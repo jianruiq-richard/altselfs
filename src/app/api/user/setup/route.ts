@@ -33,13 +33,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { email, name, role } = await req.json();
+    const { email, name, role, nickname, phone, wechatId } = await req.json();
 
     if (!email || !role) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     const normalizedRole = role === 'INVESTOR' ? 'INVESTOR' : 'CANDIDATE';
+    if (normalizedRole === 'CANDIDATE' && (!nickname || !phone || !wechatId)) {
+      return NextResponse.json(
+        { error: 'Candidate profile requires nickname, phone, and wechatId' },
+        { status: 400 }
+      );
+    }
     const existingUser = await prisma.user.findUnique({
       where: { clerkId: userId },
     });
@@ -57,6 +63,9 @@ export async function POST(req: NextRequest) {
         data: {
           email,
           name,
+          nickname: normalizedRole === 'CANDIDATE' ? nickname : existingUser.nickname,
+          phone: normalizedRole === 'CANDIDATE' ? phone : existingUser.phone,
+          wechatId: normalizedRole === 'CANDIDATE' ? wechatId : existingUser.wechatId,
         },
       });
 
@@ -69,6 +78,9 @@ export async function POST(req: NextRequest) {
         clerkId: userId,
         email,
         name,
+        nickname: normalizedRole === 'CANDIDATE' ? nickname : null,
+        phone: normalizedRole === 'CANDIDATE' ? phone : null,
+        wechatId: normalizedRole === 'CANDIDATE' ? wechatId : null,
         role: normalizedRole,
       },
     });

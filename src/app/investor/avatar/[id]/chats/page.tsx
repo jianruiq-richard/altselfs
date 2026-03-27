@@ -28,8 +28,12 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
         include: {
           candidate: {
             select: {
+              id: true,
+              nickname: true,
               name: true,
               email: true,
+              phone: true,
+              wechatId: true,
             },
           },
           messages: {
@@ -95,10 +99,13 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">
-                      {chat.title || `与 ${chat.candidate.name || '匿名用户'} 的对话`}
+                      {chat.title || `与 ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} 的对话`}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {chat.candidate.name || '匿名用户'} ({chat.candidate.email})
+                      {chat.candidate.nickname || chat.candidate.name || '匿名用户'} ({chat.candidate.email})
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      电话：{chat.candidate.phone || '未填写'} · 微信：{chat.candidate.wechatId || '未填写'}
                     </p>
                   </div>
                   <div className="text-right">

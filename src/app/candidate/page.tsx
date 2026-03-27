@@ -50,6 +50,10 @@ export default async function CandidateDashboard() {
     redirect('/dashboard');
   }
 
+  if (!dbUser.nickname || !dbUser.phone || !dbUser.wechatId) {
+    redirect('/dashboard/setup?role=candidate');
+  }
+
   // Get all active avatars
   const avatars = await prisma.avatar.findMany({
     where: { status: 'ACTIVE' },

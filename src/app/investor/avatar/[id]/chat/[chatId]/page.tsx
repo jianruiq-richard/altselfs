@@ -31,8 +31,12 @@ export default async function ChatDetailPage({
       avatar: true,
       candidate: {
         select: {
+          id: true,
+          nickname: true,
           name: true,
           email: true,
+          phone: true,
+          wechatId: true,
         },
       },
       messages: {
@@ -61,12 +65,14 @@ export default async function ChatDetailPage({
                 ← 返回对话列表
               </Link>
               <h1 className="text-2xl font-bold text-gray-900">
-                {chat.title || `与 ${chat.candidate.name || '匿名用户'} 的对话`}
+                {chat.title || `与 ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} 的对话`}
               </h1>
               <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
                 <span>分身: {chat.avatar.name}</span>
-                <span>用户: {chat.candidate.name || '匿名用户'}</span>
+                <span>用户: {chat.candidate.nickname || chat.candidate.name || '匿名用户'}</span>
                 <span>邮箱: {chat.candidate.email}</span>
+                <span>电话: {chat.candidate.phone || '未填写'}</span>
+                <span>微信: {chat.candidate.wechatId || '未填写'}</span>
                 <span>消息: {chat.messages.length} 条</span>
               </div>
             </div>
@@ -163,7 +169,7 @@ export default async function ChatDetailPage({
                     <div className="flex items-center gap-2 mb-2">
                       <span className="font-semibold text-gray-900">
                         {message.role === 'user'
-                          ? chat.candidate.name || '创业者'
+                          ? chat.candidate.nickname || chat.candidate.name || '创业者'
                           : chat.avatar.name
                         }
                       </span>

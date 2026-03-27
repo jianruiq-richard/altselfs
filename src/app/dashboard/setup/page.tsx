@@ -14,9 +14,16 @@ export default function SetupPage({
   const role = use(searchParams).role;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nickname, setNickname] = useState('');
+  const [phone, setPhone] = useState('');
+  const [wechatId, setWechatId] = useState('');
 
   const handleSetup = async () => {
     if (!user || !role) return;
+    if (role === 'candidate' && (!nickname.trim() || !phone.trim() || !wechatId.trim())) {
+      setError('请先填写昵称、联系电话和微信号');
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -31,6 +38,9 @@ export default function SetupPage({
           email: user.emailAddresses[0]?.emailAddress,
           name: user.fullName,
           role: role.toUpperCase(),
+          nickname: role === 'candidate' ? nickname.trim() : undefined,
+          phone: role === 'candidate' ? phone.trim() : undefined,
+          wechatId: role === 'candidate' ? wechatId.trim() : undefined,
         }),
       });
 
@@ -78,6 +88,41 @@ export default function SetupPage({
 
           {error && (
             <p className="text-sm text-red-600 mb-4">{error}</p>
+          )}
+
+          {role === 'candidate' && (
+            <div className="space-y-3 mb-6 text-left">
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">昵称 *</label>
+                <input
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请输入你的昵称"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">联系电话 *</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请输入手机号或电话"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">微信号 *</label>
+                <input
+                  type="text"
+                  value={wechatId}
+                  onChange={(e) => setWechatId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请输入微信号"
+                />
+              </div>
+            </div>
           )}
 
           <button

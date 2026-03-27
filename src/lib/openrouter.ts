@@ -31,7 +31,7 @@ function clampScore(score: number): number {
 
 function safeParseQualification(raw: string): QualificationResult {
   try {
-    const parsed = JSON.parse(raw) as Partial<QualificationResult>;
+    const parsed = JSON.parse(extractJsonObject(raw) ?? raw) as Partial<QualificationResult>;
     const allowedStatus = new Set(['PENDING', 'NEEDS_INFO', 'QUALIFIED', 'REJECTED']);
     const status = allowedStatus.has(parsed.status || '') ? parsed.status : 'NEEDS_INFO';
 
@@ -62,6 +62,36 @@ async function requestCompletion(messages: ChatMessage[], model: string) {
   });
 
   return completion.choices[0]?.message?.content || '';
+}
+
+async function requestJsonCompletion(messages: ChatMessage[], model: string) {
+  const completion = await openai.chat.completions.create({
+    model,
+    messages,
+    temperature: 0.1,
+    max_tokens: 800,
+    response_format: { type: 'json_object' },
+  });
+
+  return completion.choices[0]?.message?.content || '';
+}
+
+function extractJsonObject(raw: string): string | null {
+  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenceMatch?.[1]) {
+    const candidate = fenceMatch[1].trim();
+    if (candidate.startsWith('{') && candidate.endsWith('}')) {
+      return candidate;
+    }
+  }
+
+  const firstBrace = raw.indexOf('{');
+  const lastBrace = raw.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return raw.slice(firstBrace, lastBrace + 1);
+  }
+
+  return null;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -136,10 +166,39 @@ ${avatarSystemPrompt}`;
     ...messages,
   ];
 
-  const raw = await createChatCompletion(
-    evaluationMessages,
-    process.env.OPENROUTER_MODEL_EVALUATOR || process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.2'
-  );
+  const candidates = [
+    process.env.OPENROUTER_MODEL_EVALUATOR,
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1,
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2,
+    process.env.OPENROUTER_MODEL_PRIMARY,
+    process.env.OPENROUTER_MODEL_FALLBACK,
+    'deepseek/deepseek-chat-v3-0324',
+  ].filter(Boolean) as string[];
+
+  let raw = '';
+  let lastError: unknown;
+
+  for (const model of candidates) {
+    try {
+      raw = await requestJsonCompletion(evaluationMessages, model);
+      if (raw.trim()) break;
+    } catch (error) {
+      lastError = error;
+      console.error(`Evaluation model error (${model}):`, error);
+    }
+  }
+
+  if (!raw.trim()) {
+    const detail = getErrorMessage(lastError);
+    console.error(`Evaluation failed across all models: ${detail}`);
+    return {
+      status: 'NEEDS_INFO',
+      score: 0,
+      needsInvestorReview: false,
+      reason: '评估模型暂时不可用，请稍后重试。',
+      summary: '评估暂不可用，本轮仅保留聊天记录。',
+    };
+  }
 
   return safeParseQualification(raw);
 }

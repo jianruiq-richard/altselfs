@@ -18,13 +18,17 @@ export default async function RootLayout({
 }>) {
   const user = await currentUser();
   let roleLabel = '用户';
+  let displayName = user?.fullName || '已登录用户';
 
   if (user) {
     const dbUser = await prisma.user.findUnique({
       where: { clerkId: user.id },
-      select: { role: true },
+      select: { role: true, nickname: true },
     });
     roleLabel = dbUser?.role === 'INVESTOR' ? '投资人' : dbUser?.role === 'CANDIDATE' ? '人选' : '用户';
+    if (dbUser?.nickname?.trim()) {
+      displayName = dbUser.nickname;
+    }
   }
 
   return (
@@ -39,7 +43,7 @@ export default async function RootLayout({
               {user ? (
                 <AuthStatus
                   imageUrl={user.imageUrl}
-                  displayName={user.fullName || '已登录用户'}
+                  displayName={displayName}
                   roleLabel={roleLabel}
                 />
               ) : (
