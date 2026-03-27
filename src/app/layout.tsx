@@ -25,7 +25,7 @@ export default async function RootLayout({
       where: { clerkId: user.id },
       select: { role: true, nickname: true },
     });
-    roleLabel = dbUser?.role === 'INVESTOR' ? '投资人' : dbUser?.role === 'CANDIDATE' ? '人选' : '用户';
+    roleLabel = dbUser?.role === 'INVESTOR' ? '投资人' : dbUser?.role === 'CANDIDATE' ? '创业者' : '用户';
     if (dbUser?.nickname?.trim()) {
       displayName = dbUser.nickname;
     }
@@ -49,7 +49,7 @@ export default async function RootLayout({
               ) : (
                 <Link
                   href="/sign-in"
-                  className="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                  className="bg-sky-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-sky-700 transition-colors shadow-sm"
                 >
                   登录
                 </Link>

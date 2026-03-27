@@ -15,11 +15,11 @@ export default async function Page({
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
             {normalizedRole === 'investor' ? '注册投资人账户' :
-             normalizedRole === 'candidate' ? '注册人选账户' : '创建账户'}
+             normalizedRole === 'candidate' ? '注册创业者账户' : '创建账户'}
           </h1>
           <p className="text-gray-600 mt-2">
             {normalizedRole === 'investor' ? '完成注册后将进入投资人控制台流程' :
-             normalizedRole === 'candidate' ? '完成注册后将进入人选对话流程' :
+             normalizedRole === 'candidate' ? '完成注册后将进入创业者对话流程' :
              '加入 AltSelfs 平台'}
           </p>
         </div>

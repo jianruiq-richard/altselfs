@@ -36,7 +36,7 @@ export default async function Home() {
               </p>
               <Link
                 href="/sign-up?role=investor"
-                className="inline-block bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors duration-200"
+                className="inline-block bg-sky-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-sky-700 transition-colors duration-200 shadow-sm"
               >
                 注册为投资人
               </Link>
@@ -51,7 +51,7 @@ export default async function Home() {
             </div>
           </div>
 
-          {/* 人选入口 */}
+          {/* 创业者入口 */}
           <div className="bg-white rounded-2xl border border-slate-200 p-8 hover:shadow-lg transition-shadow duration-300">
             <div className="text-center">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -59,7 +59,7 @@ export default async function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-4">人选入口</h2>
+              <h2 className="text-2xl font-bold text-slate-900 mb-4">创业者入口</h2>
               <p className="text-slate-700 mb-8">
                 与投资人的数字分身对话，完善你的项目想法，获得专业反馈，提高融资成功率
               </p>
@@ -67,7 +67,7 @@ export default async function Home() {
                 href="/sign-up?role=candidate"
                 className="inline-block bg-green-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors duration-200"
               >
-                注册为人选
+                注册为创业者
               </Link>
               <div className="mt-3">
                 <Link

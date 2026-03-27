@@ -17,7 +17,7 @@ export default function Page() {
           </Link>
           <span className="mx-2">|</span>
           <Link href="/sign-up?role=candidate" className="text-green-600 hover:underline">
-            注册为人选
+            注册为创业者
           </Link>
         </div>
       </div>

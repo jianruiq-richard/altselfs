@@ -105,7 +105,7 @@ export default function ProfilePage() {
         <form onSubmit={onSave} className="max-w-2xl mx-auto bg-white border border-slate-200 rounded-xl p-6 space-y-4">
           <div>
             <label className="block text-sm text-slate-600 mb-1">身份</label>
-            <p className="text-slate-900 font-medium">{profile.role === 'INVESTOR' ? '投资人' : '人选'}</p>
+            <p className="text-slate-900 font-medium">{profile.role === 'INVESTOR' ? '投资人' : '创业者'}</p>
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">邮箱</label>
