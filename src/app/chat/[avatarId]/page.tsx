@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 
@@ -39,13 +39,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
-  useEffect(() => {
-    if (avatarId && user) {
-      fetchAvatarAndChat();
-    }
-  }, [avatarId, user]);
-
-  const fetchAvatarAndChat = async () => {
+  const fetchAvatarAndChat = useCallback(async () => {
     setIsLoading(true);
     try {
       // Fetch avatar info
@@ -67,7 +61,13 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [avatarId]);
+
+  useEffect(() => {
+    if (avatarId && user) {
+      void fetchAvatarAndChat();
+    }
+  }, [avatarId, user, fetchAvatarAndChat]);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,10 +114,10 @@ export default function ChatPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">加载中...</p>
+          <p className="text-slate-600">加载中...</p>
         </div>
       </div>
     );
@@ -125,17 +125,17 @@ export default function ChatPage() {
 
   if (!avatar) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">分身不存在</h1>
-          <p className="text-gray-600">请检查链接是否正确</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-4">分身不存在</h1>
+          <p className="text-slate-600">请检查链接是否正确</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-slate-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="container mx-auto px-4 py-4">
@@ -154,8 +154,8 @@ export default function ChatPage() {
               )}
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">{avatar.name}</h1>
-              <p className="text-sm text-gray-500">
+              <h1 className="text-lg font-semibold text-slate-900">{avatar.name}</h1>
+              <p className="text-sm text-slate-500">
                 来自 {avatar.investor.name || '匿名投资人'}
               </p>
             </div>
@@ -168,7 +168,7 @@ export default function ChatPage() {
         <div className="max-w-3xl mx-auto space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-8">
-              <p className="text-gray-500 mb-4">开始与 {avatar.name} 对话吧！</p>
+              <p className="text-slate-600 mb-4">开始与 {avatar.name} 对话吧！</p>
               <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
                 <p className="font-medium mb-2">提示：</p>
                 <ul className="text-left space-y-1">
@@ -189,12 +189,12 @@ export default function ChatPage() {
                 className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                   message.role === 'user'
                     ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-900 shadow-sm'
+                    : 'bg-white text-slate-900 shadow-sm'
                 }`}
               >
                 <p className="whitespace-pre-wrap">{message.content}</p>
                 <p className={`text-xs mt-1 ${
-                  message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
+                  message.role === 'user' ? 'text-blue-100' : 'text-slate-500'
                 }`}>
                   {new Date(message.createdAt).toLocaleTimeString('zh-CN', {
                     hour: '2-digit',
@@ -207,14 +207,14 @@ export default function ChatPage() {
 
           {isSending && (
             <div className="flex justify-start">
-              <div className="bg-white text-gray-900 shadow-sm max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
+              <div className="bg-white text-slate-900 shadow-sm max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
                 <div className="flex items-center space-x-2">
                   <div className="flex space-x-1">
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
-                  <span className="text-sm text-gray-500">正在回复...</span>
+                  <span className="text-sm text-slate-500">正在回复...</span>
                 </div>
               </div>
             </div>
@@ -230,7 +230,7 @@ export default function ChatPage() {
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="输入你的消息..."
-              className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="flex-1 resize-none border border-slate-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               rows={3}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {

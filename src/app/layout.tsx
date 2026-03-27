@@ -1,35 +1,59 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from '@clerk/nextjs';
+import { currentUser } from '@clerk/nextjs/server';
+import { prisma } from '@/lib/prisma';
+import Link from 'next/link';
+import AuthStatus from '@/components/auth-status';
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "AltSelfs - 投资人数字分身平台",
   description: "为投资人和FA提供数字分身服务，提高项目筛选效率",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await currentUser();
+  let roleLabel = '用户';
+
+  if (user) {
+    const dbUser = await prisma.user.findUnique({
+      where: { clerkId: user.id },
+      select: { role: true },
+    });
+    roleLabel = dbUser?.role === 'INVESTOR' ? '投资人' : dbUser?.role === 'CANDIDATE' ? '人选' : '用户';
+  }
+
   return (
     <ClerkProvider>
-      <html
-        lang="zh-CN"
-        className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      >
-        <body className="min-h-full flex flex-col">{children}</body>
+      <html lang="zh-CN" className="h-full antialiased">
+        <body className="min-h-full flex flex-col">
+          <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+              <Link href="/" className="text-slate-900 font-semibold tracking-tight">
+                AltSelfs
+              </Link>
+              {user ? (
+                <AuthStatus
+                  imageUrl={user.imageUrl}
+                  displayName={user.fullName || '已登录用户'}
+                  roleLabel={roleLabel}
+                />
+              ) : (
+                <Link
+                  href="/sign-in"
+                  className="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                >
+                  登录
+                </Link>
+              )}
+            </div>
+          </header>
+          <main className="flex-1">{children}</main>
+        </body>
       </html>
     </ClerkProvider>
   );

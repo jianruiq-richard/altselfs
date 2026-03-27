@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 
-export default async function AvatarChatsPage({ params }: { params: { id: string } }) {
+export default async function AvatarChatsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const user = await currentUser();
 
   if (!user) {
@@ -21,7 +22,7 @@ export default async function AvatarChatsPage({ params }: { params: { id: string
 
   // Get avatar and verify ownership
   const avatar = await prisma.avatar.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       chats: {
         include: {
@@ -124,10 +125,34 @@ export default async function AvatarChatsPage({ params }: { params: { id: string
                   </div>
                 )}
 
+                <div className="bg-slate-50 rounded-lg p-3 mb-4 border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-700">
+                      AI评估分数: <span className="font-semibold">{chat.qualificationScore}</span>
+                    </p>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      chat.qualificationStatus === 'QUALIFIED'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : chat.qualificationStatus === 'REJECTED'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {chat.qualificationStatus === 'QUALIFIED'
+                        ? '已达标'
+                        : chat.qualificationStatus === 'REJECTED'
+                        ? '不建议'
+                        : '待补充'}
+                    </span>
+                  </div>
+                  {chat.qualificationReason && (
+                    <p className="text-sm text-slate-600 mt-2">{chat.qualificationReason}</p>
+                  )}
+                </div>
+
                 <div className="border-t pt-4">
                   <h4 className="text-sm font-medium text-gray-900 mb-3">最近的对话</h4>
                   <div className="space-y-3 max-h-60 overflow-y-auto">
-                    {chat.messages.slice(-6).map((message, index) => (
+                    {chat.messages.slice(-6).map((message) => (
                       <div
                         key={message.id}
                         className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -160,15 +185,11 @@ export default async function AvatarChatsPage({ params }: { params: { id: string
                   >
                     查看完整对话
                   </Link>
-                  <button
-                    className="bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 transition-colors"
-                    onClick={() => {
-                      // TODO: Implement generate summary
-                      alert('生成总结功能开发中...');
-                    }}
-                  >
-                    生成总结
-                  </button>
+                  {chat.needsInvestorReview && (
+                    <span className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded text-sm">
+                      建议你现在亲自介入
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

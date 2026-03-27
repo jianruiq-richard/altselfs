@@ -7,31 +7,17 @@ generator client {
 
 datasource db {
   provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  INVESTOR
-  CANDIDATE
-}
-
-enum AvatarStatus {
-  ACTIVE
-  INACTIVE
-  PENDING
-}
-
-enum ChatStatus {
-  ACTIVE
-  COMPLETED
-  ARCHIVED
-}
+// SQLite doesn't support enums, using String with constraints instead
 
 model User {
   id        String   @id @default(cuid())
   clerkId   String   @unique
   email     String   @unique
   name      String?
-  role      UserRole
+  role      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -50,7 +36,7 @@ model Avatar {
   description String?
   avatar      String?      // 头像URL
   systemPrompt String     // AI 系统提示词
-  status      AvatarStatus @default(ACTIVE)
+  status      String @default("ACTIVE")
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -67,8 +53,13 @@ model Avatar {
 model Chat {
   id        String     @id @default(cuid())
   title     String?
-  status    ChatStatus @default(ACTIVE)
+  status    String @default("ACTIVE")
   summary   String?    // AI 生成的聊天总结
+  qualificationStatus String @default("PENDING") // PENDING | NEEDS_INFO | QUALIFIED | REJECTED
+  qualificationScore Int @default(0) // 0-100
+  qualificationReason String?
+  needsInvestorReview Boolean @default(false)
+  lastEvaluatedAt DateTime?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
@@ -83,6 +74,8 @@ model Chat {
   // 聊天消息
   messages Message[]
 
+  @@index([candidateId, avatarId, status])
+  @@index([avatarId, qualificationStatus, needsInvestorReview])
   @@map("chats")
 }
 

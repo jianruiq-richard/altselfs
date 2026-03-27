@@ -5,8 +5,9 @@ const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
   defaultHeaders: {
-    "HTTP-Referer": "https://altselfs.com", // 替换为你的域名
-    "X-Title": "AltSelfs - 投资人数字分身平台",
+    "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    // Header values must be ASCII/latin1-safe in Node runtime.
+    "X-Title": "AltSelfs Platform",
   }
 });
 
@@ -15,40 +16,149 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface QualificationResult {
+  status: 'PENDING' | 'NEEDS_INFO' | 'QUALIFIED' | 'REJECTED';
+  score: number;
+  needsInvestorReview: boolean;
+  reason: string;
+  summary: string;
+}
+
+function clampScore(score: number): number {
+  if (!Number.isFinite(score)) return 0;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function safeParseQualification(raw: string): QualificationResult {
+  try {
+    const parsed = JSON.parse(raw) as Partial<QualificationResult>;
+    const allowedStatus = new Set(['PENDING', 'NEEDS_INFO', 'QUALIFIED', 'REJECTED']);
+    const status = allowedStatus.has(parsed.status || '') ? parsed.status : 'NEEDS_INFO';
+
+    return {
+      status: status as QualificationResult['status'],
+      score: clampScore(Number(parsed.score ?? 0)),
+      needsInvestorReview: Boolean(parsed.needsInvestorReview),
+      reason: String(parsed.reason || '暂无明确理由'),
+      summary: String(parsed.summary || '暂无总结'),
+    };
+  } catch {
+    return {
+      status: 'NEEDS_INFO',
+      score: 0,
+      needsInvestorReview: false,
+      reason: '评估结果解析失败，已回退为待补充信息状态。',
+      summary: '当前会话信息不足或评估格式异常，请继续追问关键信息后再评估。',
+    };
+  }
+}
+
+async function requestCompletion(messages: ChatMessage[], model: string) {
+  const completion = await openai.chat.completions.create({
+    model,
+    messages,
+    temperature: 0.7,
+    max_tokens: 2000,
+  });
+
+  return completion.choices[0]?.message?.content || '';
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return 'unknown error';
+}
+
 export async function createChatCompletion(
   messages: ChatMessage[],
-  model: string = "anthropic/claude-3.5-sonnet" // 默认使用 Claude 3.5 Sonnet
+  model?: string
 ) {
-  try {
-    const completion = await openai.chat.completions.create({
-      model,
-      messages,
-      temperature: 0.7,
-      max_tokens: 2000,
-    });
+  const candidates = [
+    model,
+    process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.2',
+    process.env.OPENROUTER_MODEL_FALLBACK || 'anthropic/claude-sonnet-4.5',
+    process.env.OPENROUTER_MODEL_BACKUP || 'anthropic/claude-3.5-sonnet',
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'deepseek/deepseek-chat-v3-0324',
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'qwen/qwen-2.5-72b-instruct',
+    'openai/gpt-4o-mini',
+  ].filter(Boolean) as string[];
 
-    return completion.choices[0]?.message?.content || '';
-  } catch (error) {
-    console.error('OpenRouter API error:', error);
-    throw new Error('Failed to generate response');
+  let lastError: unknown;
+  const tried: string[] = [];
+
+  for (const currentModel of candidates) {
+    tried.push(currentModel);
+    try {
+      return await requestCompletion(messages, currentModel);
+    } catch (error) {
+      lastError = error;
+      console.error(`OpenRouter API error (${currentModel}):`, error);
+    }
   }
+
+  const detail = getErrorMessage(lastError);
+  throw new Error(`OpenRouter failed after trying models [${tried.join(', ')}]: ${detail}`);
+}
+
+export async function evaluateConversation(
+  avatarSystemPrompt: string,
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+): Promise<QualificationResult> {
+  const evaluationPrompt = `你是投资流程评估引擎。请基于下面对话判断该项目是否达到了“值得投资人亲自介入”的标准。
+
+评估原则：
+1) 结合投资人分身的 system prompt 判断匹配度。
+2) 判断信息是否充分：市场、团队、产品、商业模式、竞争、阶段与需求是否基本清晰。
+3) 只输出 JSON，不要输出任何额外文本。
+
+JSON格式：
+{
+  "status": "PENDING|NEEDS_INFO|QUALIFIED|REJECTED",
+  "score": 0-100,
+  "needsInvestorReview": true/false,
+  "reason": "一句到三句中文，说明判断依据",
+  "summary": "中文摘要，<=180字，供投资人后台快速浏览"
+}
+
+判定建议：
+- QUALIFIED：信息充分且明显匹配，可转人工
+- NEEDS_INFO：暂不充分，需继续追问
+- REJECTED：明显不匹配或质量较差
+- PENDING：非常早期、仍无法判断
+
+投资人分身 system prompt：
+${avatarSystemPrompt}`;
+
+  const evaluationMessages: ChatMessage[] = [
+    { role: 'system', content: evaluationPrompt },
+    ...messages,
+  ];
+
+  const raw = await createChatCompletion(
+    evaluationMessages,
+    process.env.OPENROUTER_MODEL_EVALUATOR || process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.2'
+  );
+
+  return safeParseQualification(raw);
 }
 
 // 可用的模型列表
 export const availableModels = [
   {
-    id: "anthropic/claude-3.5-sonnet",
-    name: "Claude 3.5 Sonnet",
-    description: "最新的 Claude 模型，推理能力强"
+    id: "openai/gpt-5.2",
+    name: "GPT-5.2",
+    description: "默认优先模型，适合综合推理与对话"
   },
   {
-    id: "openai/gpt-4-turbo",
-    name: "GPT-4 Turbo",
-    description: "OpenAI 最新的 GPT-4 模型"
+    id: "anthropic/claude-sonnet-4.5",
+    name: "Claude Sonnet 4.5",
+    description: "作为回退模型，兼顾质量与稳定性"
   },
   {
-    id: "anthropic/claude-3-opus",
-    name: "Claude 3 Opus",
-    description: "Claude 3 系列最强大的模型"
+    id: "openai/gpt-5.2-mini",
+    name: "GPT-5.2 Mini",
+    description: "成本敏感场景可选"
   }
 ];

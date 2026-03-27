@@ -11,7 +11,7 @@ export default async function Dashboard() {
   }
 
   // Check if user exists in our database
-  let dbUser = await prisma.user.findUnique({
+  const dbUser = await prisma.user.findUnique({
     where: { clerkId: user.id }
   });
 

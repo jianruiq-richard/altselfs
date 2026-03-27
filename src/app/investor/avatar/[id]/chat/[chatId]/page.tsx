@@ -6,8 +6,9 @@ import Link from 'next/link';
 export default async function ChatDetailPage({
   params
 }: {
-  params: { id: string; chatId: string }
+  params: Promise<{ id: string; chatId: string }>
 }) {
+  const { id, chatId } = await params;
   const user = await currentUser();
 
   if (!user) {
@@ -25,7 +26,7 @@ export default async function ChatDetailPage({
 
   // Get chat and verify ownership
   const chat = await prisma.chat.findUnique({
-    where: { id: params.chatId },
+    where: { id: chatId },
     include: {
       avatar: true,
       candidate: {
@@ -54,7 +55,7 @@ export default async function ChatDetailPage({
           <div className="flex items-center justify-between">
             <div>
               <Link
-                href={`/investor/avatar/${params.id}/chats`}
+                href={`/investor/avatar/${id}/chats`}
                 className="text-blue-600 hover:underline text-sm mb-2 block"
               >
                 ← 返回对话列表
@@ -98,6 +99,35 @@ export default async function ChatDetailPage({
         </div>
       )}
 
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-3 max-w-4xl">
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-slate-600">
+              AI评分: <span className="font-semibold text-slate-900">{chat.qualificationScore}</span>
+            </span>
+            <span className={`inline-flex px-2 py-1 rounded-full ${
+              chat.qualificationStatus === 'QUALIFIED'
+                ? 'bg-emerald-100 text-emerald-800'
+                : chat.qualificationStatus === 'REJECTED'
+                ? 'bg-red-100 text-red-800'
+                : 'bg-amber-100 text-amber-800'
+            }`}>
+              {chat.qualificationStatus === 'QUALIFIED'
+                ? '已达标'
+                : chat.qualificationStatus === 'REJECTED'
+                ? '不建议'
+                : '待补充'}
+            </span>
+            {chat.needsInvestorReview && (
+              <span className="text-emerald-700 font-medium">建议你立即介入</span>
+            )}
+          </div>
+          {chat.qualificationReason && (
+            <p className="text-sm text-slate-600 mt-1">{chat.qualificationReason}</p>
+          )}
+        </div>
+      </div>
+
       {/* Messages */}
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
@@ -107,7 +137,7 @@ export default async function ChatDetailPage({
             </div>
           ) : (
             <div className="space-y-6">
-              {chat.messages.map((message, index) => (
+              {chat.messages.map((message) => (
                 <div key={message.id} className="flex items-start gap-4">
                   {/* Avatar */}
                   <div className="flex-shrink-0">
@@ -156,33 +186,12 @@ export default async function ChatDetailPage({
         {/* Action Buttons */}
         <div className="max-w-4xl mx-auto mt-8 pt-8 border-t">
           <div className="flex gap-4 justify-center">
-            <button
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              onClick={() => {
-                // TODO: Implement generate summary
-                alert('生成对话总结功能开发中...');
-              }}
-            >
-              生成对话总结
-            </button>
-            <button
+            <Link
+              href={`mailto:${chat.candidate.email}?subject=${encodeURIComponent(`关于你的项目：${chat.title || chat.avatar.name}`)}`}
               className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
-              onClick={() => {
-                // TODO: Implement contact candidate
-                alert('联系创业者功能开发中...');
-              }}
             >
-              联系这位创业者
-            </button>
-            <button
-              className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-              onClick={() => {
-                // TODO: Implement export conversation
-                alert('导出对话记录功能开发中...');
-              }}
-            >
-              导出对话记录
-            </button>
+              通过邮箱联系
+            </Link>
           </div>
         </div>
       </div>

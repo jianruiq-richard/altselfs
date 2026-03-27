@@ -1,10 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
+import { isDemoMode } from '@/lib/dev-auth';
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = auth();
+    // Handle demo mode
+    if (isDemoMode) {
+      const { name, description, systemPrompt } = await req.json();
+
+      if (!name || !systemPrompt) {
+        return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+      }
+
+      // Create a demo user if not exists
+      let user = await prisma.user.findUnique({
+        where: { clerkId: 'demo-user-id' },
+      });
+
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            clerkId: 'demo-user-id',
+            email: 'demo@example.com',
+            name: 'Demo User',
+            role: 'INVESTOR',
+          },
+        });
+      }
+
+      const avatar = await prisma.avatar.create({
+        data: {
+          name,
+          description,
+          systemPrompt,
+          investorId: user.id,
+        },
+      });
+
+      return NextResponse.json({ avatar });
+    }
+
+    const authResult = await auth();
+    const userId = authResult.userId;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -42,9 +80,29 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const { userId } = auth();
+    // Handle demo mode - return all avatars for demo
+    if (isDemoMode) {
+      const avatars = await prisma.avatar.findMany({
+        where: { status: 'ACTIVE' },
+        include: {
+          investor: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      return NextResponse.json({ avatars });
+    }
+
+    const authResult = await auth();
+    const userId = authResult.userId;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

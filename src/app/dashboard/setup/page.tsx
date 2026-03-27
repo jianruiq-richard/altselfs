@@ -1,20 +1,25 @@
 'use client';
 
 import { useUser } from '@clerk/nextjs';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { use, useState } from 'react';
 
-export default function SetupPage() {
+export default function SetupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ role?: string }>;
+}) {
   const { user } = useUser();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const role = searchParams.get('role');
+  const role = use(searchParams).role;
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSetup = async () => {
     if (!user || !role) return;
 
     setIsLoading(true);
+    setError(null);
 
     try {
       const response = await fetch('/api/user/setup', {
@@ -23,7 +28,6 @@ export default function SetupPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          clerkId: user.id,
           email: user.emailAddresses[0]?.emailAddress,
           name: user.fullName,
           role: role.toUpperCase(),
@@ -37,10 +41,12 @@ export default function SetupPage() {
           router.push('/candidate');
         }
       } else {
-        console.error('Failed to create user');
+        const data = await response.json().catch(() => ({}));
+        setError(data.error || '账户设置失败，请稍后重试');
       }
     } catch (error) {
       console.error('Error:', error);
+      setError('网络错误，请稍后重试');
     } finally {
       setIsLoading(false);
     }
@@ -69,6 +75,10 @@ export default function SetupPage() {
               {role === 'investor' ? '投资人' : '创业者'}
             </span>
           </p>
+
+          {error && (
+            <p className="text-sm text-red-600 mb-4">{error}</p>
+          )}
 
           <button
             onClick={handleSetup}

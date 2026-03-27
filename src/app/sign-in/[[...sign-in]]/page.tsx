@@ -1,4 +1,5 @@
 import { SignIn } from '@clerk/nextjs';
+import Link from 'next/link';
 
 export default function Page() {
   return (
@@ -9,6 +10,16 @@ export default function Page() {
           <p className="text-gray-600 mt-2">登录到 AltSelfs</p>
         </div>
         <SignIn />
+        <div className="mt-4 text-sm text-center text-gray-600">
+          还没账号？
+          <Link href="/sign-up?role=investor" className="text-blue-600 hover:underline ml-1">
+            注册为投资人
+          </Link>
+          <span className="mx-2">|</span>
+          <Link href="/sign-up?role=candidate" className="text-green-600 hover:underline">
+            注册为人选
+          </Link>
+        </div>
       </div>
     </div>
   );
