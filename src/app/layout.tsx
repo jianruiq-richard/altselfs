@@ -17,7 +17,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const user = await currentUser();
-  let roleLabel = '用户';
+  let roleLabel = '创业者';
   let displayName = user?.fullName || '已登录用户';
 
   if (user) {
@@ -25,7 +25,7 @@ export default async function RootLayout({
       where: { clerkId: user.id },
       select: { role: true, nickname: true },
     });
-    roleLabel = dbUser?.role === 'INVESTOR' ? '投资人' : dbUser?.role === 'CANDIDATE' ? '创业者' : '用户';
+    roleLabel = dbUser?.role === 'INVESTOR' ? '投资人' : '创业者';
     if (dbUser?.nickname?.trim()) {
       displayName = dbUser.nickname;
     }

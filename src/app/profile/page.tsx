@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type Profile = {
   email: string;
@@ -13,6 +14,7 @@ type Profile = {
 };
 
 export default function ProfilePage() {
+  const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,6 +69,7 @@ export default function ProfilePage() {
       }
       setProfile(data.user);
       setSuccess('保存成功');
+      router.refresh();
     } catch {
       setError('网络错误，请稍后重试');
     } finally {
