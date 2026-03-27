@@ -1,0 +1,100 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum UserRole {
+  INVESTOR
+  CANDIDATE
+}
+
+enum AvatarStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum ChatStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  role      UserRole
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 投资人创建的分身
+  avatars Avatar[]
+
+  // 人选发起的聊天
+  chatsAsCandidate Chat[] @relation("CandidateChats")
+
+  @@map("users")
+}
+
+model Avatar {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  avatar      String?      // 头像URL
+  systemPrompt String     // AI 系统提示词
+  status      AvatarStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // 所属投资人
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  // 与此分身的聊天
+  chats Chat[]
+
+  @@map("avatars")
+}
+
+model Chat {
+  id        String     @id @default(cuid())
+  title     String?
+  status    ChatStatus @default(ACTIVE)
+  summary   String?    // AI 生成的聊天总结
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // 人选
+  candidateId String
+  candidate   User   @relation("CandidateChats", fields: [candidateId], references: [id], onDelete: Cascade)
+
+  // 对应的分身
+  avatarId String
+  avatar   Avatar @relation(fields: [avatarId], references: [id], onDelete: Cascade)
+
+  // 聊天消息
+  messages Message[]
+
+  @@map("chats")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  role      String   // "user" 或 "assistant"
+  createdAt DateTime @default(now())
+
+  // 所属聊天
+  chatId String
+  chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
