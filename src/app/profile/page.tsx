@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { displayEmail } from '@/lib/user-identifier';
 
 type Profile = {
   email: string;
@@ -112,7 +113,7 @@ export default function ProfilePage() {
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">邮箱</label>
-            <p className="text-slate-900">{profile.email}</p>
+            <p className="text-slate-900">{displayEmail(profile.email)}</p>
           </div>
           <div>
             <label className="block text-sm text-slate-700 mb-1">昵称</label>

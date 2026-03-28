@@ -2,6 +2,7 @@ import { currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import { displayEmail, isFallbackEmail } from '@/lib/user-identifier';
 
 export default async function ChatDetailPage({
   params
@@ -70,7 +71,7 @@ export default async function ChatDetailPage({
               <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
                 <span>分身: {chat.avatar.name}</span>
                 <span>用户: {chat.candidate.nickname || chat.candidate.name || '匿名用户'}</span>
-                <span>邮箱: {chat.candidate.email}</span>
+                <span>邮箱: {displayEmail(chat.candidate.email)}</span>
                 <span>电话: {chat.candidate.phone || '未填写'}</span>
                 <span>微信: {chat.candidate.wechatId || '未填写'}</span>
                 <span>消息: {chat.messages.length} 条</span>
@@ -192,12 +193,18 @@ export default async function ChatDetailPage({
         {/* Action Buttons */}
         <div className="max-w-4xl mx-auto mt-8 pt-8 border-t">
           <div className="flex gap-4 justify-center">
-            <Link
-              href={`mailto:${chat.candidate.email}?subject=${encodeURIComponent(`关于你的项目：${chat.title || chat.avatar.name}`)}`}
-              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
-            >
-              通过邮箱联系
-            </Link>
+            {chat.candidate.email && !isFallbackEmail(chat.candidate.email) ? (
+              <Link
+                href={`mailto:${chat.candidate.email}?subject=${encodeURIComponent(`关于你的项目：${chat.title || chat.avatar.name}`)}`}
+                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                通过邮箱联系
+              </Link>
+            ) : (
+              <span className="bg-slate-100 text-slate-600 px-6 py-2 rounded-lg">
+                暂无可用邮箱
+              </span>
+            )}
           </div>
         </div>
       </div>

@@ -22,6 +22,7 @@ export default async function Page({
              normalizedRole === 'candidate' ? '完成注册后将进入创业者对话流程' :
              '加入 AltSelfs 平台'}
           </p>
+          <p className="text-xs text-gray-500 mt-2">支持邮箱、Google、手机号验证码注册</p>
         </div>
         <SignUp forceRedirectUrl={redirectUrl} fallbackRedirectUrl={redirectUrl} />
       </div>

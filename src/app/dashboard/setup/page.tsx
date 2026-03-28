@@ -2,7 +2,8 @@
 
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
+import { buildFallbackEmail } from '@/lib/user-identifier';
 
 export default function SetupPage({
   searchParams,
@@ -15,8 +16,14 @@ export default function SetupPage({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nickname, setNickname] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(user?.primaryPhoneNumber?.phoneNumber || '');
   const [wechatId, setWechatId] = useState('');
+
+  useEffect(() => {
+    if (user?.primaryPhoneNumber?.phoneNumber && !phone) {
+      setPhone(user.primaryPhoneNumber.phoneNumber);
+    }
+  }, [user, phone]);
 
   const handleSetup = async () => {
     if (!user || !role) return;
@@ -35,7 +42,10 @@ export default function SetupPage({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: user.emailAddresses[0]?.emailAddress,
+          email:
+            user.primaryEmailAddress?.emailAddress ||
+            user.emailAddresses[0]?.emailAddress ||
+            buildFallbackEmail(user.id),
           name: user.fullName,
           role: role.toUpperCase(),
           nickname: role === 'candidate' ? nickname.trim() : undefined,

@@ -7,9 +7,9 @@ export default function Page() {
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">欢迎回来</h1>
-          <p className="text-gray-600 mt-2">登录到 AltSelfs</p>
+          <p className="text-gray-600 mt-2">登录到 AltSelfs（支持邮箱、Google、手机号验证码）</p>
         </div>
-        <SignIn />
+        <SignIn forceRedirectUrl="/dashboard" fallbackRedirectUrl="/dashboard" />
         <div className="mt-4 text-sm text-center text-gray-600">
           还没账号？
           <Link href="/sign-up?role=investor" className="text-blue-600 hover:underline ml-1">

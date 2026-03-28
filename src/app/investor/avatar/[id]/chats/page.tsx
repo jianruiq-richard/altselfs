@@ -2,6 +2,7 @@ import { currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import { displayEmail } from '@/lib/user-identifier';
 
 export default async function AvatarChatsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -102,7 +103,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                       {chat.title || `与 ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} 的对话`}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {chat.candidate.nickname || chat.candidate.name || '匿名用户'} ({chat.candidate.email})
+                      {chat.candidate.nickname || chat.candidate.name || '匿名用户'} ({displayEmail(chat.candidate.email)})
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
                       电话：{chat.candidate.phone || '未填写'} · 微信：{chat.candidate.wechatId || '未填写'}
