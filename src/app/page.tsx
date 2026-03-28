@@ -35,7 +35,7 @@ export default async function Home() {
                 创建你的数字分身，设定投资标准和沟通方式，让AI帮你初步筛选项目，节省宝贵时间
               </p>
               <Link
-                href="/sign-up?role=investor"
+                href="/sign-up?role=investor&method=phone"
                 className="inline-block bg-sky-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-sky-700 transition-colors duration-200 shadow-sm"
               >
                 注册为投资人
@@ -64,7 +64,7 @@ export default async function Home() {
                 与投资人的数字分身对话，完善你的项目想法，获得专业反馈，提高融资成功率
               </p>
               <Link
-                href="/sign-up?role=candidate"
+                href="/sign-up?role=candidate&method=phone"
                 className="inline-block bg-green-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors duration-200"
               >
                 注册为创业者

@@ -12,11 +12,11 @@ export default function Page() {
         <SignIn forceRedirectUrl="/dashboard" fallbackRedirectUrl="/dashboard" />
         <div className="mt-4 text-sm text-center text-gray-600">
           还没账号？
-          <Link href="/sign-up?role=investor" className="text-blue-600 hover:underline ml-1">
+          <Link href="/sign-up?role=investor&method=phone" className="text-blue-600 hover:underline ml-1">
             注册为投资人
           </Link>
           <span className="mx-2">|</span>
-          <Link href="/sign-up?role=candidate" className="text-green-600 hover:underline">
+          <Link href="/sign-up?role=candidate&method=phone" className="text-green-600 hover:underline">
             注册为创业者
           </Link>
         </div>
