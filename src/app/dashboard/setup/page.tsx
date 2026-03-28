@@ -55,11 +55,9 @@ export default function SetupPage({
       });
 
       if (response.ok) {
-        if (role === 'investor') {
-          router.push('/investor');
-        } else {
-          router.push('/candidate');
-        }
+        const target = role === 'investor' ? '/investor' : '/candidate';
+        router.replace(target);
+        router.refresh();
       } else {
         const data = await response.json().catch(() => ({}));
         setError(data.error || '账户设置失败，请稍后重试');
