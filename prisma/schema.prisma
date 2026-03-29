@@ -31,7 +31,47 @@ model User {
   // 人选发起的聊天
   chatsAsCandidate Chat[] @relation("CandidateChats")
 
+  // 投资人外部账户集成
+  integrations InvestorIntegration[]
+
   @@map("users")
+}
+
+model InvestorIntegration {
+  id           String   @id @default(cuid())
+  provider     String
+  status       String   @default("CONNECTED")
+  accountEmail String?
+  accountName  String?
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  scope        String?
+  connectedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  investorId String
+  investor   User @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  snapshots IntegrationSnapshot[]
+
+  @@unique([investorId, provider])
+  @@index([provider, updatedAt])
+  @@map("investor_integrations")
+}
+
+model IntegrationSnapshot {
+  id           String   @id @default(cuid())
+  provider     String
+  summary      String
+  raw          Json?
+  createdAt    DateTime @default(now())
+
+  integrationId String
+  integration   InvestorIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId, createdAt])
+  @@map("integration_snapshots")
 }
 
 model Avatar {

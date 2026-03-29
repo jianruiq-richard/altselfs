@@ -2,9 +2,19 @@ import { currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import InvestorIntegrationsPanel from '@/components/investor-integrations-panel';
 
-export default async function InvestorDashboard() {
+export default async function InvestorDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    integrationStatus?: string;
+    integrationProvider?: string;
+    integrationDetail?: string;
+  }>;
+}) {
   const user = await currentUser();
+  const query = await searchParams;
 
   if (!user) {
     redirect('/sign-in');
@@ -16,6 +26,14 @@ export default async function InvestorDashboard() {
       avatars: {
         include: {
           chats: true,
+        },
+      },
+      integrations: {
+        include: {
+          snapshots: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
         },
       },
     },
@@ -31,6 +49,22 @@ export default async function InvestorDashboard() {
       acc + avatar.chats.filter((chat) => chat.qualificationStatus === 'QUALIFIED' || chat.needsInvestorReview).length,
     0
   );
+
+  const integrationMap = new Map(dbUser.integrations.map((it) => [it.provider, it]));
+  const integrationCards = (['gmail', 'feishu'] as const).map((provider) => {
+    const dbProvider = provider === 'gmail' ? 'GMAIL' : 'FEISHU';
+    const integration = integrationMap.get(dbProvider);
+    const latest = integration?.snapshots[0];
+    return {
+      provider,
+      connected: Boolean(integration),
+      accountEmail: integration?.accountEmail || null,
+      accountName: integration?.accountName || null,
+      updatedAt: integration?.updatedAt.toISOString() || null,
+      latestSummary: latest?.summary || null,
+      latestSummaryAt: latest?.createdAt.toISOString() || null,
+    };
+  });
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -50,6 +84,13 @@ export default async function InvestorDashboard() {
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        <InvestorIntegrationsPanel
+          initialCards={integrationCards}
+          integrationStatus={query.integrationStatus}
+          integrationProvider={query.integrationProvider}
+          integrationDetail={query.integrationDetail}
+        />
+
         <div className="grid md:grid-cols-3 gap-4 mb-8">
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <p className="text-slate-500 text-sm">分身数量</p>
