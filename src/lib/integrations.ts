@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 export type IntegrationProvider = 'gmail' | 'feishu';
 export type IntegrationProviderDb = 'GMAIL' | 'FEISHU';
@@ -329,7 +330,12 @@ export async function saveIntegrationSnapshot(params: {
         integrationId: integration.id,
         provider: dbProvider,
         summary: params.summary,
-        raw: params.raw as object | null | undefined,
+        raw:
+          params.raw === undefined
+            ? undefined
+            : params.raw === null
+            ? Prisma.JsonNull
+            : (params.raw as Prisma.InputJsonValue),
       },
     });
   }
