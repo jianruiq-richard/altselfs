@@ -14,6 +14,11 @@ type IntegrationCard = {
   latestSummaryAt: string | null;
 };
 
+type AssistantMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 export default function InvestorIntegrationsPanel({
   initialCards,
   integrationStatus,
@@ -28,6 +33,18 @@ export default function InvestorIntegrationsPanel({
   const [cards, setCards] = useState(initialCards);
   const [loadingProvider, setLoadingProvider] = useState<ProviderKey | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [assistantInputs, setAssistantInputs] = useState<Record<ProviderKey, string>>({
+    gmail: '',
+    feishu: '',
+  });
+  const [assistantLoading, setAssistantLoading] = useState<Record<ProviderKey, boolean>>({
+    gmail: false,
+    feishu: false,
+  });
+  const [assistantChats, setAssistantChats] = useState<Record<ProviderKey, AssistantMessage[]>>({
+    gmail: [],
+    feishu: [],
+  });
 
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
@@ -75,6 +92,48 @@ export default function InvestorIntegrationsPanel({
       setError('网络错误，请稍后重试');
     } finally {
       setLoadingProvider(null);
+    }
+  };
+
+  const sendAssistantMessage = async (provider: ProviderKey) => {
+    const text = assistantInputs[provider].trim();
+    if (!text || assistantLoading[provider]) return;
+
+    const current = assistantChats[provider];
+    const nextMessages: AssistantMessage[] = [...current, { role: 'user', content: text }];
+
+    setAssistantInputs((prev) => ({ ...prev, [provider]: '' }));
+    setAssistantChats((prev) => ({ ...prev, [provider]: nextMessages }));
+    setAssistantLoading((prev) => ({ ...prev, [provider]: true }));
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/investor/integrations/assistant/${provider}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const content = data.error || 'AI助手暂时不可用，请稍后重试。';
+        setAssistantChats((prev) => ({
+          ...prev,
+          [provider]: [...nextMessages, { role: 'assistant', content }],
+        }));
+        return;
+      }
+
+      setAssistantChats((prev) => ({
+        ...prev,
+        [provider]: [...nextMessages, { role: 'assistant', content: data.reply || '已收到，但暂无回复。' }],
+      }));
+    } catch {
+      setAssistantChats((prev) => ({
+        ...prev,
+        [provider]: [...nextMessages, { role: 'assistant', content: '网络错误，请稍后重试。' }],
+      }));
+    } finally {
+      setAssistantLoading((prev) => ({ ...prev, [provider]: false }));
     }
   };
 
@@ -147,6 +206,53 @@ export default function InvestorIntegrationsPanel({
                   生成于：{new Date(card.latestSummaryAt).toLocaleString('zh-CN')}
                 </p>
               )}
+            </div>
+
+            <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
+              <p className="text-xs text-slate-500 mb-2">AI员工对话</p>
+              <div className="max-h-44 overflow-y-auto space-y-2 pr-1">
+                {assistantChats[card.provider].length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    你可以直接提问，例如“帮我按优先级整理最近邮件并给出今天要做的3件事”。
+                  </p>
+                ) : (
+                  assistantChats[card.provider].map((m, idx) => (
+                    <div
+                      key={`${card.provider}-${idx}`}
+                      className={`rounded-md px-3 py-2 text-sm whitespace-pre-wrap ${
+                        m.role === 'user' ? 'bg-sky-50 text-sky-900' : 'bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      {m.content}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={assistantInputs[card.provider]}
+                  onChange={(e) =>
+                    setAssistantInputs((prev) => ({ ...prev, [card.provider]: e.target.value }))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void sendAssistantMessage(card.provider);
+                    }
+                  }}
+                  disabled={!card.connected}
+                  placeholder={card.connected ? '输入你的问题...' : '先绑定账号后可对话'}
+                  className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:bg-slate-100"
+                />
+                <button
+                  type="button"
+                  disabled={!card.connected || assistantLoading[card.provider] || !assistantInputs[card.provider].trim()}
+                  onClick={() => void sendAssistantMessage(card.provider)}
+                  className="px-3 py-2 rounded-lg text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+                >
+                  {assistantLoading[card.provider] ? '思考中...' : '发送'}
+                </button>
+              </div>
             </div>
           </div>
         ))}
