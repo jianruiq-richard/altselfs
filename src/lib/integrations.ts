@@ -11,13 +11,56 @@ type GmailProfile = {
   historyId: string;
 };
 
-type GmailMessage = {
+type GmailHeader = { name: string; value: string };
+type GmailPartBody = { size?: number; data?: string; attachmentId?: string };
+type GmailPart = {
+  partId?: string;
+  mimeType?: string;
+  filename?: string;
+  headers?: GmailHeader[];
+  body?: GmailPartBody;
+  parts?: GmailPart[];
+};
+
+type GmailMessageFull = {
   id: string;
+  threadId?: string;
+  labelIds?: string[];
   snippet?: string;
-  payload?: {
-    headers?: Array<{ name: string; value: string }>;
-  };
+  payload?: GmailPart;
+  sizeEstimate?: number;
   internalDate?: string;
+};
+
+type GmailMessageDigest = {
+  id: string;
+  threadId: string | null;
+  subject: string;
+  from: string;
+  to: string;
+  date: string;
+  snippet: string;
+  bodyText: string;
+  attachments: Array<{
+    filename: string;
+    mimeType: string;
+    size: number;
+    hasAttachmentId: boolean;
+  }>;
+  status: {
+    unread: boolean;
+    starred: boolean;
+    important: boolean;
+    inbox: boolean;
+    sent: boolean;
+    draft: boolean;
+    trash: boolean;
+    spam: boolean;
+    categories: string[];
+    labels: string[];
+  };
+  sizeEstimate: number;
+  receivedAt: string | null;
 };
 
 function getEnv(name: string): string {
@@ -172,64 +215,209 @@ export async function fetchGmailProfile(accessToken: string): Promise<GmailProfi
   return data;
 }
 
-async function fetchGmailRecentMessages(accessToken: string) {
-  const listRes = await fetch(
-    'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=8&labelIds=INBOX&q=newer_than:14d',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: 'no-store',
+async function gmailFetch<T>(accessToken: string, path: string): Promise<T> {
+  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Gmail API failed (${path}): ${JSON.stringify(data)}`);
+  }
+  return data as T;
+}
+
+function headerValue(headers: GmailHeader[] | undefined, key: string) {
+  return headers?.find((h) => h.name.toLowerCase() === key.toLowerCase())?.value || '';
+}
+
+function decodeBase64Url(input?: string): string {
+  if (!input) return '';
+  const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padding = normalized.length % 4 ? '='.repeat(4 - (normalized.length % 4)) : '';
+  return Buffer.from(normalized + padding, 'base64').toString('utf-8');
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function collectParts(part: GmailPart | undefined, bucket: GmailPart[] = []) {
+  if (!part) return bucket;
+  bucket.push(part);
+  for (const child of part.parts || []) {
+    collectParts(child, bucket);
+  }
+  return bucket;
+}
+
+function extractBodyText(payload: GmailPart | undefined): string {
+  const parts = collectParts(payload);
+  const textPlain = parts
+    .filter((p) => p.mimeType === 'text/plain')
+    .map((p) => decodeBase64Url(p.body?.data))
+    .join('\n')
+    .trim();
+
+  if (textPlain) return textPlain;
+
+  const textHtml = parts
+    .filter((p) => p.mimeType === 'text/html')
+    .map((p) => stripHtml(decodeBase64Url(p.body?.data)))
+    .join('\n')
+    .trim();
+
+  if (textHtml) return textHtml;
+
+  return decodeBase64Url(payload?.body?.data);
+}
+
+function extractAttachments(payload: GmailPart | undefined) {
+  const parts = collectParts(payload);
+  return parts
+    .filter((p) => Boolean(p.filename))
+    .map((p) => ({
+      filename: p.filename || 'unnamed',
+      mimeType: p.mimeType || 'application/octet-stream',
+      size: p.body?.size || 0,
+      hasAttachmentId: Boolean(p.body?.attachmentId),
+    }));
+}
+
+function digestGmailMessage(message: GmailMessageFull): GmailMessageDigest {
+  const headers = message.payload?.headers || [];
+  const labels = message.labelIds || [];
+  const categories = labels
+    .filter((l) => l.startsWith('CATEGORY_'))
+    .map((l) => l.replace('CATEGORY_', '').toLowerCase());
+
+  return {
+    id: message.id,
+    threadId: message.threadId || null,
+    subject: headerValue(headers, 'Subject') || '无主题',
+    from: headerValue(headers, 'From') || '未知发件人',
+    to: headerValue(headers, 'To') || '未知收件人',
+    date: headerValue(headers, 'Date') || '',
+    snippet: (message.snippet || '').trim(),
+    bodyText: extractBodyText(message.payload),
+    attachments: extractAttachments(message.payload),
+    status: {
+      unread: labels.includes('UNREAD'),
+      starred: labels.includes('STARRED'),
+      important: labels.includes('IMPORTANT'),
+      inbox: labels.includes('INBOX'),
+      sent: labels.includes('SENT'),
+      draft: labels.includes('DRAFT'),
+      trash: labels.includes('TRASH'),
+      spam: labels.includes('SPAM'),
+      categories,
+      labels,
+    },
+    sizeEstimate: message.sizeEstimate || 0,
+    receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : null,
+  };
+}
+
+async function fetchAllGmailMessages(accessToken: string) {
+  const pageSize = 500;
+  const maxMessages = Number(process.env.GMAIL_SYNC_MAX_MESSAGES || 2000);
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+  let hasMore = false;
+
+  do {
+    const params = new URLSearchParams({
+      maxResults: String(pageSize),
+      includeSpamTrash: 'true',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+
+    const list = await gmailFetch<{ messages?: Array<{ id: string }>; nextPageToken?: string }>(
+      accessToken,
+      `messages?${params.toString()}`
+    );
+
+    for (const m of list.messages || []) {
+      ids.push(m.id);
+      if (ids.length >= maxMessages) {
+        hasMore = true;
+        break;
+      }
     }
-  );
-  const listData = await listRes.json();
-  if (!listRes.ok) {
-    throw new Error(`Gmail message list failed: ${JSON.stringify(listData)}`);
+
+    if (ids.length >= maxMessages) break;
+    pageToken = list.nextPageToken;
+  } while (pageToken);
+
+  const concurrency = 5;
+  const digests: GmailMessageDigest[] = [];
+
+  for (let i = 0; i < ids.length; i += concurrency) {
+    const chunk = ids.slice(i, i + concurrency);
+    const details = await Promise.all(
+      chunk.map((id) =>
+        gmailFetch<GmailMessageFull>(accessToken, `messages/${id}?format=full`)
+      )
+    );
+    for (const d of details) {
+      digests.push(digestGmailMessage(d));
+    }
   }
 
-  const ids: string[] = (listData.messages || []).map((m: { id: string }) => m.id);
-  const detailIds = ids.slice(0, 5);
-  const details = await Promise.all(
-    detailIds.map(async (id) => {
-      const detailRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          cache: 'no-store',
-        }
-      );
-      const detailData = await detailRes.json();
-      if (!detailRes.ok) {
-        throw new Error(`Gmail message detail failed: ${JSON.stringify(detailData)}`);
-      }
-      return detailData as GmailMessage;
-    })
-  );
-
-  return details;
+  digests.sort((a, b) => (b.receivedAt || '').localeCompare(a.receivedAt || ''));
+  return { digests, hasMore, fetchedCount: ids.length, maxMessages };
 }
 
-function headerValue(message: GmailMessage, key: string) {
-  return (
-    message.payload?.headers?.find((h) => h.name.toLowerCase() === key.toLowerCase())?.value || '未知'
-  );
-}
+function summarizeGmailDigests(
+  profile: GmailProfile,
+  digests: GmailMessageDigest[],
+  hasMore: boolean,
+  maxMessages: number
+) {
+  const unread = digests.filter((m) => m.status.unread).length;
+  const withAttachments = digests.filter((m) => m.attachments.length > 0).length;
+  const totalAttachments = digests.reduce((n, m) => n + m.attachments.length, 0);
+  const inbox = digests.filter((m) => m.status.inbox).length;
+  const sent = digests.filter((m) => m.status.sent).length;
+  const important = digests.filter((m) => m.status.important).length;
 
-export async function buildGmailSummary(accessToken: string) {
-  const profile = await fetchGmailProfile(accessToken);
-  const details = await fetchGmailRecentMessages(accessToken);
-
-  const lines = details.map((m, idx) => {
-    const subject = headerValue(m, 'Subject');
-    const from = headerValue(m, 'From');
-    const snippet = (m.snippet || '').trim().slice(0, 80);
-    return `${idx + 1}. ${subject}（发件人：${from}）${snippet ? ` - ${snippet}` : ''}`;
+  const latestLines = digests.slice(0, 8).map((m, idx) => {
+    const attach = m.attachments.length > 0 ? ` | 附件 ${m.attachments.length}` : '';
+    const status = [
+      m.status.unread ? '未读' : null,
+      m.status.important ? '重要' : null,
+      m.status.starred ? '星标' : null,
+    ].filter(Boolean).join('/');
+    const statusText = status ? ` | ${status}` : '';
+    return `${idx + 1}. ${m.subject}（${m.from}）${statusText}${attach}`;
   });
 
   const summary = [
     `Gmail 账户 ${profile.emailAddress} 概览：`,
-    `总邮件约 ${profile.messagesTotal} 封，线程约 ${profile.threadsTotal} 个。`,
-    `近 14 天收件箱最近消息：`,
-    ...(lines.length > 0 ? lines : ['暂无近 14 天收件箱消息。']),
-  ].join('\n');
+    `已抓取邮件 ${digests.length} 封（全部模式${hasMore ? `，达到上限 ${maxMessages}` : ''}）。`,
+    `未读 ${unread}，重要 ${important}，收件箱 ${inbox}，已发送 ${sent}。`,
+    `含附件邮件 ${withAttachments} 封，附件总数 ${totalAttachments}。`,
+    '最近邮件：',
+    ...(latestLines.length > 0 ? latestLines : ['暂无邮件数据。']),
+    hasMore
+      ? `提示：当前为了稳定性仅同步到 ${maxMessages} 封，可通过环境变量 GMAIL_SYNC_MAX_MESSAGES 提高上限。`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return summary;
+}
+
+export async function buildGmailSummary(accessToken: string) {
+  const profile = await fetchGmailProfile(accessToken);
+  const { digests, hasMore, maxMessages } = await fetchAllGmailMessages(accessToken);
+  const summary = summarizeGmailDigests(profile, digests, hasMore, maxMessages);
 
   return {
     accountEmail: profile.emailAddress,
@@ -237,7 +425,9 @@ export async function buildGmailSummary(accessToken: string) {
     summary,
     raw: {
       profile,
-      recentMessages: details,
+      allMessages: digests,
+      hasMore,
+      maxMessages,
     },
   };
 }

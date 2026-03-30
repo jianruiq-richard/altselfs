@@ -18,9 +18,33 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
   if (provider === 'gmail' && raw && typeof raw === 'object') {
     const r = raw as {
       profile?: { emailAddress?: string; messagesTotal?: number; threadsTotal?: number };
-      recentMessages?: Array<{
+      hasMore?: boolean;
+      maxMessages?: number;
+      allMessages?: Array<{
+        subject?: string;
+        from?: string;
         snippet?: string;
-        payload?: { headers?: Array<{ name: string; value: string }> };
+        bodyText?: string;
+        date?: string;
+        receivedAt?: string | null;
+        attachments?: Array<{
+          filename?: string;
+          mimeType?: string;
+          size?: number;
+          hasAttachmentId?: boolean;
+        }>;
+        status?: {
+          unread?: boolean;
+          important?: boolean;
+          starred?: boolean;
+          inbox?: boolean;
+          sent?: boolean;
+          draft?: boolean;
+          trash?: boolean;
+          spam?: boolean;
+          categories?: string[];
+          labels?: string[];
+        };
       }>;
     };
     if (r.profile?.emailAddress) {
@@ -32,15 +56,50 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
     if (typeof r.profile?.threadsTotal === 'number') {
       lines.push(`总线程数：${r.profile.threadsTotal}`);
     }
-    if (Array.isArray(r.recentMessages) && r.recentMessages.length > 0) {
-      const top = r.recentMessages.slice(0, 5).map((m, idx) => {
-        const headers = m.payload?.headers || [];
-        const subject = headers.find((h) => h.name.toLowerCase() === 'subject')?.value || '无主题';
-        const from = headers.find((h) => h.name.toLowerCase() === 'from')?.value || '未知发件人';
-        const snippet = (m.snippet || '').trim().slice(0, 100);
-        return `${idx + 1}. ${subject}（${from}）${snippet ? ` - ${snippet}` : ''}`;
+
+    if (Array.isArray(r.allMessages) && r.allMessages.length > 0) {
+      const total = r.allMessages.length;
+      const unread = r.allMessages.filter((m) => Boolean(m.status?.unread)).length;
+      const important = r.allMessages.filter((m) => Boolean(m.status?.important)).length;
+      const withAttachments = r.allMessages.filter((m) => (m.attachments?.length || 0) > 0).length;
+      lines.push(
+        `全量同步邮件：${total} 封（未读 ${unread}，重要 ${important}，含附件 ${withAttachments}${r.hasMore ? `，已达上限 ${r.maxMessages || 'N/A'}` : ''}）`
+      );
+
+      const top = r.allMessages.slice(0, 12).map((m, idx) => {
+        const subject = (m.subject || '无主题').trim();
+        const from = (m.from || '未知发件人').trim();
+        const snippet = (m.snippet || '').trim().slice(0, 120);
+        const bodyPreview = (m.bodyText || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+        const status = [
+          m.status?.unread ? '未读' : null,
+          m.status?.important ? '重要' : null,
+          m.status?.starred ? '星标' : null,
+          m.status?.inbox ? '收件箱' : null,
+          m.status?.sent ? '已发送' : null,
+          m.status?.draft ? '草稿' : null,
+          m.status?.trash ? '垃圾箱' : null,
+          m.status?.spam ? '垃圾邮件' : null,
+        ]
+          .filter(Boolean)
+          .join('/');
+        const attachSummary =
+          m.attachments && m.attachments.length > 0
+            ? m.attachments
+                .slice(0, 4)
+                .map((a) => `${a.filename || 'unnamed'}(${a.mimeType || 'unknown'},${a.size || 0}B)`)
+                .join(', ')
+            : '无';
+        return [
+          `${idx + 1}. ${subject}（${from}）`,
+          `   时间：${m.receivedAt || m.date || '未知'} | 状态：${status || '普通'}`,
+          `   附件：${attachSummary}`,
+          `   片段：${snippet || '无'}`,
+          `   正文预览：${bodyPreview || '无'}`,
+        ].join('\n');
       });
-      lines.push(`最近邮件片段：\n${top.join('\n')}`);
+
+      lines.push(`最近邮件详情：\n${top.join('\n')}`);
     }
   }
 
