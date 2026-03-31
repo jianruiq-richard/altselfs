@@ -45,6 +45,34 @@ export default function InvestorIntegrationsPanel({
     gmail: [],
     feishu: [],
   });
+  const [coachOpen, setCoachOpen] = useState<Record<ProviderKey, boolean>>({
+    gmail: false,
+    feishu: false,
+  });
+  const [coachLoaded, setCoachLoaded] = useState<Record<ProviderKey, boolean>>({
+    gmail: false,
+    feishu: false,
+  });
+  const [coachLoading, setCoachLoading] = useState<Record<ProviderKey, boolean>>({
+    gmail: false,
+    feishu: false,
+  });
+  const [coachSaving, setCoachSaving] = useState<Record<ProviderKey, boolean>>({
+    gmail: false,
+    feishu: false,
+  });
+  const [coachDraft, setCoachDraft] = useState<Record<ProviderKey, string>>({
+    gmail: '',
+    feishu: '',
+  });
+  const [coachSaved, setCoachSaved] = useState<Record<ProviderKey, string>>({
+    gmail: '',
+    feishu: '',
+  });
+  const [coachMessage, setCoachMessage] = useState<Record<ProviderKey, string>>({
+    gmail: '',
+    feishu: '',
+  });
 
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
@@ -134,6 +162,61 @@ export default function InvestorIntegrationsPanel({
       }));
     } finally {
       setAssistantLoading((prev) => ({ ...prev, [provider]: false }));
+    }
+  };
+
+  const toggleCoach = async (provider: ProviderKey) => {
+    const nextOpen = !coachOpen[provider];
+    setCoachOpen((prev) => ({ ...prev, [provider]: nextOpen }));
+    if (!nextOpen || coachLoaded[provider]) return;
+
+    setCoachLoading((prev) => ({ ...prev, [provider]: true }));
+    setCoachMessage((prev) => ({ ...prev, [provider]: '' }));
+    setError(null);
+    try {
+      const res = await fetch(`/api/investor/integrations/assistant/${provider}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || '加载调教设置失败');
+        return;
+      }
+
+      const prompt = String(data.customPrompt || '');
+      setCoachDraft((prev) => ({ ...prev, [provider]: prompt }));
+      setCoachSaved((prev) => ({ ...prev, [provider]: prompt }));
+      setCoachLoaded((prev) => ({ ...prev, [provider]: true }));
+    } catch {
+      setError('网络错误，请稍后重试');
+    } finally {
+      setCoachLoading((prev) => ({ ...prev, [provider]: false }));
+    }
+  };
+
+  const saveCoachPrompt = async (provider: ProviderKey) => {
+    if (coachSaving[provider]) return;
+    setCoachSaving((prev) => ({ ...prev, [provider]: true }));
+    setCoachMessage((prev) => ({ ...prev, [provider]: '' }));
+    setError(null);
+    try {
+      const res = await fetch(`/api/investor/integrations/assistant/${provider}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customPrompt: coachDraft[provider] }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || '保存调教设置失败');
+        return;
+      }
+
+      const prompt = String(data.integration?.customPrompt || '');
+      setCoachDraft((prev) => ({ ...prev, [provider]: prompt }));
+      setCoachSaved((prev) => ({ ...prev, [provider]: prompt }));
+      setCoachMessage((prev) => ({ ...prev, [provider]: '已保存，后续对话已生效。' }));
+    } catch {
+      setError('网络错误，请稍后重试');
+    } finally {
+      setCoachSaving((prev) => ({ ...prev, [provider]: false }));
     }
   };
 
@@ -253,6 +336,67 @@ export default function InvestorIntegrationsPanel({
                   {assistantLoading[card.provider] ? '思考中...' : '发送'}
                 </button>
               </div>
+            </div>
+
+            <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500">AI员工调教</p>
+                <button
+                  type="button"
+                  onClick={() => void toggleCoach(card.provider)}
+                  className="text-xs font-medium text-sky-700 hover:underline"
+                >
+                  {coachOpen[card.provider] ? '收起' : '打开'}
+                </button>
+              </div>
+
+              {coachOpen[card.provider] && (
+                <div className="mt-2">
+                  {coachLoading[card.provider] ? (
+                    <p className="text-sm text-slate-500">加载中...</p>
+                  ) : (
+                    <>
+                      <textarea
+                        value={coachDraft[card.provider]}
+                        onChange={(e) =>
+                          setCoachDraft((prev) => ({ ...prev, [card.provider]: e.target.value }))
+                        }
+                        rows={6}
+                        placeholder="例如：你是我的执行型邮箱助理。优先输出待办清单、风险点、可直接发送的回复草稿。语气简洁专业。"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <p className="text-xs text-slate-500">
+                          当前长度 {coachDraft[card.provider].length}/8000
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={coachSaving[card.provider]}
+                            onClick={() =>
+                              setCoachDraft((prev) => ({ ...prev, [card.provider]: coachSaved[card.provider] }))
+                            }
+                            className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                          >
+                            撤销修改
+                          </button>
+                          <button
+                            type="button"
+                            disabled={coachSaving[card.provider]}
+                            onClick={() => void saveCoachPrompt(card.provider)}
+                            className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+                          >
+                            {coachSaving[card.provider] ? '保存中...' : '保存并生效'}
+                          </button>
+                        </div>
+                      </div>
+                      {coachMessage[card.provider] && (
+                        <p className="mt-2 text-xs text-emerald-700">{coachMessage[card.provider]}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}

@@ -40,6 +40,8 @@ type GmailPlan = {
   };
 };
 
+const MAX_CUSTOM_PROMPT_LENGTH = 8000;
+
 function getMailAgentModelCandidates() {
   const models = [
     process.env.OPENROUTER_MODEL_MAIL_AGENT_PRIMARY || 'openai/gpt-5.2',
@@ -257,9 +259,9 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
   return lines.join('\n');
 }
 
-function buildSystemPrompt(provider: 'gmail' | 'feishu') {
+function buildSystemPrompt(provider: 'gmail' | 'feishu', customPrompt?: string | null) {
   const providerLabel = provider === 'gmail' ? 'Gmail' : '飞书';
-  return [
+  const base = [
     `你是投资人的“${providerLabel} 消息AI员工”。`,
     '你的工作是：',
     '1) 基于已提供的渠道数据回答问题并给出清晰下一步建议；',
@@ -270,11 +272,19 @@ function buildSystemPrompt(provider: 'gmail' | 'feishu') {
     '2) 信息不足时明确指出缺失项，并提示用户点击“刷新摘要”；',
     '3) 当用户要求写回复时，给出可直接复制的草稿。',
     '4) 若上下文中出现“正文同步状态：已同步 X/Y”，且 X>0，不要再声称“正文未同步”。',
-  ].join('\n');
+  ];
+
+  const normalized = customPrompt?.trim();
+  if (normalized) {
+    base.push('用户自定义调教要求：');
+    base.push(normalized);
+  }
+
+  return base.join('\n');
 }
 
-function buildRealtimePlannerPrompt(conversation: ClientMessage[]) {
-  return [
+function buildRealtimePlannerPrompt(conversation: ClientMessage[], customPrompt?: string | null) {
+  const blocks = [
     '你是 Gmail 实时代理的工具调度器。你的唯一任务是选择下一步要调用的 Gmail API。',
     '你必须只返回 JSON，不要输出任何其他文字。',
     '可选 action：',
@@ -308,15 +318,27 @@ function buildRealtimePlannerPrompt(conversation: ClientMessage[]) {
     '- 用户要求“发邮件/回邮件”且给出收件人+内容时用 send_email。',
     '- 缺关键参数就用 clarify。',
     '',
+  ];
+
+  if (customPrompt?.trim()) {
+    blocks.push('用户给你的调教偏好（必须尽量遵循）：');
+    blocks.push(customPrompt.trim());
+    blocks.push('');
+  }
+
+  blocks.push(
     '最近对话：',
-    ...conversation.map((m, idx) => `${idx + 1}. [${m.role}] ${m.content}`),
-  ].join('\n');
+    ...conversation.map((m, idx) => `${idx + 1}. [${m.role}] ${m.content}`)
+  );
+
+  return blocks.join('\n');
 }
 
 async function buildRealtimeFinalReply(input: {
   userMessages: ClientMessage[];
   plan: GmailPlan;
   toolResult: unknown;
+  customPrompt?: string | null;
 }) {
   const messages: ChatMessage[] = [
     {
@@ -330,6 +352,7 @@ async function buildRealtimeFinalReply(input: {
         '3) 如果是读取单封邮件，给“关键信息摘要 + 下一步建议 + 可回复草稿(如适用)”。',
         '4) 如果是发信成功，明确返回发送成功和 messageId。',
         '5) 不要编造工具结果中不存在的信息。',
+        input.customPrompt?.trim() ? `用户自定义调教要求：\n${input.customPrompt.trim()}` : '',
       ].join('\n'),
     },
     {
@@ -343,6 +366,95 @@ async function buildRealtimeFinalReply(input: {
   ];
 
   return runMailAgentText(messages);
+}
+
+function normalizeCustomPrompt(input: unknown) {
+  const prompt = String(input ?? '').trim();
+  if (!prompt) return null;
+  return prompt.slice(0, MAX_CUSTOM_PROMPT_LENGTH);
+}
+
+async function resolveInvestorAndProvider(
+  req: NextRequest,
+  params: Promise<{ provider: string }>
+) {
+  const investor = await getInvestorOrNull();
+  if (!investor) {
+    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) } as const;
+  }
+
+  const { provider: rawProvider } = await params;
+  const provider = parseProvider(rawProvider);
+  if (!provider) {
+    return { error: NextResponse.json({ error: 'Unsupported provider' }, { status: 400 }) } as const;
+  }
+
+  const integration = await prisma.investorIntegration.findUnique({
+    where: {
+      investorId_provider: {
+        investorId: investor.id,
+        provider: providerToDb(provider),
+      },
+    },
+  });
+
+  if (!integration) {
+    return {
+      error: NextResponse.json(
+        { error: `请先绑定${provider === 'gmail' ? 'Gmail' : '飞书'}账号` },
+        { status: 400 }
+      ),
+    } as const;
+  }
+
+  return { investor, provider, integration, req } as const;
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ provider: string }> }
+) {
+  const resolved = await resolveInvestorAndProvider(req, params);
+  if ('error' in resolved) return resolved.error;
+
+  return NextResponse.json({
+    provider: resolved.provider,
+    customPrompt: resolved.integration.assistantCustomPrompt || '',
+  });
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ provider: string }> }
+) {
+  const resolved = await resolveInvestorAndProvider(req, params);
+  if ('error' in resolved) return resolved.error;
+
+  const body = (await req.json().catch(() => ({}))) as { customPrompt?: unknown };
+  const customPrompt = normalizeCustomPrompt(body.customPrompt);
+
+  const updated = await prisma.investorIntegration.update({
+    where: { id: resolved.integration.id },
+    data: {
+      assistantCustomPrompt: customPrompt,
+    },
+    select: {
+      id: true,
+      provider: true,
+      assistantCustomPrompt: true,
+      updatedAt: true,
+    },
+  });
+
+  return NextResponse.json({
+    ok: true,
+    integration: {
+      id: updated.id,
+      provider: updated.provider,
+      customPrompt: updated.assistantCustomPrompt || '',
+      updatedAt: updated.updatedAt,
+    },
+  });
 }
 
 async function executeGmailPlan(accessToken: string, plan: GmailPlan) {
@@ -442,16 +554,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ provider: string }> }
 ) {
-  const investor = await getInvestorOrNull();
-  if (!investor) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { provider: rawProvider } = await params;
-  const provider = parseProvider(rawProvider);
-  if (!provider) {
-    return NextResponse.json({ error: 'Unsupported provider' }, { status: 400 });
-  }
+  const resolved = await resolveInvestorAndProvider(req, params);
+  if ('error' in resolved) return resolved.error;
+  const { provider, integration } = resolved;
 
   const body = (await req.json().catch(() => ({}))) as { messages?: ClientMessage[] };
   const incoming = Array.isArray(body.messages) ? body.messages : [];
@@ -465,18 +570,7 @@ export async function POST(
     return NextResponse.json({ error: '缺少对话内容' }, { status: 400 });
   }
 
-  const integration = await prisma.investorIntegration.findUnique({
-    where: {
-      investorId_provider: {
-        investorId: investor.id,
-        provider: providerToDb(provider),
-      },
-    },
-  });
-
-  if (!integration) {
-    return NextResponse.json({ error: `请先绑定${provider === 'gmail' ? 'Gmail' : '飞书'}账号` }, { status: 400 });
-  }
+  const customPrompt = integration.assistantCustomPrompt || null;
 
   if (provider !== 'gmail') {
     const latestSnapshot = await prisma.integrationSnapshot.findFirst({
@@ -487,7 +581,7 @@ export async function POST(
     const context = buildProviderContext(provider, latestSnapshot?.summary || null, latestSnapshot?.raw);
 
     const aiMessages: ChatMessage[] = [
-      { role: 'system', content: buildSystemPrompt(provider) },
+      { role: 'system', content: buildSystemPrompt(provider, customPrompt) },
       { role: 'system', content: `渠道上下文：\n${context}` },
       ...messages,
     ];
@@ -511,7 +605,7 @@ export async function POST(
       },
       {
         role: 'user',
-        content: buildRealtimePlannerPrompt(messages),
+        content: buildRealtimePlannerPrompt(messages, customPrompt),
       },
     ];
 
@@ -526,7 +620,13 @@ export async function POST(
 
     if (plan.action === 'snapshot_answer') {
       const result = await runMailAgentText([
-        { role: 'system', content: '你是投资人的 Gmail 助手。基于当前对话直接回答，不调用工具。' },
+        {
+          role: 'system',
+          content: [
+            '你是投资人的 Gmail 助手。基于当前对话直接回答，不调用工具。',
+            customPrompt?.trim() ? `用户自定义调教要求：\n${customPrompt.trim()}` : '',
+          ].join('\n'),
+        },
         ...messages,
       ]);
       return NextResponse.json({ reply: result.content, planner: plan, toolResult, model: result.model });
@@ -536,6 +636,7 @@ export async function POST(
       userMessages: messages,
       plan,
       toolResult,
+      customPrompt,
     });
 
     return NextResponse.json({

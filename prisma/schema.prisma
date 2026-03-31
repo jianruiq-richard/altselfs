@@ -43,6 +43,7 @@ model InvestorIntegration {
   status       String   @default("CONNECTED")
   accountEmail String?
   accountName  String?
+  assistantCustomPrompt String?
   accessToken  String?
   refreshToken String?
   expiresAt    DateTime?
