@@ -132,6 +132,40 @@ export async function createChatCompletion(
   throw new Error(`OpenRouter failed after trying models [${tried.join(', ')}]: ${detail}`);
 }
 
+export async function createJsonChatCompletion(
+  messages: ChatMessage[],
+  model?: string
+) {
+  const candidates = [
+    model,
+    process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.2',
+    process.env.OPENROUTER_MODEL_FALLBACK || 'anthropic/claude-sonnet-4.5',
+    process.env.OPENROUTER_MODEL_BACKUP || 'anthropic/claude-3.5-sonnet',
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'deepseek/deepseek-chat-v3-0324',
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'qwen/qwen-2.5-72b-instruct',
+    'openai/gpt-4o-mini',
+  ].filter(Boolean) as string[];
+
+  let lastError: unknown;
+  const tried: string[] = [];
+
+  for (const currentModel of candidates) {
+    tried.push(currentModel);
+    try {
+      const raw = await requestJsonCompletion(messages, currentModel);
+      if (raw.trim()) {
+        return raw;
+      }
+    } catch (error) {
+      lastError = error;
+      console.error(`OpenRouter JSON API error (${currentModel}):`, error);
+    }
+  }
+
+  const detail = getErrorMessage(lastError);
+  throw new Error(`OpenRouter JSON failed after trying models [${tried.join(', ')}]: ${detail}`);
+}
+
 export async function evaluateConversation(
   avatarSystemPrompt: string,
   messages: Array<{ role: 'user' | 'assistant'; content: string }>

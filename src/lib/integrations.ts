@@ -63,6 +63,8 @@ type GmailMessageDigest = {
   receivedAt: string | null;
 };
 
+export type GmailRealtimeMessage = GmailMessageDigest;
+
 function getEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -95,6 +97,7 @@ export function buildGoogleAuthUrl(origin: string, state: string): string {
     'email',
     'profile',
     'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.send',
   ].join(' ');
   const params = new URLSearchParams({
     client_id: clientId,
@@ -227,6 +230,22 @@ async function gmailFetch<T>(accessToken: string, path: string): Promise<T> {
   return data as T;
 }
 
+async function gmailFetchText(accessToken: string, path: string, init?: RequestInit): Promise<string> {
+  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(init?.headers || {}),
+    },
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Gmail API failed (${path}): ${text}`);
+  }
+  return text;
+}
+
 function headerValue(headers: GmailHeader[] | undefined, key: string) {
   return headers?.find((h) => h.name.toLowerCase() === key.toLowerCase())?.value || '';
 }
@@ -320,6 +339,102 @@ function digestGmailMessage(message: GmailMessageFull): GmailMessageDigest {
     },
     sizeEstimate: message.sizeEstimate || 0,
     receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : null,
+  };
+}
+
+export async function searchGmailMessages(
+  accessToken: string,
+  options?: {
+    query?: string;
+    maxResults?: number;
+    includeSpamTrash?: boolean;
+  }
+) {
+  const maxResults = Math.max(1, Math.min(options?.maxResults ?? 10, 20));
+  const params = new URLSearchParams({
+    maxResults: String(maxResults),
+    includeSpamTrash: options?.includeSpamTrash ? 'true' : 'false',
+  });
+  if (options?.query?.trim()) {
+    params.set('q', options.query.trim());
+  }
+
+  const list = await gmailFetch<{ messages?: Array<{ id: string }> }>(
+    accessToken,
+    `messages?${params.toString()}`
+  );
+  const ids = (list.messages || []).map((m) => m.id);
+  if (ids.length === 0) return [] as GmailRealtimeMessage[];
+
+  const details = await Promise.all(
+    ids.map((id) => gmailFetch<GmailMessageFull>(accessToken, `messages/${id}?format=full`))
+  );
+  return details.map(digestGmailMessage);
+}
+
+export async function getGmailMessageById(accessToken: string, messageId: string) {
+  const cleanId = messageId.trim();
+  if (!cleanId) {
+    throw new Error('messageId is required');
+  }
+  const full = await gmailFetch<GmailMessageFull>(accessToken, `messages/${cleanId}?format=full`);
+  return digestGmailMessage(full);
+}
+
+function toBase64Url(input: string) {
+  return Buffer.from(input, 'utf-8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function encodeMimeHeader(value: string) {
+  const encoded = Buffer.from(value, 'utf-8').toString('base64');
+  return `=?UTF-8?B?${encoded}?=`;
+}
+
+export async function sendGmailMessage(
+  accessToken: string,
+  payload: {
+    to: string;
+    subject: string;
+    body: string;
+    cc?: string;
+    bcc?: string;
+  }
+) {
+  const to = payload.to.trim();
+  const subject = payload.subject.trim();
+  const body = payload.body.trim();
+
+  if (!to || !subject || !body) {
+    throw new Error('to, subject and body are required');
+  }
+
+  const lines = [
+    `To: ${to}`,
+    payload.cc?.trim() ? `Cc: ${payload.cc.trim()}` : null,
+    payload.bcc?.trim() ? `Bcc: ${payload.bcc.trim()}` : null,
+    `Subject: ${encodeMimeHeader(subject)}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset="UTF-8"',
+    '',
+    body,
+  ].filter(Boolean) as string[];
+
+  const raw = toBase64Url(lines.join('\r\n'));
+  const responseText = await gmailFetchText(accessToken, 'messages/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ raw }),
+  });
+
+  const sent = JSON.parse(responseText) as { id?: string; threadId?: string; labelIds?: string[] };
+  return {
+    id: sent.id || '',
+    threadId: sent.threadId || null,
+    labelIds: sent.labelIds || [],
   };
 }
 
