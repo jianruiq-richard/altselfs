@@ -40,6 +40,60 @@ type GmailPlan = {
   };
 };
 
+function getMailAgentModelCandidates() {
+  const models = [
+    process.env.OPENROUTER_MODEL_MAIL_AGENT_PRIMARY || 'openai/gpt-5.2',
+    process.env.OPENROUTER_MODEL_MAIL_AGENT_FALLBACK || 'openai/gpt-5.2-mini',
+    process.env.OPENROUTER_MODEL_PRIMARY,
+    process.env.OPENROUTER_MODEL_FALLBACK,
+    process.env.OPENROUTER_MODEL_BACKUP,
+    'openai/gpt-4o-mini',
+  ].filter(Boolean) as string[];
+
+  const seen = new Set<string>();
+  return models.filter((m) => {
+    if (seen.has(m)) return false;
+    seen.add(m);
+    return true;
+  });
+}
+
+async function runMailAgentText(messages: ChatMessage[]) {
+  const candidates = getMailAgentModelCandidates();
+  let lastError: unknown;
+
+  for (const model of candidates) {
+    try {
+      const content = await createChatCompletion(messages, model);
+      return { content, model };
+    } catch (error) {
+      lastError = error;
+      console.error(`[mail-agent] text model failed (${model}):`, error);
+    }
+  }
+
+  const detail = lastError instanceof Error ? lastError.message : 'unknown';
+  throw new Error(`Mail agent text failed across models [${candidates.join(', ')}]: ${detail}`);
+}
+
+async function runMailAgentJson(messages: ChatMessage[]) {
+  const candidates = getMailAgentModelCandidates();
+  let lastError: unknown;
+
+  for (const model of candidates) {
+    try {
+      const content = await createJsonChatCompletion(messages, model);
+      return { content, model };
+    } catch (error) {
+      lastError = error;
+      console.error(`[mail-agent] json model failed (${model}):`, error);
+    }
+  }
+
+  const detail = lastError instanceof Error ? lastError.message : 'unknown';
+  throw new Error(`Mail agent json failed across models [${candidates.join(', ')}]: ${detail}`);
+}
+
 function extractJsonObject(raw: string): string | null {
   const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fenceMatch?.[1]) {
@@ -288,7 +342,7 @@ async function buildRealtimeFinalReply(input: {
     },
   ];
 
-  return createChatCompletion(messages);
+  return runMailAgentText(messages);
 }
 
 async function executeGmailPlan(accessToken: string, plan: GmailPlan) {
@@ -439,8 +493,8 @@ export async function POST(
     ];
 
     try {
-      const reply = await createChatCompletion(aiMessages);
-      return NextResponse.json({ reply });
+      const result = await runMailAgentText(aiMessages);
+      return NextResponse.json({ reply: result.content, model: result.model });
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'unknown';
       return NextResponse.json({ error: `AI回复失败：${detail}` }, { status: 500 });
@@ -461,30 +515,38 @@ export async function POST(
       },
     ];
 
-    const plannerRaw = await createJsonChatCompletion(plannerMessages);
-    const plan = safeParsePlan(plannerRaw);
+    const planner = await runMailAgentJson(plannerMessages);
+    const plan = safeParsePlan(planner.content);
     const toolResult = await executeGmailPlan(accessToken, plan);
 
     if ((toolResult as { action?: string }).action === 'clarify') {
       const clarify = (toolResult as { error?: string; note?: string }).error || '请补充更具体的操作目标。';
-      return NextResponse.json({ reply: clarify, planner: plan, toolResult });
+      return NextResponse.json({ reply: clarify, planner: plan, toolResult, model: planner.model });
     }
 
     if (plan.action === 'snapshot_answer') {
-      const reply = await createChatCompletion([
+      const result = await runMailAgentText([
         { role: 'system', content: '你是投资人的 Gmail 助手。基于当前对话直接回答，不调用工具。' },
         ...messages,
       ]);
-      return NextResponse.json({ reply, planner: plan, toolResult });
+      return NextResponse.json({ reply: result.content, planner: plan, toolResult, model: result.model });
     }
 
-    const reply = await buildRealtimeFinalReply({
+    const final = await buildRealtimeFinalReply({
       userMessages: messages,
       plan,
       toolResult,
     });
 
-    return NextResponse.json({ reply, planner: plan, toolResult });
+    return NextResponse.json({
+      reply: final.content,
+      planner: plan,
+      toolResult,
+      model: {
+        planner: planner.model,
+        responder: final.model,
+      },
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown';
     if (String(detail).toLowerCase().includes('insufficient authentication scopes')) {
