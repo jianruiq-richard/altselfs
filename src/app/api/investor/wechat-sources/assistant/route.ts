@@ -66,6 +66,13 @@ type ArticleCandidate = {
   summary: string;
 };
 
+function isValidBiz(value: string) {
+  const biz = value.trim();
+  if (!biz) return false;
+  if (biz.includes('${') || biz.includes('window.') || biz.includes('{') || biz.includes('}')) return false;
+  return /^(Mz[A-Za-z0-9+/_=-]{8,}|[A-Za-z0-9+/_=-]{12,})$/.test(biz);
+}
+
 function normalizeMessages(raw: unknown): ClientMessage[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -267,6 +274,20 @@ function renderToolResults(results: Array<{ tool: string; result: unknown }>) {
   return results.map((r, i) => `${i + 1}. ${r.tool}\n${JSON.stringify(r.result)}`).join('\n\n');
 }
 
+export async function DELETE() {
+  const investor = await getInvestorOrNull();
+  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const deleted = await prisma.agentThread.deleteMany({
+    where: {
+      investorId: investor.id,
+      agentType: WECHAT_PROVIDER,
+    },
+  });
+
+  return NextResponse.json({ ok: true, deletedThreads: deleted.count });
+}
+
 export async function GET() {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -395,6 +416,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, reply, threadId: thread.id });
   }
 
+  const validSources = sources.filter((source) => isValidBiz(source.biz));
+  const invalidSources = sources.filter((source) => !isValidBiz(source.biz));
+  if (validSources.length === 0) {
+    const names = invalidSources.map((item) => item.displayName).join('、');
+    const reply = `当前录入的公众号标识异常（例如包含模板占位符），请删除并重录。异常项：${names || '未知'}`;
+    await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
+    return NextResponse.json({ ok: true, reply, threadId: thread.id });
+  }
+
   const userQuery =
     [...messages].reverse().find((m) => m.role === 'user')?.content || messages[messages.length - 1].content;
 
@@ -427,7 +457,7 @@ export async function POST(req: NextRequest) {
     status: 'SUCCESS',
   });
 
-  const selectedSources = chooseSources(sources, plan, userQuery);
+  const selectedSources = chooseSources(validSources, plan, userQuery);
   const maxArticles = plan.args?.maxArticles || 8;
   const keyword = plan.args?.keyword || '';
   const toolResults: Array<{ tool: string; result: unknown }> = [];
@@ -562,7 +592,17 @@ export async function POST(req: NextRequest) {
 
   const responseMessages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(integration?.assistantCustomPrompt) },
-    { role: 'system', content: `用户公众号源：${sources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}` },
+    {
+      role: 'system',
+      content: [
+        `用户有效公众号源：${validSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`,
+        invalidSources.length > 0
+          ? `检测到无效公众号标识，已自动跳过：${invalidSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    },
     { role: 'system', content: `本轮执行计划：${JSON.stringify(plan)}` },
     { role: 'system', content: `候选文章：\n${renderCandidates(candidates)}` },
     { role: 'system', content: `工具结果：\n${renderToolResults(toolResults)}` },

@@ -99,6 +99,7 @@ model InvestorWechatSource {
   id             String   @id @default(cuid())
   biz            String
   displayName    String
+  description    String?
   lastArticleUrl String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

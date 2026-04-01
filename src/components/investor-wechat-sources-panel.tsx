@@ -6,6 +6,7 @@ type WechatSource = {
   id: string;
   biz: string;
   displayName: string;
+  description: string;
   lastArticleUrl: string;
   createdAt: string;
   updatedAt: string;
@@ -21,6 +22,7 @@ type WechatCandidate = {
   wechatId: string;
   biz: string;
   originId: string;
+  description: string;
   latestArticleUrl: string;
 };
 
@@ -42,6 +44,7 @@ export default function InvestorWechatSourcesPanel({
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
+  const [clearingAssistant, setClearingAssistant] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachLoaded, setCoachLoaded] = useState(false);
   const [coachLoading, setCoachLoading] = useState(false);
@@ -173,6 +176,7 @@ export default function InvestorWechatSourcesPanel({
         body: JSON.stringify({
           biz: candidate.biz,
           displayName: candidate.displayName || candidate.wechatId || candidate.originId || candidate.biz,
+          description: candidate.description || '',
           articleUrl: candidate.latestArticleUrl || undefined,
         }),
       });
@@ -233,6 +237,32 @@ export default function InvestorWechatSourcesPanel({
       ]);
     } finally {
       setAssistantLoading(false);
+    }
+  };
+
+  const clearAssistantHistory = async () => {
+    if (clearingAssistant || assistantLoading) return;
+    if (!window.confirm('确定清空该 AI 员工的全部聊天记录吗？此操作不可恢复。')) return;
+
+    setClearingAssistant(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch('/api/investor/wechat-sources/assistant', {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || '清空失败，请稍后重试');
+        return;
+      }
+      setAssistantMessages([]);
+      setAssistantThreadId(null);
+      setSuccess('已清空公众号 AI 员工聊天记录');
+    } catch {
+      setError('网络错误，请稍后重试');
+    } finally {
+      setClearingAssistant(false);
     }
   };
 
@@ -320,7 +350,7 @@ export default function InvestorWechatSourcesPanel({
                 <div key={source.id} className="px-4 py-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900 truncate">{source.displayName}</p>
-                    <p className="text-xs text-slate-500 mt-1">biz: {source.biz}</p>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{source.description || '暂无公众号简介'}</p>
                     <a
                       href={source.lastArticleUrl}
                       target="_blank"
@@ -398,6 +428,9 @@ export default function InvestorWechatSourcesPanel({
                   <p className="text-xs text-slate-500 mt-1 break-all">
                     wxid: {candidate.wechatId || '-'} · biz: {candidate.biz || '-'}
                   </p>
+                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                    {candidate.description || '暂无公众号简介'}
+                  </p>
                   {candidate.latestArticleUrl ? (
                     <p className="text-xs text-emerald-700 mt-1 break-all">已解析最新文章链接</p>
                   ) : (
@@ -419,7 +452,17 @@ export default function InvestorWechatSourcesPanel({
       </div>
 
       <div className="mt-4 border border-slate-200 rounded-lg p-3 bg-white">
-        <p className="text-xs text-slate-500 mb-2">AI员工对话</p>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs text-slate-500">AI员工对话</p>
+          <button
+            type="button"
+            disabled={clearingAssistant || assistantLoading || assistantMessages.length === 0}
+            onClick={() => void clearAssistantHistory()}
+            className="px-2 py-1 text-xs rounded border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+          >
+            {clearingAssistant ? '清空中...' : '清空聊天记录'}
+          </button>
+        </div>
         <div className="max-h-44 overflow-y-auto space-y-2 pr-1">
           {assistantMessages.length === 0 ? (
             <p className="text-sm text-slate-500">

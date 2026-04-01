@@ -7,6 +7,7 @@ export type AggregatedWechatAccount = {
   wechatId: string;
   biz: string;
   originId: string;
+  description: string;
   latestArticleUrl: string;
 };
 
@@ -40,6 +41,7 @@ function normalizeAccount(item: AnyRecord): AggregatedWechatAccount {
     wechatId: pickString(item.wxid, item.wechat_id, item.alias, item.account),
     biz: pickString(item.biz, item.__biz, item.fakeid),
     originId: pickString(item.origin_id, item.ghid, item.gh_id, item.ori_id),
+    description: pickString(item.description, item.desc, item.intro, item.brief, item.signature),
     latestArticleUrl: '',
   };
 }

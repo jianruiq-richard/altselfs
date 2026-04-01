@@ -59,6 +59,7 @@ export default async function InvestorDashboard({
     id: source.id,
     biz: source.biz,
     displayName: source.displayName,
+    description: source.description || '',
     lastArticleUrl: source.lastArticleUrl,
     createdAt: source.createdAt.toISOString(),
     updatedAt: source.updatedAt.toISOString(),

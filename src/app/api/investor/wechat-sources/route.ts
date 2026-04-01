@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 
+function isValidBiz(value: string) {
+  const biz = value.trim();
+  if (!biz) return false;
+  if (biz.includes('${') || biz.includes('window.') || biz.includes('{') || biz.includes('}')) return false;
+  // WeChat biz is typically base64-like, often starts with Mz*
+  return /^(Mz[A-Za-z0-9+/_=-]{8,}|[A-Za-z0-9+/_=-]{12,})$/.test(biz);
+}
+
 function normalizeUrlWithoutHash(input: string) {
   const url = new URL(input);
   url.hash = '';
@@ -18,7 +26,10 @@ function extractBizFromText(text: string) {
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match?.[1]) {
-      return decodeURIComponent(match[1]).trim();
+      const decoded = decodeURIComponent(match[1]).trim();
+      if (isValidBiz(decoded)) {
+        return decoded;
+      }
     }
   }
 
@@ -38,7 +49,7 @@ async function parseWechatArticleUrl(raw: string) {
   }
 
   const directBiz = (parsed.searchParams.get('__biz') || '').trim();
-  if (directBiz) {
+  if (directBiz && isValidBiz(directBiz)) {
     return {
       biz: directBiz,
       normalizedUrl: normalizeUrlWithoutHash(parsed.toString()),
@@ -59,7 +70,7 @@ async function parseWechatArticleUrl(raw: string) {
 
     const finalUrl = new URL(res.url || parsed.toString());
     const finalBiz = (finalUrl.searchParams.get('__biz') || '').trim();
-    if (finalBiz) {
+    if (finalBiz && isValidBiz(finalBiz)) {
       return {
         biz: finalBiz,
         normalizedUrl: normalizeUrlWithoutHash(finalUrl.toString()),
@@ -116,6 +127,7 @@ export async function POST(req: NextRequest) {
   const articleUrl = String((body as { articleUrl?: string })?.articleUrl || '').trim();
   const candidateBiz = String((body as { biz?: string })?.biz || '').trim();
   const candidateName = String((body as { displayName?: string })?.displayName || '').trim();
+  const candidateDescription = String((body as { description?: string })?.description || '').trim();
 
   let parsed:
     | {
@@ -132,6 +144,9 @@ export async function POST(req: NextRequest) {
   } else {
     if (!candidateBiz) {
       return NextResponse.json({ error: '请先输入文章链接，或从候选公众号中选择后添加' }, { status: 400 });
+    }
+    if (!isValidBiz(candidateBiz)) {
+      return NextResponse.json({ error: '候选公众号标识无效，请重新搜索并选择' }, { status: 400 });
     }
     parsed = {
       biz: candidateBiz,
@@ -163,6 +178,7 @@ export async function POST(req: NextRequest) {
       investorId: investor.id,
       biz: parsed.biz,
       displayName: candidateName || inferDisplayName(parsed.biz),
+      description: candidateDescription || null,
       lastArticleUrl: parsed.normalizedUrl || articleUrl || `https://mp.weixin.qq.com/?__biz=${encodeURIComponent(parsed.biz)}`,
     },
   });
