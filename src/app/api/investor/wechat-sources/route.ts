@@ -154,6 +154,12 @@ function inferDisplayName(biz: string) {
 }
 
 type AnyRecord = Record<string, unknown>;
+type EnrichLog = {
+  step: string;
+  status: 'ok' | 'skip' | 'error';
+  detail?: string;
+  input?: Record<string, unknown>;
+};
 
 function pickString(obj: AnyRecord, keys: string[]) {
   for (const key of keys) {
@@ -181,30 +187,30 @@ function asList(payload: unknown): AnyRecord[] {
 }
 
 async function enrichFromDajialaByBiz(biz: string, hintUrl?: string) {
+  const logs: EnrichLog[] = [];
   if (!isDajialaReady()) {
-    return { displayName: '', description: '', latestArticleUrl: '' };
+    logs.push({
+      step: 'dajiala_config_check',
+      status: 'skip',
+      detail: 'DAJIALA_API_KEY 未配置',
+    });
+    return { displayName: '', description: '', latestArticleUrl: '', logs };
   }
 
   try {
     let displayName = '';
     let description = '';
-
     let latestArticleUrl = '';
-    try {
-      const history = await DajialaRaw.getMpHistoryPosts({ biz, p: 1, count: 3 });
-      const list = asList(history);
-      const first = list[0] || {};
-      displayName = pickString(first, ['nickname', 'name', 'account_name', 'username']) || displayName;
-      description = pickString(first, ['description', 'desc', 'intro', 'brief']) || description;
-      latestArticleUrl = pickString(first, ['url', 'article_url', 'content_url', 'link']);
-    } catch {
-      // ignore history failures
-    }
 
     try {
       const principal = await DajialaRaw.getMpSubjectInfo({
         biz,
         url: latestArticleUrl || hintUrl || undefined,
+      });
+      logs.push({
+        step: 'getMpSubjectInfo',
+        status: 'ok',
+        input: { biz, url: latestArticleUrl || hintUrl || undefined },
       });
       const principalObj =
         (principal && typeof principal === 'object' && (principal as AnyRecord).data && typeof (principal as AnyRecord).data === 'object'
@@ -214,14 +220,24 @@ async function enrichFromDajialaByBiz(biz: string, hintUrl?: string) {
         pickString(principalObj, ['nick_name', 'nickname', 'name', 'account_name', 'wx_name']) || displayName;
       description =
         pickString(principalObj, ['desc', 'description', 'intro', 'brief', 'signature']) || description;
-    } catch {
-      // ignore principal info failures
+    } catch (error) {
+      logs.push({
+        step: 'getMpSubjectInfo',
+        status: 'error',
+        detail: error instanceof Error ? error.message : 'unknown',
+        input: { biz, url: latestArticleUrl || hintUrl || undefined },
+      });
     }
 
     if (!displayName) {
       try {
         const base = await DajialaRaw.getMpBaseInfo({
           url: latestArticleUrl || hintUrl || undefined,
+        });
+        logs.push({
+          step: 'getMpBaseInfo',
+          status: 'ok',
+          input: { url: latestArticleUrl || hintUrl || undefined },
         });
         const baseObj =
           (base && typeof base === 'object' && (base as AnyRecord).data && typeof (base as AnyRecord).data === 'object'
@@ -231,14 +247,51 @@ async function enrichFromDajialaByBiz(biz: string, hintUrl?: string) {
           pickString(baseObj, ['nick_name', 'nickname', 'name', 'account_name', 'wx_name']) || displayName;
         description =
           pickString(baseObj, ['desc', 'description', 'intro', 'brief', 'signature']) || description;
-      } catch {
-        // ignore avatar_type failures
+      } catch (error) {
+        logs.push({
+          step: 'getMpBaseInfo',
+          status: 'error',
+          detail: error instanceof Error ? error.message : 'unknown',
+          input: { url: latestArticleUrl || hintUrl || undefined },
+        });
       }
     }
 
-    return { displayName, description, latestArticleUrl };
+    if (!latestArticleUrl && !hintUrl) {
+      try {
+        const history = await DajialaRaw.getMpHistoryPosts({ biz, p: 1, count: 3 });
+        logs.push({
+          step: 'getMpHistoryPosts',
+          status: 'ok',
+          input: { biz, p: 1, count: 3 },
+        });
+        const list = asList(history);
+        const first = list[0] || {};
+        latestArticleUrl = pickString(first, ['url', 'article_url', 'content_url', 'link']);
+      } catch (error) {
+        logs.push({
+          step: 'getMpHistoryPosts',
+          status: 'error',
+          detail: error instanceof Error ? error.message : 'unknown',
+          input: { biz, p: 1, count: 3 },
+        });
+      }
+    } else {
+      logs.push({
+        step: 'getMpHistoryPosts',
+        status: 'skip',
+        detail: '已有文章链接，无需补抓历史',
+      });
+    }
+
+    return { displayName, description, latestArticleUrl, logs };
   } catch {
-    return { displayName: '', description: '', latestArticleUrl: '' };
+    logs.push({
+      step: 'enrichFromDajialaByBiz',
+      status: 'error',
+      detail: 'unexpected error',
+    });
+    return { displayName: '', description: '', latestArticleUrl: '', logs };
   }
 }
 
@@ -320,26 +373,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const enriched = await enrichFromDajialaByBiz(parsed.biz, articleUrl || parsed.normalizedUrl || undefined);
   const source = await prisma.investorWechatSource.create({
-    data: await (async () => {
-      const enriched = await enrichFromDajialaByBiz(parsed.biz, parsed.normalizedUrl || articleUrl || undefined);
-      return {
-        investorId: investor.id,
-        biz: parsed.biz,
-        displayName:
-          candidateName ||
-          parsed.displayName ||
-          enriched.displayName ||
-          inferDisplayName(parsed.biz),
-        description: candidateDescription || parsed.description || enriched.description || null,
-        lastArticleUrl:
-          parsed.normalizedUrl ||
-          articleUrl ||
-          enriched.latestArticleUrl ||
-          `https://mp.weixin.qq.com/?__biz=${encodeURIComponent(parsed.biz)}`,
-      };
-    })(),
+    data: {
+      investorId: investor.id,
+      biz: parsed.biz,
+      displayName:
+        candidateName ||
+        parsed.displayName ||
+        enriched.displayName ||
+        inferDisplayName(parsed.biz),
+      description: candidateDescription || parsed.description || enriched.description || null,
+      lastArticleUrl:
+        enriched.latestArticleUrl ||
+        articleUrl ||
+        parsed.normalizedUrl ||
+        `https://mp.weixin.qq.com/?__biz=${encodeURIComponent(parsed.biz)}`,
+    },
   });
 
-  return NextResponse.json({ ok: true, source });
+  return NextResponse.json({ ok: true, source, logs: enriched.logs });
 }

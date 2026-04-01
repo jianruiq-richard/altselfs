@@ -26,6 +26,13 @@ type WechatCandidate = {
   latestArticleUrl: string;
 };
 
+type AddSourceLog = {
+  step: string;
+  status: 'ok' | 'skip' | 'error';
+  detail?: string;
+  input?: Record<string, unknown>;
+};
+
 export default function InvestorWechatSourcesPanel({
   initialSources,
 }: {
@@ -52,6 +59,8 @@ export default function InvestorWechatSourcesPanel({
   const [coachDraft, setCoachDraft] = useState('');
   const [coachSaved, setCoachSaved] = useState('');
   const [coachMessage, setCoachMessage] = useState('');
+  const [addLogs, setAddLogs] = useState<AddSourceLog[]>([]);
+  const [logsOpen, setLogsOpen] = useState(false);
 
   const sortedSources = useMemo(
     () => [...sources].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)),
@@ -84,6 +93,8 @@ export default function InvestorWechatSourcesPanel({
     setLoading(true);
     setError(null);
     setSuccess(null);
+    setAddLogs([]);
+    setLogsOpen(false);
 
     try {
       const res = await fetch('/api/investor/wechat-sources', {
@@ -103,6 +114,9 @@ export default function InvestorWechatSourcesPanel({
       setArticleUrl('');
       setExpanded(true);
       setSuccess(`已录入：${created.displayName}`);
+      const logs = Array.isArray(data.logs) ? (data.logs as AddSourceLog[]) : [];
+      setAddLogs(logs);
+      setLogsOpen(logs.length > 0);
     } catch {
       setError('网络错误，请稍后重试');
     } finally {
@@ -116,6 +130,8 @@ export default function InvestorWechatSourcesPanel({
     setLoading(true);
     setError(null);
     setSuccess(null);
+    setAddLogs([]);
+    setLogsOpen(false);
 
     try {
       const res = await fetch(`/api/investor/wechat-sources/${id}`, {
@@ -190,6 +206,9 @@ export default function InvestorWechatSourcesPanel({
       setSources((prev) => [created, ...prev.filter((it) => it.id !== created.id)]);
       setExpanded(true);
       setSuccess(`已录入：${created.displayName}`);
+      const logs = Array.isArray(data.logs) ? (data.logs as AddSourceLog[]) : [];
+      setAddLogs(logs);
+      setLogsOpen(logs.length > 0);
     } catch {
       setError('网络错误，请稍后重试');
     } finally {
@@ -330,6 +349,46 @@ export default function InvestorWechatSourcesPanel({
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       {success && <p className="mt-3 text-sm text-emerald-700">{success}</p>}
+      {addLogs.length > 0 && (
+        <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setLogsOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors"
+          >
+            <span className="text-xs font-medium text-slate-700">后台执行日志（{addLogs.length}）</span>
+            <span className="text-xs text-slate-500">{logsOpen ? '收起' : '展开'}</span>
+          </button>
+          {logsOpen && (
+            <div className="bg-white divide-y divide-slate-200">
+              {addLogs.map((log, idx) => (
+                <div key={`${log.step}-${idx}`} className="px-3 py-2 text-xs text-slate-700">
+                  <p className="font-medium">
+                    {idx + 1}. {log.step}{' '}
+                    <span
+                      className={
+                        log.status === 'ok'
+                          ? 'text-emerald-700'
+                          : log.status === 'skip'
+                            ? 'text-amber-700'
+                            : 'text-rose-700'
+                      }
+                    >
+                      [{log.status}]
+                    </span>
+                  </p>
+                  {log.detail && <p className="mt-1 text-slate-500 break-all">detail: {log.detail}</p>}
+                  {log.input && (
+                    <pre className="mt-1 p-2 bg-slate-50 rounded border border-slate-200 text-[11px] overflow-x-auto whitespace-pre-wrap break-all">
+                      {JSON.stringify(log.input, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
         <button
