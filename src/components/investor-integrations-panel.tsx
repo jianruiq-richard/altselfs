@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type ProviderKey = 'gmail' | 'feishu';
 
@@ -45,6 +45,10 @@ export default function InvestorIntegrationsPanel({
     gmail: [],
     feishu: [],
   });
+  const [assistantThreadIds, setAssistantThreadIds] = useState<Record<ProviderKey, string | null>>({
+    gmail: null,
+    feishu: null,
+  });
   const [coachOpen, setCoachOpen] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
@@ -84,6 +88,27 @@ export default function InvestorIntegrationsPanel({
   }, [integrationDetail, integrationProvider, integrationStatus]);
 
   const providerLabel = (provider: ProviderKey) => (provider === 'gmail' ? 'Gmail' : '飞书');
+
+  useEffect(() => {
+    const loadThreads = async () => {
+      for (const provider of ['gmail', 'feishu'] as const) {
+        try {
+          const res = await fetch(`/api/investor/integrations/assistant/${provider}`);
+          const data = await res.json();
+          if (!res.ok) continue;
+          if (data.thread?.id) {
+            setAssistantThreadIds((prev) => ({ ...prev, [provider]: String(data.thread.id) }));
+          }
+          if (Array.isArray(data.thread?.messages)) {
+            setAssistantChats((prev) => ({ ...prev, [provider]: data.thread.messages }));
+          }
+        } catch {
+          // ignore thread preload failure
+        }
+      }
+    };
+    void loadThreads();
+  }, []);
 
   const connect = (provider: ProviderKey) => {
     window.location.href = `/api/investor/integrations/connect/${provider}`;
@@ -139,7 +164,7 @@ export default function InvestorIntegrationsPanel({
       const res = await fetch(`/api/investor/integrations/assistant/${provider}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ messages: nextMessages, threadId: assistantThreadIds[provider] }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -155,6 +180,9 @@ export default function InvestorIntegrationsPanel({
         ...prev,
         [provider]: [...nextMessages, { role: 'assistant', content: data.reply || '已收到，但暂无回复。' }],
       }));
+      if (data.threadId) {
+        setAssistantThreadIds((prev) => ({ ...prev, [provider]: String(data.threadId) }));
+      }
     } catch {
       setAssistantChats((prev) => ({
         ...prev,

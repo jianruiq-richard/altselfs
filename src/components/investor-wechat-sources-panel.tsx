@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type WechatSource = {
   id: string;
@@ -30,6 +30,7 @@ export default function InvestorWechatSourcesPanel({
   const [assistantInput, setAssistantInput] = useState('');
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
+  const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachLoaded, setCoachLoaded] = useState(false);
   const [coachLoading, setCoachLoading] = useState(false);
@@ -42,6 +43,25 @@ export default function InvestorWechatSourcesPanel({
     () => [...sources].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)),
     [sources]
   );
+
+  useEffect(() => {
+    const loadThreadAndPrompt = async () => {
+      try {
+        const res = await fetch('/api/investor/wechat-sources/assistant');
+        const data = await res.json();
+        if (!res.ok) return;
+        if (data.thread?.id) {
+          setAssistantThreadId(String(data.thread.id));
+        }
+        if (Array.isArray(data.thread?.messages)) {
+          setAssistantMessages(data.thread.messages);
+        }
+      } catch {
+        // ignore preload failure
+      }
+    };
+    void loadThreadAndPrompt();
+  }, []);
 
   const addSource = async () => {
     const nextUrl = articleUrl.trim();
@@ -117,7 +137,7 @@ export default function InvestorWechatSourcesPanel({
       const res = await fetch('/api/investor/wechat-sources/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ messages: nextMessages, threadId: assistantThreadId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -132,6 +152,9 @@ export default function InvestorWechatSourcesPanel({
         ...prev,
         { role: 'assistant', content: data.reply || '已收到，但暂无回复。' },
       ]);
+      if (data.threadId) {
+        setAssistantThreadId(String(data.threadId));
+      }
     } catch {
       setAssistantMessages((prev) => [
         ...prev,

@@ -37,7 +37,62 @@ model User {
   // 投资人维护的公众号源
   wechatSources InvestorWechatSource[]
 
+  // 投资人 AI 员工会话
+  agentThreads AgentThread[]
+
   @@map("users")
+}
+
+model AgentThread {
+  id        String   @id @default(cuid())
+  agentType String
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  messages  AgentMessage[]
+  toolCalls AgentToolCall[]
+
+  @@index([investorId, agentType, updatedAt])
+  @@map("agent_threads")
+}
+
+model AgentMessage {
+  id        String   @id @default(cuid())
+  role      String
+  content   String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  threadId String
+  thread   AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  toolCalls AgentToolCall[]
+
+  @@index([threadId, createdAt])
+  @@map("agent_messages")
+}
+
+model AgentToolCall {
+  id         String   @id @default(cuid())
+  toolName   String
+  status     String   @default("SUCCESS")
+  toolArgs   Json?
+  toolResult Json?
+  createdAt  DateTime @default(now())
+
+  threadId String
+  thread   AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  messageId String?
+  message   AgentMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([threadId, createdAt])
+  @@index([messageId])
+  @@map("agent_tool_calls")
 }
 
 model InvestorWechatSource {

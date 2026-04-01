@@ -3,6 +3,14 @@ import { prisma } from '@/lib/prisma';
 import { createChatCompletion, createJsonChatCompletion, type ChatMessage } from '@/lib/openrouter';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import {
+  appendThreadMessage,
+  appendToolCall,
+  ensureThread,
+  getLatestThreadWithMessages,
+  toClientMessages,
+  type AgentType,
+} from '@/lib/agent-session';
+import {
   getGmailMessageById,
   parseProvider,
   providerToDb,
@@ -417,9 +425,18 @@ export async function GET(
   const resolved = await resolveInvestorAndProvider(req, params);
   if ('error' in resolved) return resolved.error;
 
+  const agentType = providerToDb(resolved.provider) as AgentType;
+  const thread = await getLatestThreadWithMessages(resolved.investor.id, agentType);
+
   return NextResponse.json({
     provider: resolved.provider,
     customPrompt: resolved.integration.assistantCustomPrompt || '',
+    thread: thread
+      ? {
+          id: thread.id,
+          messages: toClientMessages(thread.messages),
+        }
+      : null,
   });
 }
 
@@ -558,7 +575,7 @@ export async function POST(
   if ('error' in resolved) return resolved.error;
   const { provider, integration } = resolved;
 
-  const body = (await req.json().catch(() => ({}))) as { messages?: ClientMessage[] };
+  const body = (await req.json().catch(() => ({}))) as { messages?: ClientMessage[]; threadId?: string };
   const incoming = Array.isArray(body.messages) ? body.messages : [];
   const messages = incoming
     .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -568,6 +585,23 @@ export async function POST(
 
   if (messages.length === 0) {
     return NextResponse.json({ error: '缺少对话内容' }, { status: 400 });
+  }
+
+  const thread = await ensureThread({
+    investorId: resolved.investor.id,
+    agentType: providerToDb(provider) as AgentType,
+    threadId: typeof body.threadId === 'string' ? body.threadId : null,
+  });
+
+  const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+  let userMessageId: string | null = null;
+  if (lastUser) {
+    const saved = await appendThreadMessage({
+      threadId: thread.id,
+      role: 'USER',
+      content: lastUser.content,
+    });
+    userMessageId = saved.id;
   }
 
   const customPrompt = integration.assistantCustomPrompt || null;
@@ -588,7 +622,13 @@ export async function POST(
 
     try {
       const result = await runMailAgentText(aiMessages);
-      return NextResponse.json({ reply: result.content, model: result.model });
+      await appendThreadMessage({
+        threadId: thread.id,
+        role: 'ASSISTANT',
+        content: result.content || '已收到，但暂无回复。',
+        meta: { model: result.model },
+      });
+      return NextResponse.json({ reply: result.content, model: result.model, threadId: thread.id });
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'unknown';
       return NextResponse.json({ error: `AI回复失败：${detail}` }, { status: 500 });
@@ -611,11 +651,33 @@ export async function POST(
 
     const planner = await runMailAgentJson(plannerMessages);
     const plan = safeParsePlan(planner.content);
+    await appendToolCall({
+      threadId: thread.id,
+      messageId: userMessageId,
+      toolName: 'gmail_planner',
+      status: 'SUCCESS',
+      toolArgs: { messages: messages.slice(-8) },
+      toolResult: { plan, model: planner.model },
+    });
     const toolResult = await executeGmailPlan(accessToken, plan);
+    await appendToolCall({
+      threadId: thread.id,
+      messageId: userMessageId,
+      toolName: `gmail_${plan.action}`,
+      status: 'SUCCESS',
+      toolArgs: plan.args,
+      toolResult,
+    });
 
     if ((toolResult as { action?: string }).action === 'clarify') {
       const clarify = (toolResult as { error?: string; note?: string }).error || '请补充更具体的操作目标。';
-      return NextResponse.json({ reply: clarify, planner: plan, toolResult, model: planner.model });
+      await appendThreadMessage({
+        threadId: thread.id,
+        role: 'ASSISTANT',
+        content: clarify,
+        meta: { plannerModel: planner.model, plan },
+      });
+      return NextResponse.json({ reply: clarify, planner: plan, toolResult, model: planner.model, threadId: thread.id });
     }
 
     if (plan.action === 'snapshot_answer') {
@@ -629,7 +691,13 @@ export async function POST(
         },
         ...messages,
       ]);
-      return NextResponse.json({ reply: result.content, planner: plan, toolResult, model: result.model });
+      await appendThreadMessage({
+        threadId: thread.id,
+        role: 'ASSISTANT',
+        content: result.content || '已收到，但暂无回复。',
+        meta: { model: result.model, plan },
+      });
+      return NextResponse.json({ reply: result.content, planner: plan, toolResult, model: result.model, threadId: thread.id });
     }
 
     const final = await buildRealtimeFinalReply({
@@ -637,6 +705,17 @@ export async function POST(
       plan,
       toolResult,
       customPrompt,
+    });
+
+    await appendThreadMessage({
+      threadId: thread.id,
+      role: 'ASSISTANT',
+      content: final.content || '已收到，但暂无回复。',
+      meta: {
+        plannerModel: planner.model,
+        responderModel: final.model,
+        plan,
+      },
     });
 
     return NextResponse.json({
@@ -647,6 +726,7 @@ export async function POST(
         planner: planner.model,
         responder: final.model,
       },
+      threadId: thread.id,
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown';
