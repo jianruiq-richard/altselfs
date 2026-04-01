@@ -37,11 +37,11 @@ function pickString(...values: unknown[]) {
 
 function normalizeAccount(item: AnyRecord): AggregatedWechatAccount {
   return {
-    displayName: pickString(item.name, item.nickname, item.account_name),
+    displayName: pickString(item.nick_name, item.nickname, item.name, item.account_name),
     wechatId: pickString(item.wxid, item.wechat_id, item.alias, item.account),
     biz: pickString(item.biz, item.__biz, item.fakeid),
     originId: pickString(item.origin_id, item.ghid, item.gh_id, item.ori_id),
-    description: pickString(item.description, item.desc, item.intro, item.brief, item.signature),
+    description: pickString(item.desc, item.description, item.intro, item.brief, item.signature),
     latestArticleUrl: '',
   };
 }

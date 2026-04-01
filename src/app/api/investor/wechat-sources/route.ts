@@ -180,32 +180,60 @@ function asList(payload: unknown): AnyRecord[] {
   return [];
 }
 
-async function enrichFromDajialaByBiz(biz: string) {
+async function enrichFromDajialaByBiz(biz: string, hintUrl?: string) {
   if (!isDajialaReady()) {
     return { displayName: '', description: '', latestArticleUrl: '' };
   }
 
   try {
-    const baseInfo = await DajialaRaw.getMpBaseInfo({ biz });
-    const baseObj =
-      (baseInfo && typeof baseInfo === 'object' && (baseInfo as AnyRecord).data && typeof (baseInfo as AnyRecord).data === 'object'
-        ? ((baseInfo as AnyRecord).data as AnyRecord)
-        : (baseInfo as AnyRecord)) || {};
-
-    let displayName = pickString(baseObj, ['name', 'nickname', 'account_name', 'title']);
-    const description = pickString(baseObj, ['description', 'desc', 'intro', 'brief', 'signature']);
+    let displayName = '';
+    let description = '';
 
     let latestArticleUrl = '';
     try {
       const history = await DajialaRaw.getMpHistoryPosts({ biz, p: 1, count: 3 });
       const list = asList(history);
       const first = list[0] || {};
-      if (!displayName) {
-        displayName = pickString(first, ['nickname', 'name', 'account_name']);
-      }
+      displayName = pickString(first, ['nickname', 'name', 'account_name', 'username']) || displayName;
+      description = pickString(first, ['description', 'desc', 'intro', 'brief']) || description;
       latestArticleUrl = pickString(first, ['url', 'article_url', 'content_url', 'link']);
     } catch {
       // ignore history failures
+    }
+
+    try {
+      const principal = await DajialaRaw.getMpSubjectInfo({
+        biz,
+        url: latestArticleUrl || hintUrl || undefined,
+      });
+      const principalObj =
+        (principal && typeof principal === 'object' && (principal as AnyRecord).data && typeof (principal as AnyRecord).data === 'object'
+          ? ((principal as AnyRecord).data as AnyRecord)
+          : (principal as AnyRecord)) || {};
+      displayName =
+        pickString(principalObj, ['nick_name', 'nickname', 'name', 'account_name', 'wx_name']) || displayName;
+      description =
+        pickString(principalObj, ['desc', 'description', 'intro', 'brief', 'signature']) || description;
+    } catch {
+      // ignore principal info failures
+    }
+
+    if (!displayName) {
+      try {
+        const base = await DajialaRaw.getMpBaseInfo({
+          url: latestArticleUrl || hintUrl || undefined,
+        });
+        const baseObj =
+          (base && typeof base === 'object' && (base as AnyRecord).data && typeof (base as AnyRecord).data === 'object'
+            ? ((base as AnyRecord).data as AnyRecord)
+            : (base as AnyRecord)) || {};
+        displayName =
+          pickString(baseObj, ['nick_name', 'nickname', 'name', 'account_name', 'wx_name']) || displayName;
+        description =
+          pickString(baseObj, ['desc', 'description', 'intro', 'brief', 'signature']) || description;
+      } catch {
+        // ignore avatar_type failures
+      }
     }
 
     return { displayName, description, latestArticleUrl };
@@ -294,7 +322,7 @@ export async function POST(req: NextRequest) {
 
   const source = await prisma.investorWechatSource.create({
     data: await (async () => {
-      const enriched = await enrichFromDajialaByBiz(parsed.biz);
+      const enriched = await enrichFromDajialaByBiz(parsed.biz, parsed.normalizedUrl || articleUrl || undefined);
       return {
         investorId: investor.id,
         biz: parsed.biz,
