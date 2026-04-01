@@ -114,13 +114,29 @@ export async function POST(req: NextRequest) {
   }
 
   const articleUrl = String((body as { articleUrl?: string })?.articleUrl || '').trim();
-  if (!articleUrl) {
-    return NextResponse.json({ error: '请先输入文章链接' }, { status: 400 });
-  }
+  const candidateBiz = String((body as { biz?: string })?.biz || '').trim();
+  const candidateName = String((body as { displayName?: string })?.displayName || '').trim();
 
-  const parsed = await parseWechatArticleUrl(articleUrl);
-  if ('error' in parsed) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  let parsed:
+    | {
+        biz: string;
+        normalizedUrl: string;
+      }
+    | { error: string };
+
+  if (articleUrl) {
+    parsed = await parseWechatArticleUrl(articleUrl);
+    if ('error' in parsed) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+  } else {
+    if (!candidateBiz) {
+      return NextResponse.json({ error: '请先输入文章链接，或从候选公众号中选择后添加' }, { status: 400 });
+    }
+    parsed = {
+      biz: candidateBiz,
+      normalizedUrl: '',
+    };
   }
 
   const existing = await prisma.investorWechatSource.findUnique({
@@ -146,8 +162,8 @@ export async function POST(req: NextRequest) {
     data: {
       investorId: investor.id,
       biz: parsed.biz,
-      displayName: inferDisplayName(parsed.biz),
-      lastArticleUrl: parsed.normalizedUrl,
+      displayName: candidateName || inferDisplayName(parsed.biz),
+      lastArticleUrl: parsed.normalizedUrl || articleUrl || `https://mp.weixin.qq.com/?__biz=${encodeURIComponent(parsed.biz)}`,
     },
   });
 

@@ -16,6 +16,14 @@ type AssistantMessage = {
   content: string;
 };
 
+type WechatCandidate = {
+  displayName: string;
+  wechatId: string;
+  biz: string;
+  originId: string;
+  latestArticleUrl: string;
+};
+
 export default function InvestorWechatSourcesPanel({
   initialSources,
 }: {
@@ -27,6 +35,9 @@ export default function InvestorWechatSourcesPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchCandidates, setSearchCandidates] = useState<WechatCandidate[]>([]);
   const [assistantInput, setAssistantInput] = useState('');
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
@@ -115,6 +126,66 @@ export default function InvestorWechatSourcesPanel({
 
       setSources((prev) => prev.filter((it) => it.id !== id));
       setSuccess('已删除公众号');
+    } catch {
+      setError('网络错误，请稍后重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchCandidatesByKeyword = async () => {
+    const keyword = searchKeyword.trim();
+    if (!keyword || searchLoading) return;
+
+    setSearchLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await fetch(`/api/investor/wechat-sources/search?keyword=${encodeURIComponent(keyword)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || '搜索失败，请稍后重试');
+        return;
+      }
+      setSearchCandidates(Array.isArray(data.candidates) ? data.candidates : []);
+      if (!Array.isArray(data.candidates) || data.candidates.length === 0) {
+        setSuccess('未搜索到候选公众号，请换个关键词或改用文章链接录入');
+      }
+    } catch {
+      setError('网络错误，请稍后重试');
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const addSourceFromCandidate = async (candidate: WechatCandidate) => {
+    if (loading) return;
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await fetch('/api/investor/wechat-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          biz: candidate.biz,
+          displayName: candidate.displayName || candidate.wechatId || candidate.originId || candidate.biz,
+          articleUrl: candidate.latestArticleUrl || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || '录入失败，请稍后重试');
+        return;
+      }
+
+      const created = data.source as WechatSource;
+      setSources((prev) => [created, ...prev.filter((it) => it.id !== created.id)]);
+      setExpanded(true);
+      setSuccess(`已录入：${created.displayName}`);
     } catch {
       setError('网络错误，请稍后重试');
     } finally {
@@ -289,6 +360,62 @@ export default function InvestorWechatSourcesPanel({
         >
           {loading ? '处理中...' : '添加'}
         </button>
+      </div>
+
+      <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-slate-50">
+        <p className="text-xs text-slate-500 mb-2">关键词搜索公众号后直接选择录入</p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void searchCandidatesByKeyword();
+              }
+            }}
+            placeholder="输入公众号名称或关键词"
+            className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+          />
+          <button
+            type="button"
+            disabled={searchLoading || !searchKeyword.trim()}
+            onClick={() => void searchCandidatesByKeyword()}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-white text-slate-800 border border-slate-300 hover:bg-slate-100 disabled:opacity-50"
+          >
+            {searchLoading ? '搜索中...' : '搜索候选'}
+          </button>
+        </div>
+
+        {searchCandidates.length > 0 && (
+          <div className="mt-2 max-h-56 overflow-y-auto border border-slate-200 bg-white rounded-lg divide-y divide-slate-200">
+            {searchCandidates.map((candidate, idx) => (
+              <div key={`${candidate.biz || candidate.wechatId || candidate.originId}-${idx}`} className="px-3 py-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-900 font-medium truncate">
+                    {candidate.displayName || candidate.wechatId || candidate.originId || candidate.biz}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1 break-all">
+                    wxid: {candidate.wechatId || '-'} · biz: {candidate.biz || '-'}
+                  </p>
+                  {candidate.latestArticleUrl ? (
+                    <p className="text-xs text-emerald-700 mt-1 break-all">已解析最新文章链接</p>
+                  ) : (
+                    <p className="text-xs text-amber-700 mt-1 break-all">未拿到最新文章链接（可先录入，后续补链接）</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={loading || !candidate.biz}
+                  onClick={() => void addSourceFromCandidate(candidate)}
+                  className="shrink-0 px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+                >
+                  选择并添加
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mt-4 border border-slate-200 rounded-lg p-3 bg-white">

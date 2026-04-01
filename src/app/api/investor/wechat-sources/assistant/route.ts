@@ -9,6 +9,14 @@ import {
   getLatestThreadWithMessages,
   toClientMessages,
 } from '@/lib/agent-session';
+import {
+  getArticleDetail,
+  getArticleMetrics,
+  listArticlesByAccount,
+  searchArticles,
+  searchRealtimeArticles,
+} from '@/lib/dajiala-tools/agent';
+import { isDajialaReady } from '@/lib/dajiala-tools/raw';
 
 const WECHAT_PROVIDER = 'WECHAT';
 const MAX_CUSTOM_PROMPT_LENGTH = 8000;
@@ -25,72 +33,41 @@ type SourceRecord = {
   updatedAt: Date;
 };
 
+type PlannerAction =
+  | 'list_source_articles'
+  | 'search_global_articles'
+  | 'get_article_detail'
+  | 'get_article_metrics'
+  | 'mixed_analysis'
+  | 'clarify';
+
 type WechatToolPlan = {
-  action: 'discover_articles' | 'fetch_article_content' | 'answer_only' | 'clarify';
+  action: PlannerAction;
   reason?: string;
   args?: {
     bizList?: string[];
-    maxSources?: number;
-    maxArticles?: number;
     keyword?: string;
     dateFrom?: string;
     dateTo?: string;
-    focus?: string;
+    targetUrl?: string;
+    articleUrls?: string[];
+    maxSources?: number;
+    maxArticles?: number;
+    realtime?: boolean;
   };
 };
 
-type DiscoveredArticle = {
+type ArticleCandidate = {
+  sourceName: string;
   biz: string;
-  displayName: string;
-  url: string;
-  finalUrl: string;
   title: string;
-  snippet: string;
+  url: string;
   publishAt: string | null;
-  fetchedAt: string;
-  content?: string;
-  error?: string;
+  summary: string;
 };
-
-function buildSourceContext(sources: SourceRecord[]) {
-  if (sources.length === 0) {
-    return '当前未录入任何公众号。先在上方添加公众号文章链接后再分析。';
-  }
-
-  return sources
-    .map(
-      (source, index) =>
-        `${index + 1}. ${source.displayName}（biz: ${source.biz}）\n` +
-        `   最近链接：${source.lastArticleUrl}\n` +
-        `   更新时间：${source.updatedAt.toLocaleString('zh-CN')}`
-    )
-    .join('\n');
-}
-
-function buildSystemPrompt(customPrompt?: string | null) {
-  const base = [
-    '你是投资人的“微信公众号AI员工”。',
-    '你的任务：',
-    '1) 先基于用户问题决定是否要先“发现文章列表”再“抓全文”。',
-    '2) 若用户询问某天/近几天/某主题，优先从候选文章中筛选后再回答。',
-    '3) 默认中文，输出简洁、有层次。',
-    '限制：',
-    '1) 不要编造未抓取到的文章全文；',
-    '2) 需要引用时优先给出具体标题和链接；',
-    '3) 信息不足时明确说明并提出下一步。',
-  ];
-
-  if (customPrompt?.trim()) {
-    base.push('用户自定义调教要求：');
-    base.push(customPrompt.trim());
-  }
-
-  return base.join('\n');
-}
 
 function normalizeMessages(raw: unknown): ClientMessage[] {
   if (!Array.isArray(raw)) return [];
-
   return raw
     .map((item) => {
       const role = (item as { role?: string })?.role;
@@ -104,49 +81,58 @@ function normalizeMessages(raw: unknown): ClientMessage[] {
 }
 
 function extractJsonObject(raw: string): string | null {
-  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fenceMatch?.[1]) {
-    const candidate = fenceMatch[1].trim();
-    if (candidate.startsWith('{') && candidate.endsWith('}')) {
-      return candidate;
-    }
-  }
-
-  const firstBrace = raw.indexOf('{');
-  const lastBrace = raw.lastIndexOf('}');
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    return raw.slice(firstBrace, lastBrace + 1);
-  }
-
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  if (fence && fence.trim().startsWith('{') && fence.trim().endsWith('}')) return fence.trim();
+  const left = raw.indexOf('{');
+  const right = raw.lastIndexOf('}');
+  if (left >= 0 && right > left) return raw.slice(left, right + 1);
   return null;
 }
 
 function safeParsePlan(raw: string): WechatToolPlan {
   try {
     const parsed = JSON.parse(extractJsonObject(raw) ?? raw) as Partial<WechatToolPlan>;
-    const allowed = new Set(['discover_articles', 'fetch_article_content', 'answer_only', 'clarify']);
-    const action = allowed.has(parsed.action || '') ? parsed.action : 'clarify';
+    const allowed = new Set<PlannerAction>([
+      'list_source_articles',
+      'search_global_articles',
+      'get_article_detail',
+      'get_article_metrics',
+      'mixed_analysis',
+      'clarify',
+    ]);
+    const action = allowed.has(parsed.action as PlannerAction)
+      ? (parsed.action as PlannerAction)
+      : 'clarify';
     const bizList = Array.isArray(parsed.args?.bizList)
-      ? parsed.args.bizList.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim())
+      ? parsed.args.bizList
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .map((x) => x.trim())
+      : [];
+    const articleUrls = Array.isArray(parsed.args?.articleUrls)
+      ? parsed.args.articleUrls
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .map((x) => x.trim())
       : [];
 
     return {
-      action: action as WechatToolPlan['action'],
+      action,
       reason: typeof parsed.reason === 'string' ? parsed.reason : '',
       args: {
         bizList,
-        maxSources:
-          typeof parsed.args?.maxSources === 'number' && Number.isFinite(parsed.args.maxSources)
-            ? Math.max(1, Math.min(8, Math.round(parsed.args.maxSources)))
-            : undefined,
-        maxArticles:
-          typeof parsed.args?.maxArticles === 'number' && Number.isFinite(parsed.args.maxArticles)
-            ? Math.max(1, Math.min(10, Math.round(parsed.args.maxArticles)))
-            : undefined,
         keyword: typeof parsed.args?.keyword === 'string' ? parsed.args.keyword.trim() : undefined,
         dateFrom: typeof parsed.args?.dateFrom === 'string' ? parsed.args.dateFrom.trim() : undefined,
         dateTo: typeof parsed.args?.dateTo === 'string' ? parsed.args.dateTo.trim() : undefined,
-        focus: typeof parsed.args?.focus === 'string' ? parsed.args.focus.trim() : undefined,
+        targetUrl: typeof parsed.args?.targetUrl === 'string' ? parsed.args.targetUrl.trim() : undefined,
+        articleUrls,
+        maxSources:
+          typeof parsed.args?.maxSources === 'number'
+            ? Math.max(1, Math.min(8, Math.round(parsed.args.maxSources)))
+            : undefined,
+        maxArticles:
+          typeof parsed.args?.maxArticles === 'number'
+            ? Math.max(1, Math.min(20, Math.round(parsed.args.maxArticles)))
+            : undefined,
+        realtime: Boolean(parsed.args?.realtime),
       },
     };
   } catch {
@@ -154,360 +140,140 @@ function safeParsePlan(raw: string): WechatToolPlan {
   }
 }
 
-function normalizeUrlWithoutHash(input: string) {
-  const url = new URL(input);
-  url.hash = '';
-  return url.toString();
-}
-
-function extractBizFromUrl(rawUrl: string) {
-  try {
-    return (new URL(rawUrl).searchParams.get('__biz') || '').trim();
-  } catch {
-    return '';
+function buildSystemPrompt(customPrompt?: string | null) {
+  const lines = [
+    '你是投资人的微信公众号AI员工。',
+    '你会先通过工具获取文章列表/正文/指标，再给出结论。',
+    '必须基于工具结果回答，不可编造。',
+    '输出简洁中文，优先给可执行结论。',
+  ];
+  if (customPrompt?.trim()) {
+    lines.push('用户自定义调教要求：');
+    lines.push(customPrompt.trim());
   }
-}
-
-function decodeHtmlEntities(text: string) {
-  return text
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
-function stripHtml(html: string) {
-  return decodeHtmlEntities(
-    html
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/p>/gi, '\n')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/[ \t]{2,}/g, ' ')
-      .trim()
-  );
-}
-
-function extractArticleTitle(html: string) {
-  const candidates = [
-    html.match(/property="og:title"\s+content="([^"]+)"/i)?.[1],
-    html.match(/var\s+msg_title\s*=\s*'([^']+)'/i)?.[1],
-    html.match(/var\s+msg_title\s*=\s*"([^"]+)"/i)?.[1],
-    html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1],
-  ].filter(Boolean) as string[];
-
-  return decodeHtmlEntities((candidates[0] || '未识别标题').trim());
-}
-
-function extractPublishAt(html: string): string | null {
-  const tsRaw = html.match(/var\s+ct\s*=\s*['\"]?(\d{10})['\"]?/i)?.[1];
-  if (tsRaw) {
-    const ts = Number(tsRaw) * 1000;
-    if (Number.isFinite(ts)) return new Date(ts).toISOString();
-  }
-
-  const dateRaw = html.match(/"publish_time"\s*:\s*"([^"]+)"/i)?.[1];
-  if (dateRaw) {
-    const t = Date.parse(dateRaw);
-    if (!Number.isNaN(t)) return new Date(t).toISOString();
-  }
-
-  return null;
-}
-
-function extractArticleContent(html: string, maxLen = 12000) {
-  const block =
-    html.match(/<div[^>]+id="js_content"[^>]*>([\s\S]*?)<\/div>/i)?.[1] ||
-    html.match(/<article[\s\S]*?>([\s\S]*?)<\/article>/i)?.[1] ||
-    '';
-
-  return stripHtml(block || html).slice(0, maxLen);
-}
-
-function extractRelatedUrls(html: string, biz: string) {
-  const urls = new Set<string>();
-  const regex = /(https?:\/\/mp\.weixin\.qq\.com\/s\?[^"'\s<]+)/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(html)) !== null) {
-    const raw = decodeHtmlEntities(match[1]);
-    try {
-      const url = normalizeUrlWithoutHash(raw);
-      const linkBiz = extractBizFromUrl(url);
-      if (linkBiz && linkBiz === biz) {
-        urls.add(url);
-      }
-    } catch {
-      // ignore invalid URL
-    }
-  }
-
-  return [...urls];
-}
-
-async function fetchAndParseArticle(
-  input: {
-    url: string;
-    displayName: string;
-    bizHint?: string;
-    includeContent?: boolean;
-  }
-): Promise<DiscoveredArticle> {
-  const fetchedAt = new Date().toISOString();
-
-  try {
-    const response = await fetch(input.url, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
-      },
-      signal: AbortSignal.timeout(15_000),
-    });
-
-    const html = await response.text();
-    const finalUrl = normalizeUrlWithoutHash(response.url || input.url);
-    const biz = extractBizFromUrl(finalUrl) || input.bizHint || '';
-    const title = extractArticleTitle(html);
-    const content = extractArticleContent(html, input.includeContent ? 12000 : 1200);
-
-    return {
-      biz,
-      displayName: input.displayName,
-      url: input.url,
-      finalUrl,
-      title,
-      snippet: content.slice(0, 400),
-      content: input.includeContent ? content : undefined,
-      publishAt: extractPublishAt(html),
-      fetchedAt,
-    };
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : 'unknown';
-    return {
-      biz: input.bizHint || '',
-      displayName: input.displayName,
-      url: input.url,
-      finalUrl: input.url,
-      title: '抓取失败',
-      snippet: '',
-      publishAt: null,
-      fetchedAt,
-      error: detail,
-    };
-  }
-}
-
-function parseDateOnly(value?: string) {
-  if (!value) return null;
-  const normalized = value.trim();
-  const withTime = /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? `${normalized}T00:00:00.000Z` : normalized;
-  const t = Date.parse(withTime);
-  if (Number.isNaN(t)) return null;
-  return t;
-}
-
-function chooseSourcesByQuery(sources: SourceRecord[], query: string, maxSources: number) {
-  const normalized = query.toLowerCase();
-  const matched = sources.filter(
-    (source) =>
-      normalized.includes(source.displayName.toLowerCase()) || normalized.includes(source.biz.toLowerCase())
-  );
-  const base = matched.length > 0 ? matched : sources;
-  return base.slice(0, maxSources);
+  return lines.join('\n');
 }
 
 function buildPlannerPrompt(input: { userQuery: string; sources: SourceRecord[]; messages: ClientMessage[] }) {
-  const sourceList =
+  const sourceText =
     input.sources.length === 0
       ? '无'
-      : input.sources
-          .map((source, idx) => `${idx + 1}. ${source.displayName} | biz=${source.biz}`)
-          .join('\n');
-
+      : input.sources.map((source, i) => `${i + 1}. ${source.displayName} | biz=${source.biz}`).join('\n');
   const history = input.messages
     .slice(-8)
-    .map((message, idx) => `${idx + 1}. [${message.role}] ${message.content}`)
+    .map((message, i) => `${i + 1}. [${message.role}] ${message.content}`)
     .join('\n');
 
   return [
-    '你是微信公众号AI员工的函数调度器。',
-    '你负责决定本轮是否先发现文章列表，再抓全文。',
-    '只输出 JSON，不要输出任何其他文字。',
-    'action 可选：discover_articles | fetch_article_content | answer_only | clarify。',
-    'JSON schema:',
+    '你是函数规划器，只返回 JSON。',
+    '你要选择 action 并提供 args，驱动后端工具执行。',
+    'action 候选：',
+    '1) list_source_articles: 在用户已录入公众号里查文章列表（按日期/关键词）',
+    '2) search_global_articles: 用全网搜索查文章',
+    '3) get_article_detail: 抓单篇或多篇文章正文',
+    '4) get_article_metrics: 抓文章阅读/点赞等指标',
+    '5) mixed_analysis: 先列文章再抓正文/指标（推荐默认）',
+    '6) clarify: 信息不足，先追问',
+    'JSON Schema:',
     '{',
-    '  "action": "discover_articles|fetch_article_content|answer_only|clarify",',
-    '  "reason": "短原因",',
-    '  "args": {',
-    '    "bizList": ["可选，指定公众号biz"],',
-    '    "maxSources": 1-8,',
-    '    "maxArticles": 1-10,',
-    '    "keyword": "可选，主题关键词",',
-    '    "dateFrom": "可选，YYYY-MM-DD",',
-    '    "dateTo": "可选，YYYY-MM-DD",',
-    '    "focus": "可选，如 最新/某日/某主题"',
+    '  "action":"list_source_articles|search_global_articles|get_article_detail|get_article_metrics|mixed_analysis|clarify",',
+    '  "reason":"短原因",',
+    '  "args":{',
+    '    "bizList":["可选"],',
+    '    "keyword":"可选关键词",',
+    '    "dateFrom":"可选 YYYY-MM-DD",',
+    '    "dateTo":"可选 YYYY-MM-DD",',
+    '    "targetUrl":"可选，单篇 URL",',
+    '    "articleUrls":["可选，多个 URL"],',
+    '    "maxSources":1-8,',
+    '    "maxArticles":1-20,',
+    '    "realtime":true/false',
     '  }',
     '}',
-    '规则：',
-    '- 用户问“某一天/近几天/某主题有哪些文章”时，至少 discover_articles。',
-    '- 用户问“全文/逐段分析/原文细节”时，优先 fetch_article_content。',
-    '- 纯策略类问题可 answer_only。',
-    `当前用户问题：${input.userQuery}`,
-    `用户已录入公众号：\n${sourceList}`,
+    `用户问题：${input.userQuery}`,
+    `用户录入公众号：\n${sourceText}`,
     `最近对话：\n${history || '无'}`,
   ].join('\n');
 }
 
-async function discoverArticles(input: {
-  sources: SourceRecord[];
-  maxArticles: number;
-  keyword?: string;
-  dateFrom?: string;
-  dateTo?: string;
-}) {
-  const discovered: DiscoveredArticle[] = [];
-  const seenUrls = new Set<string>();
-
-  for (const source of input.sources) {
-    const seed = await fetchAndParseArticle({
-      url: source.lastArticleUrl,
-      displayName: source.displayName,
-      bizHint: source.biz,
-      includeContent: false,
-    });
-
-    const push = (item: DiscoveredArticle) => {
-      const key = item.finalUrl || item.url;
-      if (!key || seenUrls.has(key)) return;
-      seenUrls.add(key);
-      discovered.push(item);
-    };
-
-    push(seed);
-
-    if (!seed.error) {
-      try {
-        const response = await fetch(seed.finalUrl || source.lastArticleUrl, {
-          method: 'GET',
-          redirect: 'follow',
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
-          },
-          signal: AbortSignal.timeout(10_000),
-        });
-        const html = await response.text();
-        const relatedUrls = extractRelatedUrls(html, source.biz).slice(0, 6);
-
-        for (const relatedUrl of relatedUrls) {
-          if (seenUrls.has(relatedUrl)) continue;
-          const related = await fetchAndParseArticle({
-            url: relatedUrl,
-            displayName: source.displayName,
-            bizHint: source.biz,
-            includeContent: false,
-          });
-          push(related);
-          if (discovered.length >= input.maxArticles * 2) break;
-        }
-      } catch {
-        // ignore related link expansion failures
-      }
-    }
-
-    if (discovered.length >= input.maxArticles * 2) break;
+function pickFirstString(obj: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number') return String(value);
   }
-
-  const keyword = (input.keyword || '').trim().toLowerCase();
-  const fromTs = parseDateOnly(input.dateFrom);
-  const toTs = parseDateOnly(input.dateTo);
-
-  const filtered = discovered.filter((item) => {
-    if (keyword) {
-      const text = `${item.title} ${item.snippet}`.toLowerCase();
-      if (!text.includes(keyword)) return false;
-    }
-
-    if (fromTs || toTs) {
-      const published = item.publishAt ? Date.parse(item.publishAt) : NaN;
-      if (Number.isNaN(published)) return false;
-      if (fromTs && published < fromTs) return false;
-      if (toTs && published > toTs + 24 * 3600 * 1000 - 1) return false;
-    }
-
-    return true;
-  });
-
-  const sorted = [...filtered].sort((a, b) => {
-    const ta = a.publishAt ? Date.parse(a.publishAt) : 0;
-    const tb = b.publishAt ? Date.parse(b.publishAt) : 0;
-    return tb - ta;
-  });
-
-  return sorted.slice(0, input.maxArticles);
+  return '';
 }
 
-function buildDiscoveryContext(articles: DiscoveredArticle[]) {
-  if (articles.length === 0) return '本轮未发现符合条件的文章。';
+function asList(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return [];
+  const root = payload as Record<string, unknown>;
+  if (Array.isArray(root.data)) return root.data as Record<string, unknown>[];
+  if (root.data && typeof root.data === 'object') {
+    const d = root.data as Record<string, unknown>;
+    if (Array.isArray(d.list)) return d.list as Record<string, unknown>[];
+    if (Array.isArray(d.rows)) return d.rows as Record<string, unknown>[];
+    if (Array.isArray(d.items)) return d.items as Record<string, unknown>[];
+  }
+  if (Array.isArray(root.list)) return root.list as Record<string, unknown>[];
+  if (Array.isArray(root.rows)) return root.rows as Record<string, unknown>[];
+  if (Array.isArray(root.items)) return root.items as Record<string, unknown>[];
+  return [];
+}
 
-  return articles
-    .map((article, idx) => {
-      const lines = [
-        `${idx + 1}. ${article.title}`,
-        `公众号：${article.displayName}（biz: ${article.biz || '未知'}）`,
-        `发布时间：${article.publishAt || '未知'}`,
-        `链接：${article.finalUrl}`,
-      ];
-      if (article.error) {
-        lines.push(`状态：抓取失败（${article.error}）`);
-      } else {
-        lines.push(`摘要：${article.snippet || '无'}`);
-      }
-      return lines.join('\n');
-    })
+function toArticleCandidates(sourceName: string, biz: string, payload: unknown): ArticleCandidate[] {
+  const list = asList(payload);
+  return list
+    .map((item) => ({
+      sourceName,
+      biz,
+      title: pickFirstString(item, ['title', 'msg_title', 'name']) || '未命名文章',
+      url: pickFirstString(item, ['url', 'article_url', 'link', 'content_url']),
+      publishAt: pickFirstString(item, ['publish_time', 'datetime', 'time', 'date']) || null,
+      summary: pickFirstString(item, ['digest', 'summary', 'abstract', 'desc']),
+    }))
+    .filter((item) => item.url);
+}
+
+function chooseSources(sources: SourceRecord[], plan: WechatToolPlan, userQuery: string) {
+  const maxSources = plan.args?.maxSources || 3;
+  if (plan.args?.bizList && plan.args.bizList.length > 0) {
+    return sources.filter((source) => plan.args?.bizList?.includes(source.biz)).slice(0, maxSources);
+  }
+  const normalized = userQuery.toLowerCase();
+  const matched = sources.filter(
+    (source) =>
+      normalized.includes(source.displayName.toLowerCase()) || normalized.includes(source.biz.toLowerCase())
+  );
+  return (matched.length > 0 ? matched : sources).slice(0, maxSources);
+}
+
+function renderCandidates(candidates: ArticleCandidate[]) {
+  if (candidates.length === 0) return '无候选文章。';
+  return candidates
+    .map(
+      (item, i) =>
+        `${i + 1}. ${item.title}\n` +
+        `来源：${item.sourceName}（biz: ${item.biz}）\n` +
+        `发布时间：${item.publishAt || '未知'}\n` +
+        `链接：${item.url}\n` +
+        `摘要：${item.summary || '无'}`
+    )
     .join('\n\n');
 }
 
-function buildFullContentContext(articles: DiscoveredArticle[]) {
-  if (articles.length === 0) return '本轮未抓取全文。';
-
-  return articles
-    .map((article, idx) => {
-      const lines = [
-        `${idx + 1}. ${article.title}`,
-        `链接：${article.finalUrl}`,
-      ];
-      if (article.error) {
-        lines.push(`抓取失败：${article.error}`);
-      } else {
-        lines.push(`全文（截断）：\n${article.content || article.snippet || '无内容'}`);
-      }
-      return lines.join('\n');
-    })
-    .join('\n\n');
+function renderToolResults(results: Array<{ tool: string; result: unknown }>) {
+  if (results.length === 0) return '无工具结果。';
+  return results.map((r, i) => `${i + 1}. ${r.tool}\n${JSON.stringify(r.result)}`).join('\n\n');
 }
 
 export async function GET() {
   const investor = await getInvestorOrNull();
-  if (!investor) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const [integration, thread] = await Promise.all([
     prisma.investorIntegration.findUnique({
-      where: {
-        investorId_provider: {
-          investorId: investor.id,
-          provider: WECHAT_PROVIDER,
-        },
-      },
+      where: { investorId_provider: { investorId: investor.id, provider: WECHAT_PROVIDER } },
       select: { assistantCustomPrompt: true },
     }),
     getLatestThreadWithMessages(investor.id, WECHAT_PROVIDER),
@@ -526,18 +292,10 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const investor = await getInvestorOrNull();
-  if (!investor) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: '请求体格式错误' }, { status: 400 });
-  }
-
-  const customPrompt = String((body as { customPrompt?: string })?.customPrompt || '');
+  const body = (await req.json().catch(() => ({}))) as { customPrompt?: string };
+  const customPrompt = String(body.customPrompt || '');
   if (customPrompt.length > MAX_CUSTOM_PROMPT_LENGTH) {
     return NextResponse.json(
       { error: `调教内容过长，最多 ${MAX_CUSTOM_PROMPT_LENGTH} 字符` },
@@ -577,32 +335,19 @@ export async function PUT(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const investor = await getInvestorOrNull();
-  if (!investor) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: '请求体格式错误' }, { status: 400 });
-  }
-
-  const messages = normalizeMessages((body as { messages?: unknown })?.messages);
-  const threadId = typeof (body as { threadId?: unknown })?.threadId === 'string'
-    ? String((body as { threadId?: string }).threadId)
-    : null;
-  if (messages.length === 0) {
-    return NextResponse.json({ error: '消息不能为空' }, { status: 400 });
-  }
+  const body = (await req.json().catch(() => ({}))) as { messages?: unknown; threadId?: string };
+  const messages = normalizeMessages(body.messages);
+  if (messages.length === 0) return NextResponse.json({ error: '消息不能为空' }, { status: 400 });
 
   const thread = await ensureThread({
     investorId: investor.id,
     agentType: WECHAT_PROVIDER,
-    threadId,
+    threadId: typeof body.threadId === 'string' ? body.threadId : null,
   });
 
-  const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   let userMessageId: string | null = null;
   if (lastUser) {
     const saved = await appendThreadMessage({
@@ -613,11 +358,17 @@ export async function POST(req: NextRequest) {
     userMessageId = saved.id;
   }
 
+  if (!isDajialaReady()) {
+    const reply = '公众号数据源未配置（缺少 DAJIALA_API_KEY），请先配置后再使用。';
+    await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
+    return NextResponse.json({ ok: true, reply, threadId: thread.id });
+  }
+
   const [sources, integration] = await Promise.all([
     prisma.investorWechatSource.findMany({
       where: { investorId: investor.id },
       orderBy: { updatedAt: 'desc' },
-      take: 40,
+      take: 50,
       select: {
         displayName: true,
         biz: true,
@@ -639,43 +390,32 @@ export async function POST(req: NextRequest) {
   ]);
 
   if (sources.length === 0) {
-    const noSourceReply = '当前没有可用公众号源。请先在上方录入至少一个公众号文章链接。';
-    await appendThreadMessage({
-      threadId: thread.id,
-      role: 'ASSISTANT',
-      content: noSourceReply,
-    });
-    return NextResponse.json({ ok: true, reply: noSourceReply, threadId: thread.id });
+    const reply = '当前没有可用公众号源。请先录入公众号，再进行文章检索。';
+    await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
+    return NextResponse.json({ ok: true, reply, threadId: thread.id });
   }
 
   const userQuery =
-    [...messages].reverse().find((message) => message.role === 'user')?.content ||
-    messages[messages.length - 1].content;
+    [...messages].reverse().find((m) => m.role === 'user')?.content || messages[messages.length - 1].content;
+
+  const plannerInput: ChatMessage[] = [
+    { role: 'system', content: '你是严格JSON输出规划器。' },
+    {
+      role: 'user',
+      content: buildPlannerPrompt({ userQuery, sources, messages }),
+    },
+  ];
 
   let plan: WechatToolPlan = {
-    action: 'discover_articles',
+    action: 'mixed_analysis',
     reason: 'default',
-    args: { maxSources: 3, maxArticles: 5 },
+    args: { maxSources: 3, maxArticles: 8 },
   };
-
   try {
-    const plannerRaw = await createJsonChatCompletion([
-      {
-        role: 'system',
-        content: '你是严格JSON输出的函数调度器。',
-      },
-      {
-        role: 'user',
-        content: buildPlannerPrompt({ userQuery, sources, messages }),
-      },
-    ]);
-    plan = safeParsePlan(plannerRaw);
+    const raw = await createJsonChatCompletion(plannerInput);
+    plan = safeParsePlan(raw);
   } catch {
-    plan = {
-      action: 'discover_articles',
-      reason: 'planner unavailable',
-      args: { maxSources: 3, maxArticles: 5 },
-    };
+    plan = { action: 'mixed_analysis', reason: 'planner failed', args: { maxSources: 3, maxArticles: 8 } };
   }
 
   await appendToolCall({
@@ -687,110 +427,150 @@ export async function POST(req: NextRequest) {
     status: 'SUCCESS',
   });
 
-  const maxSources = plan.args?.maxSources || 3;
-  const maxArticles = plan.args?.maxArticles || 5;
-  const selectedSources =
-    plan.args?.bizList && plan.args.bizList.length > 0
-      ? sources.filter((source) => plan.args?.bizList?.includes(source.biz)).slice(0, maxSources)
-      : chooseSourcesByQuery(sources, userQuery, maxSources);
+  const selectedSources = chooseSources(sources, plan, userQuery);
+  const maxArticles = plan.args?.maxArticles || 8;
+  const keyword = plan.args?.keyword || '';
+  const toolResults: Array<{ tool: string; result: unknown }> = [];
+  let candidates: ArticleCandidate[] = [];
 
-  const needsDiscover = plan.action === 'discover_articles' || plan.action === 'fetch_article_content';
-  const discovered = needsDiscover
-    ? await discoverArticles({
-        sources: selectedSources,
-        maxArticles,
-        keyword: plan.args?.keyword,
-        dateFrom: plan.args?.dateFrom,
-        dateTo: plan.args?.dateTo,
+  const needList = ['list_source_articles', 'mixed_analysis'].includes(plan.action);
+  if (needList) {
+    const listResults = await Promise.all(
+      selectedSources.map(async (source) => {
+        const result = await listArticlesByAccount({
+          biz: source.biz,
+          name: source.displayName,
+          page: 1,
+          count: Math.min(20, maxArticles),
+        });
+        return { source, result };
       })
-    : [];
+    );
+    for (const item of listResults) {
+      const arr = toArticleCandidates(item.source.displayName, item.source.biz, item.result);
+      candidates.push(...arr);
+      toolResults.push({
+        tool: 'listArticlesByAccount',
+        result: {
+          source: item.source.displayName,
+          biz: item.source.biz,
+          count: arr.length,
+          sample: arr.slice(0, 3),
+        },
+      });
+      await appendToolCall({
+        threadId: thread.id,
+        messageId: userMessageId,
+        toolName: 'listArticlesByAccount',
+        toolArgs: { biz: item.source.biz, name: item.source.displayName },
+        toolResult: item.result,
+        status: 'SUCCESS',
+      });
+    }
+  }
 
-  await appendToolCall({
-    threadId: thread.id,
-    messageId: userMessageId,
-    toolName: 'wechat_discover_articles',
-    toolArgs: {
-      selectedSources: selectedSources.map((source) => ({ biz: source.biz, name: source.displayName })),
-      keyword: plan.args?.keyword,
-      dateFrom: plan.args?.dateFrom,
-      dateTo: plan.args?.dateTo,
-      maxArticles,
-    },
-    toolResult: discovered.map((item) => ({
-      biz: item.biz,
-      title: item.title,
-      publishAt: item.publishAt,
-      finalUrl: item.finalUrl,
-      error: item.error || null,
-    })),
-    status: 'SUCCESS',
-  });
-
-  const needsFull = plan.action === 'fetch_article_content';
-  const toFetchFull = needsFull ? discovered.slice(0, Math.min(maxArticles, 3)) : [];
-  const fetchedFull = needsFull
-    ? await Promise.all(
-        toFetchFull.map((item) =>
-          fetchAndParseArticle({
-            url: item.finalUrl || item.url,
-            displayName: item.displayName,
-            bizHint: item.biz,
-            includeContent: true,
-          })
-        )
-      )
-    : [];
-
-  if (needsFull) {
+  if (plan.action === 'search_global_articles') {
+    const result = plan.args?.realtime
+      ? await searchRealtimeArticles({ keyword: keyword || userQuery, mode: 1, page: 1, limit: maxArticles })
+      : await searchArticles({ keyword: keyword || userQuery, page: 1, limit: maxArticles });
+    const arr = toArticleCandidates('全网搜索', '', result);
+    candidates.push(...arr);
+    toolResults.push({
+      tool: plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
+      result: { count: arr.length, sample: arr.slice(0, 5) },
+    });
     await appendToolCall({
       threadId: thread.id,
       messageId: userMessageId,
-      toolName: 'wechat_fetch_article_content',
-      toolArgs: {
-        targets: toFetchFull.map((item) => ({ title: item.title, url: item.finalUrl })),
-      },
-      toolResult: fetchedFull.map((item) => ({
-        biz: item.biz,
-        title: item.title,
-        finalUrl: item.finalUrl,
-        publishAt: item.publishAt,
-        error: item.error || null,
-      })),
+      toolName: plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
+      toolArgs: { keyword: keyword || userQuery, limit: maxArticles },
+      toolResult: result,
       status: 'SUCCESS',
     });
   }
 
-  const modelMessages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: buildSystemPrompt(integration?.assistantCustomPrompt),
-    },
-    {
-      role: 'system',
-      content: `当前公众号库：\n${buildSourceContext(sources)}`,
-    },
-    {
-      role: 'system',
-      content:
-        `本轮函数调度：action=${plan.action}; reason=${plan.reason || 'n/a'}; focus=${plan.args?.focus || 'n/a'};` +
-        ` keyword=${plan.args?.keyword || 'n/a'}; dateFrom=${plan.args?.dateFrom || 'n/a'}; dateTo=${plan.args?.dateTo || 'n/a'}`,
-    },
-    {
-      role: 'system',
-      content: `候选文章列表（discover）：\n${buildDiscoveryContext(discovered)}`,
-    },
-    {
-      role: 'system',
-      content: `全文抓取结果（fetch）：\n${buildFullContentContext(fetchedFull)}`,
-    },
-    ...messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    })),
+  if (keyword) {
+    candidates = candidates.filter((c) => `${c.title} ${c.summary}`.toLowerCase().includes(keyword.toLowerCase()));
+  }
+  candidates = candidates
+    .filter((c, index, arr) => arr.findIndex((x) => x.url === c.url) === index)
+    .slice(0, maxArticles);
+
+  const detailTargets = new Set<string>();
+  if (plan.action === 'get_article_detail' || plan.action === 'mixed_analysis') {
+    if (plan.args?.targetUrl) detailTargets.add(plan.args.targetUrl);
+    for (const url of plan.args?.articleUrls || []) detailTargets.add(url);
+    if (detailTargets.size === 0) {
+      for (const c of candidates.slice(0, Math.min(3, maxArticles))) detailTargets.add(c.url);
+    }
+  }
+
+  const metricsTargets = new Set<string>();
+  if (plan.action === 'get_article_metrics' || plan.action === 'mixed_analysis') {
+    if (plan.args?.targetUrl) metricsTargets.add(plan.args.targetUrl);
+    for (const url of plan.args?.articleUrls || []) metricsTargets.add(url);
+    if (metricsTargets.size === 0) {
+      for (const c of candidates.slice(0, Math.min(5, maxArticles))) metricsTargets.add(c.url);
+    }
+  }
+
+  const detailResults: Array<{ url: string; detail: unknown }> = [];
+  for (const url of detailTargets) {
+    const detail = await getArticleDetail({ url });
+    detailResults.push({ url, detail });
+    await appendToolCall({
+      threadId: thread.id,
+      messageId: userMessageId,
+      toolName: 'getArticleDetail',
+      toolArgs: { url },
+      toolResult: detail,
+      status: 'SUCCESS',
+    });
+  }
+  if (detailResults.length > 0) {
+    toolResults.push({
+      tool: 'getArticleDetail',
+      result: {
+        count: detailResults.length,
+        sample: detailResults.slice(0, 2),
+      },
+    });
+  }
+
+  const metricResults: Array<{ url: string; metrics: unknown }> = [];
+  for (const url of metricsTargets) {
+    const metrics = await getArticleMetrics({ url });
+    metricResults.push({ url, metrics });
+    await appendToolCall({
+      threadId: thread.id,
+      messageId: userMessageId,
+      toolName: 'getArticleMetrics',
+      toolArgs: { url },
+      toolResult: metrics,
+      status: 'SUCCESS',
+    });
+  }
+  if (metricResults.length > 0) {
+    toolResults.push({
+      tool: 'getArticleMetrics',
+      result: {
+        count: metricResults.length,
+        sample: metricResults.slice(0, 3),
+      },
+    });
+  }
+
+  const responseMessages: ChatMessage[] = [
+    { role: 'system', content: buildSystemPrompt(integration?.assistantCustomPrompt) },
+    { role: 'system', content: `用户公众号源：${sources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}` },
+    { role: 'system', content: `本轮执行计划：${JSON.stringify(plan)}` },
+    { role: 'system', content: `候选文章：\n${renderCandidates(candidates)}` },
+    { role: 'system', content: `工具结果：\n${renderToolResults(toolResults)}` },
+    ...messages.map((message) => ({ role: message.role, content: message.content })),
   ];
 
   try {
-    const reply = await createChatCompletion(modelMessages);
+    const reply = await createChatCompletion(responseMessages);
     const finalReply = reply || '已收到，但暂无回复。';
     await appendThreadMessage({
       threadId: thread.id,
@@ -798,17 +578,21 @@ export async function POST(req: NextRequest) {
       content: finalReply,
       meta: {
         plan,
-        discoveredCount: discovered.length,
-        fetchedFullCount: fetchedFull.length,
+        candidateCount: candidates.length,
+        detailCount: detailResults.length,
+        metricsCount: metricResults.length,
       },
     });
     return NextResponse.json({
       ok: true,
       reply: finalReply,
       threadId: thread.id,
-      plan,
-      discoveredCount: discovered.length,
-      fetchedFullCount: fetchedFull.length,
+      planner: plan,
+      debug: {
+        candidateCount: candidates.length,
+        detailCount: detailResults.length,
+        metricsCount: metricResults.length,
+      },
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown';
