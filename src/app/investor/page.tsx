@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import InvestorIntegrationsPanel from '@/components/investor-integrations-panel';
+import InvestorWechatSourcesPanel from '@/components/investor-wechat-sources-panel';
 
 export default async function InvestorDashboard({
   searchParams,
@@ -36,6 +37,9 @@ export default async function InvestorDashboard({
           },
         },
       },
+      wechatSources: {
+        orderBy: { updatedAt: 'desc' },
+      },
     },
   });
 
@@ -51,6 +55,14 @@ export default async function InvestorDashboard({
   );
 
   const integrationMap = new Map(dbUser.integrations.map((it) => [it.provider, it]));
+  const initialWechatSources = dbUser.wechatSources.map((source) => ({
+    id: source.id,
+    biz: source.biz,
+    displayName: source.displayName,
+    lastArticleUrl: source.lastArticleUrl,
+    createdAt: source.createdAt.toISOString(),
+    updatedAt: source.updatedAt.toISOString(),
+  }));
   const integrationCards = (['gmail', 'feishu'] as const).map((provider) => {
     const dbProvider = provider === 'gmail' ? 'GMAIL' : 'FEISHU';
     const integration = integrationMap.get(dbProvider);
@@ -84,6 +96,8 @@ export default async function InvestorDashboard({
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        <InvestorWechatSourcesPanel initialSources={initialWechatSources} />
+
         <InvestorIntegrationsPanel
           initialCards={integrationCards}
           integrationStatus={query.integrationStatus}

@@ -34,7 +34,26 @@ model User {
   // 投资人外部账户集成
   integrations InvestorIntegration[]
 
+  // 投资人维护的公众号源
+  wechatSources InvestorWechatSource[]
+
   @@map("users")
+}
+
+model InvestorWechatSource {
+  id             String   @id @default(cuid())
+  biz            String
+  displayName    String
+  lastArticleUrl String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  @@unique([investorId, biz])
+  @@index([investorId, updatedAt])
+  @@map("investor_wechat_sources")
 }
 
 model InvestorIntegration {
