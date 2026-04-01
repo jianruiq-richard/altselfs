@@ -11,6 +11,11 @@ type WechatSource = {
   updatedAt: string;
 };
 
+type AssistantMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 export default function InvestorWechatSourcesPanel({
   initialSources,
 }: {
@@ -22,6 +27,16 @@ export default function InvestorWechatSourcesPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [assistantInput, setAssistantInput] = useState('');
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
+  const [coachOpen, setCoachOpen] = useState(false);
+  const [coachLoaded, setCoachLoaded] = useState(false);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachSaving, setCoachSaving] = useState(false);
+  const [coachDraft, setCoachDraft] = useState('');
+  const [coachSaved, setCoachSaved] = useState('');
+  const [coachMessage, setCoachMessage] = useState('');
 
   const sortedSources = useMemo(
     () => [...sources].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)),
@@ -84,6 +99,101 @@ export default function InvestorWechatSourcesPanel({
       setError('网络错误，请稍后重试');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendAssistantMessage = async () => {
+    const text = assistantInput.trim();
+    if (!text || assistantLoading) return;
+
+    const nextMessages: AssistantMessage[] = [...assistantMessages, { role: 'user', content: text }];
+    setAssistantInput('');
+    setAssistantMessages(nextMessages);
+    setAssistantLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await fetch('/api/investor/wechat-sources/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAssistantMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: data.error || 'AI员工暂时不可用，请稍后重试。' },
+        ]);
+        return;
+      }
+
+      setAssistantMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: data.reply || '已收到，但暂无回复。' },
+      ]);
+    } catch {
+      setAssistantMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: '网络错误，请稍后重试。' },
+      ]);
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const toggleCoach = async () => {
+    const nextOpen = !coachOpen;
+    setCoachOpen(nextOpen);
+    if (!nextOpen || coachLoaded) return;
+
+    setCoachLoading(true);
+    setError(null);
+    setCoachMessage('');
+    try {
+      const res = await fetch('/api/investor/wechat-sources/assistant');
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || '加载调教设置失败');
+        return;
+      }
+      const prompt = String(data.customPrompt || '');
+      setCoachDraft(prompt);
+      setCoachSaved(prompt);
+      setCoachLoaded(true);
+    } catch {
+      setError('网络错误，请稍后重试');
+    } finally {
+      setCoachLoading(false);
+    }
+  };
+
+  const saveCoachPrompt = async () => {
+    if (coachSaving) return;
+    setCoachSaving(true);
+    setError(null);
+    setCoachMessage('');
+
+    try {
+      const res = await fetch('/api/investor/wechat-sources/assistant', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customPrompt: coachDraft }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || '保存调教设置失败');
+        return;
+      }
+
+      const prompt = String(data.integration?.customPrompt || '');
+      setCoachDraft(prompt);
+      setCoachSaved(prompt);
+      setCoachMessage('已保存，后续公众号AI员工对话已生效。');
+    } catch {
+      setError('网络错误，请稍后重试');
+    } finally {
+      setCoachSaving(false);
     }
   };
 
@@ -156,6 +266,104 @@ export default function InvestorWechatSourcesPanel({
         >
           {loading ? '处理中...' : '添加'}
         </button>
+      </div>
+
+      <div className="mt-4 border border-slate-200 rounded-lg p-3 bg-white">
+        <p className="text-xs text-slate-500 mb-2">AI员工对话</p>
+        <div className="max-h-44 overflow-y-auto space-y-2 pr-1">
+          {assistantMessages.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              你可以提问：例如“基于我当前公众号库，帮我总结 AI 应用方向最近值得关注的3个信号”。
+            </p>
+          ) : (
+            assistantMessages.map((message, idx) => (
+              <div
+                key={`wechat-assistant-${idx}`}
+                className={`rounded-md px-3 py-2 text-sm whitespace-pre-wrap ${
+                  message.role === 'user' ? 'bg-sky-50 text-sky-900' : 'bg-slate-100 text-slate-800'
+                }`}
+              >
+                {message.content}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="mt-2 flex gap-2">
+          <input
+            value={assistantInput}
+            onChange={(e) => setAssistantInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void sendAssistantMessage();
+              }
+            }}
+            placeholder="输入你的问题..."
+            className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+          />
+          <button
+            type="button"
+            disabled={assistantLoading || !assistantInput.trim()}
+            onClick={() => void sendAssistantMessage()}
+            className="px-3 py-2 rounded-lg text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+          >
+            {assistantLoading ? '思考中...' : '发送'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-500">AI员工调教</p>
+          <button
+            type="button"
+            onClick={() => void toggleCoach()}
+            className="text-xs font-medium text-sky-700 hover:underline"
+          >
+            {coachOpen ? '收起' : '打开'}
+          </button>
+        </div>
+
+        {coachOpen && (
+          <div className="mt-2">
+            {coachLoading ? (
+              <p className="text-sm text-slate-500">加载中...</p>
+            ) : (
+              <>
+                <textarea
+                  value={coachDraft}
+                  onChange={(e) => setCoachDraft(e.target.value)}
+                  rows={6}
+                  placeholder="例如：你是我的公众号研究员。每次先给3条核心结论，再给证据链接，再给可执行建议。"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-xs text-slate-500">当前长度 {coachDraft.length}/8000</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={coachSaving}
+                      onClick={() => setCoachDraft(coachSaved)}
+                      className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      撤销修改
+                    </button>
+                    <button
+                      type="button"
+                      disabled={coachSaving}
+                      onClick={() => void saveCoachPrompt()}
+                      className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+                    >
+                      {coachSaving ? '保存中...' : '保存并生效'}
+                    </button>
+                  </div>
+                </div>
+                {coachMessage && <p className="mt-2 text-xs text-emerald-700">{coachMessage}</p>}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
