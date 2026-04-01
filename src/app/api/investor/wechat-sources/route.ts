@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getInvestorOrNull } from '@/lib/investor-auth';
+import { DajialaRaw, isDajialaReady } from '@/lib/dajiala-tools/raw';
 
 function isValidBiz(value: string) {
   const biz = value.trim();
@@ -152,6 +153,67 @@ function inferDisplayName(biz: string) {
   return `公众号-${suffix}`;
 }
 
+type AnyRecord = Record<string, unknown>;
+
+function pickString(obj: AnyRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number') return String(value);
+  }
+  return '';
+}
+
+function asList(payload: unknown): AnyRecord[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const root = payload as AnyRecord;
+  if (Array.isArray(root.data)) return root.data as AnyRecord[];
+  if (root.data && typeof root.data === 'object') {
+    const data = root.data as AnyRecord;
+    if (Array.isArray(data.list)) return data.list as AnyRecord[];
+    if (Array.isArray(data.rows)) return data.rows as AnyRecord[];
+    if (Array.isArray(data.items)) return data.items as AnyRecord[];
+  }
+  if (Array.isArray(root.list)) return root.list as AnyRecord[];
+  if (Array.isArray(root.rows)) return root.rows as AnyRecord[];
+  if (Array.isArray(root.items)) return root.items as AnyRecord[];
+  return [];
+}
+
+async function enrichFromDajialaByBiz(biz: string) {
+  if (!isDajialaReady()) {
+    return { displayName: '', description: '', latestArticleUrl: '' };
+  }
+
+  try {
+    const baseInfo = await DajialaRaw.getMpBaseInfo({ biz });
+    const baseObj =
+      (baseInfo && typeof baseInfo === 'object' && (baseInfo as AnyRecord).data && typeof (baseInfo as AnyRecord).data === 'object'
+        ? ((baseInfo as AnyRecord).data as AnyRecord)
+        : (baseInfo as AnyRecord)) || {};
+
+    let displayName = pickString(baseObj, ['name', 'nickname', 'account_name', 'title']);
+    const description = pickString(baseObj, ['description', 'desc', 'intro', 'brief', 'signature']);
+
+    let latestArticleUrl = '';
+    try {
+      const history = await DajialaRaw.getMpHistoryPosts({ biz, p: 1, count: 3 });
+      const list = asList(history);
+      const first = list[0] || {};
+      if (!displayName) {
+        displayName = pickString(first, ['nickname', 'name', 'account_name']);
+      }
+      latestArticleUrl = pickString(first, ['url', 'article_url', 'content_url', 'link']);
+    } catch {
+      // ignore history failures
+    }
+
+    return { displayName, description, latestArticleUrl };
+  } catch {
+    return { displayName: '', description: '', latestArticleUrl: '' };
+  }
+}
+
 export async function GET() {
   const investor = await getInvestorOrNull();
   if (!investor) {
@@ -231,13 +293,24 @@ export async function POST(req: NextRequest) {
   }
 
   const source = await prisma.investorWechatSource.create({
-    data: {
-      investorId: investor.id,
-      biz: parsed.biz,
-      displayName: candidateName || parsed.displayName || inferDisplayName(parsed.biz),
-      description: candidateDescription || parsed.description || null,
-      lastArticleUrl: parsed.normalizedUrl || articleUrl || `https://mp.weixin.qq.com/?__biz=${encodeURIComponent(parsed.biz)}`,
-    },
+    data: await (async () => {
+      const enriched = await enrichFromDajialaByBiz(parsed.biz);
+      return {
+        investorId: investor.id,
+        biz: parsed.biz,
+        displayName:
+          candidateName ||
+          parsed.displayName ||
+          enriched.displayName ||
+          inferDisplayName(parsed.biz),
+        description: candidateDescription || parsed.description || enriched.description || null,
+        lastArticleUrl:
+          parsed.normalizedUrl ||
+          articleUrl ||
+          enriched.latestArticleUrl ||
+          `https://mp.weixin.qq.com/?__biz=${encodeURIComponent(parsed.biz)}`,
+      };
+    })(),
   });
 
   return NextResponse.json({ ok: true, source });
