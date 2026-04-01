@@ -36,6 +36,36 @@ function extractBizFromText(text: string) {
   return '';
 }
 
+function decodeHtmlEntities(text: string) {
+  return text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function extractProfileFromHtml(html: string) {
+  const nicknameCandidates = [
+    html.match(/var\s+nickname\s*=\s*'([^']+)'/i)?.[1],
+    html.match(/var\s+nickname\s*=\s*"([^"]+)"/i)?.[1],
+    html.match(/"nickname"\s*:\s*"([^"]+)"/i)?.[1],
+    html.match(/meta property="og:article:author" content="([^"]+)"/i)?.[1],
+  ].filter(Boolean) as string[];
+
+  const descCandidates = [
+    html.match(/var\s+user_desc\s*=\s*'([^']+)'/i)?.[1],
+    html.match(/var\s+user_desc\s*=\s*"([^"]+)"/i)?.[1],
+    html.match(/"user_desc"\s*:\s*"([^"]+)"/i)?.[1],
+  ].filter(Boolean) as string[];
+
+  return {
+    displayName: decodeHtmlEntities((nicknameCandidates[0] || '').trim()),
+    description: decodeHtmlEntities((descCandidates[0] || '').trim()),
+  };
+}
+
 async function parseWechatArticleUrl(raw: string) {
   let parsed: URL;
   try {
@@ -50,9 +80,31 @@ async function parseWechatArticleUrl(raw: string) {
 
   const directBiz = (parsed.searchParams.get('__biz') || '').trim();
   if (directBiz && isValidBiz(directBiz)) {
+    let displayName = '';
+    let description = '';
+    try {
+      const page = await fetch(parsed.toString(), {
+        method: 'GET',
+        redirect: 'follow',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+      const html = await page.text();
+      const profile = extractProfileFromHtml(html);
+      displayName = profile.displayName;
+      description = profile.description;
+    } catch {
+      // ignore profile extraction errors
+    }
+
     return {
       biz: directBiz,
       normalizedUrl: normalizeUrlWithoutHash(parsed.toString()),
+      displayName,
+      description,
     } as const;
   }
 
@@ -78,11 +130,14 @@ async function parseWechatArticleUrl(raw: string) {
     }
 
     const html = await res.text();
+    const profile = extractProfileFromHtml(html);
     const htmlBiz = extractBizFromText(html);
     if (htmlBiz) {
       return {
         biz: htmlBiz,
         normalizedUrl: normalizeUrlWithoutHash(finalUrl.toString()),
+        displayName: profile.displayName,
+        description: profile.description,
       } as const;
     }
   } catch {
@@ -133,6 +188,8 @@ export async function POST(req: NextRequest) {
     | {
         biz: string;
         normalizedUrl: string;
+        displayName?: string;
+        description?: string;
       }
     | { error: string };
 
@@ -177,8 +234,8 @@ export async function POST(req: NextRequest) {
     data: {
       investorId: investor.id,
       biz: parsed.biz,
-      displayName: candidateName || inferDisplayName(parsed.biz),
-      description: candidateDescription || null,
+      displayName: candidateName || parsed.displayName || inferDisplayName(parsed.biz),
+      description: candidateDescription || parsed.description || null,
       lastArticleUrl: parsed.normalizedUrl || articleUrl || `https://mp.weixin.qq.com/?__biz=${encodeURIComponent(parsed.biz)}`,
     },
   });
