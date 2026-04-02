@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInvestorOrNull } from '@/lib/investor-auth';
-import { isDajialaReady } from '@/lib/dajiala-tools/raw';
-import { resolveWechatAccountsByKeyword } from '@/lib/dajiala-tools/agent';
+import {
+  getWechatDataProviderLabel,
+  getWechatProviderRequiredEnv,
+  isWechatProviderReady,
+} from '@/lib/wechat-data-provider/raw';
+import { resolveWechatAccountsByKeyword } from '@/lib/wechat-tools/agent';
 
 export async function GET(req: NextRequest) {
   const investor = await getInvestorOrNull();
@@ -14,9 +18,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: '请输入关键词' }, { status: 400 });
   }
 
-  if (!isDajialaReady()) {
+  if (!isWechatProviderReady()) {
+    const provider = getWechatDataProviderLabel();
+    const requiredEnv = getWechatProviderRequiredEnv();
     return NextResponse.json(
-      { error: '第三方公众号搜索未配置（缺少 DAJIALA_API_KEY）' },
+      { error: `第三方公众号搜索未配置（provider=${provider}，缺少 ${requiredEnv}）` },
       { status: 400 }
     );
   }

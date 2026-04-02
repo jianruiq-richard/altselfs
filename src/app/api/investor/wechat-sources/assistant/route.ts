@@ -10,13 +10,18 @@ import {
   toClientMessages,
 } from '@/lib/agent-session';
 import {
+  getArticleComments,
   getArticleDetail,
   getArticleMetrics,
   listArticlesByAccount,
   searchArticles,
   searchRealtimeArticles,
-} from '@/lib/dajiala-tools/agent';
-import { isDajialaReady } from '@/lib/dajiala-tools/raw';
+} from '@/lib/wechat-tools/agent';
+import {
+  getWechatDataProviderLabel,
+  getWechatProviderRequiredEnv,
+  isWechatProviderReady,
+} from '@/lib/wechat-data-provider/raw';
 
 const WECHAT_PROVIDER = 'WECHAT';
 const MAX_CUSTOM_PROMPT_LENGTH = 8000;
@@ -38,6 +43,7 @@ type PlannerAction =
   | 'search_global_articles'
   | 'get_article_detail'
   | 'get_article_metrics'
+  | 'get_article_comments'
   | 'mixed_analysis'
   | 'clarify';
 
@@ -51,6 +57,11 @@ type WechatToolPlan = {
     dateTo?: string;
     targetUrl?: string;
     articleUrls?: string[];
+    commentId?: string;
+    buffer?: string;
+    contentId?: string;
+    maxReplyId?: string;
+    offset?: number;
     maxSources?: number;
     maxArticles?: number;
     realtime?: boolean;
@@ -104,6 +115,7 @@ function safeParsePlan(raw: string): WechatToolPlan {
       'search_global_articles',
       'get_article_detail',
       'get_article_metrics',
+      'get_article_comments',
       'mixed_analysis',
       'clarify',
     ]);
@@ -131,6 +143,14 @@ function safeParsePlan(raw: string): WechatToolPlan {
         dateTo: typeof parsed.args?.dateTo === 'string' ? parsed.args.dateTo.trim() : undefined,
         targetUrl: typeof parsed.args?.targetUrl === 'string' ? parsed.args.targetUrl.trim() : undefined,
         articleUrls,
+        commentId: typeof parsed.args?.commentId === 'string' ? parsed.args.commentId.trim() : undefined,
+        buffer: typeof parsed.args?.buffer === 'string' ? parsed.args.buffer.trim() : undefined,
+        contentId: typeof parsed.args?.contentId === 'string' ? parsed.args.contentId.trim() : undefined,
+        maxReplyId: typeof parsed.args?.maxReplyId === 'string' ? parsed.args.maxReplyId.trim() : undefined,
+        offset:
+          typeof parsed.args?.offset === 'number'
+            ? Math.max(0, Math.round(parsed.args.offset))
+            : undefined,
         maxSources:
           typeof parsed.args?.maxSources === 'number'
             ? Math.max(1, Math.min(8, Math.round(parsed.args.maxSources)))
@@ -179,11 +199,12 @@ function buildPlannerPrompt(input: { userQuery: string; sources: SourceRecord[];
     '2) search_global_articles: 用全网搜索查文章',
     '3) get_article_detail: 抓单篇或多篇文章正文',
     '4) get_article_metrics: 抓文章阅读/点赞等指标',
-    '5) mixed_analysis: 先列文章再抓正文/指标（推荐默认）',
-    '6) clarify: 信息不足，先追问',
+    '5) get_article_comments: 抓文章留言（支持自动先解析 comment_id）',
+    '6) mixed_analysis: 先列文章再抓正文/指标（推荐默认）',
+    '7) clarify: 信息不足，先追问',
     'JSON Schema:',
     '{',
-    '  "action":"list_source_articles|search_global_articles|get_article_detail|get_article_metrics|mixed_analysis|clarify",',
+    '  "action":"list_source_articles|search_global_articles|get_article_detail|get_article_metrics|get_article_comments|mixed_analysis|clarify",',
     '  "reason":"短原因",',
     '  "args":{',
     '    "bizList":["可选"],',
@@ -192,6 +213,11 @@ function buildPlannerPrompt(input: { userQuery: string; sources: SourceRecord[];
     '    "dateTo":"可选 YYYY-MM-DD",',
     '    "targetUrl":"可选，单篇 URL",',
     '    "articleUrls":["可选，多个 URL"],',
+    '    "commentId":"可选，已知留言ID时可直接用",',
+    '    "buffer":"可选，留言翻页游标",',
+    '    "contentId":"可选，一级留言ID（拉回复）",',
+    '    "maxReplyId":"可选，最大回复ID（拉回复）",',
+    '    "offset":0,',
     '    "maxSources":1-8,',
     '    "maxArticles":1-20,',
     '    "realtime":true/false',
@@ -236,7 +262,7 @@ function toArticleCandidates(sourceName: string, biz: string, payload: unknown):
       biz,
       title: pickFirstString(item, ['title', 'msg_title', 'name']) || '未命名文章',
       url: pickFirstString(item, ['url', 'article_url', 'link', 'content_url']),
-      publishAt: pickFirstString(item, ['publish_time', 'datetime', 'time', 'date']) || null,
+      publishAt: pickFirstString(item, ['publish_time', 'pub_time', 'datetime', 'time', 'date']) || null,
       summary: pickFirstString(item, ['digest', 'summary', 'abstract', 'desc']),
     }))
     .filter((item) => item.url);
@@ -272,6 +298,16 @@ function renderCandidates(candidates: ArticleCandidate[]) {
 function renderToolResults(results: Array<{ tool: string; result: unknown }>) {
   if (results.length === 0) return '无工具结果。';
   return results.map((r, i) => `${i + 1}. ${r.tool}\n${JSON.stringify(r.result)}`).join('\n\n');
+}
+
+function extractCommentIdFromDetail(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return '';
+  const root = payload as Record<string, unknown>;
+  const data = root.data && typeof root.data === 'object' ? (root.data as Record<string, unknown>) : root;
+  const commentId = data.comment_id;
+  if (typeof commentId === 'string' && commentId.trim()) return commentId.trim();
+  if (typeof commentId === 'number') return String(commentId);
+  return '';
 }
 
 export async function DELETE() {
@@ -379,8 +415,10 @@ export async function POST(req: NextRequest) {
     userMessageId = saved.id;
   }
 
-  if (!isDajialaReady()) {
-    const reply = '公众号数据源未配置（缺少 DAJIALA_API_KEY），请先配置后再使用。';
+  if (!isWechatProviderReady()) {
+    const provider = getWechatDataProviderLabel();
+    const requiredEnv = getWechatProviderRequiredEnv();
+    const reply = `公众号数据源未配置（provider=${provider}，缺少 ${requiredEnv}），请先配置后再使用。`;
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({ ok: true, reply, threadId: thread.id });
   }
@@ -590,6 +628,90 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const commentResults: Array<{ url: string; commentId: string; comments: unknown }> = [];
+  const shouldFetchComments = plan.action === 'get_article_comments';
+  if (shouldFetchComments) {
+    const detailCache = new Map<string, unknown>(detailResults.map((item) => [item.url, item.detail]));
+    const commentInputs: Array<{ url: string; commentId: string }> = [];
+
+    if (plan.args?.commentId) {
+      commentInputs.push({ url: plan.args?.targetUrl || '', commentId: plan.args.commentId });
+    }
+
+    const commentUrlTargets = new Set<string>();
+    if (plan.args?.targetUrl) commentUrlTargets.add(plan.args.targetUrl);
+    for (const url of plan.args?.articleUrls || []) commentUrlTargets.add(url);
+    if (commentUrlTargets.size === 0) {
+      for (const c of candidates.slice(0, Math.min(3, maxArticles))) commentUrlTargets.add(c.url);
+    }
+
+    for (const url of commentUrlTargets) {
+      let detail = detailCache.get(url);
+      if (!detail) {
+        detail = await getArticleDetail({ url });
+        detailCache.set(url, detail);
+        await appendToolCall({
+          threadId: thread.id,
+          messageId: userMessageId,
+          toolName: 'getArticleDetail',
+          toolArgs: { url, reason: 'resolve_comment_id' },
+          toolResult: detail,
+          status: 'SUCCESS',
+        });
+      }
+      const commentId = extractCommentIdFromDetail(detail);
+      if (commentId) {
+        commentInputs.push({ url, commentId });
+      }
+    }
+
+    const dedupMap = new Map<string, { url: string; commentId: string }>();
+    for (const item of commentInputs) {
+      const key = item.commentId;
+      if (!key || dedupMap.has(key)) continue;
+      dedupMap.set(key, item);
+    }
+
+    for (const item of dedupMap.values()) {
+      const comments = await getArticleComments({
+        commentId: item.commentId,
+        buffer: plan.args?.buffer,
+        contentId: plan.args?.contentId,
+        maxReplyId: plan.args?.maxReplyId,
+        offset: plan.args?.offset,
+      });
+      commentResults.push({
+        url: item.url,
+        commentId: item.commentId,
+        comments,
+      });
+      await appendToolCall({
+        threadId: thread.id,
+        messageId: userMessageId,
+        toolName: 'getArticleComments',
+        toolArgs: {
+          url: item.url,
+          commentId: item.commentId,
+          buffer: plan.args?.buffer,
+          contentId: plan.args?.contentId,
+          maxReplyId: plan.args?.maxReplyId,
+          offset: plan.args?.offset,
+        },
+        toolResult: comments,
+        status: 'SUCCESS',
+      });
+    }
+  }
+  if (commentResults.length > 0) {
+    toolResults.push({
+      tool: 'getArticleComments',
+      result: {
+        count: commentResults.length,
+        sample: commentResults.slice(0, 2),
+      },
+    });
+  }
+
   const responseMessages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(integration?.assistantCustomPrompt) },
     {
@@ -621,6 +743,7 @@ export async function POST(req: NextRequest) {
         candidateCount: candidates.length,
         detailCount: detailResults.length,
         metricsCount: metricResults.length,
+        commentCount: commentResults.length,
       },
     });
     return NextResponse.json({
@@ -632,6 +755,7 @@ export async function POST(req: NextRequest) {
         candidateCount: candidates.length,
         detailCount: detailResults.length,
         metricsCount: metricResults.length,
+        commentCount: commentResults.length,
       },
     });
   } catch (error) {

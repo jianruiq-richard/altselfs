@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getInvestorOrNull } from '@/lib/investor-auth';
-import { DajialaRaw, isDajialaReady } from '@/lib/dajiala-tools/raw';
+import {
+  getWechatDataProviderLabel,
+  getWechatProviderRequiredEnv,
+  isWechatProviderReady,
+  WechatProviderRaw,
+} from '@/lib/wechat-data-provider/raw';
 
 function isValidBiz(value: string) {
   const biz = value.trim();
@@ -170,6 +175,18 @@ function pickString(obj: AnyRecord, keys: string[]) {
   return '';
 }
 
+function pickFromKvPairs(items: AnyRecord[], candidates: string[]) {
+  const normalizedCandidates = candidates.map((x) => x.trim().toLowerCase());
+  for (const item of items) {
+    const key = typeof item.key === 'string' ? item.key.trim().toLowerCase() : '';
+    if (!key) continue;
+    if (!normalizedCandidates.some((candidate) => key.includes(candidate))) continue;
+    const value = item.value;
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
 function asList(payload: unknown): AnyRecord[] {
   if (!payload || typeof payload !== 'object') return [];
   const root = payload as AnyRecord;
@@ -186,13 +203,15 @@ function asList(payload: unknown): AnyRecord[] {
   return [];
 }
 
-async function enrichFromDajialaByBiz(biz: string, hintUrl?: string) {
+async function enrichFromProviderByBiz(biz: string, hintUrl?: string) {
   const logs: EnrichLog[] = [];
-  if (!isDajialaReady()) {
+  const provider = getWechatDataProviderLabel();
+  if (!isWechatProviderReady()) {
+    const requiredEnv = getWechatProviderRequiredEnv();
     logs.push({
-      step: 'dajiala_config_check',
+      step: `${provider}_config_check`,
       status: 'skip',
-      detail: 'DAJIALA_API_KEY 未配置',
+      detail: `${requiredEnv} 未配置`,
     });
     return { displayName: '', description: '', latestArticleUrl: '', logs };
   }
@@ -203,14 +222,13 @@ async function enrichFromDajialaByBiz(biz: string, hintUrl?: string) {
     let latestArticleUrl = '';
 
     try {
-      const principal = await DajialaRaw.getMpSubjectInfo({
+      const principal = await WechatProviderRaw.getMpSubjectInfo({
         biz,
-        url: latestArticleUrl || hintUrl || undefined,
       });
       logs.push({
         step: 'getMpSubjectInfo',
         status: 'ok',
-        input: { biz, url: latestArticleUrl || hintUrl || undefined },
+        input: { biz },
       });
       const principalObj =
         (principal && typeof principal === 'object' && (principal as AnyRecord).data && typeof (principal as AnyRecord).data === 'object'
@@ -225,41 +243,46 @@ async function enrichFromDajialaByBiz(biz: string, hintUrl?: string) {
         step: 'getMpSubjectInfo',
         status: 'error',
         detail: error instanceof Error ? error.message : 'unknown',
-        input: { biz, url: latestArticleUrl || hintUrl || undefined },
+        input: { biz },
       });
     }
 
-    if (!displayName) {
+    if (!displayName || !description) {
       try {
-        const base = await DajialaRaw.getMpBaseInfo({
-          url: latestArticleUrl || hintUrl || undefined,
+        const base = await WechatProviderRaw.getMpBaseInfo({
+          biz,
         });
         logs.push({
           step: 'getMpBaseInfo',
           status: 'ok',
-          input: { url: latestArticleUrl || hintUrl || undefined },
+          input: { biz },
         });
-        const baseObj =
-          (base && typeof base === 'object' && (base as AnyRecord).data && typeof (base as AnyRecord).data === 'object'
-            ? ((base as AnyRecord).data as AnyRecord)
-            : (base as AnyRecord)) || {};
-        displayName =
-          pickString(baseObj, ['nick_name', 'nickname', 'name', 'account_name', 'wx_name']) || displayName;
-        description =
-          pickString(baseObj, ['desc', 'description', 'intro', 'brief', 'signature']) || description;
+        const baseRoot = (base && typeof base === 'object' ? (base as AnyRecord) : {}) || {};
+        const baseData = baseRoot.data;
+        const baseList = Array.isArray(baseData) ? (baseData as AnyRecord[]) : [];
+        if (!displayName) {
+          displayName =
+            pickFromKvPairs(baseList, ['公众号名称', '账号名称', '名称']) ||
+            displayName;
+        }
+        if (!description) {
+          description =
+            pickFromKvPairs(baseList, ['公众号简介', '简介', '描述']) ||
+            description;
+        }
       } catch (error) {
         logs.push({
           step: 'getMpBaseInfo',
           status: 'error',
           detail: error instanceof Error ? error.message : 'unknown',
-          input: { url: latestArticleUrl || hintUrl || undefined },
+          input: { biz },
         });
       }
     }
 
     if (!latestArticleUrl && !hintUrl) {
       try {
-        const history = await DajialaRaw.getMpHistoryPosts({ biz, p: 1, count: 3 });
+        const history = await WechatProviderRaw.getMpHistoryPosts({ biz, p: 1, count: 3 });
         logs.push({
           step: 'getMpHistoryPosts',
           status: 'ok',
@@ -286,11 +309,11 @@ async function enrichFromDajialaByBiz(biz: string, hintUrl?: string) {
 
     return { displayName, description, latestArticleUrl, logs };
   } catch {
-    logs.push({
-      step: 'enrichFromDajialaByBiz',
-      status: 'error',
-      detail: 'unexpected error',
-    });
+      logs.push({
+        step: 'enrichFromProviderByBiz',
+        status: 'error',
+        detail: 'unexpected error',
+      });
     return { displayName: '', description: '', latestArticleUrl: '', logs };
   }
 }
@@ -373,7 +396,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const enriched = await enrichFromDajialaByBiz(parsed.biz, articleUrl || parsed.normalizedUrl || undefined);
+  const enriched = await enrichFromProviderByBiz(parsed.biz, articleUrl || parsed.normalizedUrl || undefined);
   const source = await prisma.investorWechatSource.create({
     data: {
       investorId: investor.id,
