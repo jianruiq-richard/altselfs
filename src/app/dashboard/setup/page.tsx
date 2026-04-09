@@ -13,6 +13,7 @@ export default function SetupPage({
   const { user } = useUser();
   const router = useRouter();
   const role = use(searchParams).role;
+  const normalizedRole = role === 'candidate' ? 'candidate' : 'investor';
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nickname, setNickname] = useState('');
@@ -26,8 +27,8 @@ export default function SetupPage({
   }, [user, phone]);
 
   const handleSetup = async () => {
-    if (!user || !role) return;
-    if (role === 'candidate' && (!nickname.trim() || !phone.trim() || !wechatId.trim())) {
+    if (!user) return;
+    if (normalizedRole === 'candidate' && (!nickname.trim() || !phone.trim() || !wechatId.trim())) {
       setError('请先填写昵称、联系电话和微信号');
       return;
     }
@@ -47,15 +48,15 @@ export default function SetupPage({
             user.emailAddresses[0]?.emailAddress ||
             buildFallbackEmail(user.id),
           name: user.fullName,
-          role: role.toUpperCase(),
-          nickname: role === 'candidate' ? nickname.trim() : undefined,
-          phone: role === 'candidate' ? phone.trim() : undefined,
-          wechatId: role === 'candidate' ? wechatId.trim() : undefined,
+          role: normalizedRole.toUpperCase(),
+          nickname: normalizedRole === 'candidate' ? nickname.trim() : undefined,
+          phone: normalizedRole === 'candidate' ? phone.trim() : undefined,
+          wechatId: normalizedRole === 'candidate' ? wechatId.trim() : undefined,
         }),
       });
 
       if (response.ok) {
-        const target = role === 'investor' ? '/investor' : '/candidate';
+        const target = normalizedRole === 'investor' ? '/investor' : '/candidate';
         router.replace(target);
         router.refresh();
       } else {
@@ -70,35 +71,22 @@ export default function SetupPage({
     }
   };
 
-  if (!role) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">参数错误</h1>
-          <p className="text-gray-600">请重新选择身份</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
+    <div className="min-h-screen flex items-center justify-center bg-[#f5f7fb] px-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            确认身份
+          <h1 className="text-2xl font-bold text-slate-900 mb-4">
+            初始化 OPC 账户
           </h1>
-          <p className="text-gray-600 mb-8">
-            你选择了：<span className="font-semibold">
-              {role === 'investor' ? '投资人' : '创业者'}
-            </span>
+          <p className="text-slate-600 mb-8">
+            完成基础设置后即可进入统一数字分身工作台
           </p>
 
           {error && (
             <p className="text-sm text-red-600 mb-4">{error}</p>
           )}
 
-          {role === 'candidate' && (
+          {normalizedRole === 'candidate' && (
             <div className="space-y-3 mb-6 text-left">
               <div>
                 <label className="block text-sm text-gray-700 mb-1">昵称 *</label>
@@ -106,7 +94,7 @@ export default function SetupPage({
                   type="text"
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="请输入你的昵称"
                 />
               </div>
@@ -116,7 +104,7 @@ export default function SetupPage({
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="请输入手机号或电话"
                 />
               </div>
@@ -126,7 +114,7 @@ export default function SetupPage({
                   type="text"
                   value={wechatId}
                   onChange={(e) => setWechatId(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="请输入微信号"
                 />
               </div>
@@ -136,7 +124,7 @@ export default function SetupPage({
           <button
             onClick={handleSetup}
             disabled={isLoading}
-            className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? '设置中...' : '确认并继续'}
           </button>

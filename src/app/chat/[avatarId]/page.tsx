@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
+import Link from 'next/link';
+import { FigmaShell } from '@/components/figma-shell';
 
 interface Message {
   id: string;
@@ -135,102 +137,65 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-              {avatar.avatar ? (
-                <img
-                  src={avatar.avatar}
-                  alt={avatar.name}
-                  className="w-10 h-10 rounded-full object-cover"
-                />
-              ) : (
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              )}
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-slate-900">{avatar.name}</h1>
-              <p className="text-sm text-slate-500">
-                来自 {avatar.investor.name || '匿名投资人'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="max-w-3xl mx-auto space-y-4">
-          {messages.length === 0 && (
-            <div className="text-center py-8">
-              <p className="text-slate-600 mb-4">开始与 {avatar.name} 对话吧！</p>
-              <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
-                <p className="font-medium mb-2">提示：</p>
-                <ul className="text-left space-y-1">
-                  <li>• 介绍你的项目和团队背景</li>
-                  <li>• 说明你的商业模式和市场机会</li>
-                  <li>• 询问投资建议和改进方向</li>
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {messages.map((message, index) => (
-            <div
-              key={message.id || index}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                  message.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-slate-900 shadow-sm'
-                }`}
-              >
-                <p className="whitespace-pre-wrap">{message.content}</p>
-                <p className={`text-xs mt-1 ${
-                  message.role === 'user' ? 'text-blue-100' : 'text-slate-500'
-                }`}>
-                  {new Date(message.createdAt).toLocaleTimeString('zh-CN', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            </div>
-          ))}
-
-          {isSending && (
-            <div className="flex justify-start">
-              <div className="bg-white text-slate-900 shadow-sm max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
-                  <span className="text-sm text-slate-500">正在回复...</span>
+    <FigmaShell
+      homeHref="/candidate"
+      title={avatar.name}
+      subtitle={`来自 ${avatar.investor.name || 'OPC成员'} 的数字分身`}
+      actions={
+        <Link href="/candidate" className="text-sm text-blue-700 hover:underline">
+          返回分身大厅
+        </Link>
+      }
+    >
+      <div className="rounded-2xl border border-slate-200 bg-white">
+        <div className="h-[56vh] overflow-y-auto p-5">
+          <div className="mx-auto max-w-3xl space-y-4">
+            {messages.length === 0 && (
+              <div className="py-8 text-center">
+                <p className="mb-4 text-slate-600">开始与 {avatar.name} 对话吧！</p>
+                <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
+                  <p className="mb-2 font-medium">提示：</p>
+                  <ul className="space-y-1 text-left">
+                    <li>• 介绍你的项目和团队背景</li>
+                    <li>• 说明你的商业模式和市场机会</li>
+                    <li>• 询问投资建议和改进方向</li>
+                  </ul>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
+            )}
 
-      {/* Input */}
-      <div className="bg-white border-t p-4">
-        <div className="max-w-3xl mx-auto">
-          <form onSubmit={sendMessage} className="flex space-x-4">
+            {messages.map((message, index) => (
+              <div key={message.id || index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-xs rounded-2xl px-4 py-3 lg:max-w-md ${
+                    message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  <p className={`mt-1 text-xs ${message.role === 'user' ? 'text-blue-100' : 'text-slate-500'}`}>
+                    {new Date(message.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            ))}
+
+            {isSending && (
+              <div className="flex justify-start">
+                <div className="max-w-xs rounded-2xl bg-slate-100 px-4 py-3 text-slate-700 lg:max-w-md">
+                  正在回复...
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 p-4">
+          <form onSubmit={sendMessage} className="mx-auto flex max-w-3xl gap-3">
             <textarea
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="输入你的消息..."
-              className="flex-1 resize-none border border-slate-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="flex-1 resize-none rounded-xl border border-slate-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               rows={3}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -242,13 +207,13 @@ export default function ChatPage() {
             <button
               type="submit"
               disabled={!newMessage.trim() || isSending}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-end"
+              className="self-end rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {isSending ? '发送中...' : '发送'}
             </button>
           </form>
         </div>
       </div>
-    </div>
+    </FigmaShell>
   );
 }

@@ -11,73 +11,32 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
-      <div className="container mx-auto px-4 py-16">
-        <div className="text-center mb-16">
-          <h1 className="text-5xl font-bold text-slate-900 mb-6">
-            AltSelfs
-          </h1>
-          <p className="text-xl text-slate-700 mb-8 max-w-3xl mx-auto">
-            投资人数字分身平台 - 让AI帮你预筛选项目，提高沟通效率，专注于真正有潜力的投资机会
+      <div className="mx-auto max-w-4xl px-4 py-20">
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold text-slate-900 mb-6">OPC平台</h1>
+          <p className="mx-auto max-w-3xl text-xl text-slate-700">
+            统一的数字分身工作台。让 AI 员工帮你处理信息、沉淀知识、提升协作效率。
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {/* 投资人入口 */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 hover:shadow-lg transition-shadow duration-300">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-4">投资人入口</h2>
-              <p className="text-slate-700 mb-8">
-                创建你的数字分身，设定投资标准和沟通方式，让AI帮你初步筛选项目，节省宝贵时间
-              </p>
-              <Link
-                href="/sign-up?role=investor&method=phone"
-                className="inline-block bg-sky-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-sky-700 transition-colors duration-200 shadow-sm"
-              >
-                注册为投资人
-              </Link>
-              <div className="mt-3">
-                <Link
-                  href="/sign-in"
-                  className="inline-block text-sm font-medium text-slate-700 border border-slate-300 px-5 py-2 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  已有账号登录
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* 创业者入口 */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 hover:shadow-lg transition-shadow duration-300">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-4">创业者入口</h2>
-              <p className="text-slate-700 mb-8">
-                与投资人的数字分身对话，完善你的项目想法，获得专业反馈，提高融资成功率
-              </p>
-              <Link
-                href="/sign-up?role=candidate&method=phone"
-                className="inline-block bg-green-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors duration-200"
-              >
-                注册为创业者
-              </Link>
-              <div className="mt-3">
-                <Link
-                  href="/sign-in"
-                  className="inline-block text-sm font-medium text-slate-700 border border-slate-300 px-5 py-2 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  已有账号登录
-                </Link>
-              </div>
-            </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <h2 className="text-2xl font-bold text-slate-900">开始使用 OPC + 数字分身</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-slate-600">
+            注册一个统一 OPC 账户即可开始。后续可在平台内管理你的数字分身与 AI 助手。
+          </p>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link
+              href="/sign-up?method=phone"
+              className="inline-flex rounded-xl bg-sky-600 px-8 py-3 font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
+            >
+              注册 OPC 账户
+            </Link>
+            <Link
+              href="/sign-in"
+              className="inline-flex rounded-xl border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+            >
+              已有账号登录
+            </Link>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { DebugCollapsible } from '@/components/debug-collapsible';
 
 type WechatSource = {
   id: string;
@@ -565,57 +566,56 @@ export default function InvestorWechatSourcesPanel({
         </div>
       </div>
 
-      <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-500">AI员工调教</p>
+      <div className="mt-3">
+        <DebugCollapsible title="高级设置（AI员工调教）">
           <button
             type="button"
             onClick={() => void toggleCoach()}
-            className="text-xs font-medium text-sky-700 hover:underline"
+            className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
           >
-            {coachOpen ? '收起' : '打开'}
+            {coachOpen ? '隐藏调教编辑器' : '加载调教编辑器'}
           </button>
-        </div>
 
-        {coachOpen && (
-          <div className="mt-2">
-            {coachLoading ? (
-              <p className="text-sm text-slate-500">加载中...</p>
-            ) : (
-              <>
-                <textarea
-                  value={coachDraft}
-                  onChange={(e) => setCoachDraft(e.target.value)}
-                  rows={6}
-                  placeholder="例如：你是我的公众号研究员。每次先给3条核心结论，再给证据链接，再给可执行建议。"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <p className="text-xs text-slate-500">当前长度 {coachDraft.length}/8000</p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={coachSaving}
-                      onClick={() => setCoachDraft(coachSaved)}
-                      className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      撤销修改
-                    </button>
-                    <button
-                      type="button"
-                      disabled={coachSaving}
-                      onClick={() => void saveCoachPrompt()}
-                      className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
-                    >
-                      {coachSaving ? '保存中...' : '保存并生效'}
-                    </button>
+          {coachOpen && (
+            <div className="mt-2">
+              {coachLoading ? (
+                <p className="text-sm text-slate-500">加载中...</p>
+              ) : (
+                <>
+                  <textarea
+                    value={coachDraft}
+                    onChange={(e) => setCoachDraft(e.target.value)}
+                    rows={6}
+                    placeholder="例如：你是我的公众号研究员。每次先给3条核心结论，再给证据链接，再给可执行建议。"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="text-xs text-slate-500">当前长度 {coachDraft.length}/8000</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={coachSaving}
+                        onClick={() => setCoachDraft(coachSaved)}
+                        className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        撤销修改
+                      </button>
+                      <button
+                        type="button"
+                        disabled={coachSaving}
+                        onClick={() => void saveCoachPrompt()}
+                        className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+                      >
+                        {coachSaving ? '保存中...' : '保存并生效'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-                {coachMessage && <p className="mt-2 text-xs text-emerald-700">{coachMessage}</p>}
-              </>
-            )}
-          </div>
-        )}
+                  {coachMessage && <p className="mt-2 text-xs text-emerald-700">{coachMessage}</p>}
+                </>
+              )}
+            </div>
+          )}
+        </DebugCollapsible>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { displayEmail, isFallbackEmail } from '@/lib/user-identifier';
+import { FigmaShell } from '@/components/figma-shell';
 
 export default async function ChatDetailPage({
   params
@@ -53,61 +54,25 @@ export default async function ChatDetailPage({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Link
-                href={`/investor/avatar/${id}/chats`}
-                className="text-blue-600 hover:underline text-sm mb-2 block"
-              >
-                ← 返回对话列表
-              </Link>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {chat.title || `与 ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} 的对话`}
-              </h1>
-              <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
-                <span>分身: {chat.avatar.name}</span>
-                <span>用户: {chat.candidate.nickname || chat.candidate.name || '匿名用户'}</span>
-                <span>邮箱: {displayEmail(chat.candidate.email)}</span>
-                <span>电话: {chat.candidate.phone || '未填写'}</span>
-                <span>微信: {chat.candidate.wechatId || '未填写'}</span>
-                <span>消息: {chat.messages.length} 条</span>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium mb-2 ${
-                chat.status === 'ACTIVE'
-                  ? 'bg-green-100 text-green-800'
-                  : chat.status === 'COMPLETED'
-                  ? 'bg-blue-100 text-blue-800'
-                  : 'bg-gray-100 text-gray-800'
-              }`}>
-                {chat.status === 'ACTIVE' ? '进行中' :
-                 chat.status === 'COMPLETED' ? '已完成' : '已归档'}
-              </span>
-              <p className="text-sm text-gray-500">
-                开始于 {new Date(chat.createdAt).toLocaleString('zh-CN')}
-              </p>
-            </div>
-          </div>
+    <FigmaShell
+      homeHref="/investor"
+      title={chat.title || `与 ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} 的对话`}
+      subtitle={`分身: ${chat.avatar.name} · 用户: ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} · 消息: ${chat.messages.length} 条`}
+      actions={
+        <Link href={`/investor/avatar/${id}/chats`} className="text-sm text-blue-700 hover:underline">
+          返回对话列表
+        </Link>
+      }
+    >
+      {chat.summary ? (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <h2 className="mb-2 text-lg font-semibold text-blue-900">对话总结</h2>
+          <p className="text-blue-800">{chat.summary}</p>
         </div>
-      </div>
+      ) : null}
 
-      {/* Chat Summary */}
-      {chat.summary && (
-        <div className="bg-blue-50 border-b">
-          <div className="container mx-auto px-4 py-4">
-            <h2 className="text-lg font-semibold text-blue-900 mb-2">对话总结</h2>
-            <p className="text-blue-800">{chat.summary}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-3 max-w-4xl">
+      <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <div className="max-w-4xl">
           <div className="flex items-center gap-3 text-sm">
             <span className="text-slate-600">
               AI评分: <span className="font-semibold text-slate-900">{chat.qualificationScore}</span>
@@ -132,12 +97,14 @@ export default async function ChatDetailPage({
           {chat.qualificationReason && (
             <p className="text-sm text-slate-600 mt-1">{chat.qualificationReason}</p>
           )}
+          <p className="mt-2 text-xs text-slate-500">
+            邮箱: {displayEmail(chat.candidate.email)} · 电话: {chat.candidate.phone || '未填写'} · 微信: {chat.candidate.wechatId || '未填写'}
+          </p>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="mx-auto max-w-4xl">
           {chat.messages.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-500">这个对话还没有消息</p>
@@ -170,7 +137,7 @@ export default async function ChatDetailPage({
                     <div className="flex items-center gap-2 mb-2">
                       <span className="font-semibold text-gray-900">
                         {message.role === 'user'
-                          ? chat.candidate.nickname || chat.candidate.name || '创业者'
+                          ? chat.candidate.nickname || chat.candidate.name || '用户'
                           : chat.avatar.name
                         }
                       </span>
@@ -190,13 +157,12 @@ export default async function ChatDetailPage({
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="max-w-4xl mx-auto mt-8 pt-8 border-t">
+          <div className="mx-auto mt-8 max-w-4xl border-t pt-8">
           <div className="flex gap-4 justify-center">
             {chat.candidate.email && !isFallbackEmail(chat.candidate.email) ? (
               <Link
                 href={`mailto:${chat.candidate.email}?subject=${encodeURIComponent(`关于你的项目：${chat.title || chat.avatar.name}`)}`}
-                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                className="rounded-xl bg-green-600 px-6 py-2 text-white hover:bg-green-700"
               >
                 通过邮箱联系
               </Link>
@@ -208,6 +174,6 @@ export default async function ChatDetailPage({
           </div>
         </div>
       </div>
-    </div>
+    </FigmaShell>
   );
 }

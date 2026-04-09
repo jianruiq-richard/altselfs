@@ -47,3 +47,5 @@ next-env.d.ts
 /prisma/dev.db-journal
 *.db
 *.db-journal
+
+AI_Information_Filtering_Platform/

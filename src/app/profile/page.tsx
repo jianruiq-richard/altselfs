@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { displayEmail } from '@/lib/user-identifier';
+import { FigmaShell } from '@/components/figma-shell';
 
 type Profile = {
   email: string;
@@ -95,66 +96,64 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="bg-white border-b border-slate-200">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/dashboard" className="text-blue-700 hover:underline text-sm">
-            ← 返回控制台
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 mt-2">个人信息</h1>
+    <FigmaShell
+      homeHref={profile.role === 'INVESTOR' ? '/investor' : '/candidate'}
+      title="个人信息"
+      subtitle="管理你的账号资料与联系信息"
+      actions={
+        <Link href={profile.role === 'INVESTOR' ? '/investor' : '/candidate'} className="text-sm text-blue-700 hover:underline">
+          返回工作台
+        </Link>
+      }
+    >
+      <form onSubmit={onSave} className="max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <div>
+          <label className="block text-sm text-slate-600 mb-1">身份</label>
+          <p className="text-slate-900 font-medium">OPC成员</p>
         </div>
-      </div>
+        <div>
+          <label className="block text-sm text-slate-600 mb-1">邮箱</label>
+          <p className="text-slate-900">{displayEmail(profile.email)}</p>
+        </div>
+        <div>
+          <label className="block text-sm text-slate-700 mb-1">昵称</label>
+          <input
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+            className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="请输入昵称"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-slate-700 mb-1">联系电话</label>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="请输入联系电话"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-slate-700 mb-1">微信号</label>
+          <input
+            value={wechatId}
+            onChange={(e) => setWechatId(e.target.value)}
+            className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="请输入微信号"
+          />
+        </div>
 
-      <div className="container mx-auto px-4 py-8">
-        <form onSubmit={onSave} className="max-w-2xl mx-auto bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">身份</label>
-            <p className="text-slate-900 font-medium">{profile.role === 'INVESTOR' ? '投资人' : '创业者'}</p>
-          </div>
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">邮箱</label>
-            <p className="text-slate-900">{displayEmail(profile.email)}</p>
-          </div>
-          <div>
-            <label className="block text-sm text-slate-700 mb-1">昵称</label>
-            <input
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="请输入昵称"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-700 mb-1">联系电话</label>
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="请输入联系电话"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-700 mb-1">微信号</label>
-            <input
-              value={wechatId}
-              onChange={(e) => setWechatId(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="请输入微信号"
-            />
-          </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        {success && <p className="text-sm text-emerald-700">{success}</p>}
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          {success && <p className="text-sm text-emerald-700">{success}</p>}
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-60"
-          >
-            {saving ? '保存中...' : '保存'}
-          </button>
-        </form>
-      </div>
-    </div>
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-xl bg-blue-600 px-4 py-2 text-white font-semibold hover:bg-blue-700 disabled:opacity-60"
+        >
+          {saving ? '保存中...' : '保存'}
+        </button>
+      </form>
+    </FigmaShell>
   );
 }

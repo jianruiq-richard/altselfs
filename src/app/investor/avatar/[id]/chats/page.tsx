@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { displayEmail } from '@/lib/user-identifier';
+import { FigmaShell } from '@/components/figma-shell';
 
 export default async function AvatarChatsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -55,48 +56,25 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Link
-                href="/investor"
-                className="text-blue-600 hover:underline text-sm mb-2 block"
-              >
-                ← 返回控制台
-              </Link>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {avatar.name} - 对话记录
-              </h1>
-              <p className="text-gray-600">共 {avatar.chats.length} 个对话会话</p>
-            </div>
-          </div>
+    <FigmaShell
+      homeHref="/investor"
+      title={`${avatar.name} · 对话记录`}
+      subtitle={`共 ${avatar.chats.length} 个会话`}
+      actions={
+        <Link href="/investor" className="text-sm text-blue-700 hover:underline">
+          返回工作台
+        </Link>
+      }
+    >
+      {avatar.chats.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+          <h2 className="text-2xl font-bold text-slate-900">还没有对话</h2>
+          <p className="mt-2 text-slate-600">等待用户与你的分身开始对话。</p>
         </div>
-      </div>
-
-      <div className="container mx-auto px-4 py-8">
-        {avatar.chats.length === 0 ? (
-          // No chats state
-          <div className="text-center py-16">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              还没有对话
-            </h2>
-            <p className="text-gray-600">
-              等待创业者与你的分身开始对话
-            </p>
-          </div>
-        ) : (
-          // Chats list
-          <div className="space-y-6">
-            {avatar.chats.map((chat) => (
-              <div key={chat.id} className="bg-white rounded-lg shadow-lg p-6">
+      ) : (
+        <div className="space-y-5">
+          {avatar.chats.map((chat) => (
+            <div key={chat.id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">
@@ -189,7 +167,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                 <div className="flex gap-2 mt-4 pt-4 border-t">
                   <Link
                     href={`/investor/avatar/${avatar.id}/chat/${chat.id}`}
-                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
                   >
                     查看完整对话
                   </Link>
@@ -200,10 +178,9 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                   )}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+          ))}
+        </div>
+      )}
+    </FigmaShell>
   );
 }

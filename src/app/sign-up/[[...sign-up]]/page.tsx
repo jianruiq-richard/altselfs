@@ -7,26 +7,17 @@ export default async function Page({
   searchParams: Promise<{ role?: string; method?: string }>;
 }) {
   const params = await searchParams;
-  const role = params.role;
   const method = params.method === 'email' ? 'email' : 'phone';
-  const normalizedRole = role === 'investor' ? 'investor' : role === 'candidate' ? 'candidate' : null;
-  const baseSignUpUrl = normalizedRole ? `/sign-up?role=${normalizedRole}` : '/sign-up';
+  const baseSignUpUrl = '/sign-up';
   const methodJoiner = baseSignUpUrl.includes('?') ? '&' : '?';
-  const redirectUrl = normalizedRole ? `/dashboard/setup?role=${normalizedRole}` : '/dashboard';
+  const redirectUrl = '/dashboard/setup';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            {normalizedRole === 'investor' ? '注册投资人账户' :
-             normalizedRole === 'candidate' ? '注册创业者账户' : '创建账户'}
-          </h1>
-          <p className="text-gray-600 mt-2">
-            {normalizedRole === 'investor' ? '完成注册后将进入投资人控制台流程' :
-             normalizedRole === 'candidate' ? '完成注册后将进入创业者对话流程' :
-             '加入 AltSelfs 平台'}
-          </p>
+          <h1 className="text-3xl font-bold text-gray-900">注册 OPC 账户</h1>
+          <p className="text-gray-600 mt-2">完成注册后将进入数字分身工作台</p>
           <p className="text-xs text-gray-500 mt-2">支持邮箱、Google、手机号验证码注册</p>
         </div>
         <div className="mb-4 flex gap-2">

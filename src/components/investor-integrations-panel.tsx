@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { DebugCollapsible } from '@/components/debug-collapsible';
 
 type ProviderKey = 'gmail' | 'feishu';
 
@@ -254,7 +255,7 @@ export default function InvestorIntegrationsPanel({
         <div>
           <h2 className="text-lg font-semibold text-slate-900">外部消息助手</h2>
           <p className="text-sm text-slate-600 mt-1">
-            仅投资人可用。先绑定 Gmail / 飞书账号，再由分身生成你的被动消息摘要。
+            先绑定 Gmail / 飞书账号，再由数字分身生成你的被动消息摘要。
           </p>
         </div>
       </div>
@@ -366,65 +367,66 @@ export default function InvestorIntegrationsPanel({
               </div>
             </div>
 
-            <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-slate-500">AI员工调教</p>
-                <button
-                  type="button"
-                  onClick={() => void toggleCoach(card.provider)}
-                  className="text-xs font-medium text-sky-700 hover:underline"
-                >
-                  {coachOpen[card.provider] ? '收起' : '打开'}
-                </button>
-              </div>
-
-              {coachOpen[card.provider] && (
+            <div className="mt-3">
+              <DebugCollapsible title="高级设置（AI员工调教）">
                 <div className="mt-2">
-                  {coachLoading[card.provider] ? (
-                    <p className="text-sm text-slate-500">加载中...</p>
-                  ) : (
-                    <>
-                      <textarea
-                        value={coachDraft[card.provider]}
-                        onChange={(e) =>
-                          setCoachDraft((prev) => ({ ...prev, [card.provider]: e.target.value }))
-                        }
-                        rows={6}
-                        placeholder="例如：你是我的执行型邮箱助理。优先输出待办清单、风险点、可直接发送的回复草稿。语气简洁专业。"
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                      />
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <p className="text-xs text-slate-500">
-                          当前长度 {coachDraft[card.provider].length}/8000
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={coachSaving[card.provider]}
-                            onClick={() =>
-                              setCoachDraft((prev) => ({ ...prev, [card.provider]: coachSaved[card.provider] }))
+                  <button
+                    type="button"
+                    onClick={() => void toggleCoach(card.provider)}
+                    className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                  >
+                    {coachOpen[card.provider] ? '隐藏调教编辑器' : '加载调教编辑器'}
+                  </button>
+
+                  {coachOpen[card.provider] && (
+                    <div className="mt-2">
+                      {coachLoading[card.provider] ? (
+                        <p className="text-sm text-slate-500">加载中...</p>
+                      ) : (
+                        <>
+                          <textarea
+                            value={coachDraft[card.provider]}
+                            onChange={(e) =>
+                              setCoachDraft((prev) => ({ ...prev, [card.provider]: e.target.value }))
                             }
-                            className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                          >
-                            撤销修改
-                          </button>
-                          <button
-                            type="button"
-                            disabled={coachSaving[card.provider]}
-                            onClick={() => void saveCoachPrompt(card.provider)}
-                            className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
-                          >
-                            {coachSaving[card.provider] ? '保存中...' : '保存并生效'}
-                          </button>
-                        </div>
-                      </div>
-                      {coachMessage[card.provider] && (
-                        <p className="mt-2 text-xs text-emerald-700">{coachMessage[card.provider]}</p>
+                            rows={6}
+                            placeholder="例如：你是我的执行型邮箱助理。优先输出待办清单、风险点、可直接发送的回复草稿。语气简洁专业。"
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          />
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <p className="text-xs text-slate-500">
+                              当前长度 {coachDraft[card.provider].length}/8000
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                disabled={coachSaving[card.provider]}
+                                onClick={() =>
+                                  setCoachDraft((prev) => ({ ...prev, [card.provider]: coachSaved[card.provider] }))
+                                }
+                                className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                              >
+                                撤销修改
+                              </button>
+                              <button
+                                type="button"
+                                disabled={coachSaving[card.provider]}
+                                onClick={() => void saveCoachPrompt(card.provider)}
+                                className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+                              >
+                                {coachSaving[card.provider] ? '保存中...' : '保存并生效'}
+                              </button>
+                            </div>
+                          </div>
+                          {coachMessage[card.provider] && (
+                            <p className="mt-2 text-xs text-emerald-700">{coachMessage[card.provider]}</p>
+                          )}
+                        </>
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
-              )}
+              </DebugCollapsible>
             </div>
           </div>
         ))}
