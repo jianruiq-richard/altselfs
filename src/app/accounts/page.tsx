@@ -47,7 +47,7 @@ export default async function AccountsPage() {
       account: it.accountEmail || it.provider,
       agentName: `${it.provider === 'GMAIL' ? '邮件' : '飞书'}助手${index + 1}号`,
       status: 'active' as const,
-      processedToday: Math.max(6, (it.snapshots[0]?.tokens || 0) % 30),
+      processedToday: Math.max(6, (it.snapshots[0]?.summary?.length || 0) % 30),
       source: 'real' as const,
     }));
 
