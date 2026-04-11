@@ -81,7 +81,7 @@ export function FigmaShell({
                 <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white">
                   <span className="text-sm font-semibold">{(user?.fullName || '用').slice(0, 1)}</span>
                   <span className="absolute -right-1 -bottom-1">
-                    <UserButton afterSignOutUrl="/" />
+                    <UserButton />
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
