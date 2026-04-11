@@ -32,7 +32,7 @@ export function FigmaShell({
   const navItems = useMemo<NavItem[]>(
     () => [
       { name: '工作台', href: homeHref, icon: Home, matchPrefixes: ['/investor/avatar'] },
-      { name: '数字分身大厅', href: '/candidate', icon: Users, matchPrefixes: ['/chat'] },
+      { name: '数字分身大厅', href: '/digital-twins', icon: Users, matchPrefixes: ['/candidate', '/chat'] },
       { name: '我的数字分身', href: '/investor/avatar/new', icon: Sparkles },
       { name: 'AI人才大厅', href: '/ai-talent', icon: Briefcase },
       { name: '部门管理', href: '/accounts', icon: UserCircle },
