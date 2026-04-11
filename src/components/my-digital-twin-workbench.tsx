@@ -19,7 +19,7 @@ import {
   Briefcase,
 } from 'lucide-react';
 
-type AvatarItem = {
+export type AvatarItem = {
   id: string;
   name: string;
   status: 'ACTIVE' | 'INACTIVE';

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { FigmaShell } from '@/components/figma-shell';
 import MyDigitalTwinWorkbench from '@/components/my-digital-twin-workbench';
+import type { AvatarItem } from '@/components/my-digital-twin-workbench';
 
 export default async function MyDigitalTwinPage() {
   const user = await currentUser();
@@ -41,7 +42,7 @@ export default async function MyDigitalTwinPage() {
   ].reduce((a, b) => a + b, 0);
   const totalCompletion = Math.max(20, Math.min(96, completionSeed));
 
-  const avatars = dbUser.avatars.map((avatar) => ({
+  const avatars: AvatarItem[] = dbUser.avatars.map((avatar) => ({
     id: avatar.id,
     name: avatar.name,
     status: avatar.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
