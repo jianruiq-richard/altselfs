@@ -199,12 +199,12 @@ export default async function DigitalTwinsPage() {
                 <Link href={twin.chatHref} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-blue-700">
                   <span className="inline-flex items-center justify-center">
                     <MessageCircle className="mr-1.5 h-4 w-4" />
-                    开始对话
+                    发起对话
                   </span>
                 </Link>
               ) : (
                 <button type="button" className="flex-1 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white">
-                  演示预览
+                  发起对话
                 </button>
               )}
             </div>
