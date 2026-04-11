@@ -44,7 +44,7 @@ export default async function MyDigitalTwinPage() {
   const avatars = dbUser.avatars.map((avatar) => ({
     id: avatar.id,
     name: avatar.name,
-    status: avatar.status,
+    status: avatar.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
     chatsCount: avatar.chats.length,
   }));
 
