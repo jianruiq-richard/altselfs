@@ -5,6 +5,35 @@ import { FigmaShell } from '@/components/figma-shell';
 import MyDigitalTwinWorkbench from '@/components/my-digital-twin-workbench';
 import type { DefaultAvatarItem, ReceivedConversationItem } from '@/components/my-digital-twin-workbench';
 
+function deriveTwinDisplayBase(input: {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}) {
+  const name = String(input.name || '').trim();
+  if (name) return name;
+
+  const email = String(input.email || '').trim();
+  if (email.includes('@')) {
+    const prefix = email.split('@')[0]?.trim();
+    if (prefix) return prefix;
+  }
+
+  const phone = String(input.phone || '').trim();
+  if (phone) return phone;
+
+  return '';
+}
+
+function defaultTwinName(input: {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}) {
+  const base = deriveTwinDisplayBase(input);
+  return base ? `${base} 的数字分身` : '我的数字分身';
+}
+
 function pickVisitorEmoji(seed: string) {
   const pool = ['👨‍💼', '👩‍💻', '🎨', '📊', '🚀', '🧠', '📚', '🛠️'];
   let hash = 0;
@@ -113,7 +142,11 @@ export default async function MyDigitalTwinPage() {
     await prisma.avatar.create({
       data: {
         investorId: dbUser.id,
-        name: dbUser.name?.trim() ? `${dbUser.name.trim()} 的数字分身` : '我的数字分身',
+        name: defaultTwinName({
+          name: dbUser.name,
+          email: dbUser.email,
+          phone: dbUser.phone,
+        }),
         description: '这是你的默认数字分身，可在此持续完善它的表达与知识。',
         systemPrompt:
           '你是该用户的数字分身。请保持专业、清晰、真诚的表达，基于已知信息回答问题；信息不足时主动追问，不要编造事实。',

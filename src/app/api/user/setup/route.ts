@@ -4,8 +4,32 @@ import { auth } from '@clerk/nextjs/server';
 import { isDemoMode } from '@/lib/dev-auth';
 import { buildFallbackEmail } from '@/lib/user-identifier';
 
-function defaultTwinName(name?: string | null) {
-  const base = String(name || '').trim();
+function deriveTwinDisplayBase(input: {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}) {
+  const name = String(input.name || '').trim();
+  if (name) return name;
+
+  const email = String(input.email || '').trim();
+  if (email.includes('@')) {
+    const prefix = email.split('@')[0]?.trim();
+    if (prefix) return prefix;
+  }
+
+  const phone = String(input.phone || '').trim();
+  if (phone) return phone;
+
+  return '';
+}
+
+function defaultTwinName(input: {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}) {
+  const base = deriveTwinDisplayBase(input);
   return base ? `${base} 的数字分身` : '我的数字分身';
 }
 
@@ -88,7 +112,11 @@ export async function POST(req: NextRequest) {
           await prisma.avatar.create({
             data: {
               investorId: user.id,
-              name: defaultTwinName(user.name),
+              name: defaultTwinName({
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+              }),
               description: '这是你的默认数字分身，可在“我的数字分身”页持续完善。',
               systemPrompt: DEFAULT_TWIN_PROMPT,
               status: 'ACTIVE',
@@ -117,7 +145,11 @@ export async function POST(req: NextRequest) {
       await prisma.avatar.create({
         data: {
           investorId: user.id,
-          name: defaultTwinName(user.name),
+          name: defaultTwinName({
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+          }),
           description: '这是你的默认数字分身，可在“我的数字分身”页持续完善。',
           systemPrompt: DEFAULT_TWIN_PROMPT,
           status: 'ACTIVE',
