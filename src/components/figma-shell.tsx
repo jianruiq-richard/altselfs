@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Users, Settings, Sparkles, Briefcase, UserCircle, Mail, MessageSquare } from 'lucide-react';
-import { UserButton, useUser } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 import { useMemo } from 'react';
 
 type NavItem = {
@@ -18,12 +18,14 @@ export function FigmaShell({
   title,
   subtitle,
   actions,
+  showPageHeader = true,
   children,
 }: {
   homeHref?: string;
-  title: string;
+  title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  showPageHeader?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -69,24 +71,25 @@ export function FigmaShell({
                   }`}
                 >
                   <item.icon className="h-5 w-5" />
-                  <span className="text-[17px]">{item.name}</span>
+                  <span>{item.name}</span>
                 </Link>
               );
             })}
           </nav>
 
           <div className="border-t border-gray-200 p-4">
-            <Link href="/profile" className="block rounded-lg px-4 py-3 transition-colors hover:bg-gray-50">
+            <Link href="/profile" className="block rounded-lg px-4 py-3">
               <div className="flex items-center gap-3">
-                <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                  <span className="text-sm font-semibold">{(user?.fullName || '用').slice(0, 1)}</span>
-                  <span className="absolute -right-1 -bottom-1">
-                    <UserButton />
-                  </span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-xl font-semibold text-white">
+                  {(user?.fullName || '用').slice(0, 1)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-gray-900">{user?.fullName || '用户名'}</p>
-                  <p className="truncate text-sm text-gray-500">{user?.primaryEmailAddress?.emailAddress || 'user@example.com'}</p>
+                  <p className="truncate text-base font-medium text-gray-900">
+                    {user?.fullName || '用户名'}
+                  </p>
+                  <p className="truncate text-sm text-gray-500">
+                    {user?.primaryEmailAddress?.emailAddress || 'user@example.com'}
+                  </p>
                 </div>
               </div>
             </Link>
@@ -96,13 +99,15 @@ export function FigmaShell({
 
       <main className="min-w-0 flex-1">
         <div className="mx-auto w-full max-w-7xl p-8">
-          <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
-              {subtitle ? <p className="mt-2 text-gray-500">{subtitle}</p> : null}
+          {showPageHeader ? (
+            <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
+                {subtitle ? <p className="mt-2 text-gray-500">{subtitle}</p> : null}
+              </div>
+              {actions ? <div className="shrink-0">{actions}</div> : null}
             </div>
-            {actions ? <div className="shrink-0">{actions}</div> : null}
-          </div>
+          ) : null}
           {children}
         </div>
       </main>
