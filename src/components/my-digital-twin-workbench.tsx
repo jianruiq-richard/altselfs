@@ -28,6 +28,16 @@ export type AvatarItem = {
   chatsCount: number;
 };
 
+export type DefaultAvatarItem = {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  avatar: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  chatsCount: number;
+};
+
 export type ReceivedConversationItem = {
   id: string;
   avatarId: string;
@@ -46,11 +56,9 @@ export type ReceivedConversationItem = {
 };
 
 type Props = {
-  avatarCount: number;
-  totalChats: number;
   totalTokens: number;
   totalCompletion: number;
-  avatars: AvatarItem[];
+  defaultAvatar: DefaultAvatarItem;
   receivedConversations: ReceivedConversationItem[];
 };
 
@@ -75,11 +83,9 @@ const initialKnowledge = [
 ];
 
 export default function MyDigitalTwinWorkbench({
-  avatarCount,
-  totalChats,
   totalTokens,
   totalCompletion,
-  avatars,
+  defaultAvatar,
   receivedConversations,
 }: Props) {
   const router = useRouter();
@@ -88,11 +94,11 @@ export default function MyDigitalTwinWorkbench({
   const [isLoading, setIsLoading] = useState(false);
   const [skills, setSkills] = useState(initialSkills);
   const [knowledge, setKnowledge] = useState(initialKnowledge);
-  const [bio, setBio] = useState('专注于 AI 与软件方向的投资人，关注长期价值与执行力。');
+  const [bio, setBio] = useState(defaultAvatar.description || '专注于 AI 与软件方向的投资人，关注长期价值与执行力。');
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    systemPrompt: '',
+    name: defaultAvatar.name,
+    description: defaultAvatar.description || '',
+    systemPrompt: defaultAvatar.systemPrompt || '',
   });
 
   const knowledgeTokens = useMemo(() => knowledge.reduce((sum, item) => sum + item.tokens, 0), [knowledge]);
@@ -101,25 +107,27 @@ export default function MyDigitalTwinWorkbench({
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleCreateAvatar = async (e: React.FormEvent) => {
+  const handleSaveAvatar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.systemPrompt.trim() || isLoading) return;
 
     setIsLoading(true);
     try {
-      const res = await fetch('/api/avatar', {
-        method: 'POST',
+      const res = await fetch(`/api/avatar/${defaultAvatar.id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          status: defaultAvatar.status,
+        }),
       });
 
       if (!res.ok) {
-        console.error('Failed to create avatar');
+        console.error('Failed to update avatar');
         return;
       }
 
       router.refresh();
-      setFormData({ name: '', description: '', systemPrompt: '' });
       setActiveTab('overview');
     } catch (error) {
       console.error(error);
@@ -221,7 +229,7 @@ export default function MyDigitalTwinWorkbench({
             <h2 className="text-xl font-bold text-gray-900">基础信息</h2>
             <p className="mt-1 text-sm text-gray-500">这些信息会影响别人如何认识你的数字分身</p>
 
-            <form onSubmit={handleCreateAvatar} className="mt-5 space-y-4">
+            <form onSubmit={handleSaveAvatar} className="mt-5 space-y-4">
               <div className="flex items-center gap-4">
                 <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-4xl text-white">
                   {(formData.name || '分').slice(0, 1)}
@@ -276,7 +284,7 @@ export default function MyDigitalTwinWorkbench({
                 disabled={isLoading}
                 className="rounded-xl bg-[#030213] px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
               >
-                {isLoading ? '保存中...' : '保存基础信息'}
+                {isLoading ? '保存中...' : '保存分身信息'}
               </button>
             </form>
           </div>
@@ -297,35 +305,6 @@ export default function MyDigitalTwinWorkbench({
                 <BookOpen className="mr-3 h-5 w-5" />
                 导入文档（笔记、博客、文章）
               </button>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-6">
-            <h3 className="text-lg font-semibold text-gray-900">我的分身列表</h3>
-            <p className="mt-1 text-sm text-gray-500">已创建 {avatarCount} 个分身 · 总会话 {totalChats}</p>
-            <div className="mt-4 space-y-3">
-              {avatars.length > 0 ? (
-                avatars.map((avatar) => (
-                  <div key={avatar.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
-                    <div>
-                      <p className="font-medium text-gray-900">{avatar.name}</p>
-                      <p className="text-sm text-gray-500">会话数 {avatar.chatsCount}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`rounded px-2 py-0.5 text-xs ${avatar.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700'}`}>
-                        {avatar.status === 'ACTIVE' ? '启用中' : '已停用'}
-                      </span>
-                      <Link href={`/investor/avatar/${avatar.id}`} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
-                        管理
-                      </Link>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
-                  你还没有创建分身，先在上面填写信息创建第一个分身。
-                </div>
-              )}
             </div>
           </div>
 

@@ -4,6 +4,14 @@ import { auth } from '@clerk/nextjs/server';
 import { isDemoMode } from '@/lib/dev-auth';
 import { buildFallbackEmail } from '@/lib/user-identifier';
 
+function defaultTwinName(name?: string | null) {
+  const base = String(name || '').trim();
+  return base ? `${base} 的数字分身` : '我的数字分身';
+}
+
+const DEFAULT_TWIN_PROMPT =
+  '你是该用户的数字分身。请保持专业、清晰、真诚的表达，基于已知信息回答问题；信息不足时主动追问，不要编造事实。';
+
 export async function POST(req: NextRequest) {
   try {
     // Handle demo mode
@@ -71,6 +79,24 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      if (normalizedRole === 'INVESTOR') {
+        const hasAvatar = await prisma.avatar.findFirst({
+          where: { investorId: user.id },
+          select: { id: true },
+        });
+        if (!hasAvatar) {
+          await prisma.avatar.create({
+            data: {
+              investorId: user.id,
+              name: defaultTwinName(user.name),
+              description: '这是你的默认数字分身，可在“我的数字分身”页持续完善。',
+              systemPrompt: DEFAULT_TWIN_PROMPT,
+              status: 'ACTIVE',
+            },
+          });
+        }
+      }
+
       return NextResponse.json({ user });
     }
 
@@ -86,6 +112,18 @@ export async function POST(req: NextRequest) {
         role: normalizedRole,
       },
     });
+
+    if (normalizedRole === 'INVESTOR') {
+      await prisma.avatar.create({
+        data: {
+          investorId: user.id,
+          name: defaultTwinName(user.name),
+          description: '这是你的默认数字分身，可在“我的数字分身”页持续完善。',
+          systemPrompt: DEFAULT_TWIN_PROMPT,
+          status: 'ACTIVE',
+        },
+      });
+    }
 
     return NextResponse.json({ user });
   } catch (error) {

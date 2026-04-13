@@ -29,14 +29,29 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const avatar = await prisma.avatar.create({
-        data: {
-          name,
-          description,
-          systemPrompt,
-          investorId: user.id,
-        },
+      const existing = await prisma.avatar.findFirst({
+        where: { investorId: user.id },
+        orderBy: { createdAt: 'asc' },
       });
+
+      const avatar = existing
+        ? await prisma.avatar.update({
+            where: { id: existing.id },
+            data: {
+              name,
+              description,
+              systemPrompt,
+              status: 'ACTIVE',
+            },
+          })
+        : await prisma.avatar.create({
+            data: {
+              name,
+              description,
+              systemPrompt,
+              investorId: user.id,
+            },
+          });
 
       return NextResponse.json({ avatar });
     }
@@ -63,15 +78,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User not found or not an investor' }, { status: 403 });
     }
 
-    // Create the avatar
-    const avatar = await prisma.avatar.create({
-      data: {
-        name,
-        description,
-        systemPrompt,
-        investorId: user.id,
-      },
+    // Single-twin mode: always keep one avatar per account.
+    const existing = await prisma.avatar.findFirst({
+      where: { investorId: user.id },
+      orderBy: { createdAt: 'asc' },
     });
+
+    const avatar = existing
+      ? await prisma.avatar.update({
+          where: { id: existing.id },
+          data: {
+            name,
+            description,
+            systemPrompt,
+            status: 'ACTIVE',
+          },
+        })
+      : await prisma.avatar.create({
+          data: {
+            name,
+            description,
+            systemPrompt,
+            investorId: user.id,
+          },
+        });
 
     return NextResponse.json({ avatar });
   } catch (error) {
