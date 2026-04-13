@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Users, Settings, Sparkles, Briefcase, UserCircle, Mail, MessageSquare } from 'lucide-react';
-import { useUser } from '@clerk/nextjs';
+import { Home, Users, Settings, Sparkles, Briefcase, UserCircle, Mail, MessageSquare, LogOut } from 'lucide-react';
+import { SignOutButton, useUser } from '@clerk/nextjs';
 import { useMemo } from 'react';
 
 type NavItem = {
@@ -69,8 +69,8 @@ export function FigmaShell({
   }, [navItems, pathname]);
 
   return (
-    <div className="flex min-h-screen bg-gray-50 text-slate-900">
-      <aside className="w-64 border-r border-gray-200 bg-white">
+    <div className="flex h-screen overflow-hidden bg-gray-50 text-slate-900">
+      <aside className="h-full w-64 shrink-0 border-r border-gray-200 bg-white">
         <div className="flex h-full flex-col">
           <div className="border-b border-gray-200 px-6 py-6">
             <div>
@@ -79,7 +79,7 @@ export function FigmaShell({
             </div>
           </div>
 
-          <nav className="flex-1 space-y-1 p-4">
+          <nav className="flex-1 space-y-1 overflow-y-auto p-4">
             {navItems.map((item) => {
               const isActive = activeNavKey === item.key;
               return (
@@ -113,11 +113,20 @@ export function FigmaShell({
                 </div>
               </div>
             </Link>
+            <SignOutButton redirectUrl="/">
+              <button
+                type="button"
+                className="mt-2 flex w-full items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-gray-900"
+              >
+                <LogOut className="h-4 w-4" />
+                退出登录
+              </button>
+            </SignOutButton>
           </div>
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1">
+      <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-7xl p-8">
           {showPageHeader ? (
             <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
