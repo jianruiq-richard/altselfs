@@ -7,10 +7,11 @@ import { useUser } from '@clerk/nextjs';
 import { useMemo } from 'react';
 
 type NavItem = {
+  key: string;
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  matchPrefixes?: string[];
+  activePrefixes?: string[];
 };
 
 export function FigmaShell({
@@ -33,17 +34,39 @@ export function FigmaShell({
 
   const navItems = useMemo<NavItem[]>(
     () => [
-      { name: '工作台', href: homeHref, icon: Home, matchPrefixes: ['/investor/avatar'] },
-      { name: '数字分身大厅', href: '/digital-twins', icon: Users, matchPrefixes: ['/candidate', '/chat'] },
-      { name: '我的数字分身', href: '/investor/avatar/new', icon: Sparkles },
-      { name: 'AI人才大厅', href: '/ai-talent', icon: Briefcase },
-      { name: '部门管理', href: '/accounts', icon: UserCircle },
-      { name: '信息中心', href: '/messages', icon: Mail },
-      { name: 'AI助手', href: '/messages', icon: MessageSquare },
-      { name: '设置', href: '/profile', icon: Settings },
+      { key: 'home', name: '工作台', href: homeHref, icon: Home },
+      { key: 'hall', name: '数字分身大厅', href: '/digital-twins', icon: Users, activePrefixes: ['/candidate', '/chat'] },
+      { key: 'my-twin', name: '我的数字分身', href: '/investor/avatar/new', icon: Sparkles, activePrefixes: ['/investor/avatar'] },
+      { key: 'talent', name: 'AI人才大厅', href: '/ai-talent', icon: Briefcase },
+      { key: 'accounts', name: '部门管理', href: '/accounts', icon: UserCircle },
+      { key: 'messages', name: '信息中心', href: '/messages', icon: Mail },
+      { key: 'assistant', name: 'AI助手', href: '/investor/info-ops', icon: MessageSquare, activePrefixes: ['/investor/info-ops'] },
+      { key: 'settings', name: '设置', href: '/profile', icon: Settings },
     ],
     [homeHref]
   );
+
+  const activeNavKey = useMemo(() => {
+    const scoreFor = (item: NavItem) => {
+      if (pathname === item.href) return item.href.length + 10_000;
+      if (item.activePrefixes?.some((prefix) => pathname.startsWith(prefix))) {
+        const longestPrefix = Math.max(...item.activePrefixes.map((prefix) => (pathname.startsWith(prefix) ? prefix.length : 0)));
+        return longestPrefix + 5_000;
+      }
+      if (item.href !== '/' && pathname.startsWith(item.href)) return item.href.length;
+      return -1;
+    };
+
+    let winner: { key: string; score: number } | null = null;
+    for (const item of navItems) {
+      const score = scoreFor(item);
+      if (score < 0) continue;
+      if (!winner || score > winner.score) {
+        winner = { key: item.key, score };
+      }
+    }
+    return winner?.key || null;
+  }, [navItems, pathname]);
 
   return (
     <div className="flex min-h-screen bg-gray-50 text-slate-900">
@@ -58,13 +81,10 @@ export function FigmaShell({
 
           <nav className="flex-1 space-y-1 p-4">
             {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.matchPrefixes ? item.matchPrefixes.some((p) => pathname.startsWith(p)) : false) ||
-                (item.href !== '/' && pathname.startsWith(item.href));
+              const isActive = activeNavKey === item.key;
               return (
                 <Link
-                  key={item.name}
+                  key={item.key}
                   href={item.href}
                   className={`flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
                     isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'
