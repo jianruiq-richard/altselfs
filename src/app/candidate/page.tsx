@@ -57,7 +57,7 @@ export default async function CandidateDashboard() {
 
   // Get all active avatars
   const avatars = await prisma.avatar.findMany({
-    where: { status: 'ACTIVE' },
+    where: { status: 'ACTIVE', isPublic: true },
     include: {
       investor: {
         select: {

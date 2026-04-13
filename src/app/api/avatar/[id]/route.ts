@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
 import { isDemoMode } from '@/lib/dev-auth';
@@ -71,6 +72,7 @@ export async function GET(
         description: true,
         avatar: true,
         status: true,
+        isPublic: true,
         createdAt: true,
         updatedAt: true,
         investorId: true,
@@ -98,13 +100,18 @@ export async function PUT(
 
     if (isDemoMode) {
       const body = await request.json();
+      const existing = await prisma.avatar.findUnique({ where: { id } });
+      if (!existing) {
+        return NextResponse.json({ error: 'Avatar not found' }, { status: 404 });
+      }
       const updated = await prisma.avatar.update({
         where: { id },
         data: {
           name: body.name,
           description: body.description ?? null,
           avatar: body.avatar ?? null,
-          status: body.status ?? 'ACTIVE',
+          status: body.status ?? existing.status,
+          isPublic: typeof body.isPublic === 'boolean' ? body.isPublic : existing.isPublic,
           systemPrompt: body.systemPrompt,
         },
       });
@@ -131,7 +138,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Avatar not found or access denied' }, { status: 404 });
     }
 
-    const { name, description, avatar: avatarUrl, status, systemPrompt } = await request.json();
+    const { name, description, avatar: avatarUrl, status, isPublic, systemPrompt } = await request.json();
 
     if (!name || !systemPrompt) {
       return NextResponse.json({ error: 'Name and systemPrompt are required' }, { status: 400 });
@@ -143,7 +150,8 @@ export async function PUT(
         name,
         description: description ?? null,
         avatar: avatarUrl ?? null,
-        status: status ?? 'ACTIVE',
+        status: status ?? avatar.status,
+        isPublic: typeof isPublic === 'boolean' ? isPublic : avatar.isPublic,
         systemPrompt,
       },
     });
@@ -151,6 +159,15 @@ export async function PUT(
     return NextResponse.json({ avatar: updated });
   } catch (error) {
     console.error('Error updating avatar:', error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2022') {
+      return NextResponse.json(
+        {
+          error: '数据库字段缺失，请先执行最新迁移后再重试',
+          code: 'DB_MIGRATION_REQUIRED',
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

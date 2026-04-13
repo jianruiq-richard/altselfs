@@ -11,6 +11,7 @@ type TwinSeed = {
   description: string;
   systemPrompt: string;
   status: string;
+  isPublic: boolean;
   investorName: string;
   conversations: number;
   allowChat: boolean;
@@ -24,6 +25,7 @@ const mockTwinSeeds: TwinSeed[] = [
     description: '10年软件开发经验，专注于 AI 和 Web3。擅长系统架构设计，热爱开源。',
     systemPrompt: '技术 创业 AI Web3 React Node.js Python 系统设计',
     status: 'ACTIVE',
+    isPublic: true,
     investorName: 'Alex Chen',
     conversations: 1247,
     allowChat: false,
@@ -35,6 +37,7 @@ const mockTwinSeeds: TwinSeed[] = [
     description: '8年 UX/UI 设计经验，擅长用户研究和交互设计。',
     systemPrompt: '设计 UX UI Figma 用户研究 产品设计',
     status: 'ACTIVE',
+    isPublic: true,
     investorName: 'Sarah Wang',
     conversations: 892,
     allowChat: false,
@@ -46,6 +49,7 @@ const mockTwinSeeds: TwinSeed[] = [
     description: '帮助多家创业公司从0到1，擅长产品策略与市场分析。',
     systemPrompt: '商业 strategy product 运营 管理 增长',
     status: 'ACTIVE',
+    isPublic: true,
     investorName: 'Michael Zhang',
     conversations: 2103,
     allowChat: false,
@@ -57,6 +61,7 @@ const mockTwinSeeds: TwinSeed[] = [
     description: 'AI 研究员与讲师，长期关注模型评测、应用落地与知识体系化。',
     systemPrompt: '研究 知识 AI 学习 analysis insight 数据',
     status: 'ACTIVE',
+    isPublic: true,
     investorName: 'Lisa Liu',
     conversations: 1567,
     allowChat: false,
@@ -68,6 +73,7 @@ const mockTwinSeeds: TwinSeed[] = [
     description: '增长策略顾问，擅长从产品、渠道、数据三维制定增长路径。',
     systemPrompt: '增长 商业 strategy 产品 运营 数据',
     status: 'ACTIVE',
+    isPublic: true,
     investorName: 'Tom Wu',
     conversations: 743,
     allowChat: false,
@@ -79,6 +85,7 @@ const mockTwinSeeds: TwinSeed[] = [
     description: '创新顾问，关注科技趋势与组织变革，擅长商业模式设计。',
     systemPrompt: '创新 商业 strategy 管理 设计 产品',
     status: 'ACTIVE',
+    isPublic: true,
     investorName: 'Emma Chen',
     conversations: 1089,
     allowChat: false,
@@ -132,6 +139,7 @@ function normalizeCardFromAvatar(input: {
   description: string | null;
   systemPrompt: string;
   status: string;
+  isPublic: boolean;
   investorName: string | null;
   conversations: number;
   allowChat: boolean;
@@ -151,7 +159,7 @@ function normalizeCardFromAvatar(input: {
     conversations: input.conversations,
     rating: Math.min(5, 4.6 + Math.min(input.conversations, 60) / 150),
     category: inferCategory(textBase),
-    isPublic: input.status === 'ACTIVE',
+    isPublic: input.isPublic,
     detailHref: null,
     chatHref: input.allowChat ? `/chat/${input.id}` : null,
   } satisfies DigitalTwinCard;
@@ -168,7 +176,7 @@ export default async function DigitalTwinsPage() {
   if (!dbUser) redirect('/dashboard');
 
   const avatars = await prisma.avatar.findMany({
-    where: { status: 'ACTIVE' },
+    where: { status: 'ACTIVE', isPublic: true },
     include: {
       investor: {
         select: {
@@ -195,6 +203,7 @@ export default async function DigitalTwinsPage() {
       description: avatar.description,
       systemPrompt: avatar.systemPrompt,
       status: avatar.status,
+      isPublic: avatar.isPublic,
       investorName: avatar.investor.name,
       conversations: avatar._count.chats,
       allowChat: dbUser.role === 'CANDIDATE',
@@ -209,6 +218,7 @@ export default async function DigitalTwinsPage() {
       description: seed.description,
       systemPrompt: seed.systemPrompt,
       status: seed.status,
+      isPublic: seed.isPublic,
       investorName: seed.investorName,
       conversations: seed.conversations,
       allowChat: seed.allowChat,

@@ -157,6 +157,7 @@ model Avatar {
   avatar      String?      // 头像URL
   systemPrompt String     // AI 系统提示词
   status      String @default("ACTIVE")
+  isPublic    Boolean @default(true)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 

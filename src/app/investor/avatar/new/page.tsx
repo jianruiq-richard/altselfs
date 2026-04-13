@@ -192,6 +192,7 @@ export default async function MyDigitalTwinPage() {
     systemPrompt: defaultAvatarRecord.systemPrompt,
     avatar: defaultAvatarRecord.avatar,
     status: defaultAvatarRecord.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+    isPublic: defaultAvatarRecord.isPublic,
     chatsCount: defaultAvatarRecord._count.chats,
   };
 

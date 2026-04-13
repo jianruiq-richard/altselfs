@@ -115,7 +115,7 @@ export async function GET() {
     // Handle demo mode - return all avatars for demo
     if (isDemoMode) {
       const avatars = await prisma.avatar.findMany({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', isPublic: true },
         include: {
           investor: {
             select: {
@@ -140,7 +140,7 @@ export async function GET() {
 
     // Get all active avatars for browsing (for candidates)
     const avatars = await prisma.avatar.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', isPublic: true },
       include: {
         investor: {
           select: {

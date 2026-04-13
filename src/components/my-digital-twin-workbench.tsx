@@ -35,6 +35,7 @@ export type DefaultAvatarItem = {
   systemPrompt: string;
   avatar: string | null;
   status: 'ACTIVE' | 'INACTIVE';
+  isPublic: boolean;
   chatsCount: number;
 };
 
@@ -90,7 +91,7 @@ export default function MyDigitalTwinWorkbench({
 }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'overview' | 'conversations' | 'skills' | 'knowledge' | 'personality' | 'values'>('overview');
-  const [isPublic, setIsPublic] = useState(true);
+  const [isPublic, setIsPublic] = useState(defaultAvatar.isPublic);
   const [isLoading, setIsLoading] = useState(false);
   const [skills, setSkills] = useState(initialSkills);
   const [knowledge, setKnowledge] = useState(initialKnowledge);
@@ -119,6 +120,7 @@ export default function MyDigitalTwinWorkbench({
         body: JSON.stringify({
           ...formData,
           status: defaultAvatar.status,
+          isPublic,
         }),
       });
 
@@ -136,6 +138,41 @@ export default function MyDigitalTwinWorkbench({
     }
   };
 
+  const handleTogglePublic = async () => {
+    if (isLoading) return;
+
+    const nextIsPublic = !isPublic;
+    setIsPublic(nextIsPublic);
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/avatar/${defaultAvatar.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          systemPrompt: formData.systemPrompt,
+          status: defaultAvatar.status,
+          isPublic: nextIsPublic,
+        }),
+      });
+
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        setIsPublic(!nextIsPublic);
+        console.error('Failed to update avatar visibility', detail?.error || res.statusText);
+        return;
+      }
+
+      router.refresh();
+    } catch (error) {
+      setIsPublic(!nextIsPublic);
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div>
       <div className="mb-8 flex items-start justify-between">
@@ -146,8 +183,9 @@ export default function MyDigitalTwinWorkbench({
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => setIsPublic((v) => !v)}
-            className="inline-flex items-center gap-2 text-sm text-gray-700"
+            onClick={handleTogglePublic}
+            disabled={isLoading}
+            className="inline-flex items-center gap-2 text-sm text-gray-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isPublic ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
             <span
