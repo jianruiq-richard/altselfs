@@ -1,6 +1,7 @@
 import { currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import InvestorDashboard from '@/app/investor/page';
 
 export default async function Dashboard() {
   const user = await currentUser();
@@ -19,9 +20,9 @@ export default async function Dashboard() {
     redirect('/dashboard/setup?role=investor');
   }
 
-  // Redirect based on user role
+  // Render based on user role
   if (dbUser.role === 'INVESTOR') {
-    redirect('/investor');
+    return InvestorDashboard();
   } else {
     redirect('/candidate');
   }

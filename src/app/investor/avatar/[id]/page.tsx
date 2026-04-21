@@ -101,7 +101,7 @@ export default function AvatarManagePage() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <p className="text-slate-700 mb-4">未找到该分身或无权限访问</p>
-          <Link href="/investor" className="text-blue-700 hover:underline">
+          <Link href="/dashboard" className="text-blue-700 hover:underline">
             返回工作台
           </Link>
         </div>
@@ -111,11 +111,11 @@ export default function AvatarManagePage() {
 
   return (
     <FigmaShell
-      homeHref="/investor"
+      homeHref="/dashboard"
       title="管理分身"
       subtitle="调整分身设定与系统提示词"
       actions={
-        <Link href="/investor" className="text-sm text-blue-700 hover:underline">
+        <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
           返回工作台
         </Link>
       }

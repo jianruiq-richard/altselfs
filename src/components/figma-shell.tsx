@@ -15,7 +15,7 @@ type NavItem = {
 };
 
 export function FigmaShell({
-  homeHref = '/investor',
+  homeHref = '/dashboard',
   title,
   subtitle,
   actions,

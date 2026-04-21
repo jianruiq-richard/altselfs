@@ -52,16 +52,16 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
   });
 
   if (!avatar || avatar.investorId !== dbUser.id) {
-    redirect('/investor');
+    redirect('/dashboard');
   }
 
   return (
     <FigmaShell
-      homeHref="/investor"
+      homeHref="/dashboard"
       title={`${avatar.name} · 对话记录`}
       subtitle={`共 ${avatar.chats.length} 个会话`}
       actions={
-        <Link href="/investor" className="text-sm text-blue-700 hover:underline">
+        <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
           返回工作台
         </Link>
       }

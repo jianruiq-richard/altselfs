@@ -231,7 +231,7 @@ export default async function DigitalTwinsPage() {
     .slice(0, 12);
 
   return (
-    <FigmaShell homeHref={dbUser.role === 'INVESTOR' ? '/investor' : '/candidate'} showPageHeader={false}>
+    <FigmaShell homeHref={dbUser.role === 'INVESTOR' ? '/dashboard' : '/candidate'} showPageHeader={false}>
       <DigitalTwinsGallery cards={cards} />
     </FigmaShell>
   );

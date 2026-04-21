@@ -261,7 +261,7 @@ export default async function MyDigitalTwinPage() {
       : buildMockConversations(defaultAvatarRecord.id);
 
   return (
-    <FigmaShell homeHref="/investor" showPageHeader={false}>
+    <FigmaShell homeHref="/dashboard" showPageHeader={false}>
       <MyDigitalTwinWorkbench
         totalTokens={totalTokens}
         totalCompletion={totalCompletion}

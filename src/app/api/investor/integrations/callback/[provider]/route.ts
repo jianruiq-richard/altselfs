@@ -10,7 +10,7 @@ import {
 } from '@/lib/integrations';
 
 function redirectWithResult(req: NextRequest, provider: string, status: string, detail?: string) {
-  const url = new URL('/investor', req.url);
+  const url = new URL('/dashboard', req.url);
   url.searchParams.set('integrationProvider', provider);
   url.searchParams.set('integrationStatus', status);
   if (detail) {

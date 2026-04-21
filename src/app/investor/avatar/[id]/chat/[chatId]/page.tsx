@@ -50,12 +50,12 @@ export default async function ChatDetailPage({
   });
 
   if (!chat || chat.avatar.investorId !== dbUser.id) {
-    redirect('/investor');
+    redirect('/dashboard');
   }
 
   return (
     <FigmaShell
-      homeHref="/investor"
+      homeHref="/dashboard"
       title={chat.title || `与 ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} 的对话`}
       subtitle={`分身: ${chat.avatar.name} · 用户: ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} · 消息: ${chat.messages.length} 条`}
       actions={

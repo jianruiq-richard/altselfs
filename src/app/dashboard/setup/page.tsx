@@ -57,7 +57,7 @@ export default function SetupPage({
       });
 
       if (response.ok) {
-        const target = normalizedRole === 'investor' ? '/investor' : '/candidate';
+        const target = normalizedRole === 'investor' ? '/dashboard' : '/candidate';
         router.replace(target);
         router.refresh();
       } else {

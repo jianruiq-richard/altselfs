@@ -121,11 +121,11 @@ export default function InvestorAgentChatPage() {
   if (!isExecutive) {
     return (
       <FigmaShell
-        homeHref="/investor"
+        homeHref="/dashboard"
         title="AI助手"
         subtitle="当前仅开放总裁秘书Momo入口"
         actions={
-          <Link href="/investor" className="text-sm text-blue-700 hover:underline">
+          <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
             返回工作台
           </Link>
         }
@@ -139,11 +139,11 @@ export default function InvestorAgentChatPage() {
 
   return (
     <FigmaShell
-      homeHref="/investor"
+      homeHref="/dashboard"
       title={title}
       subtitle="全局信息整合与战略支持"
       actions={
-        <Link href="/investor" className="text-sm text-blue-700 hover:underline">
+        <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
           返回工作台
         </Link>
       }

@@ -53,7 +53,8 @@ export default async function InvestorDashboard() {
     },
   });
 
-  if (!dbUser || dbUser.role !== 'INVESTOR') redirect('/dashboard');
+  if (!dbUser) redirect('/dashboard/setup?role=investor');
+  if (dbUser.role !== 'INVESTOR') redirect('/candidate');
 
   const integrationMap = new Map(dbUser.integrations.map((it) => [it.provider, it]));
   const gmail = integrationMap.get('GMAIL');
@@ -134,7 +135,7 @@ export default async function InvestorDashboard() {
 
   return (
     <FigmaShell
-      homeHref="/investor"
+      homeHref="/dashboard"
       title="工作台"
       subtitle="欢迎回来，这是你的 AI 员工工作概览"
       actions={

@@ -97,11 +97,11 @@ export default function ProfilePage() {
 
   return (
     <FigmaShell
-      homeHref={profile.role === 'INVESTOR' ? '/investor' : '/candidate'}
+      homeHref={profile.role === 'INVESTOR' ? '/dashboard' : '/candidate'}
       title="个人信息"
       subtitle="管理你的账号资料与联系信息"
       actions={
-        <Link href={profile.role === 'INVESTOR' ? '/investor' : '/candidate'} className="text-sm text-blue-700 hover:underline">
+        <Link href={profile.role === 'INVESTOR' ? '/dashboard' : '/candidate'} className="text-sm text-blue-700 hover:underline">
           返回工作台
         </Link>
       }

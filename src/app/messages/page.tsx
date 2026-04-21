@@ -183,7 +183,7 @@ export default async function MessagesPage() {
 
   return (
     <FigmaShell
-      homeHref={dbUser.role === 'INVESTOR' ? '/investor' : '/candidate'}
+      homeHref={dbUser.role === 'INVESTOR' ? '/dashboard' : '/candidate'}
       title="信息中心"
       subtitle="AI助手为你整理的所有信息"
     >
