@@ -40,7 +40,13 @@ export function FigmaShell({
       { key: 'talent', name: 'AI人才大厅', href: '/ai-talent', icon: Briefcase },
       { key: 'accounts', name: '部门管理', href: '/accounts', icon: UserCircle },
       { key: 'messages', name: '信息中心', href: '/messages', icon: Mail },
-      { key: 'assistant', name: 'AI助手', href: '/investor/info-ops', icon: MessageSquare, activePrefixes: ['/investor/info-ops'] },
+      {
+        key: 'assistant',
+        name: 'AI助手',
+        href: '/investor/chat/100',
+        icon: MessageSquare,
+        activePrefixes: ['/investor/info-ops', '/investor/chat'],
+      },
       { key: 'settings', name: '设置', href: '/profile', icon: Settings },
     ],
     [homeHref]

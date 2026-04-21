@@ -2,7 +2,7 @@
 
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { use, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { buildFallbackEmail } from '@/lib/user-identifier';
 
 export default function SetupPage({
@@ -19,6 +19,7 @@ export default function SetupPage({
   const [nickname, setNickname] = useState('');
   const [phone, setPhone] = useState(user?.primaryPhoneNumber?.phoneNumber || '');
   const [wechatId, setWechatId] = useState('');
+  const autoSetupTriggered = useRef(false);
 
   useEffect(() => {
     if (user?.primaryPhoneNumber?.phoneNumber && !phone) {
@@ -26,7 +27,7 @@ export default function SetupPage({
     }
   }, [user, phone]);
 
-  const handleSetup = async () => {
+  const handleSetup = useCallback(async () => {
     if (!user) return;
     if (normalizedRole === 'candidate' && (!nickname.trim() || !phone.trim() || !wechatId.trim())) {
       setError('请先填写昵称、联系电话和微信号');
@@ -69,7 +70,15 @@ export default function SetupPage({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [nickname, normalizedRole, phone, router, user, wechatId]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (normalizedRole !== 'investor') return;
+    if (autoSetupTriggered.current) return;
+    autoSetupTriggered.current = true;
+    void handleSetup();
+  }, [user, normalizedRole, handleSetup]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f5f7fb] px-4">
@@ -121,13 +130,19 @@ export default function SetupPage({
             </div>
           )}
 
-          <button
-            onClick={handleSetup}
-            disabled={isLoading}
-            className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? '设置中...' : '确认并继续'}
-          </button>
+          {normalizedRole === 'candidate' ? (
+            <button
+              onClick={handleSetup}
+              disabled={isLoading}
+              className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? '设置中...' : '确认并继续'}
+            </button>
+          ) : (
+            <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              {isLoading ? '正在自动初始化账户...' : '正在进入工作台...'}
+            </div>
+          )}
         </div>
       </div>
     </div>

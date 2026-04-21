@@ -10,7 +10,7 @@ export default async function Page({
   const method = params.method === 'email' ? 'email' : 'phone';
   const baseSignUpUrl = '/sign-up';
   const methodJoiner = baseSignUpUrl.includes('?') ? '&' : '?';
-  const redirectUrl = '/dashboard/setup';
+  const redirectUrl = '/dashboard';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

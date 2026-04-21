@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { FigmaShell } from '@/components/figma-shell';
 import { AlertCircle, Bot, Briefcase, Building2, ChevronRight, FileText, Mail, MessageSquare, Plus, Settings, Trash2 } from 'lucide-react';
+import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
 
 export default async function AccountsPage() {
   const user = await currentUser();
@@ -65,7 +66,38 @@ export default async function AccountsPage() {
       ]
     : [];
 
+  const dailyBriefing = buildExecutiveDailyBriefing({
+    integrations: dbUser.integrations,
+    wechatSources: dbUser.wechatSources,
+    avatars: dbUser.avatars,
+  });
+
   const departments = [
+    {
+      id: 'executive-office',
+      name: '总裁办',
+      description: '负责全局视野汇总、每日晨报与跨部门重点事项调度。',
+      icon: Briefcase,
+      color: 'from-purple-500 to-pink-600',
+      employees: 1,
+      status: '运行中',
+      employeeRows: [
+        {
+          id: 'executive-secretary',
+          typeName: '总裁秘书',
+          account: `晨报更新时间：${dailyBriefing.generatedTime}`,
+          agentName: '总裁秘书Momo',
+          status: 'active' as const,
+          processedToday: dailyBriefing.departmentOverview.reduce((acc, item) => acc + Math.max(1, Math.round(item.progress / 25)), 0),
+          source: 'real' as const,
+        },
+      ],
+      details: [
+        `晨报日期：${dailyBriefing.date}`,
+        `重点事项：${dailyBriefing.priorityTasks.length} 条`,
+        '入口：/investor/chat/100',
+      ],
+    },
     {
       id: 'info-ops',
       name: '信息处理运营部门',
