@@ -169,7 +169,7 @@ export default async function AccountsPage() {
         ? dbUser.avatars.length > 0
           ? dbUser.avatars.slice(0, 3).map((avatar) => ({
               id: `avatar-${avatar.id}`,
-              typeName: '数字分身助手',
+              typeName: '研发助手',
               account: avatar.name,
               agentName: `${avatar.name}·对话协同`,
               status: 'active' as const,

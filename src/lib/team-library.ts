@@ -18,6 +18,8 @@ export const TEAM_LIBRARY: Array<{
   { key: TEAM_KEYS.MARKETING_OPS, name: '营销运营团队', defaultAgentName: '营销助手Beta' },
 ];
 
+const VALID_TEAM_KEYS = new Set<TeamKey>(TEAM_LIBRARY.map((team) => team.key));
+
 const MARKETING_AGENT_TYPES = new Set([
   'DISCORD',
   'FACEBOOK',
@@ -60,7 +62,8 @@ export function resolveHiredTeamKeys(input: {
   if (input.teamHires.length > 0) {
     const explicit = input.teamHires
       .filter((it) => it.status === 'HIRED')
-      .map((it) => it.teamKey as TeamKey);
+      .map((it) => it.teamKey)
+      .filter((teamKey): teamKey is TeamKey => VALID_TEAM_KEYS.has(teamKey as TeamKey));
     return new Set<TeamKey>(explicit);
   }
   return inferLegacyHiredTeamKeys(input.fallback);
