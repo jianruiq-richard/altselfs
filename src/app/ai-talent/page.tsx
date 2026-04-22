@@ -39,6 +39,17 @@ const mockTalents = [
     hires: 15678,
   },
   {
+    id: 'xiaohongshu-assistant',
+    name: '小红书助手',
+    description: '跟踪小红书内容热点，提炼趋势变化并沉淀选题方向。',
+    tags: ['热点追踪', '笔记分析', '趋势洞察'],
+    type: 'real',
+    category: '信息处理运营',
+    price: '免费',
+    rating: 4.7,
+    hires: 9642,
+  },
+  {
     id: 'pm-agent',
     name: '产品策略顾问',
     description: '演示态：用于概念展示，后续可接入实际推理流程。',
@@ -149,7 +160,7 @@ export default async function AITalentPage() {
       price: '免费',
       originalPrice: '免费',
       discount: null as string | null,
-      members: ['Gmail助手', '飞书助手', '公众号助手'],
+      members: ['公众号助手', '小红书助手', 'Gmail助手', '飞书助手'],
       popular: true,
     },
     {
@@ -182,6 +193,7 @@ export default async function AITalentPage() {
     if (id === 'gmail-assistant') return { Icon: Mail, color: 'text-red-600 bg-red-50' };
     if (id === 'feishu-assistant') return { Icon: MessageSquare, color: 'text-blue-600 bg-blue-50' };
     if (id === 'wechat-assistant') return { Icon: FileText, color: 'text-green-600 bg-green-50' };
+    if (id === 'xiaohongshu-assistant') return { Icon: Star, color: 'text-rose-600 bg-rose-50' };
     if (id === 'pm-agent') return { Icon: Palette, color: 'text-purple-600 bg-purple-50' };
     if (id === 'growth-agent') return { Icon: Megaphone, color: 'text-orange-600 bg-orange-50' };
     if (id === 'discord-assistant') return { Icon: Hash, color: 'text-indigo-600 bg-indigo-50' };

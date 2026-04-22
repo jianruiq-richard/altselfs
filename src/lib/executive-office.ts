@@ -80,15 +80,19 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
   const twinOpsProgress = clampProgress(input.avatars.length > 0 ? 55 + Math.min(40, totalChats * 4) : 0);
   const followUpProgress = clampProgress(totalChats > 0 ? 45 + Math.min(35, reviewChats * 10 + qualifiedChats * 4) : 0);
 
-  const latestIntegrationSummary = connectedIntegrations
-    .map((it) => it.snapshots[0])
-    .filter(Boolean)
-    .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))[0];
-  const latestWechatSummary = input.wechatSources[0]?.description || '';
-  const topExternalContent =
-    latestIntegrationSummary?.summary?.slice(0, 160) ||
-    latestWechatSummary.slice(0, 160) ||
-    '暂无外部来源摘要，建议优先完成 Gmail/飞书/公众号接入。';
+  const opcTracks = 'AI视频、AI Agent 等 OPC 预设产品领域赛道';
+  const technologyInsight =
+    connectedIntegrations.length > 0 || input.wechatSources.length > 0
+      ? `技术趋势围绕 ${opcTracks} 进行，已由当前雇佣员工在各自渠道持续搜集信号；建议继续细化赛道关键词与技术标签，提升趋势判断精度。`
+      : `技术趋势围绕 ${opcTracks} 进行，但当前尚未接入可用渠道，建议先完成至少 1 个外部渠道接入后再启动趋势追踪。`;
+  const competitorInsight =
+    input.wechatSources.length > 0
+      ? `竞品监控由已雇佣的“公众号助手”及“小红书助手”（含未来新增渠道助手）按你的监控指令每日整理，重点跟踪是否有新竞品发布、在各渠道的推广动作与声量变化。`
+      : '竞品监控暂缺可用渠道样本，建议先补齐公众号与小红书等来源，并配置需要重点监控的赛道与产品名单。';
+  const industryTrackInsight =
+    connectedIntegrations.length > 0 || input.wechatSources.length > 0
+      ? `行业动态围绕 ${opcTracks} 汇总，按员工负责渠道持续采集并更新。`
+      : `行业动态将围绕 ${opcTracks} 汇总，待接入渠道后自动启动采集。`;
 
   const priorityTasks: ExecutivePriorityTask[] = [];
   if (!gmailConnected) {
@@ -173,22 +177,19 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
     ],
     externalInsights: [
       {
-        category: '渠道摘要',
-        content: topExternalContent,
+        category: '行业动态',
+        content: industryTrackInsight,
         source: '来自已接入渠道',
       },
       {
-        category: '组织效率',
-        content:
-          reviewChats > 0
-            ? '建议先处理待人工介入会话，再补齐低优先级配置项，可显著提升后续转化效率。'
-            : '当前会话风险较低，可把时间优先投入到渠道补齐与分身调优。',
-        source: '总裁办策略建议（规则生成）',
+        category: '技术趋势',
+        content: technologyInsight,
+        source: '系统链路评估',
       },
       {
-        category: '系统提示',
-        content: '晨报当前为规则化生成，后续可接入更细粒度外部情报源与模型总结链路。',
-        source: '系统状态',
+        category: '竞品监控',
+        content: competitorInsight,
+        source: '渠道覆盖评估',
       },
     ],
     priorityTasks: priorityTasks.slice(0, 4),
@@ -235,8 +236,8 @@ export function buildExecutiveAssistantReply(question: string, briefing: Executi
       briefing.headline,
       '',
       '包含三个模块：',
-      '1) 各部门工作概览',
-      '2) 外界信息精选',
+      '1) 外界信息精选',
+      '2) 各部门工作概览',
       '3) 今日重点事项',
       '',
       '你可以直接问我“展开部门概览 / 展开重点任务 / 展开外界趋势”。',

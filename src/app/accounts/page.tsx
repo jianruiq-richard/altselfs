@@ -33,38 +33,54 @@ export default async function AccountsPage() {
   if (!dbUser) redirect('/dashboard');
 
   const connectedIntegrations = dbUser.integrations.filter((it) => it.status === 'CONNECTED').length;
-  const infoOpsEmployees = connectedIntegrations + (dbUser.wechatSources.length > 0 ? 1 : 0);
+  const infoOpsEmployees = 4;
   const twinOpsEmployees = dbUser.avatars.length;
   const reviewEmployees =
     dbUser.role === 'INVESTOR'
       ? dbUser.avatars.reduce((acc, avatar) => acc + avatar.chats.filter((chat) => chat.needsInvestorReview).length, 0)
       : dbUser.chatsAsCandidate.length;
 
-  const integrationEmployees = dbUser.integrations
-    .filter((it) => it.status === 'CONNECTED')
-    .map((it, index) => ({
-      id: `integration-${it.id}`,
-      typeName: it.provider === 'GMAIL' ? 'Gmail助手' : '飞书助手',
-      account: it.accountEmail || it.provider,
-      agentName: `${it.provider === 'GMAIL' ? '邮件' : '飞书'}助手${index + 1}号`,
-      status: 'active' as const,
-      processedToday: Math.max(6, (it.snapshots[0]?.summary?.length || 0) % 30),
-      source: 'real' as const,
-    }));
+  const gmailIntegration = dbUser.integrations.find((it) => it.provider === 'GMAIL' && it.status === 'CONNECTED');
+  const feishuIntegration = dbUser.integrations.find((it) => it.provider === 'FEISHU' && it.status === 'CONNECTED');
 
-  const wechatEmployee = dbUser.wechatSources.length
-    ? [
-        {
-          id: 'wechat-sources',
-          typeName: '公众号助手',
-          account: `${dbUser.wechatSources.length} 个公众号`,
-          agentName: '公众号助手小智',
-          status: 'active' as const,
-          processedToday: dbUser.wechatSources.length * 3,
-          source: 'real' as const,
-        },
-      ]
-    : [];
+  const infoOpsEmployeeRows = [
+    {
+      id: 'wechat-sources',
+      typeName: '公众号助手',
+      account: dbUser.wechatSources.length > 0 ? `${dbUser.wechatSources.length} 个公众号` : '未录入公众号',
+      agentName: '公众号助手小智',
+      status: (dbUser.wechatSources.length > 0 ? 'active' : 'paused') as const,
+      processedToday: dbUser.wechatSources.length * 3,
+      source: 'real' as const,
+    },
+    {
+      id: 'xiaohongshu-assistant',
+      typeName: '小红书助手',
+      account: '未接入小红书',
+      agentName: '小红书助手小橙',
+      status: 'paused' as const,
+      processedToday: 0,
+      source: 'real' as const,
+    },
+    {
+      id: 'gmail-assistant',
+      typeName: 'Gmail助手',
+      account: gmailIntegration?.accountEmail || '未绑定 Gmail',
+      agentName: '邮件助手小明',
+      status: (gmailIntegration ? 'active' : 'paused') as const,
+      processedToday: gmailIntegration ? Math.max(6, (gmailIntegration.snapshots[0]?.summary?.length || 0) % 30) : 0,
+      source: 'real' as const,
+    },
+    {
+      id: 'feishu-assistant',
+      typeName: '飞书助手',
+      account: feishuIntegration?.accountEmail || '未绑定 飞书',
+      agentName: '飞书助手小红',
+      status: (feishuIntegration ? 'active' : 'paused') as const,
+      processedToday: feishuIntegration ? Math.max(6, (feishuIntegration.snapshots[0]?.summary?.length || 0) % 30) : 0,
+      source: 'real' as const,
+    },
+  ] as const;
 
   const dailyBriefing = buildExecutiveDailyBriefing({
     integrations: dbUser.integrations,
@@ -107,22 +123,11 @@ export default async function AccountsPage() {
       employees: infoOpsEmployees,
       status: infoOpsEmployees > 0 ? '运行中' : '待配置',
       employeeRows:
-        integrationEmployees.length || wechatEmployee.length
-          ? [...integrationEmployees, ...wechatEmployee]
-          : [
-              {
-                id: 'demo-info-ops',
-                typeName: '公众号助手',
-                account: '0 个公众号（演示）',
-                agentName: '公众号助手小智',
-                status: 'paused' as const,
-                processedToday: 0,
-                source: 'demo' as const,
-              },
-            ],
+        infoOpsEmployeeRows,
       details: [
         `Gmail/飞书集成：${connectedIntegrations}`,
         `公众号源：${dbUser.wechatSources.length}`,
+        '小红书助手：待接入',
         '消息流与摘要：已接入真实数据',
       ],
     },

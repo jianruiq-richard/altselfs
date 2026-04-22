@@ -62,6 +62,28 @@ export default async function InvestorDashboard() {
 
   const infoOpsAssistants = [
     {
+      key: 'wechat',
+      type: '公众号',
+      account: dbUser.wechatSources.length > 0 ? `${dbUser.wechatSources.length} 个公众号` : '未录入公众号',
+      unread: dbUser.wechatSources.length,
+      agentName: '公众号助手小智',
+      connected: dbUser.wechatSources.length > 0,
+      summary:
+        dbUser.wechatSources[0]?.description ||
+        (dbUser.wechatSources.length > 0
+          ? `已录入 ${dbUser.wechatSources.length} 个公众号，最新源：${dbUser.wechatSources[0].displayName}`
+          : '暂无摘要，录入公众号后可自动生成摘要。'),
+    },
+    {
+      key: 'xiaohongshu',
+      type: '小红书',
+      account: '未绑定 小红书',
+      unread: 0,
+      agentName: '小红书助手小橙',
+      connected: false,
+      summary: '暂无摘要，接入后可自动提炼笔记热点与内容趋势。',
+    },
+    {
       key: 'gmail',
       type: 'Gmail',
       account: gmail?.accountEmail || '未绑定 Gmail',
@@ -78,19 +100,6 @@ export default async function InvestorDashboard() {
       agentName: '飞书助手小红',
       connected: Boolean(feishu),
       summary: feishu?.snapshots[0]?.summary || '暂无摘要，绑定后可自动生成协作摘要。',
-    },
-    {
-      key: 'wechat',
-      type: '公众号',
-      account: dbUser.wechatSources.length > 0 ? `${dbUser.wechatSources.length} 个公众号` : '未录入公众号',
-      unread: dbUser.wechatSources.length,
-      agentName: '公众号助手小智',
-      connected: dbUser.wechatSources.length > 0,
-      summary:
-        dbUser.wechatSources[0]?.description ||
-        (dbUser.wechatSources.length > 0
-          ? `已录入 ${dbUser.wechatSources.length} 个公众号，最新源：${dbUser.wechatSources[0].displayName}`
-          : '暂无摘要，录入公众号后可自动生成摘要。'),
     },
   ] as const;
 
@@ -117,11 +126,13 @@ export default async function InvestorDashboard() {
     source: assistant.type,
     agentName: assistant.agentName,
     title:
-      assistant.type === 'Gmail'
-        ? '今日重要邮件摘要'
-        : assistant.type === '飞书'
-          ? '团队协作更新'
-          : '公众号动态精选',
+      assistant.key === 'wechat'
+        ? '公众号动态精选'
+        : assistant.key === 'xiaohongshu'
+          ? '小红书热点精选'
+          : assistant.key === 'gmail'
+            ? '今日重要邮件摘要'
+            : '团队协作更新',
     summary: assistant.summary,
     time: '刚刚',
     priority: assistant.connected ? 'medium' : 'low',
@@ -187,6 +198,19 @@ export default async function InvestorDashboard() {
         </div>
         <div className="space-y-6 px-6 pb-6">
           <div>
+            <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">🌍 外界信息精选</h3>
+            <div className="grid gap-4 md:grid-cols-3">
+              {dailyBriefing.externalInsights.map((item) => (
+                <div key={`${item.category}-${item.source}`} className="rounded-lg border border-amber-200 bg-white p-4">
+                  <span className="mb-2 inline-flex rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700">{item.category}</span>
+                  <p className="mb-2 text-sm leading-relaxed text-gray-700">{item.content}</p>
+                  <p className="text-xs text-gray-500">{item.source}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">📊 各部门工作概览</h3>
             <div className="space-y-3">
               {dailyBriefing.departmentOverview.map((item) => (
@@ -213,19 +237,6 @@ export default async function InvestorDashboard() {
                       />
                     </div>
                   ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">🌍 外界信息精选</h3>
-            <div className="grid gap-4 md:grid-cols-3">
-              {dailyBriefing.externalInsights.map((item) => (
-                <div key={`${item.category}-${item.source}`} className="rounded-lg border border-amber-200 bg-white p-4">
-                  <span className="mb-2 inline-flex rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700">{item.category}</span>
-                  <p className="mb-2 text-sm leading-relaxed text-gray-700">{item.content}</p>
-                  <p className="text-xs text-gray-500">{item.source}</p>
                 </div>
               ))}
             </div>
