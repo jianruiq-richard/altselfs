@@ -9,6 +9,7 @@ import {
   toClientMessages,
 } from '@/lib/agent-session';
 import { buildExecutiveAssistantReply, buildExecutiveDailyBriefing } from '@/lib/executive-office';
+import { resolveHiredTeamKeys } from '@/lib/team-library';
 import { EXECUTIVE_MOMO_SYSTEM_PROMPT } from '@/lib/prompts/executive-momo';
 
 type ClientMessage = {
@@ -115,15 +116,35 @@ async function loadBriefing(investorId: string) {
           },
         },
       },
+      teamHires: {
+        select: {
+          teamKey: true,
+          status: true,
+        },
+      },
+      agentThreads: {
+        select: { agentType: true },
+      },
     },
   });
 
   if (!investor) return null;
 
+  const hiredTeamKeys = resolveHiredTeamKeys({
+    teamHires: investor.teamHires,
+    fallback: {
+      integrationCount: investor.integrations.length,
+      wechatSourceCount: investor.wechatSources.length,
+      avatarCount: investor.avatars.length,
+      agentTypes: investor.agentThreads.map((thread) => thread.agentType),
+    },
+  });
+
   return buildExecutiveDailyBriefing({
     integrations: investor.integrations,
     wechatSources: investor.wechatSources,
     avatars: investor.avatars,
+    hiredTeamKeys: Array.from(hiredTeamKeys),
   });
 }
 

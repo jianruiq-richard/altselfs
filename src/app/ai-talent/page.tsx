@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { FigmaShell } from '@/components/figma-shell';
 import { CheckCircle2, Code2, FileText, Hash, Headphones, Mail, Megaphone, MessageSquare, Palette, Search, Star, Video } from 'lucide-react';
+import { resolveHiredTeamKeys, TEAM_KEYS } from '@/lib/team-library';
 
 const mockTalents = [
   {
@@ -138,6 +139,17 @@ export default async function AITalentPage() {
       integrations: true,
       wechatSources: true,
       avatars: true,
+      teamHires: {
+        select: {
+          teamKey: true,
+          status: true,
+        },
+      },
+      agentThreads: {
+        select: {
+          agentType: true,
+        },
+      },
     },
   });
 
@@ -150,42 +162,68 @@ export default async function AITalentPage() {
   }
   if (dbUser.wechatSources.length > 0) enabled.add('wechat-assistant');
 
+  const hiredTeamKeys = resolveHiredTeamKeys({
+    teamHires: dbUser.teamHires,
+    fallback: {
+      integrationCount: dbUser.integrations.length,
+      wechatSourceCount: dbUser.wechatSources.length,
+      avatarCount: dbUser.avatars.length,
+      agentTypes: dbUser.agentThreads.map((thread) => thread.agentType),
+    },
+  });
+
   const departmentPackages = [
     {
-      id: 'info-ops',
+      id: TEAM_KEYS.EXECUTIVE_OFFICE,
+      name: '总裁办',
+      description: '负责晨报、跨部门节奏和重点事项调度。',
+      gradient: 'from-purple-500 to-pink-600',
+      icon: Code2,
+      price: '免费',
+      originalPrice: '免费',
+      discount: null as string | null,
+      members: ['总裁秘书Momo（默认）'],
+      popular: false,
+      hired: hiredTeamKeys.has(TEAM_KEYS.EXECUTIVE_OFFICE),
+    },
+    {
+      id: TEAM_KEYS.INFO_OPS,
       name: '信息处理运营部门',
-      description: '完整的信息处理团队，帮你管理所有渠道的信息',
+      description: '负责外部消息接入、摘要、竞品监控与信息分发。',
       gradient: 'from-blue-500 to-purple-600',
       icon: Mail,
       price: '免费',
       originalPrice: '免费',
       discount: null as string | null,
-      members: ['公众号助手', '小红书助手', 'Gmail助手', '飞书助手'],
+      members: ['信息助手小明（默认）'],
       popular: true,
+      hired: hiredTeamKeys.has(TEAM_KEYS.INFO_OPS),
     },
     {
-      id: 'product-squad',
-      name: '产品增长部门',
-      description: '概念态团队，覆盖产品、增长与会话质检能力',
+      id: TEAM_KEYS.ENGINEERING,
+      name: '研发团队',
+      description: '负责数字分身、策略迭代与会话质量优化。',
       gradient: 'from-green-500 to-teal-600',
       icon: Code2,
-      price: '¥699/月（演示）',
-      originalPrice: '¥899/月',
-      discount: '省¥200',
-      members: ['产品策略顾问', '增长运营专家', '对话质检员'],
+      price: '免费',
+      originalPrice: '免费',
+      discount: null as string | null,
+      members: ['研发助手Alpha（默认）'],
       popular: false,
+      hired: hiredTeamKeys.has(TEAM_KEYS.ENGINEERING),
     },
     {
-      id: 'marketing-squad',
+      id: TEAM_KEYS.MARKETING_OPS,
       name: '营销运营部门',
-      description: '演示态团队，覆盖社媒与客服协同能力',
+      description: '负责投放监控、声量追踪与渠道推广执行。',
       gradient: 'from-orange-500 to-red-600',
       icon: Megaphone,
-      price: '¥699/月（演示）',
-      originalPrice: '¥897/月',
-      discount: '省¥198',
-      members: ['Discord助手', 'Facebook助手', 'Instagram助手', 'TikTok助手'],
+      price: '免费',
+      originalPrice: '免费',
+      discount: null as string | null,
+      members: ['营销助手Beta（默认）'],
       popular: false,
+      hired: hiredTeamKeys.has(TEAM_KEYS.MARKETING_OPS),
     },
   ];
 
@@ -293,9 +331,20 @@ export default async function AITalentPage() {
                 ) : null}
               </div>
 
-              <button type="button" className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
-                雇佣整个部门
-              </button>
+              <form action="/api/investor/team-hires" method="post" className="mt-4">
+                <input type="hidden" name="teamKey" value={pkg.id} />
+                <input type="hidden" name="action" value={pkg.hired ? 'unhire' : 'hire'} />
+                <button
+                  type="submit"
+                  className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold ${
+                    pkg.hired
+                      ? 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {pkg.hired ? '已雇佣（点击取消）' : '雇佣整个部门'}
+                </button>
+              </form>
             </div>
           ))}
         </div>

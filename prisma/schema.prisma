@@ -40,6 +40,9 @@ model User {
   // 投资人 AI 员工会话
   agentThreads AgentThread[]
 
+  // 投资人团队雇佣状态
+  teamHires InvestorTeamHire[]
+
   @@map("users")
 }
 
@@ -134,6 +137,22 @@ model InvestorIntegration {
   @@unique([investorId, provider])
   @@index([provider, updatedAt])
   @@map("investor_integrations")
+}
+
+model InvestorTeamHire {
+  id        String   @id @default(cuid())
+  teamKey   String
+  status    String   @default("HIRED")
+  agentName String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  @@unique([investorId, teamKey])
+  @@index([investorId, status, updatedAt])
+  @@map("investor_team_hires")
 }
 
 model IntegrationSnapshot {

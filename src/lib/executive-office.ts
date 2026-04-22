@@ -42,6 +42,7 @@ type BriefingInput = {
     name: string;
     chats: Array<{ needsInvestorReview: boolean; qualificationStatus: string }>;
   }>;
+  hiredTeamKeys?: string[];
   now?: Date;
 };
 
@@ -77,8 +78,8 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
   const infoOpsProgress = clampProgress(
     (gmailConnected ? 35 : 0) + (feishuConnected ? 30 : 0) + (wechatConnected ? 35 : 0)
   );
-  const twinOpsProgress = clampProgress(input.avatars.length > 0 ? 55 + Math.min(40, totalChats * 4) : 0);
-  const followUpProgress = clampProgress(totalChats > 0 ? 45 + Math.min(35, reviewChats * 10 + qualifiedChats * 4) : 0);
+  const engineeringProgress = clampProgress(input.avatars.length > 0 ? 50 + Math.min(40, totalChats * 4) : 0);
+  const hiredTeamSet = new Set(input.hiredTeamKeys || []);
 
   const opcTracks = 'AI视频、AI Agent 等 OPC 预设产品领域赛道';
   const technologyInsight =
@@ -95,7 +96,7 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
       : `行业动态将围绕 ${opcTracks} 汇总，待接入渠道后自动启动采集。`;
 
   const priorityTasks: ExecutivePriorityTask[] = [];
-  if (!gmailConnected) {
+  if (hiredTeamSet.has('info_ops') && !gmailConnected) {
     priorityTasks.push({
       priority: 'high',
       task: '完成 Gmail 绑定并首次拉取摘要',
@@ -103,7 +104,7 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
       assignedBy: '总裁秘书Momo',
     });
   }
-  if (!feishuConnected) {
+  if (hiredTeamSet.has('info_ops') && !feishuConnected) {
     priorityTasks.push({
       priority: 'medium',
       task: '完成 飞书 绑定并校验协作摘要',
@@ -111,7 +112,7 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
       assignedBy: '总裁秘书Momo',
     });
   }
-  if (!wechatConnected) {
+  if (hiredTeamSet.has('info_ops') && !wechatConnected) {
     priorityTasks.push({
       priority: 'medium',
       task: '录入至少 1 个公众号源',
@@ -119,12 +120,12 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
       assignedBy: '公众号助手小智',
     });
   }
-  if (reviewChats > 0) {
+  if (hiredTeamSet.has('engineering') && reviewChats > 0) {
     priorityTasks.push({
       priority: 'high',
       task: `跟进 ${reviewChats} 个待人工介入会话`,
       deadline: '今日 18:00 前',
-      assignedBy: '会话跟进助手',
+      assignedBy: '总裁秘书Momo',
     });
   }
   if (priorityTasks.length < 3) {
@@ -136,45 +137,57 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
     });
   }
 
+  const departmentOverview: ExecutiveDepartmentOverview[] = [];
+
+  if (hiredTeamSet.has('executive_office')) {
+    departmentOverview.push({
+      department: '总裁办',
+      status: '运行正常',
+      summary: '总裁秘书负责跨部门信息汇总、晨报生成与重点事项提醒。',
+      progress: 100,
+    });
+  }
+
+  if (hiredTeamSet.has('info_ops')) {
+    departmentOverview.push({
+      department: '信息处理运营部门',
+      status: infoOpsProgress > 0 ? '运行正常' : '待配置',
+      summary:
+        infoOpsProgress > 0
+          ? `已接入 ${connectedIntegrations.length} 个外部集成与 ${input.wechatSources.length} 个公众号源，信息处理链路可用。`
+          : '尚未完成外部渠道接入，建议优先配置 Gmail、飞书、公众号。',
+      progress: infoOpsProgress,
+    });
+  }
+
+  if (hiredTeamSet.has('engineering')) {
+    departmentOverview.push({
+      department: '研发团队',
+      status: input.avatars.length > 0 ? '运行正常' : '待配置',
+      summary:
+        input.avatars.length === 0
+          ? '研发团队已雇佣，默认 AI 员工已配置，等待分身与会话数据接入。'
+          : reviewChats > 0
+          ? `当前共有 ${input.avatars.length} 个分身，累计会话 ${totalChats} 次，待人工介入 ${reviewChats} 个。`
+          : `当前共有 ${input.avatars.length} 个分身，累计会话 ${totalChats} 次，已达标会话 ${qualifiedChats} 个。`,
+      progress: engineeringProgress,
+    });
+  }
+
+  if (hiredTeamSet.has('marketing_ops')) {
+    departmentOverview.push({
+      department: '营销运营团队',
+      status: '待配置',
+      summary: '营销运营团队已雇佣，默认 AI 员工已配置，待接入营销渠道与推广监控规则后自动更新进展。',
+      progress: 20,
+    });
+  }
+
   return {
     date,
     generatedTime: '今天 06:00',
     headline: `今日已汇总 ${processedInfoCount} 条信息流，当前有 ${priorityTasks.filter((item) => item.priority === 'high').length} 项高优先级事项需要关注。`,
-    departmentOverview: [
-      {
-        department: '总裁办',
-        status: '运行正常',
-        summary: '总裁秘书负责跨部门信息汇总、晨报生成与重点事项提醒。',
-        progress: 100,
-      },
-      {
-        department: '信息处理运营部门',
-        status: infoOpsProgress > 0 ? '运行正常' : '待配置',
-        summary:
-          infoOpsProgress > 0
-            ? `已接入 ${connectedIntegrations.length} 个外部集成与 ${input.wechatSources.length} 个公众号源，信息处理链路可用。`
-            : '尚未完成外部渠道接入，建议优先配置 Gmail、飞书、公众号。',
-        progress: infoOpsProgress,
-      },
-      {
-        department: '数字分身运营部门',
-        status: input.avatars.length > 0 ? '运行正常' : '待创建分身',
-        summary:
-          input.avatars.length > 0
-            ? `当前共有 ${input.avatars.length} 个分身，累计会话 ${totalChats} 次。`
-            : '尚未创建可运营分身，建议先完善默认分身。',
-        progress: twinOpsProgress,
-      },
-      {
-        department: '会话跟进部门',
-        status: totalChats > 0 ? '运行正常' : '待跟进',
-        summary:
-          totalChats > 0
-            ? `当前待人工介入 ${reviewChats} 个会话，已达标会话 ${qualifiedChats} 个。`
-            : '暂无候选人会话，后续将自动跟进新增对话。',
-        progress: followUpProgress,
-      },
-    ],
+    departmentOverview,
     externalInsights: [
       {
         category: '行业动态',

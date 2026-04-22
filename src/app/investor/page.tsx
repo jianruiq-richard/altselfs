@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { FigmaShell } from '@/components/figma-shell';
 import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
+import { resolveHiredTeamKeys, TEAM_KEYS } from '@/lib/team-library';
 
 export default async function InvestorDashboard() {
   const user = await currentUser();
@@ -49,6 +50,17 @@ export default async function InvestorDashboard() {
       },
       wechatSources: {
         orderBy: { updatedAt: 'desc' },
+      },
+      teamHires: {
+        select: {
+          teamKey: true,
+          status: true,
+        },
+      },
+      agentThreads: {
+        select: {
+          agentType: true,
+        },
       },
     },
   });
@@ -138,10 +150,68 @@ export default async function InvestorDashboard() {
     priority: assistant.connected ? 'medium' : 'low',
   }));
 
+  const hiredTeamKeys = resolveHiredTeamKeys({
+    teamHires: dbUser.teamHires,
+    fallback: {
+      integrationCount: dbUser.integrations.length,
+      wechatSourceCount: dbUser.wechatSources.length,
+      avatarCount: dbUser.avatars.length,
+      agentTypes: dbUser.agentThreads.map((thread) => thread.agentType),
+    },
+  });
+  const isExecutiveHired = hiredTeamKeys.has(TEAM_KEYS.EXECUTIVE_OFFICE);
+  const isInfoOpsHired = hiredTeamKeys.has(TEAM_KEYS.INFO_OPS);
+  const isEngineeringHired = hiredTeamKeys.has(TEAM_KEYS.ENGINEERING);
+  const isMarketingHired = hiredTeamKeys.has(TEAM_KEYS.MARKETING_OPS);
+
+  const teamCards = [
+    {
+      key: TEAM_KEYS.EXECUTIVE_OFFICE,
+      name: '总裁办',
+      color: 'bg-purple-50 text-purple-600',
+      employees: isExecutiveHired ? 1 : 0,
+      status: isExecutiveHired ? '已雇佣' : '未雇佣',
+      statusClass: isExecutiveHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
+      linkLabel: isExecutiveHired ? '总裁秘书Momo' : '去 AI 人才大厅雇佣',
+      linkHref: isExecutiveHired ? '/investor/chat/100' : '/ai-talent',
+    },
+    {
+      key: TEAM_KEYS.INFO_OPS,
+      name: '信息处理运营部门',
+      color: 'bg-blue-50 text-blue-600',
+      employees: isInfoOpsHired ? Math.max(1, infoOpsAssistants.length) : 0,
+      status: isInfoOpsHired ? '已雇佣' : '未雇佣',
+      statusClass: isInfoOpsHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
+      linkLabel: isInfoOpsHired ? '进入部门管理' : '去 AI 人才大厅雇佣',
+      linkHref: isInfoOpsHired ? '/investor/info-ops' : '/ai-talent',
+    },
+    {
+      key: TEAM_KEYS.ENGINEERING,
+      name: '研发团队',
+      color: 'bg-green-50 text-green-600',
+      employees: isEngineeringHired ? Math.max(1, dbUser.avatars.length || 1) : 0,
+      status: isEngineeringHired ? '已雇佣' : '未雇佣',
+      statusClass: isEngineeringHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
+      linkLabel: isEngineeringHired ? '管理分身' : '去 AI 人才大厅雇佣',
+      linkHref: isEngineeringHired ? '/investor/avatar/new' : '/ai-talent',
+    },
+    {
+      key: TEAM_KEYS.MARKETING_OPS,
+      name: '营销运营团队',
+      color: 'bg-orange-50 text-orange-600',
+      employees: isMarketingHired ? 1 : 0,
+      status: isMarketingHired ? '已雇佣' : '未雇佣',
+      statusClass: isMarketingHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
+      linkLabel: isMarketingHired ? '默认员工已配置' : '去 AI 人才大厅雇佣',
+      linkHref: '/ai-talent',
+    },
+  ] as const;
+
   const dailyBriefing = buildExecutiveDailyBriefing({
     integrations: dbUser.integrations,
     wechatSources: dbUser.wechatSources,
     avatars: dbUser.avatars,
+    hiredTeamKeys: Array.from(hiredTeamKeys),
   });
 
   return (
@@ -211,6 +281,35 @@ export default async function InvestorDashboard() {
           </div>
 
           <div>
+            <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">⚡ 今日重点事项</h3>
+            <div className="space-y-3">
+              {dailyBriefing.priorityTasks.map((item) => (
+                <div key={`${item.task}-${item.deadline}`} className="rounded-lg border border-amber-200 bg-white p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-1 items-start gap-3">
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+                      <div className="flex-1">
+                        <div className="mb-1 flex items-center gap-2">
+                          <h4 className="font-medium text-gray-900">{item.task}</h4>
+                          <span
+                            className={`rounded px-2 py-0.5 text-xs ${
+                              item.priority === 'high' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {item.priority === 'high' ? '紧急' : '普通'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600">截止: {item.deadline}</p>
+                        <p className="mt-1 text-xs text-gray-500">指派自 {item.assignedBy}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">📊 各部门工作概览</h3>
             <div className="space-y-3">
               {dailyBriefing.departmentOverview.map((item) => (
@@ -237,35 +336,6 @@ export default async function InvestorDashboard() {
                       />
                     </div>
                   ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">⚡ 今日重点事项</h3>
-            <div className="space-y-3">
-              {dailyBriefing.priorityTasks.map((item) => (
-                <div key={`${item.task}-${item.deadline}`} className="rounded-lg border border-amber-200 bg-white p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex flex-1 items-start gap-3">
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
-                      <div className="flex-1">
-                        <div className="mb-1 flex items-center gap-2">
-                          <h4 className="font-medium text-gray-900">{item.task}</h4>
-                          <span
-                            className={`rounded px-2 py-0.5 text-xs ${
-                              item.priority === 'high' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'
-                            }`}
-                          >
-                            {item.priority === 'high' ? '紧急' : '普通'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600">截止: {item.deadline}</p>
-                        <p className="mt-1 text-xs text-gray-500">指派自 {item.assignedBy}</p>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
@@ -328,38 +398,22 @@ export default async function InvestorDashboard() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-lg bg-purple-50 p-4 text-purple-600">
-            <div className="mb-2 flex items-center justify-between">
-              <Users className="h-5 w-5" />
-              <span className="rounded bg-white px-2 py-0.5 text-xs">1 员工</span>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {teamCards.map((team) => (
+            <div key={team.key} className={`rounded-lg p-4 ${team.color}`}>
+              <div className="mb-2 flex items-center justify-between">
+                <Users className="h-5 w-5" />
+                <div className="flex items-center gap-2">
+                  <span className={`rounded px-2 py-0.5 text-xs ${team.statusClass}`}>{team.status}</span>
+                  <span className="rounded bg-white px-2 py-0.5 text-xs">{team.employees} 员工</span>
+                </div>
+              </div>
+              <h3 className="font-semibold">{team.name}</h3>
+              <Link href={team.linkHref} className="mt-2 inline-block text-xs font-medium hover:underline">
+                {team.linkLabel}
+              </Link>
             </div>
-            <h3 className="font-semibold">总裁办</h3>
-            <Link href="/investor/chat/100" className="mt-2 inline-block text-xs font-medium text-purple-700 hover:text-purple-800">
-              总裁秘书Momo
-            </Link>
-          </div>
-          <div className="rounded-lg bg-blue-50 p-4 text-blue-600">
-            <div className="mb-2 flex items-center justify-between">
-              <Users className="h-5 w-5" />
-              <span className="rounded bg-white px-2 py-0.5 text-xs">{infoOpsAssistants.length} 员工</span>
-            </div>
-            <h3 className="font-semibold">信息处理运营部门</h3>
-          </div>
-          <div className="rounded-lg bg-green-50 p-4 text-green-600">
-            <div className="mb-2 flex items-center justify-between">
-              <Users className="h-5 w-5" />
-              <span className="rounded bg-white px-2 py-0.5 text-xs">{dbUser.avatars.length} 员工</span>
-            </div>
-            <h3 className="font-semibold">研发团队</h3>
-          </div>
-          <div className="rounded-lg bg-orange-50 p-4 text-orange-600">
-            <div className="mb-2 flex items-center justify-between">
-              <Users className="h-5 w-5" />
-              <span className="rounded bg-white px-2 py-0.5 text-xs">0 员工</span>
-            </div>
-            <h3 className="font-semibold">营销运营团队</h3>
-          </div>
+          ))}
         </div>
       </div>
 

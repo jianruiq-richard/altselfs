@@ -2,8 +2,9 @@ import { currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { FigmaShell } from '@/components/figma-shell';
-import { AlertCircle, Bot, Briefcase, Building2, ChevronRight, FileText, Mail, MessageSquare, Plus, Settings, Trash2 } from 'lucide-react';
+import { AlertCircle, Bot, Briefcase, Building2, ChevronRight, Mail, MessageSquare, Megaphone, Plus, Settings, Trash2 } from 'lucide-react';
 import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
+import { resolveHiredTeamKeys, TEAM_KEYS } from '@/lib/team-library';
 
 export default async function AccountsPage() {
   const user = await currentUser();
@@ -27,18 +28,23 @@ export default async function AccountsPage() {
         },
       },
       chatsAsCandidate: true,
+      teamHires: {
+        select: {
+          teamKey: true,
+          status: true,
+        },
+      },
+      agentThreads: {
+        select: {
+          agentType: true,
+        },
+      },
     },
   });
 
   if (!dbUser) redirect('/dashboard');
 
   const connectedIntegrations = dbUser.integrations.filter((it) => it.status === 'CONNECTED').length;
-  const infoOpsEmployees = 4;
-  const twinOpsEmployees = dbUser.avatars.length;
-  const reviewEmployees =
-    dbUser.role === 'INVESTOR'
-      ? dbUser.avatars.reduce((acc, avatar) => acc + avatar.chats.filter((chat) => chat.needsInvestorReview).length, 0)
-      : dbUser.chatsAsCandidate.length;
 
   const gmailIntegration = dbUser.integrations.find((it) => it.provider === 'GMAIL' && it.status === 'CONNECTED');
   const feishuIntegration = dbUser.integrations.find((it) => it.provider === 'FEISHU' && it.status === 'CONNECTED');
@@ -82,32 +88,53 @@ export default async function AccountsPage() {
     },
   ] as const;
 
+  const hiredTeamKeys = resolveHiredTeamKeys({
+    teamHires: dbUser.teamHires,
+    fallback: {
+      integrationCount: dbUser.integrations.length,
+      wechatSourceCount: dbUser.wechatSources.length,
+      avatarCount: dbUser.avatars.length,
+      agentTypes: dbUser.agentThreads.map((thread) => thread.agentType),
+    },
+  });
+
+  const isExecutiveHired = hiredTeamKeys.has(TEAM_KEYS.EXECUTIVE_OFFICE);
+  const isInfoOpsHired = hiredTeamKeys.has(TEAM_KEYS.INFO_OPS);
+  const isEngineeringHired = hiredTeamKeys.has(TEAM_KEYS.ENGINEERING);
+  const isMarketingHired = hiredTeamKeys.has(TEAM_KEYS.MARKETING_OPS);
+
   const dailyBriefing = buildExecutiveDailyBriefing({
     integrations: dbUser.integrations,
     wechatSources: dbUser.wechatSources,
     avatars: dbUser.avatars,
+    hiredTeamKeys: Array.from(hiredTeamKeys),
   });
 
   const departments = [
     {
-      id: 'executive-office',
+      id: TEAM_KEYS.EXECUTIVE_OFFICE,
       name: '总裁办',
       description: '负责全局视野汇总、每日晨报与跨部门重点事项调度。',
       icon: Briefcase,
       color: 'from-purple-500 to-pink-600',
-      employees: 1,
-      status: '运行中',
-      employeeRows: [
-        {
-          id: 'executive-secretary',
-          typeName: '总裁秘书',
-          account: `晨报更新时间：${dailyBriefing.generatedTime}`,
-          agentName: '总裁秘书Momo',
-          status: 'active' as const,
-          processedToday: dailyBriefing.departmentOverview.reduce((acc, item) => acc + Math.max(1, Math.round(item.progress / 25)), 0),
-          source: 'real' as const,
-        },
-      ],
+      employees: isExecutiveHired ? 1 : 0,
+      status: isExecutiveHired ? '运行中' : '待雇佣',
+      employeeRows: isExecutiveHired
+        ? [
+            {
+              id: 'executive-secretary',
+              typeName: '总裁秘书',
+              account: `晨报更新时间：${dailyBriefing.generatedTime}`,
+              agentName: '总裁秘书Momo',
+              status: 'active' as const,
+              processedToday: dailyBriefing.departmentOverview.reduce(
+                (acc, item) => acc + Math.max(1, Math.round(item.progress / 25)),
+                0
+              ),
+              source: 'real' as const,
+            },
+          ]
+        : [],
       details: [
         `晨报日期：${dailyBriefing.date}`,
         `重点事项：${dailyBriefing.priorityTasks.length} 条`,
@@ -115,15 +142,14 @@ export default async function AccountsPage() {
       ],
     },
     {
-      id: 'info-ops',
+      id: TEAM_KEYS.INFO_OPS,
       name: '信息处理运营部门',
       description: '负责外部消息接入、摘要、归档和重点提醒。',
       icon: Mail,
       color: 'from-blue-500 to-purple-600',
-      employees: infoOpsEmployees,
-      status: infoOpsEmployees > 0 ? '运行中' : '待配置',
-      employeeRows:
-        infoOpsEmployeeRows,
+      employees: isInfoOpsHired ? Math.max(1, infoOpsEmployeeRows.length) : 0,
+      status: isInfoOpsHired ? '运行中' : '待雇佣',
+      employeeRows: isInfoOpsHired ? infoOpsEmployeeRows : [],
       details: [
         `Gmail/飞书集成：${connectedIntegrations}`,
         `公众号源：${dbUser.wechatSources.length}`,
@@ -132,75 +158,67 @@ export default async function AccountsPage() {
       ],
     },
     {
-      id: 'twin-ops',
-      name: '数字分身运营部门',
+      id: TEAM_KEYS.ENGINEERING,
+      name: '研发团队',
       description: '负责分身创建、参数维护与对话策略管理。',
       icon: MessageSquare,
       color: 'from-green-500 to-teal-600',
-      employees: twinOpsEmployees,
-      status: twinOpsEmployees > 0 ? '运行中' : '待创建分身',
-      employeeRows: twinOpsEmployees
-        ? dbUser.avatars.slice(0, 3).map((avatar) => ({
-            id: `avatar-${avatar.id}`,
-            typeName: '数字分身助手',
-            account: avatar.name,
-            agentName: `${avatar.name}·对话协同`,
-            status: 'active' as const,
-            processedToday: Math.max(3, avatar.chats.length * 2),
-            source: 'real' as const,
-          }))
-        : [
-            {
-              id: 'demo-twin-ops',
+      employees: isEngineeringHired ? Math.max(1, dbUser.avatars.length || 1) : 0,
+      status: isEngineeringHired ? '运行中' : '待雇佣',
+      employeeRows: isEngineeringHired
+        ? dbUser.avatars.length > 0
+          ? dbUser.avatars.slice(0, 3).map((avatar) => ({
+              id: `avatar-${avatar.id}`,
               typeName: '数字分身助手',
-              account: '示例分身（演示）',
-              agentName: '分身运营助手Alpha',
-              status: 'paused' as const,
-              processedToday: 0,
-              source: 'demo' as const,
-            },
-          ],
+              account: avatar.name,
+              agentName: `${avatar.name}·对话协同`,
+              status: 'active' as const,
+              processedToday: Math.max(3, avatar.chats.length * 2),
+              source: 'real' as const,
+            }))
+          : [
+              {
+                id: 'default-engineering-agent',
+                typeName: '研发助手',
+                account: '默认员工（待接入分身）',
+                agentName: '研发助手Alpha',
+                status: 'paused' as const,
+                processedToday: 0,
+                source: 'real' as const,
+              },
+            ]
+        : [],
       details: [
         `分身数量：${dbUser.avatars.length}`,
         '分身配置与系统提示词：已接入真实数据',
-        '人才调度：演示态',
+        '默认员工：研发助手Alpha',
       ],
     },
     {
-      id: 'follow-up',
-      name: '会话跟进部门',
-      description: '负责会话进展跟踪、重点会话升级与质检提醒。',
-      icon: FileText,
+      id: TEAM_KEYS.MARKETING_OPS,
+      name: '营销运营团队',
+      description: '负责渠道推广执行、声量追踪与竞品传播监控。',
+      icon: Megaphone,
       color: 'from-orange-500 to-red-600',
-      employees: reviewEmployees,
-      status: reviewEmployees > 0 ? '运行中' : '暂无任务',
-      employeeRows: reviewEmployees
+      employees: isMarketingHired ? 1 : 0,
+      status: isMarketingHired ? '运行中' : '待雇佣',
+      employeeRows: isMarketingHired
         ? [
             {
-              id: 'follow-up-real',
-              typeName: '会话质检员',
-              account: `${reviewEmployees} 个会话待跟进`,
-              agentName: '会话跟进助手',
-              status: 'active' as const,
-              processedToday: reviewEmployees,
+              id: 'default-marketing-agent',
+              typeName: '营销助手',
+              account: '默认员工（待接入营销渠道）',
+              agentName: '营销助手Beta',
+              status: 'paused' as const,
+              processedToday: 0,
               source: 'real' as const,
             },
           ]
-        : [
-            {
-              id: 'follow-up-demo',
-              typeName: '会话质检员',
-              account: '暂无会话（演示）',
-              agentName: '会话跟进助手',
-              status: 'paused' as const,
-              processedToday: 0,
-              source: 'demo' as const,
-            },
-          ],
+        : [],
       details: [
-        `当前待跟进会话：${reviewEmployees}`,
-        '会话概览：已接入真实数据',
-        '自动升级规则：演示态',
+        '默认员工：营销助手Beta',
+        '渠道推广：待接入',
+        '声量监控：待配置',
       ],
     },
   ] as const;
