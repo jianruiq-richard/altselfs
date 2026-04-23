@@ -48,6 +48,7 @@ export default async function AccountsPage() {
 
   const gmailIntegration = dbUser.integrations.find((it) => it.provider === 'GMAIL' && it.status === 'CONNECTED');
   const feishuIntegration = dbUser.integrations.find((it) => it.provider === 'FEISHU' && it.status === 'CONNECTED');
+  const xhsIntegration = dbUser.integrations.find((it) => it.provider === 'XIAOHONGSHU' && it.status === 'CONNECTED');
 
   const infoOpsEmployeeRows = [
     {
@@ -62,10 +63,10 @@ export default async function AccountsPage() {
     {
       id: 'xiaohongshu-assistant',
       typeName: '小红书助手',
-      account: '未接入小红书',
+      account: xhsIntegration?.accountName || '未接入小红书',
       agentName: '小红书助手小橙',
-      status: 'paused' as const,
-      processedToday: 0,
+      status: (xhsIntegration ? 'active' : 'paused') as 'active' | 'paused',
+      processedToday: xhsIntegration?.snapshots[0] ? 6 : 0,
       source: 'real' as const,
     },
     {

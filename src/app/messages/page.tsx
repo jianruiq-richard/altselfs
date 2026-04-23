@@ -18,11 +18,13 @@ type CenterMessage = {
 const providerLabel: Record<string, string> = {
   GMAIL: 'Gmail',
   FEISHU: '飞书',
+  XIAOHONGSHU: '小红书',
 };
 
 const sourceIconMap = {
   Gmail: Mail,
   飞书: MessageSquare,
+  小红书: FileText,
   公众号: FileText,
   分身会话: MessageSquare,
   分身对话: MessageSquare,
@@ -32,6 +34,7 @@ const sourceIconMap = {
 const sourceColorMap: Record<string, string> = {
   Gmail: 'text-red-600 bg-red-50',
   飞书: 'text-blue-600 bg-blue-50',
+  小红书: 'text-rose-600 bg-rose-50',
   公众号: 'text-green-600 bg-green-50',
   分身会话: 'text-indigo-600 bg-indigo-50',
   分身对话: 'text-sky-600 bg-sky-50',

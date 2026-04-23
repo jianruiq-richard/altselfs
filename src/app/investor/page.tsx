@@ -71,6 +71,7 @@ export default async function InvestorDashboard() {
   const integrationMap = new Map(dbUser.integrations.map((it) => [it.provider, it]));
   const gmail = integrationMap.get('GMAIL');
   const feishu = integrationMap.get('FEISHU');
+  const xiaohongshu = integrationMap.get('XIAOHONGSHU');
 
   const infoOpsAssistants = [
     {
@@ -89,11 +90,11 @@ export default async function InvestorDashboard() {
     {
       key: 'xiaohongshu',
       type: '小红书',
-      account: '未绑定 小红书',
-      unread: 0,
+      account: xiaohongshu?.accountName || '未配置 小红书能力',
+      unread: xiaohongshu?.snapshots[0] ? 1 : 0,
       agentName: '小红书助手小橙',
-      connected: false,
-      summary: '暂无摘要，接入后可自动提炼笔记热点与内容趋势。',
+      connected: Boolean(xiaohongshu),
+      summary: xiaohongshu?.snapshots[0]?.summary || '暂无摘要，可在信息处理运营部门中通过对话触发 Spider_XHS 技能。',
     },
     {
       key: 'gmail',

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DebugCollapsible } from '@/components/debug-collapsible';
 
-type ProviderKey = 'gmail' | 'feishu';
+type ProviderKey = 'gmail' | 'feishu' | 'xiaohongshu';
 
 type IntegrationCard = {
   provider: ProviderKey;
@@ -37,64 +37,81 @@ export default function InvestorIntegrationsPanel({
   const [assistantInputs, setAssistantInputs] = useState<Record<ProviderKey, string>>({
     gmail: '',
     feishu: '',
+    xiaohongshu: '',
   });
   const [assistantLoading, setAssistantLoading] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
+    xiaohongshu: false,
   });
   const [assistantChats, setAssistantChats] = useState<Record<ProviderKey, AssistantMessage[]>>({
     gmail: [],
     feishu: [],
+    xiaohongshu: [],
   });
   const [assistantThreadIds, setAssistantThreadIds] = useState<Record<ProviderKey, string | null>>({
     gmail: null,
     feishu: null,
+    xiaohongshu: null,
   });
   const [coachOpen, setCoachOpen] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
+    xiaohongshu: false,
   });
   const [coachLoaded, setCoachLoaded] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
+    xiaohongshu: false,
   });
   const [coachLoading, setCoachLoading] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
+    xiaohongshu: false,
   });
   const [coachSaving, setCoachSaving] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
+    xiaohongshu: false,
   });
   const [coachDraft, setCoachDraft] = useState<Record<ProviderKey, string>>({
     gmail: '',
     feishu: '',
+    xiaohongshu: '',
   });
   const [coachSaved, setCoachSaved] = useState<Record<ProviderKey, string>>({
     gmail: '',
     feishu: '',
+    xiaohongshu: '',
   });
   const [coachMessage, setCoachMessage] = useState<Record<ProviderKey, string>>({
     gmail: '',
     feishu: '',
+    xiaohongshu: '',
   });
 
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
-    const providerLabel = integrationProvider === 'gmail' ? 'Gmail' : '飞书';
+    const providerLabel =
+      integrationProvider === 'gmail' ? 'Gmail' : integrationProvider === 'feishu' ? '飞书' : '小红书';
     if (integrationStatus === 'connected') {
       return `${providerLabel} 绑定成功`;
     }
     return `${providerLabel} 绑定失败：${integrationDetail || '未知错误'}`;
   }, [integrationDetail, integrationProvider, integrationStatus]);
 
-  const providerLabel = (provider: ProviderKey) => (provider === 'gmail' ? 'Gmail' : '飞书');
+  const providerLabel = (provider: ProviderKey) =>
+    provider === 'gmail' ? 'Gmail' : provider === 'feishu' ? '飞书' : '小红书';
+  const assistantEndpoint = (provider: ProviderKey) =>
+    provider === 'xiaohongshu'
+      ? '/api/investor/xiaohongshu/assistant'
+      : `/api/investor/integrations/assistant/${provider}`;
 
   useEffect(() => {
     const loadThreads = async () => {
-      for (const provider of ['gmail', 'feishu'] as const) {
+      for (const provider of ['gmail', 'feishu', 'xiaohongshu'] as const) {
         try {
-          const res = await fetch(`/api/investor/integrations/assistant/${provider}`);
+          const res = await fetch(assistantEndpoint(provider));
           const data = await res.json();
           if (!res.ok) continue;
           if (data.thread?.id) {
@@ -103,6 +120,9 @@ export default function InvestorIntegrationsPanel({
           if (Array.isArray(data.thread?.messages)) {
             setAssistantChats((prev) => ({ ...prev, [provider]: data.thread.messages }));
           }
+          const prompt = String(data.customPrompt || data.integration?.customPrompt || '');
+          setCoachDraft((prev) => ({ ...prev, [provider]: prompt }));
+          setCoachSaved((prev) => ({ ...prev, [provider]: prompt }));
         } catch {
           // ignore thread preload failure
         }
@@ -111,7 +131,40 @@ export default function InvestorIntegrationsPanel({
     void loadThreads();
   }, []);
 
-  const connect = (provider: ProviderKey) => {
+  const connect = async (provider: ProviderKey) => {
+    if (provider === 'xiaohongshu') {
+      setLoadingProvider(provider);
+      setError(null);
+      try {
+        const res = await fetch('/api/investor/xiaohongshu/assistant', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customPrompt: coachDraft.xiaohongshu || '' }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || '启用小红书助手失败');
+          return;
+        }
+        setCards((prev) =>
+          prev.map((card) =>
+            card.provider === 'xiaohongshu'
+              ? {
+                  ...card,
+                  connected: true,
+                  accountName: data.integration?.provider || '小红书助手',
+                  updatedAt: data.integration?.updatedAt || new Date().toISOString(),
+                }
+              : card
+          )
+        );
+      } catch {
+        setError('网络错误，请稍后重试');
+      } finally {
+        setLoadingProvider(null);
+      }
+      return;
+    }
     window.location.href = `/api/investor/integrations/connect/${provider}`;
   };
 
@@ -119,9 +172,12 @@ export default function InvestorIntegrationsPanel({
     setLoadingProvider(provider);
     setError(null);
     try {
-      const res = await fetch(`/api/investor/integrations/summary/${provider}`, {
-        method: 'POST',
-      });
+      const res =
+        provider === 'xiaohongshu'
+          ? await fetch('/api/investor/xiaohongshu/assistant')
+          : await fetch(`/api/investor/integrations/summary/${provider}`, {
+              method: 'POST',
+            });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || '刷新摘要失败');
@@ -132,12 +188,30 @@ export default function InvestorIntegrationsPanel({
           card.provider === provider
             ? {
                 ...card,
-                connected: true,
-                accountEmail: data.integration.accountEmail || null,
-                accountName: data.integration.accountName || null,
-                updatedAt: data.integration.updatedAt || null,
-                latestSummary: data.latestSummary || null,
-                latestSummaryAt: data.latestSummaryAt || null,
+                connected: provider === 'xiaohongshu' ? Boolean(data.integration?.connected) : true,
+                accountEmail: provider === 'xiaohongshu' ? null : data.integration.accountEmail || null,
+                accountName:
+                  provider === 'xiaohongshu'
+                    ? (data.integration?.connected ? '小红书助手' : null)
+                    : data.integration.accountName || null,
+                updatedAt:
+                  provider === 'xiaohongshu'
+                    ? data.thread?.messages?.length
+                      ? new Date().toISOString()
+                      : card.updatedAt
+                    : data.integration.updatedAt || null,
+                latestSummary:
+                  provider === 'xiaohongshu'
+                    ? data.thread?.messages?.length
+                      ? String(data.thread.messages[data.thread.messages.length - 1]?.content || card.latestSummary || '')
+                      : card.latestSummary
+                    : data.latestSummary || null,
+                latestSummaryAt:
+                  provider === 'xiaohongshu'
+                    ? data.thread?.messages?.length
+                      ? new Date().toISOString()
+                      : card.latestSummaryAt
+                    : data.latestSummaryAt || null,
               }
             : card
         )
@@ -162,7 +236,7 @@ export default function InvestorIntegrationsPanel({
     setError(null);
 
     try {
-      const res = await fetch(`/api/investor/integrations/assistant/${provider}`, {
+      const res = await fetch(assistantEndpoint(provider), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: nextMessages, threadId: assistantThreadIds[provider] }),
@@ -203,14 +277,14 @@ export default function InvestorIntegrationsPanel({
     setCoachMessage((prev) => ({ ...prev, [provider]: '' }));
     setError(null);
     try {
-      const res = await fetch(`/api/investor/integrations/assistant/${provider}`);
+      const res = await fetch(assistantEndpoint(provider));
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || '加载调教设置失败');
         return;
       }
 
-      const prompt = String(data.customPrompt || '');
+      const prompt = String(data.customPrompt || data.integration?.customPrompt || '');
       setCoachDraft((prev) => ({ ...prev, [provider]: prompt }));
       setCoachSaved((prev) => ({ ...prev, [provider]: prompt }));
       setCoachLoaded((prev) => ({ ...prev, [provider]: true }));
@@ -227,7 +301,7 @@ export default function InvestorIntegrationsPanel({
     setCoachMessage((prev) => ({ ...prev, [provider]: '' }));
     setError(null);
     try {
-      const res = await fetch(`/api/investor/integrations/assistant/${provider}`, {
+      const res = await fetch(assistantEndpoint(provider), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customPrompt: coachDraft[provider] }),
@@ -238,7 +312,7 @@ export default function InvestorIntegrationsPanel({
         return;
       }
 
-      const prompt = String(data.integration?.customPrompt || '');
+      const prompt = String(data.integration?.customPrompt || data.customPrompt || '');
       setCoachDraft((prev) => ({ ...prev, [provider]: prompt }));
       setCoachSaved((prev) => ({ ...prev, [provider]: prompt }));
       setCoachMessage((prev) => ({ ...prev, [provider]: '已保存，后续对话已生效。' }));
@@ -277,9 +351,9 @@ export default function InvestorIntegrationsPanel({
                   card.connected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                 }`}
               >
-                {card.connected ? '已绑定' : '未绑定'}
-              </span>
-            </div>
+          {card.connected ? (card.provider === 'xiaohongshu' ? '已启用' : '已绑定') : (card.provider === 'xiaohongshu' ? '未启用' : '未绑定')}
+                </span>
+              </div>
 
             <p className="text-sm text-slate-600 mt-2">
               {card.accountEmail || card.accountName || '尚未绑定账号'}
@@ -293,25 +367,34 @@ export default function InvestorIntegrationsPanel({
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
-                onClick={() => connect(card.provider)}
+                onClick={() => void connect(card.provider)}
                 className="bg-sky-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-sky-700 transition-colors"
               >
-                {card.connected ? '重新绑定' : `绑定${providerLabel(card.provider)}`}
+                {card.provider === 'xiaohongshu'
+                  ? card.connected
+                    ? '已启用小红书助手'
+                    : '启用小红书助手'
+                  : card.connected
+                    ? '重新绑定'
+                    : `绑定${providerLabel(card.provider)}`}
               </button>
               <button
                 type="button"
-                disabled={!card.connected || loadingProvider === card.provider}
+                disabled={loadingProvider === card.provider}
                 onClick={() => refreshSummary(card.provider)}
                 className="bg-white text-slate-800 px-3 py-2 rounded-lg text-sm border border-slate-300 hover:bg-slate-100 disabled:opacity-50"
               >
-                {loadingProvider === card.provider ? '刷新中...' : '刷新摘要'}
+                {loadingProvider === card.provider ? '刷新中...' : card.provider === 'xiaohongshu' ? '刷新状态' : '刷新摘要'}
               </button>
             </div>
 
             <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
               <p className="text-xs text-slate-500 mb-1">最近摘要</p>
               <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                {card.latestSummary || '暂无摘要，绑定后点击“刷新摘要”生成。'}
+                {card.latestSummary ||
+                  (card.provider === 'xiaohongshu'
+                    ? '暂无摘要，可直接对话触发 skill 抓取。'
+                    : '暂无摘要，绑定后点击“刷新摘要”生成。')}
               </p>
               {card.latestSummaryAt && (
                 <p className="text-xs text-slate-500 mt-2">

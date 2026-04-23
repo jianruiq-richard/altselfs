@@ -51,8 +51,8 @@ export default async function InfoOpsPage({
     updatedAt: source.updatedAt.toISOString(),
   }));
 
-  const integrationCards = (['gmail', 'feishu'] as const).map((provider) => {
-    const dbProvider = provider === 'gmail' ? 'GMAIL' : 'FEISHU';
+  const integrationCards = (['gmail', 'feishu', 'xiaohongshu'] as const).map((provider) => {
+    const dbProvider = provider === 'gmail' ? 'GMAIL' : provider === 'feishu' ? 'FEISHU' : 'XIAOHONGSHU';
     const integration = integrationMap.get(dbProvider);
     const latest = integration?.snapshots[0];
     return {
