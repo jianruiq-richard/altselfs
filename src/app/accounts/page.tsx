@@ -329,9 +329,6 @@ export default async function AccountsPage() {
                             >
                               {employee.status === 'active' ? '活跃' : '演示'}
                             </span>
-                            {employee.source === 'demo' ? (
-                              <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">mock</span>
-                            ) : null}
                           </div>
                           <p className="mb-2 text-sm text-gray-600">{employee.account}</p>
                           <div className="flex items-center gap-2 text-sm text-gray-500">
