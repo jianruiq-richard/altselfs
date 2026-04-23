@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { FigmaShell } from '@/components/figma-shell';
@@ -148,16 +148,31 @@ export default async function AITalentPage() {
   const pageStart = performance.now();
 
   try {
-    const user = await measureAsync('currentUser()', () => currentUser());
-    if (!user) redirect('/sign-in');
+    const { userId } = await measureAsync('auth()', () => auth());
+    if (!userId) redirect('/sign-in');
 
     const dbUser = await measureAsync('prisma.user.findUnique()', () =>
       prisma.user.findUnique({
-        where: { clerkId: user.id },
-        include: {
-          integrations: true,
-          wechatSources: true,
-          avatars: true,
+        where: { clerkId: userId },
+        relationLoadStrategy: 'join',
+        select: {
+          id: true,
+          role: true,
+          integrations: {
+            select: {
+              provider: true,
+            },
+          },
+          wechatSources: {
+            select: {
+              id: true,
+            },
+          },
+          avatars: {
+            select: {
+              id: true,
+            },
+          },
           teamHires: {
             select: {
               teamKey: true,
@@ -172,8 +187,6 @@ export default async function AITalentPage() {
         },
       })
     );
-
-    console.log('dbUser',JSON.stringify(dbUser,null,2));
 
     if (!dbUser) redirect('/dashboard');
 
