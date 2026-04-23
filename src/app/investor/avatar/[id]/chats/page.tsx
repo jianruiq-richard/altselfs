@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
@@ -7,27 +7,37 @@ import { FigmaShell } from '@/components/figma-shell';
 
 export default async function AvatarChatsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await currentUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     redirect('/sign-in');
   }
 
-  // Get user data from our database
-  const dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id },
-  });
-
-  if (!dbUser || dbUser.role !== 'INVESTOR') {
-    redirect('/dashboard');
-  }
-
-  // Get avatar and verify ownership
-  const avatar = await prisma.avatar.findUnique({
-    where: { id },
-    include: {
+  const avatar = await prisma.avatar.findFirst({
+    where: {
+      id,
+      investor: {
+        clerkId: userId,
+        role: 'INVESTOR',
+      },
+    },
+    relationLoadStrategy: 'join',
+    select: {
+      id: true,
+      name: true,
       chats: {
-        include: {
+        orderBy: {
+          updatedAt: 'desc',
+        },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          summary: true,
+          qualificationScore: true,
+          qualificationStatus: true,
+          qualificationReason: true,
+          needsInvestorReview: true,
           candidate: {
             select: {
               id: true,
@@ -40,18 +50,27 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
           },
           messages: {
             orderBy: {
-              createdAt: 'asc',
+              createdAt: 'desc',
+            },
+            take: 6,
+            select: {
+              id: true,
+              role: true,
+              content: true,
+              createdAt: true,
             },
           },
-        },
-        orderBy: {
-          updatedAt: 'desc',
+          _count: {
+            select: {
+              messages: true,
+            },
+          },
         },
       },
     },
   });
 
-  if (!avatar || avatar.investorId !== dbUser.id) {
+  if (!avatar) {
     redirect('/dashboard');
   }
 
@@ -99,7 +118,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                        chat.status === 'COMPLETED' ? '已完成' : '已归档'}
                     </span>
                     <p className="text-sm text-gray-500 mt-1">
-                      {chat.messages.length} 条消息
+                      {chat._count.messages} 条消息
                     </p>
                   </div>
                 </div>
@@ -138,7 +157,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                 <div className="border-t pt-4">
                   <h4 className="text-sm font-medium text-gray-900 mb-3">最近的对话</h4>
                   <div className="space-y-3 max-h-60 overflow-y-auto">
-                    {chat.messages.slice(-6).map((message) => (
+                    {[...chat.messages].reverse().map((message) => (
                       <div
                         key={message.id}
                         className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}

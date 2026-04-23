@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -17,22 +17,41 @@ export default async function InfoOpsPage({
     assistant?: string;
   }>;
 }) {
-  const user = await currentUser();
+  const { userId } = await auth();
   const query = await searchParams;
-  if (!user) redirect('/sign-in');
+  if (!userId) redirect('/sign-in');
 
   const dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id },
-    include: {
+    where: { clerkId: userId },
+    relationLoadStrategy: 'join',
+    select: {
+      role: true,
       integrations: {
-        include: {
+        select: {
+          provider: true,
+          accountEmail: true,
+          accountName: true,
+          updatedAt: true,
           snapshots: {
+            select: {
+              summary: true,
+              createdAt: true,
+            },
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
         },
       },
       wechatSources: {
+        select: {
+          id: true,
+          biz: true,
+          displayName: true,
+          description: true,
+          lastArticleUrl: true,
+          createdAt: true,
+          updatedAt: true,
+        },
         orderBy: { updatedAt: 'desc' },
       },
     },

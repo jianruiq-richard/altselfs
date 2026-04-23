@@ -1,25 +1,32 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { FigmaShell } from '@/components/figma-shell';
 
 export default async function CandidateDashboard() {
-  const user = await currentUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     redirect('/sign-in');
   }
 
   // Get user data from our database
   const dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id },
-    include: {
+    where: { clerkId: userId },
+    relationLoadStrategy: 'join',
+    select: {
+      role: true,
+      nickname: true,
+      phone: true,
+      wechatId: true,
       chatsAsCandidate: {
         where: {
           status: 'ACTIVE',
         },
-        include: {
+        select: {
+          id: true,
+          updatedAt: true,
           avatar: {
             select: {
               id: true,
@@ -34,6 +41,9 @@ export default async function CandidateDashboard() {
             },
           },
           messages: {
+            select: {
+              content: true,
+            },
             orderBy: {
               createdAt: 'desc',
             },
@@ -58,7 +68,12 @@ export default async function CandidateDashboard() {
   // Get all active avatars
   const avatars = await prisma.avatar.findMany({
     where: { status: 'ACTIVE', isPublic: true },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      avatar: true,
+      description: true,
+      createdAt: true,
       investor: {
         select: {
           name: true,

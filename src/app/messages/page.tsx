@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { FigmaShell } from '@/components/figma-shell';
@@ -42,33 +42,54 @@ const sourceColorMap: Record<string, string> = {
 };
 
 export default async function MessagesPage() {
-  const user = await currentUser();
-  if (!user) redirect('/sign-in');
+  const { userId } = await auth();
+  if (!userId) redirect('/sign-in');
 
   const dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id },
-    include: {
+    where: { clerkId: userId },
+    relationLoadStrategy: 'join',
+    select: {
+      role: true,
       integrations: {
-        include: {
+        select: {
+          id: true,
+          provider: true,
+          accountEmail: true,
           snapshots: {
+            select: {
+              summary: true,
+              createdAt: true,
+            },
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
         },
       },
       wechatSources: {
+        select: {
+          id: true,
+          displayName: true,
+          description: true,
+          updatedAt: true,
+        },
         orderBy: { updatedAt: 'desc' },
         take: 8,
       },
       chatsAsCandidate: {
         where: { status: 'ACTIVE' },
-        include: {
+        select: {
+          id: true,
+          updatedAt: true,
           avatar: {
             select: {
               name: true,
             },
           },
           messages: {
+            select: {
+              content: true,
+              createdAt: true,
+            },
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
@@ -77,9 +98,14 @@ export default async function MessagesPage() {
         take: 8,
       },
       avatars: {
-        include: {
+        select: {
+          id: true,
+          name: true,
           chats: {
-            include: {
+            select: {
+              id: true,
+              needsInvestorReview: true,
+              qualificationStatus: true,
               candidate: {
                 select: {
                   nickname: true,
@@ -87,6 +113,10 @@ export default async function MessagesPage() {
                 },
               },
               messages: {
+                select: {
+                  content: true,
+                  createdAt: true,
+                },
                 orderBy: { createdAt: 'desc' },
                 take: 1,
               },

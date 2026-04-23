@@ -5,21 +5,6 @@ import { FigmaShell } from '@/components/figma-shell';
 import { CheckCircle2, Code2, FileText, Hash, Headphones, Mail, Megaphone, MessageSquare, Palette, Search, Star, Video } from 'lucide-react';
 import { resolveHiredTeamKeys, TEAM_KEYS } from '@/lib/team-library';
 
-async function measureAsync<T>(label: string, operation: () => Promise<T>): Promise<T> {
-  const start = performance.now();
-
-  try {
-    const result = await operation();
-    const durationMs = (performance.now() - start).toFixed(2);
-    console.info(`[ai-talent] ${label} completed in ${durationMs}ms`);
-    return result;
-  } catch (error) {
-    const durationMs = (performance.now() - start).toFixed(2);
-    console.error(`[ai-talent] ${label} failed in ${durationMs}ms`, error);
-    throw error;
-  }
-}
-
 const mockTalents = [
   {
     id: 'gmail-assistant',
@@ -145,187 +130,182 @@ const mockTalents = [
 ] as const;
 
 export default async function AITalentPage() {
-  const pageStart = performance.now();
+  const { userId } = await auth();
+  if (!userId) redirect('/sign-in');
 
-  try {
-    const { userId } = await measureAsync('auth()', () => auth());
-    if (!userId) redirect('/sign-in');
-
-    const dbUser = await measureAsync('prisma.user.findUnique()', () =>
-      prisma.user.findUnique({
-        where: { clerkId: userId },
-        relationLoadStrategy: 'join',
+  const dbUser = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    relationLoadStrategy: 'join',
+    select: {
+      id: true,
+      role: true,
+      integrations: {
+        select: {
+          provider: true,
+        },
+      },
+      wechatSources: {
         select: {
           id: true,
-          role: true,
-          integrations: {
-            select: {
-              provider: true,
-            },
-          },
-          wechatSources: {
-            select: {
-              id: true,
-            },
-          },
-          avatars: {
-            select: {
-              id: true,
-            },
-          },
-          teamHires: {
-            select: {
-              teamKey: true,
-              status: true,
-            },
-          },
-          agentThreads: {
-            select: {
-              agentType: true,
-            },
-          },
         },
-      })
-    );
-
-    if (!dbUser) redirect('/dashboard');
-
-    const enabled = new Set<string>();
-    for (const integration of dbUser.integrations) {
-      if (integration.provider === 'GMAIL') enabled.add('gmail-assistant');
-      if (integration.provider === 'FEISHU') enabled.add('feishu-assistant');
-    }
-    if (dbUser.wechatSources.length > 0) enabled.add('wechat-assistant');
-
-    const hiredTeamKeys = resolveHiredTeamKeys({
-      teamHires: dbUser.teamHires,
-      fallback: {
-        integrationCount: dbUser.integrations.length,
-        wechatSourceCount: dbUser.wechatSources.length,
-        avatarCount: dbUser.avatars.length,
-        agentTypes: dbUser.agentThreads.map((thread) => thread.agentType),
       },
-    });
+      avatars: {
+        select: {
+          id: true,
+        },
+      },
+      teamHires: {
+        select: {
+          teamKey: true,
+          status: true,
+        },
+      },
+      agentThreads: {
+        select: {
+          agentType: true,
+        },
+      },
+    },
+  });
 
-    const departmentPackages = [
-      {
-        id: TEAM_KEYS.EXECUTIVE_OFFICE,
-        name: '总裁办',
-        description: '负责晨报、跨部门节奏和重点事项调度。',
-        gradient: 'from-purple-500 to-pink-600',
-        icon: Code2,
-        price: '免费',
-        originalPrice: '免费',
-        discount: null as string | null,
-        members: ['总裁秘书Momo（默认）'],
-        popular: false,
-        hired: hiredTeamKeys.has(TEAM_KEYS.EXECUTIVE_OFFICE),
-      },
-      {
-        id: TEAM_KEYS.INFO_OPS,
-        name: '信息处理运营部门',
-        description: '负责外部消息接入、摘要、竞品监控与信息分发。',
-        gradient: 'from-blue-500 to-purple-600',
-        icon: Mail,
-        price: '免费',
-        originalPrice: '免费',
-        discount: null as string | null,
-        members: ['信息助手小明（默认）'],
-        popular: true,
-        hired: hiredTeamKeys.has(TEAM_KEYS.INFO_OPS),
-      },
-      {
-        id: TEAM_KEYS.ENGINEERING,
-        name: '研发团队',
-        description: '负责数字分身、策略迭代与会话质量优化。',
-        gradient: 'from-green-500 to-teal-600',
-        icon: Code2,
-        price: '免费',
-        originalPrice: '免费',
-        discount: null as string | null,
-        members: ['研发助手Alpha（默认）'],
-        popular: false,
-        hired: hiredTeamKeys.has(TEAM_KEYS.ENGINEERING),
-      },
-      {
-        id: TEAM_KEYS.MARKETING_OPS,
-        name: '营销运营部门',
-        description: '负责投放监控、声量追踪与渠道推广执行。',
-        gradient: 'from-orange-500 to-red-600',
-        icon: Megaphone,
-        price: '免费',
-        originalPrice: '免费',
-        discount: null as string | null,
-        members: ['营销助手Beta（默认）'],
-        popular: false,
-        hired: hiredTeamKeys.has(TEAM_KEYS.MARKETING_OPS),
-      },
-    ];
+  if (!dbUser) redirect('/dashboard');
 
-    const getTalentIcon = (id: string) => {
-      if (id === 'gmail-assistant') return { Icon: Mail, color: 'text-red-600 bg-red-50' };
-      if (id === 'feishu-assistant') return { Icon: MessageSquare, color: 'text-blue-600 bg-blue-50' };
-      if (id === 'wechat-assistant') return { Icon: FileText, color: 'text-green-600 bg-green-50' };
-      if (id === 'xiaohongshu-assistant') return { Icon: Star, color: 'text-rose-600 bg-rose-50' };
-      if (id === 'pm-agent') return { Icon: Palette, color: 'text-purple-600 bg-purple-50' };
-      if (id === 'growth-agent') return { Icon: Megaphone, color: 'text-orange-600 bg-orange-50' };
-      if (id === 'discord-assistant') return { Icon: Hash, color: 'text-indigo-600 bg-indigo-50' };
-      if (id === 'facebook-assistant') return { Icon: Megaphone, color: 'text-blue-600 bg-blue-50' };
-      if (id === 'instagram-assistant') return { Icon: Palette, color: 'text-pink-600 bg-pink-50' };
-      if (id === 'tiktok-assistant') return { Icon: Video, color: 'text-gray-900 bg-gray-100' };
-      if (id === 'qa-agent') return { Icon: Headphones, color: 'text-teal-600 bg-teal-50' };
-      return { Icon: Code2, color: 'text-slate-700 bg-slate-100' };
-    };
+  const enabled = new Set<string>();
+  for (const integration of dbUser.integrations) {
+    if (integration.provider === 'GMAIL') enabled.add('gmail-assistant');
+    if (integration.provider === 'FEISHU') enabled.add('feishu-assistant');
+  }
+  if (dbUser.wechatSources.length > 0) enabled.add('wechat-assistant');
 
-    return (
-      <FigmaShell
-        homeHref={dbUser.role === 'INVESTOR' ? '/dashboard' : '/candidate'}
-        title="AI人才大厅"
-        subtitle="雇佣AI员工，组建你的专属团队"
-      >
-        <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6">
-          <div className="mb-5 flex flex-col gap-4 md:flex-row">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  readOnly
-                  value=""
-                  placeholder="搜索AI员工或部门..."
-                  className="w-full rounded-xl border border-gray-300 px-9 py-2.5 text-sm text-gray-700 placeholder:text-gray-400"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button type="button" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white">
-                部门团队
-              </button>
-              <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700">
-                单个雇佣
-              </button>
+  const hiredTeamKeys = resolveHiredTeamKeys({
+    teamHires: dbUser.teamHires,
+    fallback: {
+      integrationCount: dbUser.integrations.length,
+      wechatSourceCount: dbUser.wechatSources.length,
+      avatarCount: dbUser.avatars.length,
+      agentTypes: dbUser.agentThreads.map((thread) => thread.agentType),
+    },
+  });
+
+  const departmentPackages = [
+    {
+      id: TEAM_KEYS.EXECUTIVE_OFFICE,
+      name: '总裁办',
+      description: '负责晨报、跨部门节奏和重点事项调度。',
+      gradient: 'from-purple-500 to-pink-600',
+      icon: Code2,
+      price: '免费',
+      originalPrice: '免费',
+      discount: null as string | null,
+      members: ['总裁秘书Momo（默认）'],
+      popular: false,
+      hired: hiredTeamKeys.has(TEAM_KEYS.EXECUTIVE_OFFICE),
+    },
+    {
+      id: TEAM_KEYS.INFO_OPS,
+      name: '信息处理运营部门',
+      description: '负责外部消息接入、摘要、竞品监控与信息分发。',
+      gradient: 'from-blue-500 to-purple-600',
+      icon: Mail,
+      price: '免费',
+      originalPrice: '免费',
+      discount: null as string | null,
+      members: ['信息助手小明（默认）'],
+      popular: true,
+      hired: hiredTeamKeys.has(TEAM_KEYS.INFO_OPS),
+    },
+    {
+      id: TEAM_KEYS.ENGINEERING,
+      name: '研发团队',
+      description: '负责数字分身、策略迭代与会话质量优化。',
+      gradient: 'from-green-500 to-teal-600',
+      icon: Code2,
+      price: '免费',
+      originalPrice: '免费',
+      discount: null as string | null,
+      members: ['研发助手Alpha（默认）'],
+      popular: false,
+      hired: hiredTeamKeys.has(TEAM_KEYS.ENGINEERING),
+    },
+    {
+      id: TEAM_KEYS.MARKETING_OPS,
+      name: '营销运营部门',
+      description: '负责投放监控、声量追踪与渠道推广执行。',
+      gradient: 'from-orange-500 to-red-600',
+      icon: Megaphone,
+      price: '免费',
+      originalPrice: '免费',
+      discount: null as string | null,
+      members: ['营销助手Beta（默认）'],
+      popular: false,
+      hired: hiredTeamKeys.has(TEAM_KEYS.MARKETING_OPS),
+    },
+  ];
+
+  const getTalentIcon = (id: string) => {
+    if (id === 'gmail-assistant') return { Icon: Mail, color: 'text-red-600 bg-red-50' };
+    if (id === 'feishu-assistant') return { Icon: MessageSquare, color: 'text-blue-600 bg-blue-50' };
+    if (id === 'wechat-assistant') return { Icon: FileText, color: 'text-green-600 bg-green-50' };
+    if (id === 'xiaohongshu-assistant') return { Icon: Star, color: 'text-rose-600 bg-rose-50' };
+    if (id === 'pm-agent') return { Icon: Palette, color: 'text-purple-600 bg-purple-50' };
+    if (id === 'growth-agent') return { Icon: Megaphone, color: 'text-orange-600 bg-orange-50' };
+    if (id === 'discord-assistant') return { Icon: Hash, color: 'text-indigo-600 bg-indigo-50' };
+    if (id === 'facebook-assistant') return { Icon: Megaphone, color: 'text-blue-600 bg-blue-50' };
+    if (id === 'instagram-assistant') return { Icon: Palette, color: 'text-pink-600 bg-pink-50' };
+    if (id === 'tiktok-assistant') return { Icon: Video, color: 'text-gray-900 bg-gray-100' };
+    if (id === 'qa-agent') return { Icon: Headphones, color: 'text-teal-600 bg-teal-50' };
+    return { Icon: Code2, color: 'text-slate-700 bg-slate-100' };
+  };
+
+  return (
+    <FigmaShell
+      homeHref={dbUser.role === 'INVESTOR' ? '/dashboard' : '/candidate'}
+      title="AI人才大厅"
+      subtitle="雇佣AI员工，组建你的专属团队"
+    >
+      <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6">
+        <div className="mb-5 flex flex-col gap-4 md:flex-row">
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                readOnly
+                value=""
+                placeholder="搜索AI员工或部门..."
+                className="w-full rounded-xl border border-gray-300 px-9 py-2.5 text-sm text-gray-700 placeholder:text-gray-400"
+              />
             </div>
           </div>
-
-          <div className="flex flex-wrap gap-2">
-            {['全部', '信息处理运营', '工程开发', '营销运营'].map((tab, index) => (
-              <button
-                key={tab}
-                type="button"
-                className={`rounded-lg px-3 py-1.5 text-sm ${
-                  index === 0 ? 'bg-gray-900 text-white' : 'border border-gray-300 text-gray-700'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+          <div className="flex gap-2">
+            <button type="button" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white">
+              部门团队
+            </button>
+            <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700">
+              单个雇佣
+            </button>
           </div>
         </div>
 
-        <div className="mb-8">
-          <div className="mb-4">
-            <h2 className="text-xl font-bold text-gray-900">部门团队套餐</h2>
-            <p className="text-sm text-gray-600">一键雇佣整个部门，更高效更优惠</p>
-          </div>
+        <div className="flex flex-wrap gap-2">
+          {['全部', '信息处理运营', '工程开发', '营销运营'].map((tab, index) => (
+            <button
+              key={tab}
+              type="button"
+              className={`rounded-lg px-3 py-1.5 text-sm ${
+                index === 0 ? 'bg-gray-900 text-white' : 'border border-gray-300 text-gray-700'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-gray-900">部门团队套餐</h2>
+          <p className="text-sm text-gray-600">一键雇佣整个部门，更高效更优惠</p>
+        </div>
 
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {departmentPackages.map((pkg) => (
@@ -461,10 +441,6 @@ export default async function AITalentPage() {
             );
           })}
         </div>
-      </FigmaShell>
-    );
-  } finally {
-    const durationMs = (performance.now() - pageStart).toFixed(2);
-    console.info(`[ai-talent] page render finished in ${durationMs}ms`);
-  }
+    </FigmaShell>
+  );
 }

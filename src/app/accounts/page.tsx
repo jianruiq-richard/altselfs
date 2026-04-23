@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { FigmaShell } from '@/components/figma-shell';
@@ -7,27 +7,52 @@ import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
 import { resolveHiredTeamKeys, TEAM_KEYS } from '@/lib/team-library';
 
 export default async function AccountsPage() {
-  const user = await currentUser();
-  if (!user) redirect('/sign-in');
+  const { userId } = await auth();
+  if (!userId) redirect('/sign-in');
 
   const dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id },
-    include: {
+    where: { clerkId: userId },
+    relationLoadStrategy: 'join',
+    select: {
+      role: true,
       integrations: {
-        include: {
+        select: {
+          id: true,
+          provider: true,
+          status: true,
+          accountEmail: true,
+          accountName: true,
           snapshots: {
+            select: {
+              summary: true,
+              createdAt: true,
+            },
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
         },
       },
-      wechatSources: true,
-      avatars: {
-        include: {
-          chats: true,
+      wechatSources: {
+        select: {
+          id: true,
+          displayName: true,
+          description: true,
+          updatedAt: true,
         },
       },
-      chatsAsCandidate: true,
+      avatars: {
+        select: {
+          id: true,
+          name: true,
+          chats: {
+            select: {
+              id: true,
+              needsInvestorReview: true,
+              qualificationStatus: true,
+            },
+          },
+        },
+      },
       teamHires: {
         select: {
           teamKey: true,

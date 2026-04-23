@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
@@ -21,34 +21,51 @@ import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
 import { resolveHiredTeamKeys, TEAM_KEYS } from '@/lib/team-library';
 
 export default async function InvestorDashboard() {
-  const user = await currentUser();
-  if (!user) redirect('/sign-in');
+  const { userId } = await auth();
+  if (!userId) redirect('/sign-in');
 
   const dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id },
-    include: {
+    where: { clerkId: userId },
+    relationLoadStrategy: 'join',
+    select: {
+      role: true,
+      nickname: true,
+      phone: true,
+      wechatId: true,
       avatars: {
-        include: {
+        select: {
+          name: true,
           chats: {
-            include: {
-              messages: {
-                orderBy: { createdAt: 'desc' },
-                take: 1,
-              },
+            select: {
+              needsInvestorReview: true,
+              qualificationStatus: true,
             },
-            orderBy: { updatedAt: 'desc' },
           },
         },
       },
       integrations: {
-        include: {
+        select: {
+          provider: true,
+          status: true,
+          accountEmail: true,
+          accountName: true,
+          updatedAt: true,
           snapshots: {
+            select: {
+              summary: true,
+              createdAt: true,
+            },
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
         },
       },
       wechatSources: {
+        select: {
+          displayName: true,
+          description: true,
+          updatedAt: true,
+        },
         orderBy: { updatedAt: 'desc' },
       },
       teamHires: {

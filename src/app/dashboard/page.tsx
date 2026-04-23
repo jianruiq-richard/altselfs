@@ -1,17 +1,20 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 
 export default async function Dashboard() {
-  const user = await currentUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     redirect('/sign-in');
   }
 
   // Check if user exists in our database
   const dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id }
+    where: { clerkId: userId },
+    select: {
+      role: true,
+    },
   });
 
   // If user doesn't exist in our database, show one-time OPC setup

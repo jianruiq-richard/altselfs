@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { FigmaShell } from '@/components/figma-shell';
@@ -86,15 +86,35 @@ function buildMockConversations(baseAvatarId: string): ReceivedConversationItem[
   });
 }
 
-export default async function MyDigitalTwinPage() {
-  const user = await currentUser();
-  if (!user) redirect('/sign-in');
-
-  let dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id },
-    include: {
+async function getInvestorTwinData(clerkId: string) {
+  return prisma.user.findUnique({
+    where: { clerkId },
+    relationLoadStrategy: 'join',
+    select: {
+      id: true,
+      role: true,
+      name: true,
+      email: true,
+      nickname: true,
+      phone: true,
+      wechatId: true,
+      _count: {
+        select: {
+          integrations: true,
+          wechatSources: true,
+        },
+      },
       avatars: {
-        include: {
+        orderBy: { createdAt: 'asc' },
+        take: 1,
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          systemPrompt: true,
+          avatar: true,
+          status: true,
+          isPublic: true,
           _count: {
             select: {
               chats: true,
@@ -105,7 +125,14 @@ export default async function MyDigitalTwinPage() {
               updatedAt: 'desc',
             },
             take: 20,
-            include: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              summary: true,
+              qualificationReason: true,
+              createdAt: true,
+              updatedAt: true,
               candidate: {
                 select: {
                   id: true,
@@ -118,6 +145,9 @@ export default async function MyDigitalTwinPage() {
                   createdAt: 'desc',
                 },
                 take: 1,
+                select: {
+                  content: true,
+                },
               },
               _count: {
                 select: {
@@ -127,12 +157,16 @@ export default async function MyDigitalTwinPage() {
             },
           },
         },
-        orderBy: { createdAt: 'asc' },
       },
-      integrations: true,
-      wechatSources: true,
     },
   });
+}
+
+export default async function MyDigitalTwinPage() {
+  const { userId } = await auth();
+  if (!userId) redirect('/sign-in');
+
+  let dbUser = await getInvestorTwinData(userId);
 
   if (!dbUser || dbUser.role !== 'INVESTOR') {
     redirect('/dashboard');
@@ -154,49 +188,7 @@ export default async function MyDigitalTwinPage() {
       },
     });
 
-    dbUser = await prisma.user.findUnique({
-      where: { clerkId: user.id },
-      include: {
-        avatars: {
-          include: {
-            _count: {
-              select: {
-                chats: true,
-              },
-            },
-            chats: {
-              orderBy: {
-                updatedAt: 'desc',
-              },
-              take: 20,
-              include: {
-                candidate: {
-                  select: {
-                    id: true,
-                    nickname: true,
-                    name: true,
-                  },
-                },
-                messages: {
-                  orderBy: {
-                    createdAt: 'desc',
-                  },
-                  take: 1,
-                },
-                _count: {
-                  select: {
-                    messages: true,
-                  },
-                },
-              },
-            },
-          },
-          orderBy: { createdAt: 'asc' },
-        },
-        integrations: true,
-        wechatSources: true,
-      },
-    });
+    dbUser = await getInvestorTwinData(userId);
   }
 
   if (!dbUser || dbUser.role !== 'INVESTOR' || dbUser.avatars.length === 0) {
@@ -205,12 +197,12 @@ export default async function MyDigitalTwinPage() {
 
   const defaultAvatarRecord = dbUser.avatars[0];
   const totalChats = defaultAvatarRecord._count.chats;
-  const totalTokens = 2400 + totalChats * 320 + dbUser.integrations.length * 450 + dbUser.wechatSources.length * 180;
+  const totalTokens = 2400 + totalChats * 320 + dbUser._count.integrations * 450 + dbUser._count.wechatSources * 180;
 
   const completionSeed = [
     20,
-    dbUser.integrations.length > 0 ? 15 : 0,
-    dbUser.wechatSources.length > 0 ? 15 : 0,
+    dbUser._count.integrations > 0 ? 15 : 0,
+    dbUser._count.wechatSources > 0 ? 15 : 0,
     dbUser.nickname ? 10 : 0,
     dbUser.phone ? 10 : 0,
     dbUser.wechatId ? 10 : 0,

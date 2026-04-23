@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
@@ -11,29 +11,39 @@ export default async function ChatDetailPage({
   params: Promise<{ id: string; chatId: string }>
 }) {
   const { id, chatId } = await params;
-  const user = await currentUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     redirect('/sign-in');
   }
 
-  // Get user data from our database
-  const dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id },
-  });
-
-  if (!dbUser || dbUser.role !== 'INVESTOR') {
-    redirect('/dashboard');
-  }
-
-  // Get chat and verify ownership
-  const chat = await prisma.chat.findUnique({
-    where: { id: chatId },
-    include: {
-      avatar: true,
+  const chat = await prisma.chat.findFirst({
+    where: {
+      id: chatId,
+      avatarId: id,
+      avatar: {
+        investor: {
+          clerkId: userId,
+          role: 'INVESTOR',
+        },
+      },
+    },
+    relationLoadStrategy: 'join',
+    select: {
+      id: true,
+      title: true,
+      summary: true,
+      qualificationScore: true,
+      qualificationStatus: true,
+      qualificationReason: true,
+      needsInvestorReview: true,
+      avatar: {
+        select: {
+          name: true,
+        },
+      },
       candidate: {
         select: {
-          id: true,
           nickname: true,
           name: true,
           email: true,
@@ -45,11 +55,17 @@ export default async function ChatDetailPage({
         orderBy: {
           createdAt: 'asc',
         },
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          createdAt: true,
+        },
       },
     },
   });
 
-  if (!chat || chat.avatar.investorId !== dbUser.id) {
+  if (!chat) {
     redirect('/dashboard');
   }
 

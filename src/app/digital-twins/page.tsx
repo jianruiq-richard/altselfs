@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { FigmaShell } from '@/components/figma-shell';
@@ -166,18 +166,25 @@ function normalizeCardFromAvatar(input: {
 }
 
 export default async function DigitalTwinsPage() {
-  const user = await currentUser();
-  if (!user) redirect('/sign-in');
+  const { userId } = await auth();
+  if (!userId) redirect('/sign-in');
 
   const dbUser = await prisma.user.findUnique({
-    where: { clerkId: user.id },
+    where: { clerkId: userId },
     select: { role: true },
   });
   if (!dbUser) redirect('/dashboard');
 
   const avatars = await prisma.avatar.findMany({
     where: { status: 'ACTIVE', isPublic: true },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      avatar: true,
+      description: true,
+      systemPrompt: true,
+      status: true,
+      isPublic: true,
       investor: {
         select: {
           name: true,
