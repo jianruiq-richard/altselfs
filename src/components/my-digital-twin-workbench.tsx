@@ -473,7 +473,7 @@ export default function MyDigitalTwinWorkbench({
                   <div className="mt-4 flex gap-2">
                     {conv.chatId ? (
                       <Link
-                        href={`/investor/avatar/${conv.avatarId}/chat/${conv.chatId}`}
+                        href={`/avatar/${conv.avatarId}/chat/${conv.chatId}`}
                         className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                       >
                         查看完整对话
@@ -485,7 +485,7 @@ export default function MyDigitalTwinWorkbench({
                     )}
                     {conv.chatId ? (
                       <Link
-                        href={`/investor/avatar/${conv.avatarId}/chat/${conv.chatId}`}
+                        href={`/avatar/${conv.avatarId}/chat/${conv.chatId}`}
                         className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                       >
                         <MessageCircle className="mr-2 h-4 w-4" />

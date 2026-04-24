@@ -36,7 +36,7 @@ export function FigmaShell({
     () => [
       { key: 'home', name: '工作台', href: homeHref, icon: Home },
       { key: 'hall', name: '数字分身大厅', href: '/digital-twins', icon: Users, activePrefixes: ['/candidate', '/chat'] },
-      { key: 'my-twin', name: '我的数字分身', href: '/investor/avatar/new', icon: Sparkles, activePrefixes: ['/investor/avatar'] },
+      { key: 'my-twin', name: '我的数字分身', href: '/avatar', icon: Sparkles, activePrefixes: ['/avatar'] },
       { key: 'talent', name: 'AI人才大厅', href: '/ai-talent', icon: Briefcase },
       { key: 'accounts', name: '部门管理', href: '/accounts', icon: UserCircle },
       { key: 'messages', name: '信息中心', href: '/messages', icon: Mail },
