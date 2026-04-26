@@ -93,20 +93,20 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
       ) : (
         <div className="space-y-5">
           {avatar.chats.map((chat) => (
-            <div key={chat.id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div>
+            <div key={chat.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <h3 className="text-lg font-semibold text-gray-900">
                     {chat.title || `与 ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} 的对话`}
                   </h3>
-                  <p className="text-sm text-gray-500">
+                  <p className="break-all text-sm text-gray-500">
                     {chat.candidate.nickname || chat.candidate.name || '匿名用户'} ({displayEmail(chat.candidate.email)})
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
                     电话：{chat.candidate.phone || '未填写'} · 微信：{chat.candidate.wechatId || '未填写'}
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
                     chat.status === 'ACTIVE'
                       ? 'bg-green-100 text-green-800'
@@ -128,7 +128,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
               )}
 
               <div className="bg-slate-50 rounded-lg p-3 mb-4 border border-slate-200">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-slate-700">
                     AI评估分数: <span className="font-semibold">{chat.qualificationScore}</span>
                   </p>
@@ -160,7 +160,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                       className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div
-                        className={`max-w-sm px-4 py-2 rounded-lg text-sm ${
+                        className={`max-w-[85%] px-4 py-2 rounded-lg text-sm sm:max-w-sm ${
                           message.role === 'user'
                             ? 'bg-blue-100 text-blue-900'
                             : 'bg-gray-100 text-gray-900'
@@ -178,15 +178,15 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                 </div>
               </div>
 
-              <div className="flex gap-2 mt-4 pt-4 border-t">
+              <div className="mt-4 flex flex-col gap-2 border-t pt-4 sm:flex-row">
                 <Link
                   href={`/avatar/${avatar.id}/chat/${chat.id}`}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+                  className="rounded-xl bg-blue-600 px-4 py-3 text-center text-sm text-white hover:bg-blue-700 sm:py-2"
                 >
                   查看完整对话
                 </Link>
                 {chat.needsInvestorReview && (
-                  <span className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded text-sm">
+                  <span className="rounded bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-700 sm:py-2">
                     建议你现在亲自介入
                   </span>
                 )}

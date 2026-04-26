@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "AltSelfs XiaoHongShu Connector",
+  "version": "0.1.0",
+  "description": "Connect your logged-in XiaoHongShu browser session to AltSelfs.",
+  "permissions": ["cookies", "storage", "webRequest"],
+  "host_permissions": [
+    "https://xiaohongshu.com/*",
+    "https://*.xiaohongshu.com/*",
+    "http://localhost:3000/*",
+    "https://*.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:3000/*", "https://*.vercel.app/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

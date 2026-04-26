@@ -37,13 +37,36 @@
   --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
 }
 
+html {
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
+  min-height: 100%;
   background: #f9fafb;
   color: var(--foreground);
   font-family: var(--font-sans);
   line-height: 1.5;
+  overflow-x: hidden;
 }
 
 a {
   text-decoration: none;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select,
+  button {
+    font-size: 16px;
+  }
 }

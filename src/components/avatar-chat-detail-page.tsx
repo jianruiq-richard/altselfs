@@ -89,7 +89,7 @@ export default async function AvatarChatDetailPage({
 
       <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3">
         <div className="max-w-4xl">
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2 text-sm sm:gap-3">
             <span className="text-slate-600">
               AI评分: <span className="font-semibold text-slate-900">{chat.qualificationScore}</span>
             </span>
@@ -128,7 +128,7 @@ export default async function AvatarChatDetailPage({
           ) : (
             <div className="space-y-6">
               {chat.messages.map((message) => (
-                <div key={message.id} className="flex items-start gap-4">
+                <div key={message.id} className="flex items-start gap-3 sm:gap-4">
                   <div className="flex-shrink-0">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                       message.role === 'user' ? 'bg-green-100' : 'bg-blue-100'
@@ -146,7 +146,7 @@ export default async function AvatarChatDetailPage({
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                       <span className="font-semibold text-gray-900">
                         {message.role === 'user' ? chat.candidate.nickname || chat.candidate.name || '用户' : chat.avatar.name}
                       </span>
@@ -165,16 +165,16 @@ export default async function AvatarChatDetailPage({
         </div>
 
         <div className="mx-auto mt-8 max-w-4xl border-t pt-8">
-          <div className="flex gap-4 justify-center">
+          <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
             {chat.candidate.email && !isFallbackEmail(chat.candidate.email) ? (
               <Link
                 href={`mailto:${chat.candidate.email}?subject=${encodeURIComponent(`关于你的项目：${chat.title || chat.avatar.name}`)}`}
-                className="rounded-xl bg-green-600 px-6 py-2 text-white hover:bg-green-700"
+                className="rounded-xl bg-green-600 px-6 py-3 text-center text-white hover:bg-green-700 sm:py-2"
               >
                 通过邮箱联系
               </Link>
             ) : (
-              <span className="bg-slate-100 text-slate-600 px-6 py-2 rounded-lg">
+              <span className="rounded-lg bg-slate-100 px-6 py-3 text-center text-slate-600 sm:py-2">
                 暂无可用邮箱
               </span>
             )}

@@ -149,8 +149,8 @@ export default function InvestorAgentChatPage() {
       }
     >
       {briefing ? (
-        <div className="mb-6 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 sm:p-5">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-semibold text-gray-900">每日晨报</h2>
             <span className="text-xs text-gray-500">
               {briefing.date} · {briefing.generatedTime}
@@ -171,7 +171,7 @@ export default function InvestorAgentChatPage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white">
-        <div className="h-[56vh] overflow-y-auto p-5">
+        <div className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5">
           {loading ? (
             <div className="py-8 text-center text-slate-600">加载中...</div>
           ) : (
@@ -179,7 +179,7 @@ export default function InvestorAgentChatPage() {
               {messages.map((message, index) => (
                 <div key={`${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div
-                    className={`max-w-xs rounded-2xl px-4 py-3 lg:max-w-md ${
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 sm:max-w-xs lg:max-w-md ${
                       message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
                     }`}
                   >
@@ -192,7 +192,7 @@ export default function InvestorAgentChatPage() {
           )}
         </div>
 
-        <div className="border-t border-slate-200 p-4">
+        <div className="border-t border-slate-200 p-4 [padding-bottom:max(1rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2">
             {suggestedQuestions.map((question) => (
               <button
@@ -212,19 +212,19 @@ export default function InvestorAgentChatPage() {
               e.preventDefault();
               void handleSend();
             }}
-            className="mx-auto flex max-w-3xl gap-3"
+            className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row"
           >
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="输入你的问题..."
               rows={3}
-              className="flex-1 resize-none rounded-xl border border-slate-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="min-h-[7rem] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-0 sm:py-2"
             />
             <button
               type="submit"
               disabled={!input.trim() || sending}
-              className="self-end rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:self-end sm:py-2"
             >
               {sending ? '发送中...' : '发送'}
             </button>

@@ -264,27 +264,27 @@ export default async function InvestorDashboardPage() {
       </div>
 
       <div className="mb-8 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50">
-        <div className="p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <div className="p-4 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-orange-600">
                 <Newspaper className="h-6 w-6 text-white" />
               </div>
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">每日晨报</h2>
-                <p className="flex items-center gap-2 text-sm text-gray-600">
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">每日晨报</h2>
+                <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-600">
                   <Clock className="h-4 w-4" />
                   {dailyBriefing.date} · {dailyBriefing.generatedTime}由总裁秘书Momo生成
                 </p>
               </div>
             </div>
-            <Link href="/investor/chat/100" className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            <Link href="/investor/chat/100" className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 sm:py-2">
               与总裁秘书Momo对话
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </div>
         </div>
-        <div className="space-y-6 px-6 pb-6">
+        <div className="space-y-6 px-4 pb-4 sm:px-6 sm:pb-6">
           <div>
             <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">🌍 外界信息精选</h3>
             <div className="grid gap-4 md:grid-cols-3">
@@ -365,18 +365,18 @@ export default async function InvestorDashboardPage() {
         </div>
       </div>
 
-      <div className="mb-8 rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <div className="mb-8 rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
               <Sparkles className="h-6 w-6 text-white" />
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">我的数字分身</h2>
+            <div className="min-w-0">
+              <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">我的数字分身</h2>
               <p className="text-sm text-gray-500">你的 AI 化身，越使用越懂你</p>
             </div>
           </div>
-          <Link href="/avatar" className="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <Link href="/avatar" className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 sm:py-2">
             管理分身
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
@@ -399,17 +399,17 @@ export default async function InvestorDashboardPage() {
       </div>
 
       <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h2 className="text-xl font-bold text-gray-900">我的 AI 团队</h2>
             <p className="text-sm text-gray-500">按部门组织的 AI 员工团队</p>
           </div>
-          <div className="flex gap-2">
-            <Link href="/ai-talent" className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link href="/ai-talent" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
               <Briefcase className="mr-1 h-4 w-4" />
               雇佣员工
             </Link>
-            <Link href="/accounts" className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+            <Link href="/accounts" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
               管理部门
               <ArrowRight className="ml-1 h-4 w-4" />
             </Link>
@@ -436,12 +436,12 @@ export default async function InvestorDashboardPage() {
       </div>
 
       <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h2 className="text-xl font-bold text-gray-900">信息处理运营部门</h2>
             <p className="text-sm text-gray-500">外部消息助手统一归入本部门管理</p>
           </div>
-          <Link href="/investor/info-ops" className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+          <Link href="/investor/info-ops" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
             进入部门管理
             <ArrowRight className="ml-1 h-4 w-4" />
           </Link>
@@ -473,12 +473,12 @@ export default async function InvestorDashboardPage() {
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h2 className="text-xl font-bold text-gray-900">最近摘要</h2>
             <p className="text-sm text-gray-500">模块化摘要视图，可持续扩展更多团队</p>
           </div>
-          <Link href="/messages" className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+          <Link href="/messages" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
             查看全部
             <ArrowRight className="ml-1 h-4 w-4" />
           </Link>

@@ -296,18 +296,18 @@ export default async function AccountsPage() {
         </div>
       </div>
 
-      <div className="mb-8 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-purple-50 p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="mb-8 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-purple-50 p-4 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
               <Plus className="h-6 w-6 text-white" />
             </div>
-            <div>
-            <h2 className="text-xl font-bold text-gray-900">雇佣新的AI员工</h2>
-            <p className="mt-1 text-sm text-gray-600">前往 AI 人才大厅，雇佣单个员工或整个部门</p>
+            <div className="min-w-0">
+              <h2 className="text-xl font-bold text-gray-900">雇佣新的AI员工</h2>
+              <p className="mt-1 text-sm text-gray-600">前往 AI 人才大厅，雇佣单个员工或整个部门</p>
             </div>
           </div>
-          <a href="/ai-talent" className="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+          <a href="/ai-talent" className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 sm:py-2.5">
             去人才大厅
             <ChevronRight className="ml-1 h-4 w-4" />
           </a>
@@ -316,13 +316,13 @@ export default async function AccountsPage() {
 
       <div className="space-y-6">
         {departments.map((dept) => (
-          <div key={dept.id} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
+          <div key={dept.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-4">
                 <div className={`flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br ${dept.color}`}>
                   <dept.icon className="h-7 w-7 text-white" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-xl font-semibold text-gray-900">{dept.name}</h3>
                   <p className="text-sm text-gray-600">{dept.description}</p>
                 </div>
@@ -340,13 +340,13 @@ export default async function AccountsPage() {
               <div className="space-y-4">
                 {dept.employeeRows.map((employee) => (
                   <div key={employee.id} className="rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300">
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex flex-1 items-start gap-4">
                         <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
                           <Bot className="h-6 w-6 text-white" />
                         </div>
-                        <div className="flex-1">
-                          <div className="mb-1 flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
                             <h4 className="font-semibold text-gray-900">{employee.typeName}</h4>
                             <span
                               className={`rounded px-2 py-0.5 text-xs ${
@@ -357,14 +357,14 @@ export default async function AccountsPage() {
                             </span>
                           </div>
                           <p className="mb-2 text-sm text-gray-600">{employee.account}</p>
-                          <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
                             <span>AI员工: {employee.agentName}</span>
                             <span>·</span>
                             <span>今日处理: {employee.processedToday} 条</span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
                         <button type="button" className="rounded-md p-2 text-gray-500 hover:bg-gray-100" aria-label="进入详情">
                           <Briefcase className="h-4 w-4" />
                         </button>

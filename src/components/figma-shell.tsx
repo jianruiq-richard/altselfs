@@ -75,8 +75,8 @@ export function FigmaShell({
   }, [navItems, pathname]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 text-slate-900">
-      <aside className="h-full w-64 shrink-0 border-r border-gray-200 bg-white">
+    <div className="min-h-screen bg-gray-50 text-slate-900 md:flex md:h-screen md:overflow-hidden">
+      <aside className="hidden h-full w-64 shrink-0 border-r border-gray-200 bg-white md:block">
         <div className="flex h-full flex-col">
           <div className="border-b border-gray-200 px-6 py-6">
             <div>
@@ -132,20 +132,63 @@ export function FigmaShell({
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-7xl p-8">
+      <div className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur md:hidden">
+        <div className="mx-auto flex w-full items-center justify-between gap-3 px-4 py-3 [padding-top:max(0.75rem,env(safe-area-inset-top))]">
+          <div className="min-w-0">
+            <p className="text-lg font-bold text-gray-900">OPC平台</p>
+            <p className="truncate text-xs text-gray-500">AI员工管理系统</p>
+          </div>
+          <Link
+            href="/profile"
+            className="flex min-w-0 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-sm font-semibold text-white">
+              {(user?.fullName || '用').slice(0, 1)}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-gray-900">{user?.fullName || '用户名'}</p>
+              <p className="truncate text-xs text-gray-500">{user?.primaryEmailAddress?.emailAddress || 'user@example.com'}</p>
+            </div>
+          </Link>
+        </div>
+      </div>
+
+      <main className="min-w-0 flex-1 md:overflow-y-auto">
+        <div className="mx-auto w-full max-w-7xl px-4 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-8 lg:pb-8">
           {showPageHeader ? (
-            <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="mb-6 flex flex-col gap-3 sm:mb-8 md:flex-row md:items-start md:justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
-                {subtitle ? <p className="mt-2 text-gray-500">{subtitle}</p> : null}
+                <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{title}</h1>
+                {subtitle ? <p className="mt-2 max-w-3xl text-sm text-gray-500 sm:text-base">{subtitle}</p> : null}
               </div>
-              {actions ? <div className="shrink-0">{actions}</div> : null}
+              {actions ? <div className="shrink-0 self-start">{actions}</div> : null}
             </div>
           ) : null}
           {children}
         </div>
       </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 backdrop-blur md:hidden">
+        <div className="overflow-x-auto px-2 py-2 [padding-bottom:max(0.5rem,env(safe-area-inset-bottom))]">
+          <div className="flex min-w-max items-center gap-1">
+            {navItems.map((item) => {
+              const isActive = activeNavKey === item.key;
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  className={`flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs transition-colors ${
+                    isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span className="whitespace-nowrap">{item.name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </nav>
     </div>
   );
 }

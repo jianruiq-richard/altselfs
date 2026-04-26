@@ -175,19 +175,22 @@ export default function MyDigitalTwinWorkbench({
 
   return (
     <div>
-      <div className="mb-8 flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">我的数字分身</h1>
-          <p className="mt-2 text-gray-500">不断充实你的数字分身，让它越来越懂你</p>
+      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">我的数字分身</h1>
+          <p className="mt-2 text-sm text-gray-500 sm:text-base">不断充实你的数字分身，让它越来越懂你</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start">
           <button
             type="button"
             onClick={handleTogglePublic}
             disabled={isLoading}
-            className="inline-flex items-center gap-2 text-sm text-gray-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {isPublic ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            <span className="inline-flex items-center gap-2">
+              {isPublic ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              {isPublic ? '公开展示' : '仅自己可见'}
+            </span>
             <span
               className={`relative inline-flex h-6 w-10 items-center rounded-full transition-colors ${
                 isPublic ? 'bg-[#030213]' : 'bg-[#cbced4]'
@@ -199,22 +202,21 @@ export default function MyDigitalTwinWorkbench({
                 }`}
               />
             </span>
-            {isPublic ? '公开展示' : '仅自己可见'}
           </button>
-          <Link href="/digital-twins" className="inline-flex items-center rounded-lg bg-[#030213] px-4 py-2 text-sm font-medium text-white hover:bg-black">
+          <Link href="/digital-twins" className="inline-flex items-center justify-center rounded-lg bg-[#030213] px-4 py-3 text-sm font-medium text-white hover:bg-black sm:py-2">
             <MessageCircle className="mr-2 h-4 w-4" />
             与我的分身对话
           </Link>
         </div>
       </div>
 
-          <div className="mb-8 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-purple-50 p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
+      <div className="mb-8 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-purple-50 p-4 sm:p-6">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h3 className="mb-1 text-xl font-bold text-gray-900">完整度: {totalCompletion}%</h3>
             <p className="text-sm text-gray-600">继续完善，让你的数字分身更加丰满</p>
           </div>
-          <div className="text-right">
+          <div className="text-left sm:text-right">
             <div className="text-3xl font-bold text-blue-600">{(totalTokens + knowledgeTokens).toLocaleString()}</div>
             <p className="text-sm text-gray-600">上下文tokens</p>
           </div>
@@ -237,7 +239,7 @@ export default function MyDigitalTwinWorkbench({
         </div>
       </div>
 
-      <div className="mb-6 inline-flex h-9 flex-wrap items-center rounded-xl bg-[#ececf0] p-[3px] text-[#717182]">
+      <div className="mb-6 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 text-[#717182]">
         {[
           ['overview', '概览'],
           ['conversations', `收到的对话 ${receivedConversations.length}`],
@@ -250,10 +252,10 @@ export default function MyDigitalTwinWorkbench({
             key={key}
             type="button"
             onClick={() => setActiveTab(key as typeof activeTab)}
-            className={`inline-flex h-[calc(100%-1px)] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-2 py-1 text-sm font-medium transition-[color,box-shadow] ${
+            className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium transition-[color,box-shadow] ${
               activeTab === key
-                ? 'border-transparent bg-white text-[#030213]'
-                : 'border-transparent text-[#717182] hover:text-[#030213]'
+                ? 'border-transparent bg-white text-[#030213] shadow-sm ring-1 ring-black/5'
+                : 'border-transparent bg-[#ececf0] text-[#717182] hover:text-[#030213]'
             }`}
           >
             {label}
@@ -268,7 +270,7 @@ export default function MyDigitalTwinWorkbench({
             <p className="mt-1 text-sm text-gray-500">这些信息会影响别人如何认识你的数字分身</p>
 
             <form onSubmit={handleSaveAvatar} className="mt-5 space-y-4">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
                 <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-4xl text-white">
                   {(formData.name || '分').slice(0, 1)}
                 </div>
@@ -347,15 +349,15 @@ export default function MyDigitalTwinWorkbench({
           </div>
 
           <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-blue-50 p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
+            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
                 <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
                   <Users className="h-5 w-5 text-green-600" />
                   收到的对话
                 </h3>
                 <p className="mt-1 text-sm text-gray-500">其他用户与你的数字分身的对话</p>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <div className="text-3xl font-bold text-green-600">{receivedConversations.length}</div>
                 <p className="text-sm text-gray-600">总对话数</p>
               </div>
@@ -397,15 +399,15 @@ export default function MyDigitalTwinWorkbench({
 
       {activeTab === 'conversations' ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <h2 className="flex items-center gap-2 text-xl font-bold text-gray-900">
                 <Users className="h-5 w-5 text-blue-600" />
                 收到的对话记录
               </h2>
               <p className="text-sm text-gray-500">查看所有与你数字分身对话的访客及 AI 总结</p>
             </div>
-            <span className="rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-700">
+            <span className="self-start rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-700">
               {receivedConversations.length} 个对话
             </span>
           </div>
@@ -419,12 +421,12 @@ export default function MyDigitalTwinWorkbench({
           ) : (
             <div className="space-y-4">
               {receivedConversations.map((conv) => (
-                <div key={conv.id} className="rounded-xl border-2 border-gray-200 p-5 transition-colors hover:border-blue-300">
-                  <div className="mb-4 flex items-start gap-4">
+                <div key={conv.id} className="rounded-xl border-2 border-gray-200 p-4 transition-colors hover:border-blue-300 sm:p-5">
+                  <div className="mb-4 flex items-start gap-3 sm:gap-4">
                     <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-2xl text-white">
                       {conv.visitor.avatar}
                     </div>
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-bold text-gray-900">{conv.visitor.name}</h3>
                         <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{conv.visitor.title}</span>
@@ -470,29 +472,29 @@ export default function MyDigitalTwinWorkbench({
                     <p className="ml-7 text-sm leading-relaxed text-gray-700">{conv.aiSummary}</p>
                   </div>
 
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                     {conv.chatId ? (
                       <Link
                         href={`/avatar/${conv.avatarId}/chat/${conv.chatId}`}
-                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg border border-gray-300 px-3 py-3 text-center text-sm text-gray-700 hover:bg-gray-50 sm:py-2"
                       >
                         查看完整对话
                       </Link>
                     ) : (
-                      <button type="button" className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+                      <button type="button" className="rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 sm:py-2">
                         查看完整对话
                       </button>
                     )}
                     {conv.chatId ? (
                       <Link
                         href={`/avatar/${conv.avatarId}/chat/${conv.chatId}`}
-                        className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2"
                       >
                         <MessageCircle className="mr-2 h-4 w-4" />
                         回复访客
                       </Link>
                     ) : (
-                      <button type="button" className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+                      <button type="button" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 sm:py-2">
                         <MessageCircle className="mr-2 h-4 w-4" />
                         回复访客
                       </button>
@@ -507,8 +509,8 @@ export default function MyDigitalTwinWorkbench({
 
       {activeTab === 'skills' ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <h2 className="text-xl font-bold text-gray-900">技能专长</h2>
               <p className="text-sm text-gray-500">记录你的技能和专长，AI会学习你的专业知识</p>
             </div>
@@ -526,9 +528,9 @@ export default function MyDigitalTwinWorkbench({
           <div className="space-y-3">
             {skills.map((skill) => (
               <div key={skill.id} className="rounded-lg border border-gray-200 p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="mb-1 flex items-center gap-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-gray-900">{skill.name}</h3>
                       <span className="rounded bg-blue-600 px-2 py-0.5 text-xs text-white">{skill.level}</span>
                       <span className="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-600">{skill.category}</span>
@@ -547,8 +549,8 @@ export default function MyDigitalTwinWorkbench({
 
       {activeTab === 'knowledge' ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <h2 className="text-xl font-bold text-gray-900">知识库（无限上下文）</h2>
               <p className="text-sm text-gray-500">像 Figma demo 一样先展示概念，后续再逐项接通</p>
             </div>
@@ -565,8 +567,8 @@ export default function MyDigitalTwinWorkbench({
           </div>
 
           <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <p className="font-medium text-blue-900">总计 {knowledgeTokens.toLocaleString()} tokens</p>
                 <p className="mt-1 text-sm text-blue-700">持续积累知识，分身表达会更接近你</p>
               </div>
@@ -577,7 +579,7 @@ export default function MyDigitalTwinWorkbench({
           <div className="space-y-3">
             {knowledge.map((item) => (
               <div key={item.id} className="rounded-lg border border-gray-200 p-4">
-                <div className="mb-1 flex items-center justify-between">
+                <div className="mb-1 flex items-start justify-between gap-3">
                   <h3 className="font-semibold text-gray-900">{item.title}</h3>
                   <button type="button" onClick={() => setKnowledge((prev) => prev.filter((k) => k.id !== item.id))} className="rounded p-1 text-red-600 hover:bg-red-50">
                     <Trash2 className="h-4 w-4" />

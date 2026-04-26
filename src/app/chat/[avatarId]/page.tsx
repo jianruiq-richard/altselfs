@@ -148,7 +148,7 @@ export default function ChatPage() {
       }
     >
       <div className="rounded-2xl border border-slate-200 bg-white">
-        <div className="h-[56vh] overflow-y-auto p-5">
+        <div className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5">
           <div className="mx-auto max-w-3xl space-y-4">
             {messages.length === 0 && (
               <div className="py-8 text-center">
@@ -167,7 +167,7 @@ export default function ChatPage() {
             {messages.map((message, index) => (
               <div key={message.id || index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-xs rounded-2xl px-4 py-3 lg:max-w-md ${
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 sm:max-w-xs lg:max-w-md ${
                     message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
                   }`}
                 >
@@ -181,7 +181,7 @@ export default function ChatPage() {
 
             {isSending && (
               <div className="flex justify-start">
-                <div className="max-w-xs rounded-2xl bg-slate-100 px-4 py-3 text-slate-700 lg:max-w-md">
+                <div className="max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-slate-700 sm:max-w-xs lg:max-w-md">
                   正在回复...
                 </div>
               </div>
@@ -189,13 +189,13 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="border-t border-slate-200 p-4">
-          <form onSubmit={sendMessage} className="mx-auto flex max-w-3xl gap-3">
+        <div className="border-t border-slate-200 p-4 [padding-bottom:max(1rem,env(safe-area-inset-bottom))]">
+          <form onSubmit={sendMessage} className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row">
             <textarea
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="输入你的消息..."
-              className="flex-1 resize-none rounded-xl border border-slate-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="min-h-[7rem] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-0 sm:py-2"
               rows={3}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -207,7 +207,7 @@ export default function ChatPage() {
             <button
               type="submit"
               disabled={!newMessage.trim() || isSending}
-              className="self-end rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:self-end sm:py-2"
             >
               {isSending ? '发送中...' : '发送'}
             </button>

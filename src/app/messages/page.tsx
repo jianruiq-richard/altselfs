@@ -256,12 +256,12 @@ export default async function MessagesPage() {
         {list.map((item) => (
           <div
             key={item.id}
-            className={`rounded-2xl border p-5 shadow-sm transition-colors hover:bg-gray-50 ${
+            className={`rounded-2xl border p-4 shadow-sm transition-colors hover:bg-gray-50 sm:p-5 ${
               item.isRead ? 'border-gray-200 bg-white' : 'border-blue-200 bg-blue-50/40'
             }`}
           >
             <div className="mb-3 flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 {(() => {
                   const Icon = sourceIconMap[item.source as keyof typeof sourceIconMap] || MessageSquare;
                   return (
@@ -287,7 +287,7 @@ export default async function MessagesPage() {
             </div>
 
             <div className="mt-3 flex items-center gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                     item.priority === 'high'
