@@ -35,6 +35,15 @@ type ExecutiveTurnResult = {
   body: Record<string, unknown>;
 };
 
+type ExecutiveExecutionSnapshot = {
+  planner: ExecutivePlannerStepDefinition[];
+  plannerTrace: ExecutivePlannerTraceItem[];
+  document?: unknown;
+  subagents?: unknown;
+  toolCalls?: unknown;
+  recentToolCalls?: unknown;
+};
+
 function buildBriefingContext(briefing: {
   date: string;
   generatedTime: string;
@@ -66,19 +75,67 @@ function buildBriefingContext(briefing: {
   ].join('\n');
 }
 
+function compactForModel(value: unknown, depth = 0): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string') return value.length > 1200 ? `${value.slice(0, 1200)}...` : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (depth >= 4) return '[truncated]';
+  if (Array.isArray(value)) return value.slice(0, 12).map((item) => compactForModel(item, depth + 1));
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>).slice(0, 20)) {
+      out[key] = compactForModel(item, depth + 1);
+    }
+    return out;
+  }
+  return String(value);
+}
+
+function buildExecutionContext(snapshot?: ExecutiveExecutionSnapshot | null) {
+  if (!snapshot) return '暂无执行记录。';
+  return JSON.stringify(compactForModel(snapshot), null, 2);
+}
+
+async function loadRecentExecutionRecords(threadId: string) {
+  const toolCalls = await prisma.agentToolCall.findMany({
+    where: { threadId },
+    orderBy: { createdAt: 'desc' },
+    take: 6,
+    select: {
+      toolName: true,
+      status: true,
+      toolArgs: true,
+      toolResult: true,
+      createdAt: true,
+    },
+  });
+
+  return toolCalls.map((item) => ({
+    toolName: item.toolName,
+    status: item.status,
+    createdAt: item.createdAt.toISOString(),
+    toolArgs: compactForModel(item.toolArgs),
+    toolResult: compactForModel(item.toolResult),
+  }));
+}
+
 async function generateExecutiveReply(
   messages: ClientMessage[],
   briefing: ExecutiveDailyBriefing,
-  systemPrompt: string
+  systemPrompt: string,
+  executionSnapshot?: ExecutiveExecutionSnapshot | null
 ) {
   const contextPrompt = [
     '下面是当前可用的业务上下文。只在用户明确需要时才引用，不要机械反复提及。',
     buildBriefingContext(briefing),
+    '下面是本轮和最近几轮真实执行记录。它是你回答“刚才调用了什么、执行了什么、哪里报错、拿到了什么结果”的唯一依据。',
+    buildExecutionContext(executionSnapshot),
     '输出约束补充：',
     '1) 回复使用中文口语化表达。',
     '2) 不要使用 markdown 格式符号。',
     '3) 一次最多提出一个问题；不要连续三轮都用问句。',
     '4) 默认优先共情、复述、安抚。',
+    '5) 如果用户要求复盘执行过程，必须区分：计划了什么、实际执行了什么、跳过了什么、哪里报错、拿到哪些中间结果；不要编造未发生的调用。',
   ].join('\n\n');
 
   const chatMessages: ChatMessage[] = [
@@ -230,6 +287,10 @@ async function runExecutiveAssistantTurn(params: {
   });
 
   let persistedBriefing: Awaited<ReturnType<typeof getTodayExecutiveBriefing>> | null = null;
+  let executionSnapshot: ExecutiveExecutionSnapshot = {
+    planner: currentPlanner,
+    plannerTrace,
+  };
 
   try {
     const updateResult = await updateTodayExecutiveBriefing({
@@ -240,6 +301,19 @@ async function runExecutiveAssistantTurn(params: {
     if (updateResult) {
       briefing = updateResult.briefing;
       persistedBriefing = await getTodayExecutiveBriefing(params.investorId);
+      const subagents = updateResult.subagentResults.map((item) => ({
+        agentType: item.agentType,
+        answer: item.answer,
+        briefingItems: item.briefingItems,
+        debug: item.debug,
+      }));
+      executionSnapshot = {
+        planner: currentPlanner,
+        plannerTrace,
+        document: updateResult.document,
+        subagents,
+        toolCalls: updateResult.toolCalls,
+      };
       await appendToolCall({
         threadId: thread.id,
         toolName: 'executive_dynamic_planner',
@@ -248,12 +322,7 @@ async function runExecutiveAssistantTurn(params: {
         toolResult: {
           document: updateResult.document,
           plannerTrace,
-          subagents: updateResult.subagentResults.map((item) => ({
-            agentType: item.agentType,
-            answer: item.answer,
-            briefingItems: item.briefingItems,
-            debug: item.debug,
-          })),
+          subagents,
           toolCalls: updateResult.toolCalls,
         },
       });
@@ -280,6 +349,13 @@ async function runExecutiveAssistantTurn(params: {
     };
   }
 
+  executionSnapshot = {
+    ...executionSnapshot,
+    planner: currentPlanner,
+    plannerTrace,
+    recentToolCalls: await loadRecentExecutionRecords(thread.id),
+  };
+
   await emitPlannerEvent({
     type: 'step',
     step: {
@@ -292,7 +368,7 @@ async function runExecutiveAssistantTurn(params: {
 
   let reply = '';
   try {
-    reply = await generateExecutiveReply(params.messages, briefing, promptConfig.systemPrompt);
+    reply = await generateExecutiveReply(params.messages, briefing, promptConfig.systemPrompt, executionSnapshot);
     await emitPlannerEvent({
       type: 'step',
       step: {
@@ -335,6 +411,9 @@ async function runExecutiveAssistantTurn(params: {
     threadId: thread.id,
     role: 'ASSISTANT',
     content: reply,
+    meta: {
+      executionSnapshot: compactForModel(executionSnapshot),
+    },
   });
 
   return {
