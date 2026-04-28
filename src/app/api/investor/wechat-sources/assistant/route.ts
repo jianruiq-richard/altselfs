@@ -23,12 +23,18 @@ import {
   isWechatProviderReady,
 } from '@/lib/wechat-data-provider/raw';
 
+export const maxDuration = 300;
+
 const WECHAT_PROVIDER = 'WECHAT';
 const MAX_CUSTOM_PROMPT_LENGTH = 8000;
-const DEFAULT_MAX_SOURCES = 2;
-const DEFAULT_MAX_ARTICLES = 6;
-const DEFAULT_DETAIL_FETCHES = 2;
-const DEFAULT_METRICS_FETCHES = 3;
+const DEFAULT_MAX_SOURCES = readPositiveIntEnv('WECHAT_ASSISTANT_DEFAULT_MAX_SOURCES', 12);
+const DEFAULT_MAX_ARTICLES = readPositiveIntEnv('WECHAT_ASSISTANT_DEFAULT_MAX_ARTICLES', 40);
+const DEFAULT_DETAIL_FETCHES = readPositiveIntEnv('WECHAT_ASSISTANT_DEFAULT_DETAIL_FETCHES', 8);
+const DEFAULT_METRICS_FETCHES = readPositiveIntEnv('WECHAT_ASSISTANT_DEFAULT_METRICS_FETCHES', 12);
+const MAX_PLAN_SOURCES = readPositiveIntEnv('WECHAT_ASSISTANT_MAX_PLAN_SOURCES', 50);
+const MAX_PLAN_ARTICLES = readPositiveIntEnv('WECHAT_ASSISTANT_MAX_PLAN_ARTICLES', 120);
+const SOURCE_QUERY_LIMIT = readPositiveIntEnv('WECHAT_ASSISTANT_SOURCE_QUERY_LIMIT', 100);
+const PER_SOURCE_HISTORY_LIMIT = readPositiveIntEnv('WECHAT_ASSISTANT_PER_SOURCE_HISTORY_LIMIT', 20);
 const MAX_TOOL_LOG_DEPTH = 4;
 const MAX_TOOL_LOG_KEYS = 12;
 const MAX_TOOL_LOG_ITEMS = 4;
@@ -95,6 +101,16 @@ type ToolFailureEntry = {
   target?: string;
   detail: string;
 };
+
+function readPositiveIntEnv(key: string, fallback: number) {
+  const value = Number(process.env[key]);
+  if (!Number.isFinite(value) || value < 1) return fallback;
+  return Math.round(value);
+}
+
+function clampInt(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
 
 function isValidBiz(value: string) {
   const biz = value.trim();
@@ -172,11 +188,11 @@ function safeParsePlan(raw: string): WechatToolPlan {
             : undefined,
         maxSources:
           typeof parsed.args?.maxSources === 'number'
-            ? Math.max(1, Math.min(8, Math.round(parsed.args.maxSources)))
+            ? clampInt(parsed.args.maxSources, 1, MAX_PLAN_SOURCES)
             : undefined,
         maxArticles:
           typeof parsed.args?.maxArticles === 'number'
-            ? Math.max(1, Math.min(20, Math.round(parsed.args.maxArticles)))
+            ? clampInt(parsed.args.maxArticles, 1, MAX_PLAN_ARTICLES)
             : undefined,
         realtime: Boolean(parsed.args?.realtime),
       },
@@ -237,8 +253,8 @@ function buildPlannerPrompt(input: { userQuery: string; sources: SourceRecord[];
     '    "contentId":"可选，一级留言ID（拉回复）",',
     '    "maxReplyId":"可选，最大回复ID（拉回复）",',
     '    "offset":0,',
-    '    "maxSources":1-8,',
-    '    "maxArticles":1-20,',
+    `    "maxSources":"可选，1-${MAX_PLAN_SOURCES}",`,
+    `    "maxArticles":"可选，1-${MAX_PLAN_ARTICLES}",`,
     '    "realtime":true/false',
     '  }',
     '}',
@@ -528,7 +544,7 @@ export async function POST(req: NextRequest) {
     prisma.investorWechatSource.findMany({
       where: { investorId: investor.id },
       orderBy: { updatedAt: 'desc' },
-      take: 50,
+      take: SOURCE_QUERY_LIMIT,
       select: {
         displayName: true,
         biz: true,
@@ -615,7 +631,7 @@ export async function POST(req: NextRequest) {
           biz: source.biz,
           name: source.displayName,
           page: 1,
-          count: Math.min(20, maxArticles),
+          count: Math.min(PER_SOURCE_HISTORY_LIMIT, maxArticles),
         });
         return { source, result };
       })

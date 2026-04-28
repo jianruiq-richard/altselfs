@@ -16,6 +16,33 @@ export interface ChatMessage {
   content: string;
 }
 
+type OpenRouterServerTool =
+  | {
+      type: 'openrouter:web_search';
+      parameters?: {
+        engine?: string;
+        max_results?: number;
+        max_total_results?: number;
+        search_context_size?: string;
+      };
+    }
+  | {
+      type: 'openrouter:web_fetch';
+      parameters?: {
+        engine?: string;
+        max_uses?: number;
+        max_content_tokens?: number;
+      };
+    };
+
+type ChatCompletionResult = {
+  choices: Array<{
+    message?: {
+      content?: string | null;
+    };
+  }>;
+};
+
 export interface QualificationResult {
   status: 'PENDING' | 'NEEDS_INFO' | 'QUALIFIED' | 'REJECTED';
   score: number;
@@ -27,6 +54,48 @@ export interface QualificationResult {
 function clampScore(score: number): number {
   if (!Number.isFinite(score)) return 0;
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function readBoolEnv(key: string, fallback: boolean) {
+  const raw = process.env[key];
+  if (raw === undefined) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase());
+}
+
+function readPositiveIntEnv(key: string, fallback: number) {
+  const value = Number(process.env[key]);
+  if (!Number.isFinite(value) || value < 1) return fallback;
+  return Math.round(value);
+}
+
+function getOpenRouterServerTools(): OpenRouterServerTool[] {
+  if (!readBoolEnv('OPENROUTER_WEB_TOOLS_ENABLED', true)) return [];
+
+  const tools: OpenRouterServerTool[] = [];
+  if (readBoolEnv('OPENROUTER_WEB_SEARCH_ENABLED', true)) {
+    tools.push({
+      type: 'openrouter:web_search',
+      parameters: {
+        engine: process.env.OPENROUTER_WEB_SEARCH_ENGINE || 'auto',
+        max_results: readPositiveIntEnv('OPENROUTER_WEB_SEARCH_MAX_RESULTS', 5),
+        max_total_results: readPositiveIntEnv('OPENROUTER_WEB_SEARCH_MAX_TOTAL_RESULTS', 20),
+        search_context_size: process.env.OPENROUTER_WEB_SEARCH_CONTEXT_SIZE || 'medium',
+      },
+    });
+  }
+
+  if (readBoolEnv('OPENROUTER_WEB_FETCH_ENABLED', true)) {
+    tools.push({
+      type: 'openrouter:web_fetch',
+      parameters: {
+        engine: process.env.OPENROUTER_WEB_FETCH_ENGINE || 'auto',
+        max_uses: readPositiveIntEnv('OPENROUTER_WEB_FETCH_MAX_USES', 10),
+        max_content_tokens: readPositiveIntEnv('OPENROUTER_WEB_FETCH_MAX_CONTENT_TOKENS', 50000),
+      },
+    });
+  }
+
+  return tools;
 }
 
 function safeParseQualification(raw: string): QualificationResult {
@@ -54,12 +123,15 @@ function safeParseQualification(raw: string): QualificationResult {
 }
 
 async function requestCompletion(messages: ChatMessage[], model: string) {
-  const completion = await openai.chat.completions.create({
+  const tools = getOpenRouterServerTools();
+  const completion = (await openai.chat.completions.create({
     model,
     messages,
     temperature: 0.7,
     max_tokens: 2000,
-  });
+    stream: false,
+    ...(tools.length > 0 ? { tools } : {}),
+  } as Parameters<typeof openai.chat.completions.create>[0])) as ChatCompletionResult;
 
   return completion.choices[0]?.message?.content || '';
 }
