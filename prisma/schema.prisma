@@ -48,7 +48,28 @@ model User {
   // 投资人 AI 员工配置
   agentConfigs InvestorAgentConfig[]
 
+  // 总裁秘书每日晨报
+  executiveBriefings ExecutiveBriefing[]
+
   @@map("users")
+}
+
+model ExecutiveBriefing {
+  id        String   @id @default(cuid())
+  dateKey   String
+  title     String
+  summary   String
+  sections  Json
+  sources   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  @@unique([investorId, dateKey])
+  @@index([investorId, updatedAt])
+  @@map("executive_briefings")
 }
 
 model InvestorAgentConfig {

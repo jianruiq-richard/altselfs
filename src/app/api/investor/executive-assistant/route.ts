@@ -3,12 +3,22 @@ import { prisma } from '@/lib/prisma';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import { createChatCompletion, type ChatMessage } from '@/lib/openrouter';
 import {
+  appendToolCall,
   appendThreadMessage,
   ensureThread,
   getLatestThreadWithMessages,
   toClientMessages,
 } from '@/lib/agent-session';
-import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
+import { buildExecutiveDailyBriefing, type ExecutiveDailyBriefing } from '@/lib/executive-office';
+import {
+  getExecutivePlannerDefinition,
+  getExecutivePlannerStepDefinition,
+  getTodayExecutiveBriefing,
+  type ExecutivePlannerEvent,
+  type ExecutivePlannerStepDefinition,
+  type ExecutivePlannerTraceItem,
+  updateTodayExecutiveBriefing,
+} from '@/lib/agents/executive-orchestrator';
 import { resolveHiredTeamKeys } from '@/lib/team-library';
 import { EXECUTIVE_MOMO_SYSTEM_PROMPT } from '@/lib/prompts/executive-momo';
 
@@ -18,6 +28,11 @@ const MAX_SYSTEM_PROMPT_LENGTH = 30000;
 type ClientMessage = {
   role: 'user' | 'assistant';
   content: string;
+};
+
+type ExecutiveTurnResult = {
+  status: number;
+  body: Record<string, unknown>;
 };
 
 function buildBriefingContext(briefing: {
@@ -51,14 +66,11 @@ function buildBriefingContext(briefing: {
   ].join('\n');
 }
 
-async function generateExecutiveReply(messages: ClientMessage[], briefing: {
-  date: string;
-  generatedTime: string;
-  headline: string;
-  departmentOverview: Array<{ department: string; status: string; summary: string; progress: number }>;
-  externalInsights: Array<{ category: string; content: string; source: string }>;
-  priorityTasks: Array<{ priority: 'high' | 'medium' | 'low'; task: string; deadline: string; assignedBy: string }>;
-}, systemPrompt: string) {
+async function generateExecutiveReply(
+  messages: ClientMessage[],
+  briefing: ExecutiveDailyBriefing,
+  systemPrompt: string
+) {
   const contextPrompt = [
     '下面是当前可用的业务上下文。只在用户明确需要时才引用，不要机械反复提及。',
     buildBriefingContext(briefing),
@@ -174,13 +186,230 @@ async function loadBriefing(investorId: string) {
   });
 }
 
+async function runExecutiveAssistantTurn(params: {
+  investorId: string;
+  threadId?: string | null;
+  messages: ClientMessage[];
+  onPlannerEvent?: (event: ExecutivePlannerEvent) => void | Promise<void>;
+}): Promise<ExecutiveTurnResult> {
+  const plannerTrace: ExecutivePlannerTraceItem[] = [];
+  let currentPlanner: ExecutivePlannerStepDefinition[] = getExecutivePlannerDefinition();
+  const emitPlannerEvent = async (event: ExecutivePlannerEvent) => {
+    if (event.type === 'planner' && event.steps.length > 0) {
+      currentPlanner = event.steps;
+    }
+    if (event.type === 'step') {
+      plannerTrace.push(event.step);
+    }
+    await params.onPlannerEvent?.(event);
+  };
+
+  await emitPlannerEvent({
+    type: 'planner',
+    steps: getExecutivePlannerDefinition(),
+  });
+
+  const latest = params.messages[params.messages.length - 1];
+  const [loadedBriefing, promptConfig] = await Promise.all([
+    loadBriefing(params.investorId),
+    getExecutiveAgentConfig(params.investorId),
+  ]);
+  if (!loadedBriefing) return { status: 404, body: { error: 'Investor not found', plannerTrace } };
+  let briefing = loadedBriefing;
+
+  const thread = await ensureThread({
+    investorId: params.investorId,
+    agentType: EXECUTIVE_AGENT_TYPE,
+    threadId: params.threadId || null,
+  });
+
+  await appendThreadMessage({
+    threadId: thread.id,
+    role: 'USER',
+    content: latest.content,
+  });
+
+  let persistedBriefing: Awaited<ReturnType<typeof getTodayExecutiveBriefing>> | null = null;
+
+  try {
+    const updateResult = await updateTodayExecutiveBriefing({
+      investorId: params.investorId,
+      userQuery: latest.content,
+      onPlannerEvent: emitPlannerEvent,
+    });
+    if (updateResult) {
+      briefing = updateResult.briefing;
+      persistedBriefing = await getTodayExecutiveBriefing(params.investorId);
+      await appendToolCall({
+        threadId: thread.id,
+        toolName: 'executive_dynamic_planner',
+        status: 'SUCCESS',
+        toolArgs: { userQuery: latest.content },
+        toolResult: {
+          document: updateResult.document,
+          plannerTrace,
+          subagents: updateResult.subagentResults.map((item) => ({
+            agentType: item.agentType,
+            answer: item.answer,
+            briefingItems: item.briefingItems,
+            debug: item.debug,
+          })),
+          toolCalls: updateResult.toolCalls,
+        },
+      });
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'unknown error';
+    await appendToolCall({
+      threadId: thread.id,
+      toolName: 'executive_dynamic_planner',
+      status: 'ERROR',
+      toolArgs: { userQuery: latest.content },
+      toolResult: { error: detail, plannerTrace },
+    });
+    briefing = {
+      ...briefing,
+      externalInsights: [
+        {
+          category: '总裁秘书规划',
+          content: `本轮动态规划执行失败：${detail}`,
+          source: '总裁秘书Orchestrator',
+        },
+        ...briefing.externalInsights,
+      ],
+    };
+  }
+
+  await emitPlannerEvent({
+    type: 'step',
+    step: {
+      ...getExecutivePlannerStepDefinition('generate_reply'),
+      status: 'RUNNING',
+      detail: '正在生成总裁秘书回复。',
+      timestamp: new Date().toISOString(),
+    },
+  });
+
+  let reply = '';
+  try {
+    reply = await generateExecutiveReply(params.messages, briefing, promptConfig.systemPrompt);
+    await emitPlannerEvent({
+      type: 'step',
+      step: {
+        ...getExecutivePlannerStepDefinition('generate_reply'),
+        status: 'SUCCESS',
+        detail: '总裁秘书回复已生成。',
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('[executive-assistant] model generation failed:', error);
+    const detail = error instanceof Error ? error.message : 'unknown error';
+    await emitPlannerEvent({
+      type: 'step',
+      step: {
+        ...getExecutivePlannerStepDefinition('generate_reply'),
+        status: 'ERROR',
+        error: detail,
+        timestamp: new Date().toISOString(),
+      },
+    });
+    return {
+      status: 502,
+      body: {
+        error: `总裁秘书暂时不可用：${detail}`,
+        threadId: thread.id,
+        briefing,
+        planner: currentPlanner,
+        plannerTrace,
+        agentConfig: {
+          systemPrompt: promptConfig.systemPrompt,
+          defaultSystemPrompt: promptConfig.defaultSystemPrompt,
+          hasCustomPrompt: Boolean(promptConfig.customPrompt),
+        },
+      },
+    };
+  }
+
+  await appendThreadMessage({
+    threadId: thread.id,
+    role: 'ASSISTANT',
+    content: reply,
+  });
+
+  return {
+    status: 200,
+    body: {
+      threadId: thread.id,
+      reply,
+      messages: [...params.messages, { role: 'assistant', content: reply }],
+      briefing,
+      persistedBriefing,
+      planner: currentPlanner,
+      plannerTrace,
+      agentConfig: {
+        systemPrompt: promptConfig.systemPrompt,
+        defaultSystemPrompt: promptConfig.defaultSystemPrompt,
+        hasCustomPrompt: Boolean(promptConfig.customPrompt),
+      },
+    },
+  };
+}
+
+function streamExecutiveAssistantTurn(params: {
+  investorId: string;
+  threadId?: string | null;
+  messages: ClientMessage[];
+}) {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      const write = (payload: unknown) => {
+        controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
+      };
+
+      void (async () => {
+        try {
+          const result = await runExecutiveAssistantTurn({
+            ...params,
+            onPlannerEvent: write,
+          });
+          write({
+            type: 'final',
+            status: result.status,
+            data: result.body,
+          });
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : 'unknown error';
+          write({
+            type: 'final',
+            status: 500,
+            data: { error: `AI代理执行失败：${detail}` },
+          });
+        } finally {
+          controller.close();
+        }
+      })();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}
+
 export async function GET() {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const [briefing, promptConfig] = await Promise.all([
+  const [briefing, promptConfig, persistedBriefing] = await Promise.all([
     loadBriefing(investor.id),
     getExecutiveAgentConfig(investor.id),
+    getTodayExecutiveBriefing(investor.id),
   ]);
   if (!briefing) return NextResponse.json({ error: 'Investor not found' }, { status: 404 });
 
@@ -202,6 +431,8 @@ export async function GET() {
     threadId: thread?.id || null,
     messages: thread ? toClientMessages(thread.messages) : [],
     briefing,
+    persistedBriefing,
+    planner: getExecutivePlannerDefinition(),
     agentConfig: {
       systemPrompt: promptConfig.systemPrompt,
       defaultSystemPrompt: promptConfig.defaultSystemPrompt,
@@ -261,62 +492,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '最后一条消息必须是用户消息' }, { status: 400 });
   }
 
-  const [briefing, promptConfig] = await Promise.all([
-    loadBriefing(investor.id),
-    getExecutiveAgentConfig(investor.id),
-  ]);
-  if (!briefing) return NextResponse.json({ error: 'Investor not found' }, { status: 404 });
-
-  const thread = await ensureThread({
+  const turnParams = {
     investorId: investor.id,
-    agentType: EXECUTIVE_AGENT_TYPE,
     threadId: body?.threadId || null,
-  });
+    messages,
+  };
 
-  await appendThreadMessage({
-    threadId: thread.id,
-    role: 'USER',
-    content: latest.content,
-  });
-
-  let reply = '';
-  try {
-    reply = await generateExecutiveReply(messages, briefing, promptConfig.systemPrompt);
-  } catch (error) {
-    console.error('[executive-assistant] model generation failed:', error);
-    const detail = error instanceof Error ? error.message : 'unknown error';
-    return NextResponse.json(
-      {
-        error: `总裁秘书暂时不可用：${detail}`,
-        threadId: thread.id,
-        briefing,
-        agentConfig: {
-          systemPrompt: promptConfig.systemPrompt,
-          defaultSystemPrompt: promptConfig.defaultSystemPrompt,
-          hasCustomPrompt: Boolean(promptConfig.customPrompt),
-        },
-      },
-      { status: 502 }
-    );
+  if (req.nextUrl.searchParams.get('stream') === '1') {
+    return streamExecutiveAssistantTurn(turnParams);
   }
 
-  await appendThreadMessage({
-    threadId: thread.id,
-    role: 'ASSISTANT',
-    content: reply,
-  });
-
-  return NextResponse.json({
-    threadId: thread.id,
-    reply,
-    messages: [...messages, { role: 'assistant', content: reply }],
-    briefing,
-    agentConfig: {
-      systemPrompt: promptConfig.systemPrompt,
-      defaultSystemPrompt: promptConfig.defaultSystemPrompt,
-      hasCustomPrompt: Boolean(promptConfig.customPrompt),
-    },
-  });
+  const result = await runExecutiveAssistantTurn(turnParams);
+  return NextResponse.json(result.body, { status: result.status });
 }
 
 export async function DELETE(req: NextRequest) {

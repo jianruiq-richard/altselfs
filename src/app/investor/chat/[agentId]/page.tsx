@@ -34,12 +34,119 @@ type AgentConfig = {
   hasCustomPrompt: boolean;
 };
 
+type PlannerStepStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'ERROR' | 'SKIPPED';
+
+type PlannerStep = {
+  id: string;
+  title: string;
+  description: string;
+  agentType?: string;
+};
+
+type PlannerTraceItem = PlannerStep & {
+  status: PlannerStepStatus;
+  detail?: string;
+  error?: string;
+  timestamp: string;
+  payload?: unknown;
+};
+
+type PlannerStreamEvent =
+  | {
+      type: 'planner';
+      steps: PlannerStep[];
+    }
+  | {
+      type: 'step';
+      step: PlannerTraceItem;
+    }
+  | {
+      type: 'final';
+      status: number;
+      data: Record<string, unknown>;
+    };
+
 const suggestedQuestions = [
   '汇报一下各部门工作情况',
   '今天有哪些重点事项需要处理？',
   '外界有什么重要信息变化？',
   '晨报的完整内容是什么？',
+  '更新今天的晨报，并重点汇总 AI agent 和 vibe coding 的外界信息。',
 ];
+
+const plannerStatusLabel: Record<PlannerStepStatus, string> = {
+  PENDING: '待执行',
+  RUNNING: '执行中',
+  SUCCESS: '完成',
+  ERROR: '错误',
+  SKIPPED: '跳过',
+};
+
+const plannerStatusClass: Record<PlannerStepStatus, string> = {
+  PENDING: 'bg-slate-100 text-slate-500',
+  RUNNING: 'bg-blue-100 text-blue-700',
+  SUCCESS: 'bg-emerald-100 text-emerald-700',
+  ERROR: 'bg-red-100 text-red-700',
+  SKIPPED: 'bg-amber-100 text-amber-700',
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizePlannerSteps(value: unknown): PlannerStep[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!isRecord(item) || typeof item.id !== 'string' || typeof item.title !== 'string') return null;
+      return {
+        id: item.id,
+        title: item.title,
+        description: typeof item.description === 'string' ? item.description : '',
+        agentType: typeof item.agentType === 'string' ? item.agentType : undefined,
+      };
+    })
+    .filter(Boolean) as PlannerStep[];
+}
+
+function normalizePlannerTrace(value: unknown): PlannerTraceItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!isRecord(item) || typeof item.id !== 'string' || typeof item.title !== 'string') return null;
+      const status = typeof item.status === 'string' ? item.status : 'PENDING';
+      if (!['PENDING', 'RUNNING', 'SUCCESS', 'ERROR', 'SKIPPED'].includes(status)) return null;
+      return {
+        id: item.id,
+        title: item.title,
+        description: typeof item.description === 'string' ? item.description : '',
+        agentType: typeof item.agentType === 'string' ? item.agentType : undefined,
+        status: status as PlannerStepStatus,
+        detail: typeof item.detail === 'string' ? item.detail : undefined,
+        error: typeof item.error === 'string' ? item.error : undefined,
+        timestamp: typeof item.timestamp === 'string' ? item.timestamp : '',
+        payload: item.payload,
+      };
+    })
+    .filter(Boolean) as PlannerTraceItem[];
+}
+
+function getLatestPlannerStatuses(trace: PlannerTraceItem[]) {
+  const map = new Map<string, PlannerTraceItem>();
+  for (const item of trace) {
+    map.set(item.id, item);
+  }
+  return map;
+}
+
+function formatPlannerPayload(payload: unknown) {
+  if (payload === undefined || payload === null) return '';
+  try {
+    return JSON.stringify(payload, null, 2).slice(0, 1200);
+  } catch {
+    return String(payload).slice(0, 1200);
+  }
+}
 
 export default function InvestorAgentChatPage() {
   const params = useParams();
@@ -60,9 +167,21 @@ export default function InvestorAgentChatPage() {
   const [hasCustomPrompt, setHasCustomPrompt] = useState(false);
   const [promptSaving, setPromptSaving] = useState(false);
   const [promptMessage, setPromptMessage] = useState<string | null>(null);
+  const [plannerSteps, setPlannerSteps] = useState<PlannerStep[]>([]);
+  const [plannerTrace, setPlannerTrace] = useState<PlannerTraceItem[]>([]);
+  const [plannerPanelOpen, setPlannerPanelOpen] = useState(false);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
 
   const title = useMemo(() => (isExecutive ? '总裁秘书Momo' : 'AI 助手'), [isExecutive]);
+  const latestPlannerStatuses = useMemo(() => getLatestPlannerStatuses(plannerTrace), [plannerTrace]);
+  const hasPlannerErrors = plannerTrace.some((item) => item.status === 'ERROR');
+  const plannerButtonText = sending
+    ? '正在执行，查看过程'
+    : plannerTrace.length > 0
+      ? hasPlannerErrors
+        ? '查看上次过程和错误'
+        : '查看上次执行过程'
+      : '等待本轮 planner';
 
   const applyAgentConfig = useCallback((agentConfig: AgentConfig | null | undefined) => {
     if (!agentConfig) return;
@@ -71,6 +190,16 @@ export default function InvestorAgentChatPage() {
     setPromptSaved(systemPrompt);
     setDefaultPrompt(String(agentConfig.defaultSystemPrompt || ''));
     setHasCustomPrompt(Boolean(agentConfig.hasCustomPrompt));
+  }, []);
+
+  const applyPlannerEvent = useCallback((event: PlannerStreamEvent) => {
+    if (event.type === 'planner') {
+      setPlannerSteps(normalizePlannerSteps(event.steps));
+      return;
+    }
+    if (event.type === 'step') {
+      setPlannerTrace((items) => [...items, event.step]);
+    }
   }, []);
 
   const loadData = useCallback(async () => {
@@ -87,6 +216,7 @@ export default function InvestorAgentChatPage() {
       setThreadId(data.threadId || null);
       setMessages(Array.isArray(data.messages) ? data.messages : []);
       setBriefing(data.briefing || null);
+      setPlannerSteps(normalizePlannerSteps(data.planner));
       applyAgentConfig(data.agentConfig);
     } catch {
       setError('网络错误，请稍后重试');
@@ -108,9 +238,11 @@ export default function InvestorAgentChatPage() {
     setInput('');
     setSending(true);
     setError(null);
+    setPlannerTrace([]);
+    setPlannerPanelOpen(true);
 
     try {
-      const res = await fetch('/api/investor/executive-assistant', {
+      const res = await fetch('/api/investor/executive-assistant?stream=1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -118,25 +250,86 @@ export default function InvestorAgentChatPage() {
           messages: nextMessages,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/x-ndjson')) {
+        const data = await res.json().catch(() => ({}));
         setError(data.error || '发送失败');
         setMessages(messages);
         return;
       }
 
-      setThreadId(data.threadId || null);
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setError('网络错误，请稍后重试');
+        setMessages(messages);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalData: Record<string, unknown> | null = null;
+      let finalStatus = 500;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as PlannerStreamEvent;
+          if (event.type === 'final') {
+            finalStatus = event.status;
+            finalData = event.data;
+          } else {
+            applyPlannerEvent(event);
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        const event = JSON.parse(buffer) as PlannerStreamEvent;
+        if (event.type === 'final') {
+          finalStatus = event.status;
+          finalData = event.data;
+        } else {
+          applyPlannerEvent(event);
+        }
+      }
+
+      if (!finalData) {
+        setError('AI代理执行失败：未收到最终结果');
+        setMessages(messages);
+        return;
+      }
+
+      const data = finalData;
+      if (finalStatus >= 400) {
+        setError(typeof data.error === 'string' ? data.error : '发送失败');
+        setMessages(messages);
+        setPlannerTrace(normalizePlannerTrace(data.plannerTrace));
+        setPlannerSteps(normalizePlannerSteps(data.planner));
+        return;
+      }
+
+      setThreadId(typeof data.threadId === 'string' ? data.threadId : null);
       if (Array.isArray(data.messages)) {
-        setMessages(data.messages);
+        setMessages(data.messages as ChatMessage[]);
       } else if (typeof data.reply === 'string') {
         setMessages([...nextMessages, { role: 'assistant', content: data.reply }]);
       }
       if (data.briefing) {
-        setBriefing(data.briefing);
+        setBriefing(data.briefing as Briefing);
       }
-      applyAgentConfig(data.agentConfig);
-    } catch {
-      setError('网络错误，请稍后重试');
+      setPlannerSteps(normalizePlannerSteps(data.planner));
+      setPlannerTrace(normalizePlannerTrace(data.plannerTrace));
+      applyAgentConfig(data.agentConfig as AgentConfig | null | undefined);
+      setPlannerPanelOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
       setMessages(messages);
     } finally {
       setSending(false);
@@ -295,6 +488,97 @@ export default function InvestorAgentChatPage() {
           ) : null}
         </div>
       ) : null}
+
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">秘书 Planner</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Momo 会根据每条指令动态生成本轮计划；发送后实时显示，完成后自动收起。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPlannerPanelOpen((open) => !open)}
+            className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+              hasPlannerErrors
+                ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            {plannerPanelOpen ? '收起过程' : plannerButtonText}
+          </button>
+        </div>
+
+        {plannerPanelOpen ? (
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <h3 className="text-sm font-semibold text-slate-900">本轮动态 planner</h3>
+              <div className="mt-3 space-y-2">
+                {plannerSteps.length > 0 ? (
+                  plannerSteps.map((step) => {
+                    const trace = latestPlannerStatuses.get(step.id);
+                    const status = trace?.status || 'PENDING';
+                    return (
+                      <div key={step.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">
+                              {step.title}
+                              {step.agentType ? <span className="ml-2 text-xs text-slate-400">{step.agentType}</span> : null}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-slate-500">{step.description}</p>
+                          </div>
+                          <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${plannerStatusClass[status]}`}>
+                            {plannerStatusLabel[status]}
+                          </span>
+                        </div>
+                        {trace?.detail ? <p className="mt-2 text-xs text-slate-600">{trace.detail}</p> : null}
+                        {trace?.error ? <p className="mt-2 text-xs text-red-600">{trace.error}</p> : null}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-slate-500">发送一条指令后，这里会显示 Momo 为本轮任务动态生成的计划。</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-950 p-3 text-slate-100">
+              <h3 className="text-sm font-semibold">过程详细</h3>
+              <div className="mt-3 max-h-96 space-y-3 overflow-y-auto pr-1">
+                {plannerTrace.length > 0 ? (
+                  plannerTrace.map((item, index) => {
+                    const payloadText = formatPlannerPayload(item.payload);
+                    return (
+                      <div key={`${item.id}-${item.timestamp}-${index}`} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">{item.title}</p>
+                            <p className="mt-1 text-xs text-slate-400">{item.timestamp || '时间未知'}</p>
+                          </div>
+                          <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${plannerStatusClass[item.status]}`}>
+                            {plannerStatusLabel[item.status]}
+                          </span>
+                        </div>
+                        {item.detail ? <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-300">{item.detail}</p> : null}
+                        {item.error ? <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-red-300">{item.error}</p> : null}
+                        {payloadText ? (
+                          <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-2 text-[11px] leading-5 text-slate-300">
+                            {payloadText}
+                          </pre>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-slate-400">发送“更新今天的晨报...”后，这里会实时追加执行过程。</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       {briefing ? (
         <div className="mb-6 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 sm:p-5">
