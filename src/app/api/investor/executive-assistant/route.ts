@@ -8,7 +8,7 @@ import {
   getLatestThreadWithMessages,
   toClientMessages,
 } from '@/lib/agent-session';
-import { buildExecutiveAssistantReply, buildExecutiveDailyBriefing } from '@/lib/executive-office';
+import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
 import { resolveHiredTeamKeys } from '@/lib/team-library';
 import { EXECUTIVE_MOMO_SYSTEM_PROMPT } from '@/lib/prompts/executive-momo';
 
@@ -283,8 +283,21 @@ export async function POST(req: NextRequest) {
   try {
     reply = await generateExecutiveReply(messages, briefing, promptConfig.systemPrompt);
   } catch (error) {
-    console.error('[executive-assistant] model generation failed, fallback to rule-based reply:', error);
-    reply = buildExecutiveAssistantReply(latest.content, briefing);
+    console.error('[executive-assistant] model generation failed:', error);
+    const detail = error instanceof Error ? error.message : 'unknown error';
+    return NextResponse.json(
+      {
+        error: `总裁秘书暂时不可用：${detail}`,
+        threadId: thread.id,
+        briefing,
+        agentConfig: {
+          systemPrompt: promptConfig.systemPrompt,
+          defaultSystemPrompt: promptConfig.defaultSystemPrompt,
+          hasCustomPrompt: Boolean(promptConfig.customPrompt),
+        },
+      },
+      { status: 502 }
+    );
   }
 
   await appendThreadMessage({

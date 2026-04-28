@@ -251,7 +251,7 @@ export default async function AccountsPage() {
 
   return (
     <FigmaShell
-      homeHref={dbUser.role === 'INVESTOR' ? '/dashboard' : '/candidate'}
+      homeHref="/dashboard"
       title="部门管理"
       subtitle="管理你的AI员工团队和部门架构"
     >

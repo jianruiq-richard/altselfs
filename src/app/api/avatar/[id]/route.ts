@@ -60,7 +60,7 @@ export async function GET(
     }
 
     // Only avatar owner can read systemPrompt
-    if (avatar.investorId === dbUser.id && dbUser.role === 'INVESTOR') {
+    if (avatar.investorId === dbUser.id) {
       return NextResponse.json({ avatar });
     }
 
@@ -127,7 +127,7 @@ export async function PUT(
     const dbUser = await prisma.user.findUnique({
       where: { clerkId: userId },
     });
-    if (!dbUser || dbUser.role !== 'INVESTOR') {
+    if (!dbUser) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

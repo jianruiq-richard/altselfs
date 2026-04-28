@@ -259,7 +259,7 @@ export default async function AITalentPage() {
 
   return (
     <FigmaShell
-      homeHref={dbUser.role === 'INVESTOR' ? '/dashboard' : '/candidate'}
+      homeHref="/dashboard"
       title="AI人才大厅"
       subtitle="雇佣AI员工，组建你的专属团队"
     >

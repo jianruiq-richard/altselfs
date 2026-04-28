@@ -173,11 +173,23 @@ function getErrorMessage(error: unknown): string {
   return 'unknown error';
 }
 
+function uniqueModels(models: Array<string | undefined | null>) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const model of models) {
+    const value = model?.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
+}
+
 export async function createChatCompletion(
   messages: ChatMessage[],
   model?: string
 ) {
-  const candidates = [
+  const candidates = uniqueModels([
     model,
     process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.4',
     process.env.OPENROUTER_MODEL_FALLBACK || 'openai/gpt-5.4-mini',
@@ -185,7 +197,7 @@ export async function createChatCompletion(
     process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'openai/gpt-4o-mini',
     process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'openai/gpt-5.4-nano',
     'openai/gpt-4o-mini',
-  ].filter(Boolean) as string[];
+  ]);
 
   let lastError: unknown;
   const tried: string[] = [];
@@ -208,7 +220,7 @@ export async function createJsonChatCompletion(
   messages: ChatMessage[],
   model?: string
 ) {
-  const candidates = [
+  const candidates = uniqueModels([
     model,
     process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.4',
     process.env.OPENROUTER_MODEL_FALLBACK || 'openai/gpt-5.4-mini',
@@ -216,7 +228,7 @@ export async function createJsonChatCompletion(
     process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'openai/gpt-4o-mini',
     process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'openai/gpt-5.4-nano',
     'openai/gpt-4o-mini',
-  ].filter(Boolean) as string[];
+  ]);
 
   let lastError: unknown;
   const tried: string[] = [];

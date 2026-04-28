@@ -168,7 +168,7 @@ export default async function AvatarHomePage() {
 
   let dbUser = await getInvestorTwinData(userId);
 
-  if (!dbUser || dbUser.role !== 'INVESTOR') {
+  if (!dbUser) {
     redirect('/dashboard');
   }
 
@@ -191,7 +191,7 @@ export default async function AvatarHomePage() {
     dbUser = await getInvestorTwinData(userId);
   }
 
-  if (!dbUser || dbUser.role !== 'INVESTOR' || dbUser.avatars.length === 0) {
+  if (!dbUser || dbUser.avatars.length === 0) {
     redirect('/dashboard');
   }
 

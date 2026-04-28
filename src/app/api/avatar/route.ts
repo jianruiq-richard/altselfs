@@ -74,8 +74,8 @@ export async function POST(req: NextRequest) {
       where: { clerkId: userId },
     });
 
-    if (!user || user.role !== 'INVESTOR') {
-      return NextResponse.json({ error: 'User not found or not an investor' }, { status: 403 });
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 403 });
     }
 
     // Single-twin mode: always keep one avatar per account.

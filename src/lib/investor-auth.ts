@@ -11,9 +11,5 @@ export async function getInvestorOrNull() {
     where: { clerkId: userId },
   });
 
-  if (!user || user.role !== 'INVESTOR') {
-    return null;
-  }
-
   return user;
 }

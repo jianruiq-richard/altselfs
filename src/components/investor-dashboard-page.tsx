@@ -83,7 +83,6 @@ export default async function InvestorDashboardPage() {
   });
 
   if (!dbUser) redirect('/dashboard/setup?role=investor');
-  if (dbUser.role !== 'INVESTOR') redirect('/candidate');
 
   const integrationMap = new Map(dbUser.integrations.map((it) => [it.provider, it]));
   const gmail = integrationMap.get('GMAIL');
