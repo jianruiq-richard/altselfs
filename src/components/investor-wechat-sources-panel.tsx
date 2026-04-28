@@ -34,6 +34,18 @@ type AddSourceLog = {
   input?: Record<string, unknown>;
 };
 
+async function readResponsePayload(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return {
+      error: text.slice(0, 500) || `请求失败（HTTP ${res.status}）`,
+    };
+  }
+}
+
 export default function InvestorWechatSourcesPanel({
   initialSources,
 }: {
@@ -234,18 +246,28 @@ export default function InvestorWechatSourcesPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: nextMessages, threadId: assistantThreadId }),
       });
-      const data = await res.json();
+      const data = await readResponsePayload(res);
       if (!res.ok) {
         setAssistantMessages((prev) => [
           ...prev,
-          { role: 'assistant', content: data.error || 'AI员工暂时不可用，请稍后重试。' },
+          {
+            role: 'assistant',
+            content:
+              typeof data.error === 'string' && data.error.trim()
+                ? data.error
+                : 'AI员工暂时不可用，请稍后重试。',
+          },
         ]);
         return;
       }
 
       setAssistantMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: data.reply || '已收到，但暂无回复。' },
+        {
+          role: 'assistant',
+          content:
+            typeof data.reply === 'string' && data.reply.trim() ? data.reply : '已收到，但暂无回复。',
+        },
       ]);
       if (data.threadId) {
         setAssistantThreadId(String(data.threadId));

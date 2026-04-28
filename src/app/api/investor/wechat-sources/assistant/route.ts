@@ -25,6 +25,14 @@ import {
 
 const WECHAT_PROVIDER = 'WECHAT';
 const MAX_CUSTOM_PROMPT_LENGTH = 8000;
+const DEFAULT_MAX_SOURCES = 2;
+const DEFAULT_MAX_ARTICLES = 6;
+const DEFAULT_DETAIL_FETCHES = 2;
+const DEFAULT_METRICS_FETCHES = 3;
+const MAX_TOOL_LOG_DEPTH = 4;
+const MAX_TOOL_LOG_KEYS = 12;
+const MAX_TOOL_LOG_ITEMS = 4;
+const MAX_TOOL_LOG_STRING = 600;
 
 type ClientMessage = {
   role: 'user' | 'assistant';
@@ -75,6 +83,17 @@ type ArticleCandidate = {
   url: string;
   publishAt: string | null;
   summary: string;
+};
+
+type ToolResultEntry = {
+  tool: string;
+  result: unknown;
+};
+
+type ToolFailureEntry = {
+  tool: string;
+  target?: string;
+  detail: string;
 };
 
 function isValidBiz(value: string) {
@@ -269,7 +288,7 @@ function toArticleCandidates(sourceName: string, biz: string, payload: unknown):
 }
 
 function chooseSources(sources: SourceRecord[], plan: WechatToolPlan, userQuery: string) {
-  const maxSources = plan.args?.maxSources || 3;
+  const maxSources = plan.args?.maxSources || DEFAULT_MAX_SOURCES;
   if (plan.args?.bizList && plan.args.bizList.length > 0) {
     return sources.filter((source) => plan.args?.bizList?.includes(source.biz)).slice(0, maxSources);
   }
@@ -298,6 +317,88 @@ function renderCandidates(candidates: ArticleCandidate[]) {
 function renderToolResults(results: Array<{ tool: string; result: unknown }>) {
   if (results.length === 0) return '无工具结果。';
   return results.map((r, i) => `${i + 1}. ${r.tool}\n${JSON.stringify(r.result)}`).join('\n\n');
+}
+
+function renderToolFailures(failures: ToolFailureEntry[]) {
+  if (failures.length === 0) return '无工具异常。';
+  return failures
+    .map((item, index) => `${index + 1}. ${item.tool}${item.target ? `(${item.target})` : ''}: ${item.detail}`)
+    .join('\n');
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  return 'unknown error';
+}
+
+function compactValue(value: unknown, depth = 0): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string') {
+    if (value.length <= MAX_TOOL_LOG_STRING) return value;
+    return `${value.slice(0, MAX_TOOL_LOG_STRING)}...[truncated ${value.length - MAX_TOOL_LOG_STRING} chars]`;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (depth >= MAX_TOOL_LOG_DEPTH) return '[truncated depth]';
+  if (Array.isArray(value)) {
+    const items = value.slice(0, MAX_TOOL_LOG_ITEMS).map((item) => compactValue(item, depth + 1));
+    if (value.length > MAX_TOOL_LOG_ITEMS) {
+      items.push(`[truncated ${value.length - MAX_TOOL_LOG_ITEMS} items]`);
+    }
+    return items;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).slice(0, MAX_TOOL_LOG_KEYS);
+    const next: Record<string, unknown> = {};
+    for (const [key, item] of entries) {
+      next[key] = compactValue(item, depth + 1);
+    }
+    const totalKeys = Object.keys(value as Record<string, unknown>).length;
+    if (totalKeys > MAX_TOOL_LOG_KEYS) {
+      next.__truncatedKeys = totalKeys - MAX_TOOL_LOG_KEYS;
+    }
+    return next;
+  }
+  return String(value);
+}
+
+function summarizeToolPayload(payload: unknown) {
+  return compactValue(payload, 0);
+}
+
+async function logToolCallSafe(params: {
+  threadId: string;
+  messageId?: string | null;
+  toolName: string;
+  toolArgs?: unknown;
+  toolResult?: unknown;
+  status?: 'SUCCESS' | 'ERROR';
+}) {
+  try {
+    await appendToolCall({
+      threadId: params.threadId,
+      messageId: params.messageId,
+      toolName: params.toolName,
+      toolArgs: summarizeToolPayload(params.toolArgs),
+      toolResult: summarizeToolPayload(params.toolResult),
+      status: params.status || 'SUCCESS',
+    });
+  } catch (error) {
+    console.error(`[wechat-assistant] failed to append tool log (${params.toolName}):`, error);
+  }
+}
+
+function pushToolFailure(
+  failures: ToolFailureEntry[],
+  tool: string,
+  error: unknown,
+  target?: string
+) {
+  failures.push({
+    tool,
+    target,
+    detail: getErrorMessage(error),
+  });
 }
 
 function extractCommentIdFromDetail(payload: unknown) {
@@ -477,16 +578,20 @@ export async function POST(req: NextRequest) {
   let plan: WechatToolPlan = {
     action: 'mixed_analysis',
     reason: 'default',
-    args: { maxSources: 3, maxArticles: 8 },
+    args: { maxSources: DEFAULT_MAX_SOURCES, maxArticles: DEFAULT_MAX_ARTICLES },
   };
   try {
     const raw = await createJsonChatCompletion(plannerInput);
     plan = safeParsePlan(raw);
   } catch {
-    plan = { action: 'mixed_analysis', reason: 'planner failed', args: { maxSources: 3, maxArticles: 8 } };
+    plan = {
+      action: 'mixed_analysis',
+      reason: 'planner failed',
+      args: { maxSources: DEFAULT_MAX_SOURCES, maxArticles: DEFAULT_MAX_ARTICLES },
+    };
   }
 
-  await appendToolCall({
+  await logToolCallSafe({
     threadId: thread.id,
     messageId: userMessageId,
     toolName: 'wechat_planner',
@@ -496,14 +601,15 @@ export async function POST(req: NextRequest) {
   });
 
   const selectedSources = chooseSources(validSources, plan, userQuery);
-  const maxArticles = plan.args?.maxArticles || 8;
+  const maxArticles = plan.args?.maxArticles || DEFAULT_MAX_ARTICLES;
   const keyword = plan.args?.keyword || '';
-  const toolResults: Array<{ tool: string; result: unknown }> = [];
+  const toolResults: ToolResultEntry[] = [];
+  const toolFailures: ToolFailureEntry[] = [];
   let candidates: ArticleCandidate[] = [];
 
   const needList = ['list_source_articles', 'mixed_analysis'].includes(plan.action);
   if (needList) {
-    const listResults = await Promise.all(
+    const listResults = await Promise.allSettled(
       selectedSources.map(async (source) => {
         const result = await listArticlesByAccount({
           biz: source.biz,
@@ -515,46 +621,60 @@ export async function POST(req: NextRequest) {
       })
     );
     for (const item of listResults) {
-      const arr = toArticleCandidates(item.source.displayName, item.source.biz, item.result);
+      if (item.status !== 'fulfilled') {
+        pushToolFailure(toolFailures, 'listArticlesByAccount', item.reason);
+        continue;
+      }
+      const { source, result } = item.value;
+      const arr = toArticleCandidates(source.displayName, source.biz, result);
       candidates.push(...arr);
       toolResults.push({
         tool: 'listArticlesByAccount',
         result: {
-          source: item.source.displayName,
-          biz: item.source.biz,
+          source: source.displayName,
+          biz: source.biz,
           count: arr.length,
           sample: arr.slice(0, 3),
         },
       });
-      await appendToolCall({
+      await logToolCallSafe({
         threadId: thread.id,
         messageId: userMessageId,
         toolName: 'listArticlesByAccount',
-        toolArgs: { biz: item.source.biz, name: item.source.displayName },
-        toolResult: item.result,
+        toolArgs: { biz: source.biz, name: source.displayName },
+        toolResult: result,
         status: 'SUCCESS',
       });
     }
   }
 
   if (plan.action === 'search_global_articles') {
-    const result = plan.args?.realtime
-      ? await searchRealtimeArticles({ keyword: keyword || userQuery, mode: 1, page: 1, limit: maxArticles })
-      : await searchArticles({ keyword: keyword || userQuery, page: 1, limit: maxArticles });
-    const arr = toArticleCandidates('全网搜索', '', result);
-    candidates.push(...arr);
-    toolResults.push({
-      tool: plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
-      result: { count: arr.length, sample: arr.slice(0, 5) },
-    });
-    await appendToolCall({
-      threadId: thread.id,
-      messageId: userMessageId,
-      toolName: plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
-      toolArgs: { keyword: keyword || userQuery, limit: maxArticles },
-      toolResult: result,
-      status: 'SUCCESS',
-    });
+    try {
+      const result = plan.args?.realtime
+        ? await searchRealtimeArticles({ keyword: keyword || userQuery, mode: 1, page: 1, limit: maxArticles })
+        : await searchArticles({ keyword: keyword || userQuery, page: 1, limit: maxArticles });
+      const arr = toArticleCandidates('全网搜索', '', result);
+      candidates.push(...arr);
+      toolResults.push({
+        tool: plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
+        result: { count: arr.length, sample: arr.slice(0, 5) },
+      });
+      await logToolCallSafe({
+        threadId: thread.id,
+        messageId: userMessageId,
+        toolName: plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
+        toolArgs: { keyword: keyword || userQuery, limit: maxArticles },
+        toolResult: result,
+        status: 'SUCCESS',
+      });
+    } catch (error) {
+      pushToolFailure(
+        toolFailures,
+        plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
+        error,
+        keyword || userQuery
+      );
+    }
   }
 
   if (keyword) {
@@ -569,7 +689,7 @@ export async function POST(req: NextRequest) {
     if (plan.args?.targetUrl) detailTargets.add(plan.args.targetUrl);
     for (const url of plan.args?.articleUrls || []) detailTargets.add(url);
     if (detailTargets.size === 0) {
-      for (const c of candidates.slice(0, Math.min(3, maxArticles))) detailTargets.add(c.url);
+      for (const c of candidates.slice(0, Math.min(DEFAULT_DETAIL_FETCHES, maxArticles))) detailTargets.add(c.url);
     }
   }
 
@@ -578,20 +698,29 @@ export async function POST(req: NextRequest) {
     if (plan.args?.targetUrl) metricsTargets.add(plan.args.targetUrl);
     for (const url of plan.args?.articleUrls || []) metricsTargets.add(url);
     if (metricsTargets.size === 0) {
-      for (const c of candidates.slice(0, Math.min(5, maxArticles))) metricsTargets.add(c.url);
+      for (const c of candidates.slice(0, Math.min(DEFAULT_METRICS_FETCHES, maxArticles))) metricsTargets.add(c.url);
     }
   }
 
   const detailResults: Array<{ url: string; detail: unknown }> = [];
-  for (const url of detailTargets) {
-    const detail = await getArticleDetail({ url });
-    detailResults.push({ url, detail });
-    await appendToolCall({
+  const detailSettled = await Promise.allSettled(
+    [...detailTargets].map(async (url) => ({
+      url,
+      detail: await getArticleDetail({ url }),
+    }))
+  );
+  for (const item of detailSettled) {
+    if (item.status !== 'fulfilled') {
+      pushToolFailure(toolFailures, 'getArticleDetail', item.reason);
+      continue;
+    }
+    detailResults.push(item.value);
+    await logToolCallSafe({
       threadId: thread.id,
       messageId: userMessageId,
       toolName: 'getArticleDetail',
-      toolArgs: { url },
-      toolResult: detail,
+      toolArgs: { url: item.value.url },
+      toolResult: item.value.detail,
       status: 'SUCCESS',
     });
   }
@@ -600,21 +729,33 @@ export async function POST(req: NextRequest) {
       tool: 'getArticleDetail',
       result: {
         count: detailResults.length,
-        sample: detailResults.slice(0, 2),
+        sample: detailResults.slice(0, 2).map((item) => ({
+          url: item.url,
+          detail: summarizeToolPayload(item.detail),
+        })),
       },
     });
   }
 
   const metricResults: Array<{ url: string; metrics: unknown }> = [];
-  for (const url of metricsTargets) {
-    const metrics = await getArticleMetrics({ url });
-    metricResults.push({ url, metrics });
-    await appendToolCall({
+  const metricsSettled = await Promise.allSettled(
+    [...metricsTargets].map(async (url) => ({
+      url,
+      metrics: await getArticleMetrics({ url }),
+    }))
+  );
+  for (const item of metricsSettled) {
+    if (item.status !== 'fulfilled') {
+      pushToolFailure(toolFailures, 'getArticleMetrics', item.reason);
+      continue;
+    }
+    metricResults.push(item.value);
+    await logToolCallSafe({
       threadId: thread.id,
       messageId: userMessageId,
       toolName: 'getArticleMetrics',
-      toolArgs: { url },
-      toolResult: metrics,
+      toolArgs: { url: item.value.url },
+      toolResult: item.value.metrics,
       status: 'SUCCESS',
     });
   }
@@ -623,7 +764,10 @@ export async function POST(req: NextRequest) {
       tool: 'getArticleMetrics',
       result: {
         count: metricResults.length,
-        sample: metricResults.slice(0, 3),
+        sample: metricResults.slice(0, 3).map((item) => ({
+          url: item.url,
+          metrics: summarizeToolPayload(item.metrics),
+        })),
       },
     });
   }
@@ -642,22 +786,27 @@ export async function POST(req: NextRequest) {
     if (plan.args?.targetUrl) commentUrlTargets.add(plan.args.targetUrl);
     for (const url of plan.args?.articleUrls || []) commentUrlTargets.add(url);
     if (commentUrlTargets.size === 0) {
-      for (const c of candidates.slice(0, Math.min(3, maxArticles))) commentUrlTargets.add(c.url);
+      for (const c of candidates.slice(0, Math.min(DEFAULT_DETAIL_FETCHES, maxArticles))) commentUrlTargets.add(c.url);
     }
 
     for (const url of commentUrlTargets) {
       let detail = detailCache.get(url);
       if (!detail) {
-        detail = await getArticleDetail({ url });
-        detailCache.set(url, detail);
-        await appendToolCall({
-          threadId: thread.id,
-          messageId: userMessageId,
-          toolName: 'getArticleDetail',
-          toolArgs: { url, reason: 'resolve_comment_id' },
-          toolResult: detail,
-          status: 'SUCCESS',
-        });
+        try {
+          detail = await getArticleDetail({ url });
+          detailCache.set(url, detail);
+          await logToolCallSafe({
+            threadId: thread.id,
+            messageId: userMessageId,
+            toolName: 'getArticleDetail',
+            toolArgs: { url, reason: 'resolve_comment_id' },
+            toolResult: detail,
+            status: 'SUCCESS',
+          });
+        } catch (error) {
+          pushToolFailure(toolFailures, 'getArticleDetail', error, url);
+          continue;
+        }
       }
       const commentId = extractCommentIdFromDetail(detail);
       if (commentId) {
@@ -672,32 +821,38 @@ export async function POST(req: NextRequest) {
       dedupMap.set(key, item);
     }
 
-    for (const item of dedupMap.values()) {
-      const comments = await getArticleComments({
-        commentId: item.commentId,
-        buffer: plan.args?.buffer,
-        contentId: plan.args?.contentId,
-        maxReplyId: plan.args?.maxReplyId,
-        offset: plan.args?.offset,
-      });
-      commentResults.push({
+    const commentsSettled = await Promise.allSettled(
+      [...dedupMap.values()].map(async (item) => ({
         url: item.url,
         commentId: item.commentId,
-        comments,
-      });
-      await appendToolCall({
-        threadId: thread.id,
-        messageId: userMessageId,
-        toolName: 'getArticleComments',
-        toolArgs: {
-          url: item.url,
+        comments: await getArticleComments({
           commentId: item.commentId,
           buffer: plan.args?.buffer,
           contentId: plan.args?.contentId,
           maxReplyId: plan.args?.maxReplyId,
           offset: plan.args?.offset,
+        }),
+      }))
+    );
+    for (const item of commentsSettled) {
+      if (item.status !== 'fulfilled') {
+        pushToolFailure(toolFailures, 'getArticleComments', item.reason);
+        continue;
+      }
+      commentResults.push(item.value);
+      await logToolCallSafe({
+        threadId: thread.id,
+        messageId: userMessageId,
+        toolName: 'getArticleComments',
+        toolArgs: {
+          url: item.value.url,
+          commentId: item.value.commentId,
+          buffer: plan.args?.buffer,
+          contentId: plan.args?.contentId,
+          maxReplyId: plan.args?.maxReplyId,
+          offset: plan.args?.offset,
         },
-        toolResult: comments,
+        toolResult: item.value.comments,
         status: 'SUCCESS',
       });
     }
@@ -707,7 +862,37 @@ export async function POST(req: NextRequest) {
       tool: 'getArticleComments',
       result: {
         count: commentResults.length,
-        sample: commentResults.slice(0, 2),
+        sample: commentResults.slice(0, 2).map((item) => ({
+          url: item.url,
+          commentId: item.commentId,
+          comments: summarizeToolPayload(item.comments),
+        })),
+      },
+    });
+  }
+
+  if (toolResults.length === 0 && toolFailures.length > 0) {
+    const reply = `公众号数据抓取失败，当前未拿到可用结果：\n${renderToolFailures(toolFailures)}`;
+    await appendThreadMessage({
+      threadId: thread.id,
+      role: 'ASSISTANT',
+      content: reply,
+      meta: {
+        plan,
+        failures: toolFailures,
+      },
+    });
+    return NextResponse.json({
+      ok: true,
+      reply,
+      threadId: thread.id,
+      planner: plan,
+      debug: {
+        candidateCount: candidates.length,
+        detailCount: detailResults.length,
+        metricsCount: metricResults.length,
+        commentCount: commentResults.length,
+        failures: toolFailures.length,
       },
     });
   }
@@ -728,6 +913,7 @@ export async function POST(req: NextRequest) {
     { role: 'system', content: `本轮执行计划：${JSON.stringify(plan)}` },
     { role: 'system', content: `候选文章：\n${renderCandidates(candidates)}` },
     { role: 'system', content: `工具结果：\n${renderToolResults(toolResults)}` },
+    { role: 'system', content: `工具异常：\n${renderToolFailures(toolFailures)}` },
     ...messages.map((message) => ({ role: message.role, content: message.content })),
   ];
 
