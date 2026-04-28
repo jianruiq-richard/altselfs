@@ -52,8 +52,8 @@ const MAX_CUSTOM_PROMPT_LENGTH = 8000;
 
 function getMailAgentModelCandidates() {
   const models = [
-    process.env.OPENROUTER_MODEL_MAIL_AGENT_PRIMARY || 'openai/gpt-5.2',
-    process.env.OPENROUTER_MODEL_MAIL_AGENT_FALLBACK || 'openai/gpt-5.2-mini',
+    process.env.OPENROUTER_MODEL_MAIL_AGENT_PRIMARY || 'openai/gpt-5.4',
+    process.env.OPENROUTER_MODEL_MAIL_AGENT_FALLBACK || 'openai/gpt-5.4-mini',
     process.env.OPENROUTER_MODEL_PRIMARY,
     process.env.OPENROUTER_MODEL_FALLBACK,
     process.env.OPENROUTER_MODEL_BACKUP,

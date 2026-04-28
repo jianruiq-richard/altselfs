@@ -179,11 +179,11 @@ export async function createChatCompletion(
 ) {
   const candidates = [
     model,
-    process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.2',
-    process.env.OPENROUTER_MODEL_FALLBACK || 'anthropic/claude-sonnet-4.5',
-    process.env.OPENROUTER_MODEL_BACKUP || 'anthropic/claude-3.5-sonnet',
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'deepseek/deepseek-chat-v3-0324',
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'qwen/qwen-2.5-72b-instruct',
+    process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.4',
+    process.env.OPENROUTER_MODEL_FALLBACK || 'openai/gpt-5.4-mini',
+    process.env.OPENROUTER_MODEL_BACKUP || 'openai/gpt-5.2',
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'openai/gpt-4o-mini',
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'openai/gpt-5.4-nano',
     'openai/gpt-4o-mini',
   ].filter(Boolean) as string[];
 
@@ -210,11 +210,11 @@ export async function createJsonChatCompletion(
 ) {
   const candidates = [
     model,
-    process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.2',
-    process.env.OPENROUTER_MODEL_FALLBACK || 'anthropic/claude-sonnet-4.5',
-    process.env.OPENROUTER_MODEL_BACKUP || 'anthropic/claude-3.5-sonnet',
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'deepseek/deepseek-chat-v3-0324',
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'qwen/qwen-2.5-72b-instruct',
+    process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.4',
+    process.env.OPENROUTER_MODEL_FALLBACK || 'openai/gpt-5.4-mini',
+    process.env.OPENROUTER_MODEL_BACKUP || 'openai/gpt-5.2',
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'openai/gpt-4o-mini',
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'openai/gpt-5.4-nano',
     'openai/gpt-4o-mini',
   ].filter(Boolean) as string[];
 
@@ -278,7 +278,7 @@ ${avatarSystemPrompt}`;
     process.env.OPENROUTER_MODEL_REGION_FALLBACK_2,
     process.env.OPENROUTER_MODEL_PRIMARY,
     process.env.OPENROUTER_MODEL_FALLBACK,
-    'deepseek/deepseek-chat-v3-0324',
+    'openai/gpt-4o-mini',
   ].filter(Boolean) as string[];
 
   let raw = '';
@@ -312,14 +312,14 @@ ${avatarSystemPrompt}`;
 // 可用的模型列表
 export const availableModels = [
   {
-    id: "openai/gpt-5.2",
-    name: "GPT-5.2",
-    description: "默认优先模型，适合综合推理与对话"
+    id: "openai/gpt-5.4",
+    name: "GPT-5.4",
+    description: "默认优先模型，适合联网检索、综合推理与对话"
   },
   {
-    id: "anthropic/claude-sonnet-4.5",
-    name: "Claude Sonnet 4.5",
-    description: "作为回退模型，兼顾质量与稳定性"
+    id: "openai/gpt-5.4-mini",
+    name: "GPT-5.4 Mini",
+    description: "作为回退模型，兼顾质量与成本"
   },
   {
     id: "openai/gpt-5.2-mini",

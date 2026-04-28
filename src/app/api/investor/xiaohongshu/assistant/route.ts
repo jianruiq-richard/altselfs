@@ -318,7 +318,7 @@ export async function POST(req: NextRequest) {
     ];
     const plannerRaw = await createJsonChatCompletion(
       plannerMessages,
-      process.env.OPENROUTER_MODEL_XHS_PLANNER || 'anthropic/claude-3.5-sonnet'
+      process.env.OPENROUTER_MODEL_XHS_PLANNER || 'openai/gpt-5.4'
     );
     plan = safeParsePlan(plannerRaw);
     await appendToolCall({
@@ -367,7 +367,7 @@ export async function POST(req: NextRequest) {
     ];
     reply = await createChatCompletion(
       finalMessages,
-      process.env.OPENROUTER_MODEL_XHS_ASSISTANT || 'anthropic/claude-sonnet-4.5'
+      process.env.OPENROUTER_MODEL_XHS_ASSISTANT || 'openai/gpt-5.4'
     );
 
     const current = await upsertXhsIntegration({

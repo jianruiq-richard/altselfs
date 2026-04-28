@@ -72,7 +72,7 @@ async function generateExecutiveReply(messages: ClientMessage[], briefing: {
     ...messages.map((item) => ({ role: item.role, content: item.content })),
   ];
 
-  const model = process.env.OPENROUTER_MODEL_EXECUTIVE || 'anthropic/claude-3.5-sonnet';
+  const model = process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4';
   const reply = await createChatCompletion(chatMessages, model);
   return reply.trim();
 }
