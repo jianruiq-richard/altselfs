@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
@@ -28,6 +28,12 @@ type Briefing = {
   }>;
 };
 
+type AgentConfig = {
+  systemPrompt: string;
+  defaultSystemPrompt: string;
+  hasCustomPrompt: boolean;
+};
+
 const suggestedQuestions = [
   '汇报一下各部门工作情况',
   '今天有哪些重点事项需要处理？',
@@ -47,8 +53,25 @@ export default function InvestorAgentChatPage() {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [promptDraft, setPromptDraft] = useState('');
+  const [promptSaved, setPromptSaved] = useState('');
+  const [defaultPrompt, setDefaultPrompt] = useState('');
+  const [hasCustomPrompt, setHasCustomPrompt] = useState(false);
+  const [promptSaving, setPromptSaving] = useState(false);
+  const [promptMessage, setPromptMessage] = useState<string | null>(null);
+  const promptEditorRef = useRef<HTMLDivElement | null>(null);
 
   const title = useMemo(() => (isExecutive ? '总裁秘书Momo' : 'AI 助手'), [isExecutive]);
+
+  const applyAgentConfig = useCallback((agentConfig: AgentConfig | null | undefined) => {
+    if (!agentConfig) return;
+    const systemPrompt = String(agentConfig.systemPrompt || '');
+    setPromptDraft(systemPrompt);
+    setPromptSaved(systemPrompt);
+    setDefaultPrompt(String(agentConfig.defaultSystemPrompt || ''));
+    setHasCustomPrompt(Boolean(agentConfig.hasCustomPrompt));
+  }, []);
 
   const loadData = useCallback(async () => {
     if (!isExecutive) return;
@@ -64,12 +87,13 @@ export default function InvestorAgentChatPage() {
       setThreadId(data.threadId || null);
       setMessages(Array.isArray(data.messages) ? data.messages : []);
       setBriefing(data.briefing || null);
+      applyAgentConfig(data.agentConfig);
     } catch {
       setError('网络错误，请稍后重试');
     } finally {
       setLoading(false);
     }
-  }, [isExecutive]);
+  }, [applyAgentConfig, isExecutive]);
 
   useEffect(() => {
     void loadData();
@@ -110,11 +134,54 @@ export default function InvestorAgentChatPage() {
       if (data.briefing) {
         setBriefing(data.briefing);
       }
+      applyAgentConfig(data.agentConfig);
     } catch {
       setError('网络错误，请稍后重试');
       setMessages(messages);
     } finally {
       setSending(false);
+    }
+  };
+
+  const openPromptEditor = () => {
+    const nextOpen = !promptEditorOpen;
+    setPromptEditorOpen(nextOpen);
+    setPromptMessage(null);
+    if (!nextOpen) return;
+    window.setTimeout(() => {
+      promptEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
+
+  const savePrompt = async (resetToDefault = false) => {
+    if (promptSaving) return;
+    const nextPrompt = resetToDefault ? defaultPrompt : promptDraft.trim();
+    if (!resetToDefault && !nextPrompt) {
+      setPromptMessage('system prompt 不能为空。');
+      return;
+    }
+
+    setPromptSaving(true);
+    setPromptMessage(null);
+    setError(null);
+    try {
+      const res = await fetch('/api/investor/executive-assistant', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(resetToDefault ? { resetToDefault: true } : { systemPrompt: nextPrompt }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPromptMessage(data.error || '保存 system prompt 失败');
+        return;
+      }
+
+      applyAgentConfig(data.agentConfig);
+      setPromptMessage(resetToDefault ? '已恢复默认 system prompt，后续对话生效。' : '已保存，后续对话生效。');
+    } catch {
+      setPromptMessage('网络错误，请稍后重试');
+    } finally {
+      setPromptSaving(false);
     }
   };
 
@@ -143,11 +210,92 @@ export default function InvestorAgentChatPage() {
       title={title}
       subtitle="全局信息整合与战略支持"
       actions={
-        <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
-          返回工作台
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={openPromptEditor}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            {promptEditorOpen ? '收起 system prompt' : '编辑 system prompt'}
+          </button>
+          <Link href="/dashboard" className="px-2 text-sm text-blue-700 hover:underline">
+            返回工作台
+          </Link>
+        </div>
       }
     >
+      {promptEditorOpen ? (
+        <div ref={promptEditorRef} className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">总裁秘书 system prompt</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                当前账户专属配置。保存后，Momo 后续生成回复会使用这段系统提示词。
+              </p>
+            </div>
+            <span
+              className={`self-start rounded-full px-2 py-1 text-xs ${
+                hasCustomPrompt ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {hasCustomPrompt ? '已自定义' : '默认配置'}
+            </span>
+          </div>
+
+          <textarea
+            value={promptDraft}
+            onChange={(e) => {
+              setPromptDraft(e.target.value);
+              setPromptMessage(null);
+            }}
+            rows={14}
+            className="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 font-mono text-sm leading-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="输入总裁秘书 Momo 的 system prompt..."
+          />
+
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
+              当前长度 {promptDraft.length}/30000
+              {promptDraft !== promptSaved ? ' · 有未保存修改' : ''}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={promptSaving || promptDraft === promptSaved}
+                onClick={() => {
+                  setPromptDraft(promptSaved);
+                  setPromptMessage(null);
+                }}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                撤销修改
+              </button>
+              <button
+                type="button"
+                disabled={promptSaving || !defaultPrompt}
+                onClick={() => void savePrompt(true)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                恢复默认
+              </button>
+              <button
+                type="button"
+                disabled={promptSaving || !promptDraft.trim()}
+                onClick={() => void savePrompt(false)}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {promptSaving ? '保存中...' : '保存并生效'}
+              </button>
+            </div>
+          </div>
+          {promptMessage ? (
+            <p className={`mt-3 text-sm ${promptMessage.includes('失败') || promptMessage.includes('错误') || promptMessage.includes('不能为空') ? 'text-red-600' : 'text-emerald-700'}`}>
+              {promptMessage}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {briefing ? (
         <div className="mb-6 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 sm:p-5">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

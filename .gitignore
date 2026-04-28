@@ -51,3 +51,6 @@ external_solutions/
 
 AI_Information_Filtering_Platform/
 Altselfsfigma/
+# clerk configuration (can include secrets)
+/.clerk/
+.env*.local

@@ -7,9 +7,10 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DIRECT_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 // SQLite doesn't support enums, using String with constraints instead
@@ -44,7 +45,25 @@ model User {
   // 投资人团队雇佣状态
   teamHires InvestorTeamHire[]
 
+  // 投资人 AI 员工配置
+  agentConfigs InvestorAgentConfig[]
+
   @@map("users")
+}
+
+model InvestorAgentConfig {
+  id           String   @id @default(cuid())
+  agentType    String
+  systemPrompt String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  @@unique([investorId, agentType])
+  @@index([agentType, updatedAt])
+  @@map("investor_agent_configs")
 }
 
 model AgentThread {

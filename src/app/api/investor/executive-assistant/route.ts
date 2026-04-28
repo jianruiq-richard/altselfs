@@ -12,6 +12,9 @@ import { buildExecutiveAssistantReply, buildExecutiveDailyBriefing } from '@/lib
 import { resolveHiredTeamKeys } from '@/lib/team-library';
 import { EXECUTIVE_MOMO_SYSTEM_PROMPT } from '@/lib/prompts/executive-momo';
 
+const EXECUTIVE_AGENT_TYPE = 'EXECUTIVE';
+const MAX_SYSTEM_PROMPT_LENGTH = 30000;
+
 type ClientMessage = {
   role: 'user' | 'assistant';
   content: string;
@@ -55,7 +58,7 @@ async function generateExecutiveReply(messages: ClientMessage[], briefing: {
   departmentOverview: Array<{ department: string; status: string; summary: string; progress: number }>;
   externalInsights: Array<{ category: string; content: string; source: string }>;
   priorityTasks: Array<{ priority: 'high' | 'medium' | 'low'; task: string; deadline: string; assignedBy: string }>;
-}) {
+}, systemPrompt: string) {
   const contextPrompt = [
     '下面是当前可用的业务上下文。只在用户明确需要时才引用，不要机械反复提及。',
     buildBriefingContext(briefing),
@@ -67,7 +70,7 @@ async function generateExecutiveReply(messages: ClientMessage[], briefing: {
   ].join('\n\n');
 
   const chatMessages: ChatMessage[] = [
-    { role: 'system', content: EXECUTIVE_MOMO_SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt },
     { role: 'system', content: contextPrompt },
     ...messages.map((item) => ({ role: item.role, content: item.content })),
   ];
@@ -75,6 +78,29 @@ async function generateExecutiveReply(messages: ClientMessage[], briefing: {
   const model = process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4';
   const reply = await createChatCompletion(chatMessages, model);
   return reply.trim();
+}
+
+function normalizeSystemPrompt(input: unknown) {
+  if (typeof input !== 'string') return '';
+  return input.trim().slice(0, MAX_SYSTEM_PROMPT_LENGTH);
+}
+
+async function getExecutiveAgentConfig(investorId: string) {
+  const config = await prisma.investorAgentConfig.findUnique({
+    where: {
+      investorId_agentType: {
+        investorId,
+        agentType: EXECUTIVE_AGENT_TYPE,
+      },
+    },
+  });
+
+  const customPrompt = config?.systemPrompt?.trim() || '';
+  return {
+    customPrompt,
+    systemPrompt: customPrompt || EXECUTIVE_MOMO_SYSTEM_PROMPT,
+    defaultSystemPrompt: EXECUTIVE_MOMO_SYSTEM_PROMPT,
+  };
 }
 
 function normalizeMessages(raw: unknown): ClientMessage[] {
@@ -152,27 +178,75 @@ export async function GET() {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const briefing = await loadBriefing(investor.id);
+  const [briefing, promptConfig] = await Promise.all([
+    loadBriefing(investor.id),
+    getExecutiveAgentConfig(investor.id),
+  ]);
   if (!briefing) return NextResponse.json({ error: 'Investor not found' }, { status: 404 });
 
-  let thread = await getLatestThreadWithMessages(investor.id, 'EXECUTIVE');
+  let thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
   if (!thread) {
     const created = await ensureThread({
       investorId: investor.id,
-      agentType: 'EXECUTIVE',
+      agentType: EXECUTIVE_AGENT_TYPE,
     });
     await appendThreadMessage({
       threadId: created.id,
       role: 'ASSISTANT',
       content: `早上好！我是总裁秘书Momo。\n\n${briefing.headline}\n\n你可以问我：\n1) 各部门工作情况\n2) 今日重点事项\n3) 外界信息变化`,
     });
-    thread = await getLatestThreadWithMessages(investor.id, 'EXECUTIVE');
+    thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
   }
 
   return NextResponse.json({
     threadId: thread?.id || null,
     messages: thread ? toClientMessages(thread.messages) : [],
     briefing,
+    agentConfig: {
+      systemPrompt: promptConfig.systemPrompt,
+      defaultSystemPrompt: promptConfig.defaultSystemPrompt,
+      hasCustomPrompt: Boolean(promptConfig.customPrompt),
+    },
+  });
+}
+
+export async function PUT(req: NextRequest) {
+  const investor = await getInvestorOrNull();
+  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = (await req.json().catch(() => null)) as { systemPrompt?: unknown; resetToDefault?: boolean } | null;
+  const resetToDefault = Boolean(body?.resetToDefault);
+  const systemPrompt = resetToDefault ? '' : normalizeSystemPrompt(body?.systemPrompt);
+
+  if (!resetToDefault && !systemPrompt) {
+    return NextResponse.json({ error: 'system prompt 不能为空' }, { status: 400 });
+  }
+
+  const saved = await prisma.investorAgentConfig.upsert({
+    where: {
+      investorId_agentType: {
+        investorId: investor.id,
+        agentType: EXECUTIVE_AGENT_TYPE,
+      },
+    },
+    update: {
+      systemPrompt: resetToDefault ? null : systemPrompt,
+    },
+    create: {
+      investorId: investor.id,
+      agentType: EXECUTIVE_AGENT_TYPE,
+      systemPrompt: resetToDefault ? null : systemPrompt,
+    },
+  });
+
+  const customPrompt = saved.systemPrompt?.trim() || '';
+  return NextResponse.json({
+    ok: true,
+    agentConfig: {
+      systemPrompt: customPrompt || EXECUTIVE_MOMO_SYSTEM_PROMPT,
+      defaultSystemPrompt: EXECUTIVE_MOMO_SYSTEM_PROMPT,
+      hasCustomPrompt: Boolean(customPrompt),
+    },
   });
 }
 
@@ -187,12 +261,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '最后一条消息必须是用户消息' }, { status: 400 });
   }
 
-  const briefing = await loadBriefing(investor.id);
+  const [briefing, promptConfig] = await Promise.all([
+    loadBriefing(investor.id),
+    getExecutiveAgentConfig(investor.id),
+  ]);
   if (!briefing) return NextResponse.json({ error: 'Investor not found' }, { status: 404 });
 
   const thread = await ensureThread({
     investorId: investor.id,
-    agentType: 'EXECUTIVE',
+    agentType: EXECUTIVE_AGENT_TYPE,
     threadId: body?.threadId || null,
   });
 
@@ -204,7 +281,7 @@ export async function POST(req: NextRequest) {
 
   let reply = '';
   try {
-    reply = await generateExecutiveReply(messages, briefing);
+    reply = await generateExecutiveReply(messages, briefing, promptConfig.systemPrompt);
   } catch (error) {
     console.error('[executive-assistant] model generation failed, fallback to rule-based reply:', error);
     reply = buildExecutiveAssistantReply(latest.content, briefing);
@@ -221,6 +298,11 @@ export async function POST(req: NextRequest) {
     reply,
     messages: [...messages, { role: 'assistant', content: reply }],
     briefing,
+    agentConfig: {
+      systemPrompt: promptConfig.systemPrompt,
+      defaultSystemPrompt: promptConfig.defaultSystemPrompt,
+      hasCustomPrompt: Boolean(promptConfig.customPrompt),
+    },
   });
 }
 
@@ -236,7 +318,7 @@ export async function DELETE(req: NextRequest) {
     where: {
       id: threadId,
       investorId: investor.id,
-      agentType: 'EXECUTIVE',
+      agentType: EXECUTIVE_AGENT_TYPE,
     },
   });
 
