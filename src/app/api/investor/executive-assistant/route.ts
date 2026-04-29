@@ -296,6 +296,7 @@ async function runExecutiveAssistantTurn(params: {
     const updateResult = await updateTodayExecutiveBriefing({
       investorId: params.investorId,
       userQuery: latest.content,
+      executiveSystemPrompt: promptConfig.systemPrompt,
       onPlannerEvent: emitPlannerEvent,
     });
     if (updateResult) {

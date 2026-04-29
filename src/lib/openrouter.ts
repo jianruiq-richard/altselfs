@@ -136,12 +136,12 @@ async function requestCompletion(messages: ChatMessage[], model: string) {
   return completion.choices[0]?.message?.content || '';
 }
 
-async function requestJsonCompletion(messages: ChatMessage[], model: string) {
+async function requestJsonCompletion(messages: ChatMessage[], model: string, maxTokens?: number) {
   const completion = await openai.chat.completions.create({
     model,
     messages,
     temperature: 0.1,
-    max_tokens: 800,
+    max_tokens: maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 1800),
     response_format: { type: 'json_object' },
   });
 
@@ -218,7 +218,8 @@ export async function createChatCompletion(
 
 export async function createJsonChatCompletion(
   messages: ChatMessage[],
-  model?: string
+  model?: string,
+  options?: { maxTokens?: number }
 ) {
   const candidates = uniqueModels([
     model,
@@ -236,7 +237,7 @@ export async function createJsonChatCompletion(
   for (const currentModel of candidates) {
     tried.push(currentModel);
     try {
-      const raw = await requestJsonCompletion(messages, currentModel);
+      const raw = await requestJsonCompletion(messages, currentModel, options?.maxTokens);
       if (raw.trim()) {
         return raw;
       }

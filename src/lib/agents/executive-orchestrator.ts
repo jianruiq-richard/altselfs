@@ -310,6 +310,18 @@ function shouldUseExternalWeb(userQuery: string) {
   return shouldUpdateBriefing(userQuery) || /外界|行业|动态|趋势|竞品|情报|新闻|ai\s*agent|agent|vibe\s*coding|vibe|coding/i.test(userQuery);
 }
 
+function buildWebSearchIntent(userQuery: string, executiveSystemPrompt?: string) {
+  const preference = executiveSystemPrompt?.trim()
+    ? executiveSystemPrompt.trim().slice(0, 1600)
+    : '无额外偏好。';
+
+  return [
+    `用户当前指令：${userQuery}`,
+    `总裁秘书system prompt / 用户偏好：${preference}`,
+    '联网搜索要求：先根据上述偏好收敛搜索方向和关键词，只搜索、打开和引用符合偏好的信息；忽略泛行业新闻、无关公司动态和不符合偏好的内容；优先查找权威媒体、公司公告、产品发布、技术博客、开发者工具、AI agent、vibe coding 和竞品相关来源。',
+  ].join('\n');
+}
+
 function hasSkill(plan: ExecutiveTurnPlan, skillId: ExecutiveSkillId) {
   return plan.skills.includes(skillId);
 }
@@ -457,6 +469,7 @@ function normalizeExecutivePlan(raw: string, context: LoadedExecutiveContext, us
 async function planExecutiveTurn(params: {
   userQuery: string;
   context: LoadedExecutiveContext;
+  executiveSystemPrompt?: string;
 }): Promise<ExecutiveTurnPlan> {
   const availableSkills = EXECUTIVE_SKILL_REGISTRY.map((skill) => ({
     skillId: skill.skillId,
@@ -482,6 +495,7 @@ async function planExecutiveTurn(params: {
         '你是总裁秘书Momo的动态planner。',
         '每轮都要根据用户指令、已雇佣AI员工、可用skill和权限生成本轮执行计划。',
         '不要输出固定全量能力清单；只输出本轮真正需要执行或需要说明不可用的步骤。',
+        '如果选择 web_search，必须根据总裁秘书system prompt / 用户偏好规划有目的的搜索范围，不要泛搜。',
         '只输出JSON，不要输出markdown。',
       ].join('\n'),
     },
@@ -489,6 +503,8 @@ async function planExecutiveTurn(params: {
       role: 'user',
       content: JSON.stringify({
         userQuery: params.userQuery,
+        executiveSystemPrompt: params.executiveSystemPrompt || '',
+        webSearchPolicy: buildWebSearchIntent(params.userQuery, params.executiveSystemPrompt),
         availableSkills,
         accountContext: {
           hasWechatSources: params.context.hasWechatSources,
@@ -634,6 +650,7 @@ function mergeBriefingWithItems(
 
 async function buildBriefingSummary(input: {
   userQuery: string;
+  executiveSystemPrompt: string;
   briefing: ExecutiveDailyBriefing;
   subagentResults: AgentRunResult[];
   internalFacts: string[];
@@ -644,16 +661,21 @@ async function buildBriefingSummary(input: {
       role: 'system',
       content: [
         '你是总裁秘书Momo的晨报生成器。',
+        '下面的“总裁秘书system prompt / 用户偏好”是最高优先级过滤规则。子agent可能返回冗余信息，你必须过滤掉不符合偏好的内容。',
         '根据内部数据、子agent结果和必要的外部互联网搜索，生成一份面向创始人的今日晨报。',
-        '如果启用了联网工具，你可以搜索最新行业动态，但必须把不确定性说明清楚。',
+        '如果启用了联网工具，必须先根据总裁秘书system prompt / 用户偏好提炼搜索方向、关键词和来源范围，只搜索符合偏好的信息，不要泛搜。',
+        '联网搜索结果同样需要经过总裁秘书system prompt过滤；不符合偏好的内容不得进入最终晨报。',
+        '必须把来源和不确定性说明清楚。',
         '输出中文，结构清晰，必须围绕行业动态、技术趋势、竞品监控三个模块给出重点、证据来源和建议行动。',
       ].join('\n'),
     },
     {
       role: 'user',
       content: [
+        `总裁秘书system prompt / 用户偏好：\n${input.executiveSystemPrompt}`,
         `用户命令：${input.userQuery}`,
         `是否需要外部互联网搜索：${input.useWeb ? '是' : '否'}`,
+        `联网搜索意图：\n${buildWebSearchIntent(input.userQuery, input.executiveSystemPrompt)}`,
         `基础晨报：${JSON.stringify(input.briefing)}`,
         `内部数据：\n${input.internalFacts.join('\n')}`,
         `子agent结果：${JSON.stringify(
@@ -721,7 +743,7 @@ function normalizeStructuredModule(raw: unknown, title: StructuredBriefingModule
 }
 
 function normalizeStructuredBriefing(raw: string): StructuredBriefingOutput {
-  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  const parsed = JSON.parse(raw.trim()) as Record<string, unknown>;
   const modules = parsed.modules && typeof parsed.modules === 'object' ? (parsed.modules as Record<string, unknown>) : {};
   return {
     title: asString(parsed.title, `总裁秘书Momo晨报 ${dateKey()}`).slice(0, 160),
@@ -732,6 +754,40 @@ function normalizeStructuredBriefing(raw: string): StructuredBriefingOutput {
       normalizeStructuredModule(modules.competitorMonitoring, '竞品监控'),
     ],
   };
+}
+
+function compactBriefingSource(item: AgentBriefingItem) {
+  return {
+    title: item.title.slice(0, 160),
+    summary: item.summary.slice(0, 360),
+    source: item.source.slice(0, 120),
+    url: item.url,
+    publishedAt: item.publishedAt,
+  };
+}
+
+async function repairStructuredBriefingJson(raw: string) {
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: [
+        '你是JSON修复器。',
+        '输入是一个可能被截断或存在未闭合字符串的JSON对象。',
+        '请只输出修复后的严格JSON，不要输出markdown。',
+        '必须保留 title、summary、modules.industryDynamics、modules.technologyTrends、modules.competitorMonitoring 结构。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: raw.slice(0, 12000),
+    },
+  ];
+
+  return createJsonChatCompletion(
+    messages,
+    process.env.OPENROUTER_MODEL_EXECUTIVE_STRUCTURER || process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4',
+    { maxTokens: 2600 }
+  );
 }
 
 function fallbackStructuredBriefing(input: {
@@ -773,6 +829,7 @@ function fallbackStructuredBriefing(input: {
 
 async function buildStructuredBriefing(input: {
   userQuery: string;
+  executiveSystemPrompt: string;
   summary: string;
   briefing: ExecutiveDailyBriefing;
   subagentResults: AgentRunResult[];
@@ -786,26 +843,40 @@ async function buildStructuredBriefing(input: {
       role: 'system',
       content: [
         '你是总裁秘书Momo的晨报结构化整理agent。',
+        '下面的“总裁秘书system prompt / 用户偏好”是最高优先级过滤规则。子agent可能返回冗余信息，最终晨报只能保留符合该偏好的内容。',
         '你必须基于已经获得的信息、子agent结果和来源，自行判断哪些属于行业动态、技术趋势、竞品监控。',
         '不要按关键词机械分类，要按商业含义分类。',
+        '如果某条信息不符合总裁秘书system prompt中的关注范围，必须从最终JSON中剔除，即使它来自子agent。',
         '只输出严格JSON，不要输出markdown或解释。',
       ].join('\n'),
     },
     {
       role: 'user',
       content: JSON.stringify({
+        executiveSystemPrompt: input.executiveSystemPrompt,
         userQuery: input.userQuery,
         useWeb: input.useWeb,
-        generatedSummary: input.summary,
-        baseBriefing: input.briefing,
+        webSearchIntent: buildWebSearchIntent(input.userQuery, input.executiveSystemPrompt),
+        generatedSummary: input.summary.slice(0, 3000),
+        baseBriefing: {
+          headline: input.briefing.headline,
+          externalInsights: input.briefing.externalInsights.slice(0, 8),
+          priorityTasks: input.briefing.priorityTasks.slice(0, 5),
+        },
         calledAgents: input.calledAgents,
-        sources: input.sources,
+        sources: input.sources.slice(0, 24).map(compactBriefingSource),
         subagentResults: input.subagentResults.map((item) => ({
           agentType: item.agentType,
-          answer: item.answer,
-          briefingItems: item.briefingItems,
+          answer: item.answer.slice(0, 2600),
+          briefingItems: item.briefingItems.slice(0, 12).map(compactBriefingSource),
           debug: item.debug,
         })),
+        constraints: [
+          '每个模块最多输出6条items',
+          '每个summary不超过160字',
+          'content使用一到三段中文，不要过长',
+          '不要复制大段原文',
+        ],
         outputSchema: {
           title: 'string',
           summary: 'string',
@@ -843,9 +914,16 @@ async function buildStructuredBriefing(input: {
     });
     const raw = await createJsonChatCompletion(
       messages,
-      process.env.OPENROUTER_MODEL_EXECUTIVE_STRUCTURER || process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4'
+      process.env.OPENROUTER_MODEL_EXECUTIVE_STRUCTURER || process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4',
+      { maxTokens: 3600 }
     );
-    const structured = normalizeStructuredBriefing(raw);
+    let structured: StructuredBriefingOutput;
+    try {
+      structured = normalizeStructuredBriefing(raw);
+    } catch {
+      const repaired = await repairStructuredBriefingJson(raw);
+      structured = normalizeStructuredBriefing(repaired);
+    }
     await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'SUCCESS', {
       detail: '结构化晨报 JSON 已生成并通过校验。',
       payload: {
@@ -869,6 +947,7 @@ async function buildStructuredBriefing(input: {
 
 async function buildDocument(input: {
   userQuery: string;
+  executiveSystemPrompt: string;
   query: string;
   briefing: ExecutiveDailyBriefing;
   summary: string;
@@ -880,6 +959,7 @@ async function buildDocument(input: {
   const sources = input.subagentResults.flatMap((item) => item.briefingItems);
   const structured = await buildStructuredBriefing({
     userQuery: input.userQuery,
+    executiveSystemPrompt: input.executiveSystemPrompt,
     summary: input.summary,
     briefing: input.briefing,
     subagentResults: input.subagentResults,
@@ -929,6 +1009,7 @@ export async function getTodayExecutiveBriefing(investorId: string) {
 export async function updateTodayExecutiveBriefing(params: {
   investorId: string;
   userQuery: string;
+  executiveSystemPrompt?: string;
   onPlannerEvent?: ExecutivePlannerEmit;
 }): Promise<ExecutiveBriefingUpdateResult | null> {
   await emitPlannerStep(params.onPlannerEvent, 'load_context', 'RUNNING', {
@@ -956,6 +1037,7 @@ export async function updateTodayExecutiveBriefing(params: {
   const plan = await planExecutiveTurn({
     userQuery: params.userQuery,
     context,
+    executiveSystemPrompt: params.executiveSystemPrompt || '',
   });
   await params.onPlannerEvent?.({
     type: 'planner',
@@ -981,10 +1063,14 @@ export async function updateTodayExecutiveBriefing(params: {
   const subagentTasks: Array<Promise<AgentRunResult>> = [];
   const includeWechat = hasSkill(plan, 'wechat_articles') && context.hasWechatSources;
   const useWeb = plan.useWebSearch || hasSkill(plan, 'web_search');
+  const webSearchIntent = buildWebSearchIntent(params.userQuery, params.executiveSystemPrompt);
 
   if (useWeb) {
     await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'SUCCESS', {
-      detail: '本轮已启用模型联网搜索/网页读取能力，实际搜索会在摘要或回复生成时由模型执行。',
+      detail: '本轮已启用模型联网搜索/网页读取能力，搜索方向会按总裁秘书system prompt / 用户偏好收敛。',
+      payload: {
+        webSearchIntent,
+      },
     });
   }
 
@@ -1087,10 +1173,14 @@ export async function updateTodayExecutiveBriefing(params: {
   if (plan.updateBriefing || subagentResults.length > 0 || useWeb) {
     try {
       await emitPlannerStep(params.onPlannerEvent, 'generate_briefing_summary', 'RUNNING', {
-        detail: useWeb ? '正在生成摘要，并允许模型使用联网能力。' : '正在基于现有上下文生成摘要。',
+        detail: useWeb
+          ? '正在生成摘要，并允许模型按system prompt偏好进行有目的性的联网搜索。'
+          : '正在基于现有上下文生成摘要。',
+        payload: useWeb ? { webSearchIntent } : undefined,
       });
       summary = await buildBriefingSummary({
         userQuery: params.userQuery,
+        executiveSystemPrompt: params.executiveSystemPrompt || '',
         briefing: mergedBriefing,
         subagentResults,
         internalFacts: context.internalFacts,
@@ -1110,6 +1200,7 @@ export async function updateTodayExecutiveBriefing(params: {
 
   const document = await buildDocument({
     userQuery: params.userQuery,
+    executiveSystemPrompt: params.executiveSystemPrompt || '',
     query: params.userQuery,
     briefing: mergedBriefing,
     summary,
