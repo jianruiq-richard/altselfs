@@ -75,6 +75,27 @@ export type ExecutiveBriefingDocument = {
   }>;
 };
 
+type StructuredBriefingItem = {
+  title: string;
+  summary: string;
+  source: string;
+  url?: string;
+  publishedAt?: string;
+  whyItMatters?: string;
+};
+
+type StructuredBriefingModule = {
+  title: '行业动态' | '技术趋势' | '竞品监控';
+  content: string;
+  items: StructuredBriefingItem[];
+};
+
+type StructuredBriefingOutput = {
+  title: string;
+  summary: string;
+  modules: StructuredBriefingModule[];
+};
+
 export type ExecutiveBriefingUpdateResult = {
   baseBriefing: ExecutiveDailyBriefing;
   briefing: ExecutiveDailyBriefing;
@@ -242,6 +263,11 @@ export function getExecutivePlannerStepDefinition(id: ExecutivePlannerStepId): E
       title: '生成晨报摘要',
       description: '基于内部数据、外部信息和子 agent 结果生成晨报。',
     },
+    structure_briefing_json: {
+      id: 'structure_briefing_json',
+      title: '结构化晨报JSON',
+      description: '由总裁秘书把已获得的信息归类为行业动态、技术趋势、竞品监控三个模块。',
+    },
     persist_briefing: {
       id: 'persist_briefing',
       title: '保存今日晨报',
@@ -359,6 +385,7 @@ function fallbackExecutivePlan(params: {
   if (updateBriefing || includeWechat || useWebSearch) {
     steps.push(getExecutivePlannerStepDefinition('merge_results'));
     steps.push(getExecutivePlannerStepDefinition('generate_briefing_summary'));
+    steps.push(getExecutivePlannerStepDefinition('structure_briefing_json'));
   }
   if (updateBriefing) {
     skills.push('persist_briefing');
@@ -409,6 +436,7 @@ function normalizeExecutivePlan(raw: string, context: LoadedExecutiveContext, us
   if (updateBriefing || normalizedSkills.some((skill) => skill !== 'internal_briefing' && skill !== 'chat_reply')) {
     steps = ensurePlanStep(steps, getExecutivePlannerStepDefinition('merge_results'));
     steps = ensurePlanStep(steps, getExecutivePlannerStepDefinition('generate_briefing_summary'));
+    steps = ensurePlanStep(steps, getExecutivePlannerStepDefinition('structure_briefing_json'));
   }
   if (updateBriefing) steps = ensurePlanStep(steps, getExecutivePlannerStepDefinition('persist_briefing'));
   steps = ensurePlanStep(steps, getExecutivePlannerStepDefinition('generate_reply'));
@@ -652,107 +680,235 @@ function fallbackSummary(briefing: ExecutiveDailyBriefing, subagentResults: Agen
   return lines.join('\n\n');
 }
 
-function itemText(item: AgentBriefingItem) {
-  return `${item.title} ${item.summary} ${item.source}`.toLowerCase();
+function asString(value: unknown, fallback = '') {
+  if (typeof value !== 'string') return fallback;
+  return value.trim();
 }
 
-function classifyBriefingItem(item: AgentBriefingItem) {
-  const text = itemText(item);
-  if (
-    /技术|大模型|模型|agent|coding|代码|开发|编程|api|开源|框架|架构|推理|算力|工具|研发|engineering|developer|model/.test(
-      text
-    )
-  ) {
-    return '技术趋势';
-  }
-  if (
-    /竞品|竞争|产品|发布|上线|融资|收购|估值|openai|anthropic|google|meta|cursor|devin|manus|字节|腾讯|阿里|百度|公司|创业/.test(
-      text
-    )
-  ) {
-    return '竞品监控';
-  }
-  return '行业动态';
+function normalizeStructuredItem(raw: unknown): StructuredBriefingItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const item = raw as Record<string, unknown>;
+  const title = asString(item.title).slice(0, 160);
+  const summary = asString(item.summary).slice(0, 500);
+  const source = asString(item.source, '总裁秘书Momo').slice(0, 160);
+  if (!title || !summary) return null;
+  return {
+    title,
+    summary,
+    source,
+    url: asString(item.url) || undefined,
+    publishedAt: asString(item.publishedAt) || undefined,
+    whyItMatters: asString(item.whyItMatters).slice(0, 400) || undefined,
+  };
 }
 
-function renderModuleContent(items: AgentBriefingItem[], fallback: string) {
-  if (items.length === 0) return fallback;
-  return items
-    .slice(0, 6)
-    .map((item, index) => {
-      const source = item.url ? `${item.source} ${item.url}` : item.source;
-      return `${index + 1}. ${item.title}：${item.summary}（${source}）`;
-    })
-    .join('\n');
+function normalizeStructuredModule(raw: unknown, title: StructuredBriefingModule['title']): StructuredBriefingModule {
+  const fallback = {
+    title,
+    content: `暂无明确${title}，总裁秘书会在下一次更新晨报时继续补充。`,
+    items: [],
+  };
+  if (!raw || typeof raw !== 'object') return fallback;
+  const rawModule = raw as Record<string, unknown>;
+  const items = Array.isArray(rawModule.items)
+    ? rawModule.items.map(normalizeStructuredItem).filter((item): item is StructuredBriefingItem => Boolean(item))
+    : [];
+  return {
+    title,
+    content: asString(rawModule.content, fallback.content).slice(0, 2200),
+    items,
+  };
 }
 
-function buildBriefingModules(input: {
+function normalizeStructuredBriefing(raw: string): StructuredBriefingOutput {
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  const modules = parsed.modules && typeof parsed.modules === 'object' ? (parsed.modules as Record<string, unknown>) : {};
+  return {
+    title: asString(parsed.title, `总裁秘书Momo晨报 ${dateKey()}`).slice(0, 160),
+    summary: asString(parsed.summary, '今日晨报已更新。').slice(0, 2400),
+    modules: [
+      normalizeStructuredModule(modules.industryDynamics, '行业动态'),
+      normalizeStructuredModule(modules.technologyTrends, '技术趋势'),
+      normalizeStructuredModule(modules.competitorMonitoring, '竞品监控'),
+    ],
+  };
+}
+
+function fallbackStructuredBriefing(input: {
   summary: string;
   briefing: ExecutiveDailyBriefing;
   sources: AgentBriefingItem[];
-}) {
-  const grouped: Record<'行业动态' | '技术趋势' | '竞品监控', AgentBriefingItem[]> = {
-    行业动态: [],
-    技术趋势: [],
-    竞品监控: [],
+}): StructuredBriefingOutput {
+  const items = input.sources.slice(0, 8).map((item) => ({
+    title: item.title,
+    summary: item.summary,
+    source: item.source,
+    url: item.url,
+    publishedAt: item.publishedAt,
+  }));
+  return {
+    title: `总裁秘书Momo晨报 ${dateKey()}`,
+    summary: input.summary || input.briefing.headline,
+    modules: [
+      {
+        title: '行业动态',
+        content:
+          input.briefing.externalInsights.map((item) => `${item.category}：${item.content}`).join('\n\n') ||
+          '暂无明确行业动态。',
+        items,
+      },
+      {
+        title: '技术趋势',
+        content: input.summary || '暂无明确技术趋势。',
+        items: [],
+      },
+      {
+        title: '竞品监控',
+        content: '暂无明确竞品监控信号。',
+        items: [],
+      },
+    ],
   };
-
-  for (const item of input.sources) {
-    grouped[classifyBriefingItem(item)].push(item);
-  }
-
-  return [
-    {
-      title: '行业动态',
-      content: renderModuleContent(
-        grouped.行业动态,
-        input.briefing.externalInsights.map((item) => `${item.category}：${item.content}`).join('\n\n') ||
-          '暂无新的行业动态，点击“更新晨报”后总裁秘书会重新汇总。'
-      ),
-      items: grouped.行业动态,
-    },
-    {
-      title: '技术趋势',
-      content: renderModuleContent(
-        grouped.技术趋势,
-        input.summary || '暂无明确技术趋势，点击“更新晨报”后会重新检索并整理 AI agent、开发工具和技术路线信息。'
-      ),
-      items: grouped.技术趋势,
-    },
-    {
-      title: '竞品监控',
-      content: renderModuleContent(
-        grouped.竞品监控,
-        '暂无明确竞品信号，点击“更新晨报”后会重新检查产品发布、融资、公司动态和竞争格局。'
-      ),
-      items: grouped.竞品监控,
-    },
-  ];
 }
 
-function buildDocument(input: {
+async function buildStructuredBriefing(input: {
+  userQuery: string;
+  summary: string;
+  briefing: ExecutiveDailyBriefing;
+  subagentResults: AgentRunResult[];
+  sources: AgentBriefingItem[];
+  calledAgents: ExecutiveBriefingDocument['calledAgents'];
+  useWeb: boolean;
+  onPlannerEvent?: ExecutivePlannerEmit;
+}) {
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: [
+        '你是总裁秘书Momo的晨报结构化整理agent。',
+        '你必须基于已经获得的信息、子agent结果和来源，自行判断哪些属于行业动态、技术趋势、竞品监控。',
+        '不要按关键词机械分类，要按商业含义分类。',
+        '只输出严格JSON，不要输出markdown或解释。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        userQuery: input.userQuery,
+        useWeb: input.useWeb,
+        generatedSummary: input.summary,
+        baseBriefing: input.briefing,
+        calledAgents: input.calledAgents,
+        sources: input.sources,
+        subagentResults: input.subagentResults.map((item) => ({
+          agentType: item.agentType,
+          answer: item.answer,
+          briefingItems: item.briefingItems,
+          debug: item.debug,
+        })),
+        outputSchema: {
+          title: 'string',
+          summary: 'string',
+          modules: {
+            industryDynamics: {
+              content: 'string',
+              items: [
+                {
+                  title: 'string',
+                  summary: 'string',
+                  source: 'string',
+                  url: 'string optional',
+                  publishedAt: 'string optional',
+                  whyItMatters: 'string optional',
+                },
+              ],
+            },
+            technologyTrends: {
+              content: 'string',
+              items: 'same item schema',
+            },
+            competitorMonitoring: {
+              content: 'string',
+              items: 'same item schema',
+            },
+          },
+        },
+      }),
+    },
+  ];
+
+  try {
+    await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'RUNNING', {
+      detail: '总裁秘书正在把已获得的信息标准化为严格 JSON，并归类到三个晨报模块。',
+    });
+    const raw = await createJsonChatCompletion(
+      messages,
+      process.env.OPENROUTER_MODEL_EXECUTIVE_STRUCTURER || process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4'
+    );
+    const structured = normalizeStructuredBriefing(raw);
+    await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'SUCCESS', {
+      detail: '结构化晨报 JSON 已生成并通过校验。',
+      payload: {
+        moduleCount: structured.modules.length,
+        itemCount: structured.modules.reduce((sum, item) => sum + item.items.length, 0),
+      },
+    });
+    return structured;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'structured briefing generation failed';
+    await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'ERROR', {
+      error: `${detail}。已降级使用后端 fallback 结构。`,
+    });
+    return fallbackStructuredBriefing({
+      summary: input.summary,
+      briefing: input.briefing,
+      sources: input.sources,
+    });
+  }
+}
+
+async function buildDocument(input: {
+  userQuery: string;
   query: string;
   briefing: ExecutiveDailyBriefing;
   summary: string;
   subagentResults: AgentRunResult[];
   calledAgents: ExecutiveBriefingDocument['calledAgents'];
-}): ExecutiveBriefingDocument {
+  useWeb: boolean;
+  onPlannerEvent?: ExecutivePlannerEmit;
+}): Promise<ExecutiveBriefingDocument> {
   const sources = input.subagentResults.flatMap((item) => item.briefingItems);
-  const modules = buildBriefingModules({
+  const structured = await buildStructuredBriefing({
+    userQuery: input.userQuery,
     summary: input.summary,
     briefing: input.briefing,
+    subagentResults: input.subagentResults,
     sources,
+    calledAgents: input.calledAgents,
+    useWeb: input.useWeb,
+    onPlannerEvent: input.onPlannerEvent,
   });
   return {
     dateKey: dateKey(),
-    title: `总裁秘书Momo晨报 ${dateKey()}`,
-    summary: input.summary,
+    title: structured.title,
+    summary: structured.summary,
     sections: [
       {
         title: '总览',
         content: input.briefing.headline,
       },
-      ...modules,
+      ...structured.modules.map((section) => ({
+        title: section.title,
+        content: section.content,
+        items: section.items.map((item) => ({
+          category: section.title,
+          title: item.title,
+          summary: item.whyItMatters ? `${item.summary}\n为什么重要：${item.whyItMatters}` : item.summary,
+          source: item.source,
+          url: item.url,
+          publishedAt: item.publishedAt,
+        })),
+      })),
     ],
     sources,
     calledAgents: input.calledAgents,
@@ -952,12 +1108,15 @@ export async function updateTodayExecutiveBriefing(params: {
     }
   }
 
-  const document = buildDocument({
+  const document = await buildDocument({
+    userQuery: params.userQuery,
     query: params.userQuery,
     briefing: mergedBriefing,
     summary,
     subagentResults,
     calledAgents,
+    useWeb,
+    onPlannerEvent: params.onPlannerEvent,
   });
 
   if (plan.updateBriefing) {
