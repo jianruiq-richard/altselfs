@@ -390,6 +390,7 @@ function normalizeExecutivePlan(raw: string, context: LoadedExecutiveContext, us
     'internal_briefing',
     ...skills,
     ...(useWebSearch ? (['web_search'] as ExecutiveSkillId[]) : []),
+    ...(updateBriefing && context.hasWechatSources ? (['wechat_articles'] as ExecutiveSkillId[]) : []),
     ...(updateBriefing ? (['persist_briefing'] as ExecutiveSkillId[]) : []),
     'chat_reply',
   ]));
@@ -617,7 +618,7 @@ async function buildBriefingSummary(input: {
         '你是总裁秘书Momo的晨报生成器。',
         '根据内部数据、子agent结果和必要的外部互联网搜索，生成一份面向创始人的今日晨报。',
         '如果启用了联网工具，你可以搜索最新行业动态，但必须把不确定性说明清楚。',
-        '输出中文，结构清晰，给出重点、证据来源和建议行动。',
+        '输出中文，结构清晰，必须围绕行业动态、技术趋势、竞品监控三个模块给出重点、证据来源和建议行动。',
       ].join('\n'),
     },
     {
@@ -651,6 +652,84 @@ function fallbackSummary(briefing: ExecutiveDailyBriefing, subagentResults: Agen
   return lines.join('\n\n');
 }
 
+function itemText(item: AgentBriefingItem) {
+  return `${item.title} ${item.summary} ${item.source}`.toLowerCase();
+}
+
+function classifyBriefingItem(item: AgentBriefingItem) {
+  const text = itemText(item);
+  if (
+    /技术|大模型|模型|agent|coding|代码|开发|编程|api|开源|框架|架构|推理|算力|工具|研发|engineering|developer|model/.test(
+      text
+    )
+  ) {
+    return '技术趋势';
+  }
+  if (
+    /竞品|竞争|产品|发布|上线|融资|收购|估值|openai|anthropic|google|meta|cursor|devin|manus|字节|腾讯|阿里|百度|公司|创业/.test(
+      text
+    )
+  ) {
+    return '竞品监控';
+  }
+  return '行业动态';
+}
+
+function renderModuleContent(items: AgentBriefingItem[], fallback: string) {
+  if (items.length === 0) return fallback;
+  return items
+    .slice(0, 6)
+    .map((item, index) => {
+      const source = item.url ? `${item.source} ${item.url}` : item.source;
+      return `${index + 1}. ${item.title}：${item.summary}（${source}）`;
+    })
+    .join('\n');
+}
+
+function buildBriefingModules(input: {
+  summary: string;
+  briefing: ExecutiveDailyBriefing;
+  sources: AgentBriefingItem[];
+}) {
+  const grouped: Record<'行业动态' | '技术趋势' | '竞品监控', AgentBriefingItem[]> = {
+    行业动态: [],
+    技术趋势: [],
+    竞品监控: [],
+  };
+
+  for (const item of input.sources) {
+    grouped[classifyBriefingItem(item)].push(item);
+  }
+
+  return [
+    {
+      title: '行业动态',
+      content: renderModuleContent(
+        grouped.行业动态,
+        input.briefing.externalInsights.map((item) => `${item.category}：${item.content}`).join('\n\n') ||
+          '暂无新的行业动态，点击“更新晨报”后总裁秘书会重新汇总。'
+      ),
+      items: grouped.行业动态,
+    },
+    {
+      title: '技术趋势',
+      content: renderModuleContent(
+        grouped.技术趋势,
+        input.summary || '暂无明确技术趋势，点击“更新晨报”后会重新检索并整理 AI agent、开发工具和技术路线信息。'
+      ),
+      items: grouped.技术趋势,
+    },
+    {
+      title: '竞品监控',
+      content: renderModuleContent(
+        grouped.竞品监控,
+        '暂无明确竞品信号，点击“更新晨报”后会重新检查产品发布、融资、公司动态和竞争格局。'
+      ),
+      items: grouped.竞品监控,
+    },
+  ];
+}
+
 function buildDocument(input: {
   query: string;
   briefing: ExecutiveDailyBriefing;
@@ -659,6 +738,11 @@ function buildDocument(input: {
   calledAgents: ExecutiveBriefingDocument['calledAgents'];
 }): ExecutiveBriefingDocument {
   const sources = input.subagentResults.flatMap((item) => item.briefingItems);
+  const modules = buildBriefingModules({
+    summary: input.summary,
+    briefing: input.briefing,
+    sources,
+  });
   return {
     dateKey: dateKey(),
     title: `总裁秘书Momo晨报 ${dateKey()}`,
@@ -668,17 +752,7 @@ function buildDocument(input: {
         title: '总览',
         content: input.briefing.headline,
       },
-      {
-        title: '外界信息与子Agent结果',
-        content: input.briefing.externalInsights.map((item) => `${item.category}：${item.content}`).join('\n\n'),
-        items: sources,
-      },
-      {
-        title: '重点事项',
-        content: input.briefing.priorityTasks
-          .map((item, index) => `${index + 1}. ${item.task}（${item.priority}，${item.deadline}）`)
-          .join('\n'),
-      },
+      ...modules,
     ],
     sources,
     calledAgents: input.calledAgents,
