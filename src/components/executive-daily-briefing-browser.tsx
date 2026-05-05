@@ -74,233 +74,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function createMockImage(label: string, start: string, end: string) {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${start}" />
-          <stop offset="100%" stop-color="${end}" />
-        </linearGradient>
-      </defs>
-      <rect width="640" height="360" rx="28" fill="url(#g)" />
-      <circle cx="520" cy="78" r="56" fill="rgba(255,255,255,0.16)" />
-      <circle cx="565" cy="305" r="72" fill="rgba(255,255,255,0.12)" />
-      <text x="40" y="170" fill="white" font-size="42" font-family="Arial, sans-serif" font-weight="700">${label}</text>
-      <text x="40" y="220" fill="rgba(255,255,255,0.82)" font-size="22" font-family="Arial, sans-serif">Preview</text>
-    </svg>
-  `;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
-const mockImages = {
-  industry1: createMockImage('Industry Pulse', '#2563eb', '#1d4ed8'),
-  industry2: createMockImage('Policy Watch', '#0f766e', '#14b8a6'),
-  industry3: createMockImage('Consumer Shift', '#f97316', '#fb7185'),
-  tech1: createMockImage('AI Infra', '#16a34a', '#22c55e'),
-  tech2: createMockImage('Model Stack', '#7c3aed', '#8b5cf6'),
-  tech3: createMockImage('Agent Flow', '#0891b2', '#06b6d4'),
-  competitor1: createMockImage('Competitor Move', '#e11d48', '#fb7185'),
-  competitor2: createMockImage('Launch Tracker', '#be123c', '#f43f5e'),
-  competitor3: createMockImage('Ad Campaign', '#f59e0b', '#f97316'),
-  general1: createMockImage('Daily Brief', '#334155', '#64748b'),
-  general2: createMockImage('Insight Board', '#1f2937', '#4b5563'),
-  general3: createMockImage('Market Signal', '#4338ca', '#6366f1'),
-};
-
-const mockBriefingEntries: BriefingFeedEntry[] = [
-  {
-    id: 'mock-01',
-    categoryKey: 'industryDynamics',
-    title: 'AI 办公自动化赛道融资热度回升，企业级协作产品进入新一轮整合窗口',
-    summary: '过去两周内多家工作流和知识协作公司密集发布升级。资本更关注能直接接入企业现有系统的方案，而不是单点工具。',
-    source: '36氪创投',
-    publishedAt: '2026-05-05T08:10:00+08:00',
-    imageUrls: [mockImages.industry1, mockImages.general1],
-  },
-  {
-    id: 'mock-02',
-    categoryKey: 'technologyTrends',
-    title: '多 Agent 协同开始从 Demo 走向生产环境，企业更在意稳定性和追踪能力',
-    summary: '近期厂商讨论重点已经从“能不能做”转向“如何观测和回放”。日志、权限和可解释链路正在变成标配。',
-    source: 'InfoQ',
-    publishedAt: '2026-05-05T08:25:00+08:00',
-    imageUrls: [mockImages.tech1, mockImages.tech2, mockImages.tech3],
-  },
-  {
-    id: 'mock-03',
-    categoryKey: 'competitorMonitoring',
-    title: '某头部协同平台上线智能摘要入口，直接切入高频会议与知识沉淀场景',
-    summary: '新版本把摘要、待办提取和资料归档整合成统一入口。对比现有方案，其优势在于原生覆盖组织通讯录和权限体系。',
-    source: '竞品跟踪组',
-    publishedAt: '2026-05-05T08:40:00+08:00',
-    imageUrls: [mockImages.competitor1],
-  },
-  {
-    id: 'mock-04',
-    categoryKey: 'industryDynamics',
-    title: '政企客户采购节奏变慢，但更愿意为可审计的 AI 工作流付费',
-    summary: '采购方对纯生成式展示兴趣下降，转而要求流程可回放、结果可归因。具备权限和审计能力的产品议价能力更强。',
-    source: '甲子光年',
-    publishedAt: '2026-05-05T09:05:00+08:00',
-    imageUrls: [],
-  },
-  {
-    id: 'mock-05',
-    categoryKey: 'technologyTrends',
-    title: '向量检索开始和实时数据库融合，知识更新时效成为体验差异点',
-    summary: '越来越多团队不再接受“夜间批处理”式索引刷新。分钟级更新与热数据优先召回正在成为用户预期。',
-    source: '技术观察台',
-    publishedAt: '2026-05-05T09:20:00+08:00',
-    imageUrls: [mockImages.tech2],
-  },
-  {
-    id: 'mock-06',
-    categoryKey: 'competitorMonitoring',
-    title: '竞品开始主打“行业模板 + 自动报告”，明显在争夺非技术管理者入口',
-    summary: '这类打法降低了上手门槛，但也牺牲了一部分灵活度。值得关注其模板质量和后续留存表现。',
-    source: '渠道监测',
-    publishedAt: '2026-05-05T09:35:00+08:00',
-    imageUrls: [mockImages.competitor2, mockImages.general2],
-  },
-  {
-    id: 'mock-07',
-    categoryKey: 'industryDynamics',
-    title: '内容平台调整推荐策略后，企业品牌账号的自然曝光波动明显增大',
-    summary: '平台更强调互动质量和连续更新频率。对依赖单次爆款的品牌而言，后续投放效率会继续承压。',
-    source: '新榜',
-    publishedAt: '2026-05-05T09:50:00+08:00',
-    imageUrls: [mockImages.industry3],
-  },
-  {
-    id: 'mock-08',
-    categoryKey: 'technologyTrends',
-    title: '模型路由策略从成本优化走向任务分层，复杂问题开始采用多模型编排',
-    summary: '越来越多团队会针对总结、分类、推理分别调用不同模型。结果是平均成本可控，但系统设计复杂度显著提升。',
-    source: 'Arize 中文社区',
-    publishedAt: '2026-05-05T10:05:00+08:00',
-    imageUrls: [mockImages.tech1, mockImages.general3],
-  },
-  {
-    id: 'mock-09',
-    categoryKey: 'competitorMonitoring',
-    title: '一家垂直 SaaS 将销售分析页升级为“每日看板”，强化管理层打开频次',
-    summary: '其核心不是新增更多图表，而是把异常提醒和行动建议塞进首屏。这个思路和当前资讯模块方向高度接近。',
-    source: 'SaaS 竞品雷达',
-    publishedAt: '2026-05-05T10:15:00+08:00',
-    imageUrls: [],
-  },
-  {
-    id: 'mock-10',
-    categoryKey: 'industryDynamics',
-    title: '出海品牌对中文智能客服和本地化内容生成的需求同步升温',
-    summary: '客户越来越希望同一套系统既能处理中文内部协作，也能支持多语种外部触达。跨语言一致性变成选择标准。',
-    source: '雨果跨境',
-    publishedAt: '2026-05-05T10:28:00+08:00',
-    imageUrls: [mockImages.general1],
-  },
-  {
-    id: 'mock-11',
-    categoryKey: 'technologyTrends',
-    title: '带工具调用能力的轻量模型开始覆盖更多流程节点，吞吐量优势明显',
-    summary: '在批量整理和分类任务里，小模型加工具链的方案更容易控成本。高推理模型更多留在关键决策节点。',
-    source: '机器之心',
-    publishedAt: '2026-05-05T10:40:00+08:00',
-    imageUrls: [mockImages.tech3],
-  },
-  {
-    id: 'mock-12',
-    categoryKey: 'competitorMonitoring',
-    title: '竞品广告素材中开始弱化“AI 概念”，转而突出业务结果与团队提效',
-    summary: '素材表达从技术炫耀切到具体业务收益，说明市场教育阶段正在过去。用户开始直接问 ROI 和替代流程。',
-    source: '广告监测台',
-    publishedAt: '2026-05-05T10:55:00+08:00',
-    imageUrls: [mockImages.competitor3, mockImages.competitor1],
-  },
-  {
-    id: 'mock-13',
-    categoryKey: 'industryDynamics',
-    title: '中大型企业开始要求 AI 系统支持跨部门知识权限继承，独立知识库工具受压',
-    summary: '如果知识调用绕不开权限审批和组织结构，孤立工具很难进入核心流程。平台化能力的重要性继续提高。',
-    source: '产业情报站',
-    publishedAt: '2026-05-05T11:10:00+08:00',
-    imageUrls: [],
-  },
-  {
-    id: 'mock-14',
-    categoryKey: 'technologyTrends',
-    title: '生成式 UI 和动态报告模版结合后，管理看板的个性化展示开始普及',
-    summary: '同一批数据可以按角色生成不同视图。产品竞争点从“能否生成”升级为“是否足够稳定且可控”。',
-    source: '前端趋势',
-    publishedAt: '2026-05-05T11:22:00+08:00',
-    imageUrls: [mockImages.general2, mockImages.tech2],
-  },
-  {
-    id: 'mock-15',
-    categoryKey: 'competitorMonitoring',
-    title: '一家内容分析产品将推荐机制前置到首页，试图缩短“打开到行动”的路径',
-    summary: '首页直接给出重点情报和建议动作，减少用户先筛选再阅读的步骤。这个模式对提高周活非常有效。',
-    source: '竞对首页观察',
-    publishedAt: '2026-05-05T11:35:00+08:00',
-    imageUrls: [mockImages.competitor2],
-  },
-  {
-    id: 'mock-16',
-    categoryKey: 'industryDynamics',
-    title: '公众号、短视频、论坛三类渠道的信号开始互相验证，单一渠道判断失真风险加大',
-    summary: '同一趋势在多个渠道同时出现时，才更可能意味着真实需求变化。多源交叉验证比过去更重要。',
-    source: '多源舆情台',
-    publishedAt: '2026-05-05T11:48:00+08:00',
-    imageUrls: [mockImages.industry2, mockImages.general3],
-  },
-  {
-    id: 'mock-17',
-    categoryKey: 'technologyTrends',
-    title: '多模态摘要开始进入日常资讯浏览场景，图片和文字联合理解体验提升明显',
-    summary: '用户希望不仅看到结论，还能快速扫到关键图表和截图。资讯卡片带缩略预览，正在成为更自然的交互形式。',
-    source: '产品体验周报',
-    publishedAt: '2026-05-05T12:02:00+08:00',
-    imageUrls: [mockImages.tech1, mockImages.general1, mockImages.general2],
-  },
-  {
-    id: 'mock-18',
-    categoryKey: 'competitorMonitoring',
-    title: '竞品开始在案例页集中展示客户行业分布，试图强化“已经被主流采用”的认知',
-    summary: '这类社会证明对于后期市场转化很关键。需要继续跟踪其案例更新频率和行业覆盖变化。',
-    source: '官网更新监测',
-    publishedAt: '2026-05-05T12:15:00+08:00',
-    imageUrls: [],
-  },
-  {
-    id: 'mock-19',
-    categoryKey: 'industryDynamics',
-    title: '管理层更愿意在早晨和午间快速浏览“短摘要 + 缩略图”的资讯卡片',
-    summary: '长段报告阅读意愿下降，先扫一眼重要资讯再决定是否深挖，正在成为更主流的浏览习惯。',
-    source: '用户研究访谈',
-    publishedAt: '2026-05-05T12:26:00+08:00',
-    imageUrls: [mockImages.general2],
-  },
-  {
-    id: 'mock-20',
-    categoryKey: 'technologyTrends',
-    title: '轻量轮播式预览开始替代传统缩略图占位，兼顾信息密度和视觉吸引力',
-    summary: '当一条资讯关联多张图时，用户更容易通过轮播快速理解上下文。空状态则应自动收缩，不额外占位。',
-    source: '设计系统实验',
-    publishedAt: '2026-05-05T12:40:00+08:00',
-    imageUrls: [mockImages.tech3, mockImages.industry1],
-  },
-];
-
-const previewFallbackEntries: BriefingFeedEntry[] = [
-  ...mockBriefingEntries,
-  ...mockBriefingEntries.map((entry, index) => ({
-    ...entry,
-    id: `${entry.id}-more`,
-    title: `${entry.title}（延伸）`,
-    publishedAt: `2026-05-06T${String(8 + (index % 10)).padStart(2, '0')}:${String((index * 7) % 60).padStart(2, '0')}:00+08:00`,
-  })),
-];
-
 function normalizeBriefingModules(sections: unknown): BriefingModule[] {
   const expectedTitles = ['行业动态', '技术趋势', '竞品监控'];
   if (!Array.isArray(sections)) {
@@ -399,7 +172,7 @@ function normalizeBriefingEntries(
     const categoryKey = titleToTabKey(module.title);
     const insight = briefing.externalInsights?.find((item) => item.category.includes(module.title));
     const fallbackTitle = module.title;
-    const fallbackSummary = module.content || insight?.content || '今日暂无新的资讯更新。';
+    const fallbackSummary = insight?.content || module.content || '今日暂无新的资讯更新。';
     const rawItems =
       module.items && module.items.length > 0
         ? module.items
@@ -478,8 +251,8 @@ export function ExecutiveDailyBriefingBrowser({
   briefing: initialBriefing,
   persistedBriefing: initialPersistedBriefing,
   className = 'mb-6',
-  updating: _updating = false,
-  onUpdateBriefing: _onUpdateBriefing,
+  updating = false,
+  onUpdateBriefing,
   onPromptRequest,
 }: {
   briefing: ExecutiveDailyBriefingView;
@@ -493,6 +266,8 @@ export function ExecutiveDailyBriefingBrowser({
   const [persistedBriefing, setPersistedBriefing] = useState(initialPersistedBriefing || null);
   const [activeBriefingTab, setActiveBriefingTab] = useState<BriefingTabKey>('recommended');
   const [visibleCount, setVisibleCount] = useState(20);
+  const [internalUpdating, setInternalUpdating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -511,17 +286,11 @@ export function ExecutiveDailyBriefingBrowser({
     () => normalizeBriefingEntries(briefingModules, briefing, persistedBriefing),
     [briefingModules, briefing, persistedBriefing]
   );
-  const hydratedEntries = useMemo(() => {
-    if (briefingEntries.length >= 40) return briefingEntries;
-    const existingIds = new Set(briefingEntries.map((entry) => entry.id));
-    const filler = previewFallbackEntries.filter((entry) => !existingIds.has(entry.id));
-    return [...briefingEntries, ...filler].slice(0, 40);
-  }, [briefingEntries]);
 
   const visibleEntries = useMemo(() => {
-    if (activeBriefingTab === 'recommended') return hydratedEntries;
-    return hydratedEntries.filter((entry) => entry.categoryKey === activeBriefingTab);
-  }, [activeBriefingTab, hydratedEntries]);
+    if (activeBriefingTab === 'recommended') return briefingEntries;
+    return briefingEntries.filter((entry) => entry.categoryKey === activeBriefingTab);
+  }, [activeBriefingTab, briefingEntries]);
   const renderedEntries = useMemo(
     () => visibleEntries.slice(0, visibleCount),
     [visibleEntries, visibleCount]
@@ -561,16 +330,71 @@ export function ExecutiveDailyBriefingBrowser({
     window.location.href = `/investor/chat/100?prompt=${encodeURIComponent(prompt)}`;
   };
 
+  const handleUpdateBriefing = async () => {
+    if (onUpdateBriefing) {
+      onUpdateBriefing();
+      return;
+    }
+    if (internalUpdating) return;
+    setInternalUpdating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/investor/executive-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: EXECUTIVE_UPDATE_BRIEFING_PROMPT }],
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof data.error === 'string' ? data.error : '更新资讯失败');
+        return;
+      }
+      if (isRecord(data.briefing)) setBriefing(data.briefing as ExecutiveDailyBriefingView);
+      setPersistedBriefing(normalizePersistedBriefing(data.persistedBriefing));
+      setVisibleCount(20);
+    } catch (err) {
+      setError(err instanceof Error ? `更新资讯失败：${err.message}` : '更新资讯失败，请稍后重试');
+    } finally {
+      setInternalUpdating(false);
+    }
+  };
+
+  const isUpdating = updating || internalUpdating;
+
   return (
     <div className={`${className} relative overflow-visible rounded-[2rem] border border-slate-200 bg-[#f7f9fc] text-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.08)]`}>
       <div className="sticky top-0 z-20 border-b border-slate-200 bg-[#f7f9fc]/95 px-4 pt-4 backdrop-blur-md sm:px-6">
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-2xl font-bold text-slate-950 sm:text-3xl">每日晨报</h2>
+              <span className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-500 shadow-sm">
+                {persistedBriefing?.dateKey || briefing.date}
+              </span>
+            </div>
+            <p className="mt-2 line-clamp-2 max-w-4xl text-sm leading-6 text-slate-500">
+              {persistedBriefing?.summary || briefing.headline}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleUpdateBriefing()}
+            disabled={isUpdating}
+            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isUpdating ? '更新中...' : '更新资讯'}
+          </button>
+        </div>
+        {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
         <div className="flex gap-6 overflow-x-auto">
           {briefingTabs.map((tab) => {
             const isActive = tab.key === activeBriefingTab;
             const itemCount =
               tab.key === 'recommended'
-                ? hydratedEntries.length
-                : hydratedEntries.filter((entry) => entry.categoryKey === tab.key).length;
+                ? briefingEntries.length
+                : briefingEntries.filter((entry) => entry.categoryKey === tab.key).length;
 
             return (
               <button
