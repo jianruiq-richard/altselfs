@@ -6,18 +6,17 @@ import {
   ArrowRight,
   Bot,
   Briefcase,
-  CheckCircle2,
-  Clock,
   FileText,
   Mail,
   MessageCircle,
-  Newspaper,
   Sparkles,
   TrendingUp,
   Users,
 } from 'lucide-react';
 import { FigmaShell } from '@/components/figma-shell';
+import { ExecutiveDailyBriefingBrowser } from '@/components/executive-daily-briefing-browser';
 import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
+import { getTodayExecutiveBriefing } from '@/lib/agents/executive-orchestrator';
 import { resolveHiredTeamKeys, TEAM_KEYS } from '@/lib/team-library';
 
 export default async function InvestorDashboardPage() {
@@ -28,6 +27,7 @@ export default async function InvestorDashboardPage() {
     where: { clerkId: userId },
     relationLoadStrategy: 'join',
     select: {
+      id: true,
       role: true,
       nickname: true,
       phone: true,
@@ -230,6 +230,16 @@ export default async function InvestorDashboardPage() {
     avatars: dbUser.avatars,
     hiredTeamKeys: Array.from(hiredTeamKeys),
   });
+  const todayPersistedBriefing = await getTodayExecutiveBriefing(dbUser.id);
+  const persistedDailyBriefing = todayPersistedBriefing
+    ? {
+        dateKey: todayPersistedBriefing.dateKey,
+        title: todayPersistedBriefing.title,
+        summary: todayPersistedBriefing.summary,
+        sections: todayPersistedBriefing.sections,
+        updatedAt: todayPersistedBriefing.updatedAt.toISOString(),
+      }
+    : null;
 
   return (
     <FigmaShell
@@ -262,107 +272,11 @@ export default async function InvestorDashboardPage() {
         ))}
       </div>
 
-      <div className="mb-8 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50">
-        <div className="p-4 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-orange-600">
-                <Newspaper className="h-6 w-6 text-white" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">每日晨报</h2>
-                <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-600">
-                  <Clock className="h-4 w-4" />
-                  {dailyBriefing.date} · {dailyBriefing.generatedTime}由总裁秘书Momo生成
-                </p>
-              </div>
-            </div>
-            <Link href="/investor/chat/100" className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 sm:py-2">
-              与总裁秘书Momo对话
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </div>
-        </div>
-        <div className="space-y-6 px-4 pb-4 sm:px-6 sm:pb-6">
-          <div>
-            <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">🌍 外界信息精选</h3>
-            <div className="grid gap-4 md:grid-cols-3">
-              {dailyBriefing.externalInsights.map((item) => (
-                <div key={`${item.category}-${item.source}`} className="rounded-lg border border-amber-200 bg-white p-4">
-                  <span className="mb-2 inline-flex rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700">{item.category}</span>
-                  <p className="mb-2 text-sm leading-relaxed text-gray-700">{item.content}</p>
-                  <p className="text-xs text-gray-500">{item.source}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">⚡ 今日重点事项</h3>
-            <div className="space-y-3">
-              {dailyBriefing.priorityTasks.map((item) => (
-                <div key={`${item.task}-${item.deadline}`} className="rounded-lg border border-amber-200 bg-white p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex flex-1 items-start gap-3">
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
-                      <div className="flex-1">
-                        <div className="mb-1 flex items-center gap-2">
-                          <h4 className="font-medium text-gray-900">{item.task}</h4>
-                          <span
-                            className={`rounded px-2 py-0.5 text-xs ${
-                              item.priority === 'high' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'
-                            }`}
-                          >
-                            {item.priority === 'high' ? '紧急' : '普通'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600">截止: {item.deadline}</p>
-                        <p className="mt-1 text-xs text-gray-500">指派自 {item.assignedBy}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">📊 各部门工作概览</h3>
-            <div className="space-y-3">
-              {dailyBriefing.departmentOverview.map((item) => (
-                <div key={item.department} className="rounded-lg border border-amber-200 bg-white p-4">
-                  <div className="mb-2 flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold text-gray-900">{item.department}</h4>
-                      <span
-                        className={`rounded px-2 py-0.5 text-xs ${
-                          item.status === '运行正常' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </div>
-                    <span className="text-sm font-medium text-amber-600">{item.progress}%</span>
-                  </div>
-                  <p className="mb-2 text-sm text-gray-600">{item.summary}</p>
-                  {item.progress > 0 ? (
-                    <div className="h-2 w-full rounded-full bg-gray-200">
-                      <div
-                        className="h-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all"
-                        style={{ width: `${item.progress}%` }}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-amber-200 bg-white p-4">
-            <p className="text-sm text-gray-700">💡 晨报由总裁秘书Momo基于所有部门工作情况和外界信息自动生成，每日06:00更新</p>
-          </div>
-        </div>
-      </div>
+      <ExecutiveDailyBriefingBrowser
+        briefing={dailyBriefing}
+        persistedBriefing={persistedDailyBriefing}
+        className="mb-8"
+      />
 
       <div className="mb-8 rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

@@ -2,8 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
+import {
+  EXECUTIVE_UPDATE_BRIEFING_PROMPT,
+  ExecutiveDailyBriefingBrowser,
+} from '@/components/executive-daily-briefing-browser';
 
 type ChatMessage = {
   role: 'user' | 'assistant';
@@ -26,16 +30,10 @@ type Briefing = {
     deadline: string;
     assignedBy: string;
   }>;
-};
-
-type BriefingModule = {
-  title: string;
-  content: string;
-  items?: Array<{
-    title?: string;
-    summary?: string;
-    source?: string;
-    url?: string;
+  externalInsights?: Array<{
+    category: string;
+    content: string;
+    source: string;
   }>;
 };
 
@@ -92,9 +90,6 @@ const suggestedQuestions = [
   '晨报的完整内容是什么？',
   '更新今天的晨报，并重点汇总 AI agent 和 vibe coding 的外界信息。',
 ];
-
-const updateBriefingPrompt =
-  '更新今天的晨报，请调用可用子agent，尤其是微信公众号助手，并重新汇总当天信息，按照行业动态、技术趋势和竞品监控三个模块整理展示。';
 
 const plannerStatusLabel: Record<PlannerStepStatus, string> = {
   PENDING: '待执行',
@@ -170,48 +165,9 @@ function formatPlannerPayload(payload: unknown) {
   }
 }
 
-function normalizeBriefingModules(sections: unknown): BriefingModule[] {
-  const expectedTitles = ['行业动态', '技术趋势', '竞品监控'];
-  if (!Array.isArray(sections)) {
-    return expectedTitles.map((title) => ({
-      title,
-      content: '点击“更新晨报”后，总裁秘书会重新汇总当天信息并填充这个模块。',
-    }));
-  }
-
-  return expectedTitles.map((title) => {
-    const matched = sections.find((section) => {
-      if (!isRecord(section) || typeof section.title !== 'string') return false;
-      return section.title.includes(title);
-    });
-    if (!isRecord(matched)) {
-      return {
-        title,
-        content: '点击“更新晨报”后，总裁秘书会重新汇总当天信息并填充这个模块。',
-      };
-    }
-
-    const rawItems = Array.isArray(matched.items) ? matched.items : [];
-    return {
-      title,
-      content: typeof matched.content === 'string' && matched.content.trim() ? matched.content : '暂无明确内容。',
-      items: rawItems
-        .map((item) => {
-          if (!isRecord(item)) return null;
-          return {
-            title: typeof item.title === 'string' ? item.title : undefined,
-            summary: typeof item.summary === 'string' ? item.summary : undefined,
-            source: typeof item.source === 'string' ? item.source : undefined,
-            url: typeof item.url === 'string' ? item.url : undefined,
-          };
-        })
-        .filter(Boolean) as BriefingModule['items'],
-    };
-  });
-}
-
 export default function InvestorAgentChatPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const agentId = params.agentId as string;
   const isExecutive = agentId === '100';
 
@@ -245,11 +201,6 @@ export default function InvestorAgentChatPage() {
         ? '查看上次过程和错误'
         : '查看上次执行过程'
       : '等待本轮 planner';
-  const briefingModules = useMemo(
-    () => normalizeBriefingModules(persistedBriefing?.sections),
-    [persistedBriefing]
-  );
-
   const applyAgentConfig = useCallback((agentConfig: AgentConfig | null | undefined) => {
     if (!agentConfig) return;
     const systemPrompt = String(agentConfig.systemPrompt || '');
@@ -296,6 +247,11 @@ export default function InvestorAgentChatPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const prompt = searchParams.get('prompt')?.trim();
+    if (prompt) setInput(prompt);
+  }, [searchParams]);
 
   const handleSend = async (textFromSuggestion?: string) => {
     const content = (textFromSuggestion || input).trim();
@@ -650,48 +606,13 @@ export default function InvestorAgentChatPage() {
       </div>
 
       {briefing ? (
-        <div className="mb-6 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 sm:p-5">
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">每日晨报</h2>
-              <span className="text-xs text-gray-500">
-                {persistedBriefing?.dateKey || briefing.date} · {persistedBriefing?.updatedAt ? `已保存 ${new Date(persistedBriefing.updatedAt).toLocaleString()}` : briefing.generatedTime}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleSend(updateBriefingPrompt)}
-              disabled={sending}
-              className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
-            >
-              {sending ? '更新中...' : '更新晨报'}
-            </button>
-          </div>
-          <p className="text-sm text-gray-700">{persistedBriefing?.summary || briefing.headline}</p>
-          <div className="mt-4 grid gap-3 lg:grid-cols-3">
-            {briefingModules.map((module) => (
-              <div key={module.title} className="rounded-xl border border-amber-200 bg-white p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-gray-900">{module.title}</p>
-                  <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
-                    {module.items?.length || 0} 条来源
-                  </span>
-                </div>
-                <p className="line-clamp-6 whitespace-pre-wrap text-xs leading-5 text-gray-600">{module.content}</p>
-                {module.items && module.items.length > 0 ? (
-                  <div className="mt-3 space-y-2 border-t border-amber-100 pt-2">
-                    {module.items.slice(0, 2).map((item, index) => (
-                      <div key={`${module.title}-${item.url || item.title || index}`}>
-                        <p className="text-xs font-medium text-gray-800">{item.title || '未命名来源'}</p>
-                        <p className="mt-0.5 text-[11px] text-gray-500">{item.source || '未知来源'}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
+        <ExecutiveDailyBriefingBrowser
+          briefing={briefing}
+          persistedBriefing={persistedBriefing}
+          updating={sending}
+          onUpdateBriefing={() => void handleSend(EXECUTIVE_UPDATE_BRIEFING_PROMPT)}
+          onPromptRequest={(prompt) => setInput(prompt)}
+        />
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white">
