@@ -244,17 +244,14 @@ export default async function InvestorDashboardPage() {
   return (
     <FigmaShell
       homeHref="/dashboard"
-      title="工作台"
-      subtitle="欢迎回来，这是你的 AI 员工工作概览"
-      actions={
-        <Link
-          href="/avatar"
-          className="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-        >
-          管理分身
-        </Link>
-      }
+      showPageHeader={false}
     >
+      <ExecutiveDailyBriefingBrowser
+        briefing={dailyBriefing}
+        persistedBriefing={persistedDailyBriefing}
+        className="mb-8"
+      />
+
       <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <div key={stat.label} className="rounded-2xl border border-gray-200 bg-white p-6">
@@ -272,11 +269,20 @@ export default async function InvestorDashboardPage() {
         ))}
       </div>
 
-      <ExecutiveDailyBriefingBrowser
-        briefing={dailyBriefing}
-        persistedBriefing={persistedDailyBriefing}
-        className="mb-8"
-      />
+      <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">工作台</h1>
+          <p className="mt-2 max-w-3xl text-sm text-gray-500 sm:text-base">欢迎回来，这是你的 AI 员工工作概览</p>
+        </div>
+        <div className="shrink-0 self-start">
+          <Link
+            href="/avatar"
+            className="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            管理分身
+          </Link>
+        </div>
+      </div>
 
       <div className="mb-8 rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
