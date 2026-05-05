@@ -38,11 +38,11 @@ type BriefingModule = {
 
 type BriefingItem = NonNullable<BriefingModule['items']>[number];
 
-type BriefingTabKey = 'recommended' | 'industryDynamics' | 'technologyTrends' | 'competitorMonitoring';
+type BriefingTabKey = 'industryDynamics' | 'technologyTrends' | 'competitorMonitoring';
 
 type BriefingFeedEntry = {
   id: string;
-  categoryKey: Exclude<BriefingTabKey, 'recommended'>;
+  categoryKey: BriefingTabKey;
   title: string;
   summary: string;
   source: string;
@@ -52,7 +52,6 @@ type BriefingFeedEntry = {
 };
 
 const briefingTabs: Array<{ key: BriefingTabKey; label: string }> = [
-  { key: 'recommended', label: '推荐' },
   { key: 'industryDynamics', label: '行业动态' },
   { key: 'technologyTrends', label: '技术趋势' },
   { key: 'competitorMonitoring', label: '竞品监控' },
@@ -141,7 +140,7 @@ function normalizePersistedBriefing(value: unknown): PersistedExecutiveBriefingV
   };
 }
 
-function titleToTabKey(title: string): Exclude<BriefingTabKey, 'recommended'> {
+function titleToTabKey(title: string): BriefingTabKey {
   if (title.includes('技术趋势')) return 'technologyTrends';
   if (title.includes('竞品监控')) return 'competitorMonitoring';
   return 'industryDynamics';
@@ -264,7 +263,7 @@ export function ExecutiveDailyBriefingBrowser({
 }) {
   const [briefing, setBriefing] = useState(initialBriefing);
   const [persistedBriefing, setPersistedBriefing] = useState(initialPersistedBriefing || null);
-  const [activeBriefingTab, setActiveBriefingTab] = useState<BriefingTabKey>('recommended');
+  const [activeBriefingTab, setActiveBriefingTab] = useState<BriefingTabKey>('industryDynamics');
   const [visibleCount, setVisibleCount] = useState(20);
   const [internalUpdating, setInternalUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -287,10 +286,10 @@ export function ExecutiveDailyBriefingBrowser({
     [briefingModules, briefing, persistedBriefing]
   );
 
-  const visibleEntries = useMemo(() => {
-    if (activeBriefingTab === 'recommended') return briefingEntries;
-    return briefingEntries.filter((entry) => entry.categoryKey === activeBriefingTab);
-  }, [activeBriefingTab, briefingEntries]);
+  const visibleEntries = useMemo(
+    () => briefingEntries.filter((entry) => entry.categoryKey === activeBriefingTab),
+    [activeBriefingTab, briefingEntries]
+  );
   const renderedEntries = useMemo(
     () => visibleEntries.slice(0, visibleCount),
     [visibleEntries, visibleCount]
@@ -391,10 +390,7 @@ export function ExecutiveDailyBriefingBrowser({
         <div className="flex gap-6 overflow-x-auto">
           {briefingTabs.map((tab) => {
             const isActive = tab.key === activeBriefingTab;
-            const itemCount =
-              tab.key === 'recommended'
-                ? briefingEntries.length
-                : briefingEntries.filter((entry) => entry.categoryKey === tab.key).length;
+            const itemCount = briefingEntries.filter((entry) => entry.categoryKey === tab.key).length;
 
             return (
               <button
