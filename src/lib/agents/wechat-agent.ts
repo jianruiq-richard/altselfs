@@ -163,7 +163,7 @@ function buildFallbackAnswer(candidates: ArticleCandidate[], failures: AgentRunT
 }
 
 function toBriefingItems(candidates: ArticleCandidate[], answer: string): AgentBriefingItem[] {
-  const top = candidates.slice(0, 6);
+  const top = candidates.slice(0, DEFAULT_ARTICLE_LIMIT);
   if (top.length === 0) {
     return [
       {
