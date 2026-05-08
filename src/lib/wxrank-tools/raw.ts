@@ -5,6 +5,7 @@ export type WxrankEndpointKey =
   | 'searchMpByKeyword'
   | 'searchMpBySosuo'
   | 'getMpHistoryPosts'
+  | 'getMpHistoryPostsByBiz'
   | 'getMpSubjectInfo'
   | 'getMpBaseInfo'
   | 'getArticleDetailTextRich'
@@ -31,7 +32,8 @@ const AUTH_FIELD = process.env.WXRANK_AUTH_FIELD || 'key';
 const DEFINITIONS: EndpointDefinition[] = [
   { key: 'searchMpByKeyword', label: '关键词搜索公众号', method: 'POST', defaultPath: '/weixin/getsu' },
   { key: 'searchMpBySosuo', label: '搜一搜搜公众号', method: 'POST', defaultPath: '/weixin/getsu' },
-  { key: 'getMpHistoryPosts', label: '获取公众号历史发文列表', method: 'POST', defaultPath: '/weixin/getpc' },
+  { key: 'getMpHistoryPosts', label: '获取公众号历史发文列表', method: 'POST', defaultPath: '/weixin/getps' },
+  { key: 'getMpHistoryPostsByBiz', label: '获取公众号历史发文列表（biz兜底）', method: 'POST', defaultPath: '/weixin/getpc' },
   { key: 'getMpSubjectInfo', label: '获取公众号主体信息', method: 'POST', defaultPath: '/weixin/getinfo' },
   { key: 'getMpBaseInfo', label: '获取公众号基础信息', method: 'POST', defaultPath: '/weixin/getbiz' },
   { key: 'getArticleDetailTextRich', label: '获取文章详情（正文）', method: 'POST', defaultPath: '/weixin/artinfo' },
@@ -96,6 +98,70 @@ async function parseResponseSafe(res: Response) {
       raw: text,
     };
   }
+}
+
+function pickString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number') return String(value);
+  }
+  return '';
+}
+
+function normalizeGetpsPayload(payload: unknown, count: number) {
+  const root = (payload || {}) as AnyRecord;
+  const data = (root.data || {}) as AnyRecord;
+  const list = Array.isArray(data.list) ? (data.list as AnyRecord[]) : [];
+  return {
+    ...root,
+    data: {
+      ...data,
+      list: list.slice(0, count).map((item) => ({
+        title: item.title,
+        url: item.art_url,
+        article_url: item.art_url,
+        pic_url: item.pic_url,
+        sn: item.sn,
+        publish_time: item.pub_time,
+        pub_time: item.pub_time,
+        source: 'getps',
+      })),
+    },
+  };
+}
+
+function normalizeGetpcPayload(payload: unknown, count: number) {
+  const root = (payload || {}) as AnyRecord;
+  const data = (root.data || {}) as AnyRecord;
+  const publishList = Array.isArray(data.publish_list)
+    ? (data.publish_list as AnyRecord[])
+    : [];
+  const list: AnyRecord[] = [];
+  for (const block of publishList) {
+    const sentTime = typeof block.sent_info_time === 'string' ? block.sent_info_time : '';
+    const appList = Array.isArray(block.sent_appmsg_list)
+      ? (block.sent_appmsg_list as AnyRecord[])
+      : [];
+    for (const item of appList) {
+      list.push({
+        title: item.title,
+        url: item.art_url,
+        article_url: item.art_url,
+        pic_url: item.pic_url,
+        idx: item.idx,
+        publish_time: sentTime,
+        pub_time: sentTime,
+        source: 'getpc',
+      });
+    }
+  }
+  return {
+    ...root,
+    data: {
+      ...(typeof root.data === 'object' && root.data ? (root.data as AnyRecord) : {}),
+      list: list.slice(0, count),
+    },
+  };
 }
 
 export function isWxrankReady() {
@@ -172,72 +238,57 @@ export const WxrankRaw = {
       (typeof params.wxid === 'string' && params.wxid.trim()) ||
       (typeof params.origin_id === 'string' && params.origin_id.trim()) ||
       '';
+    const articleUrl =
+      (typeof params.article_url === 'string' && params.article_url.trim()) ||
+      (typeof params.last_article_url === 'string' && params.last_article_url.trim()) ||
+      (typeof params.url === 'string' && params.url.trim()) ||
+      '';
     const count = Math.max(1, Math.min(20, Number(params.count) || 10));
-    if (biz) {
-      const begin = Number(params.begin) || 0;
-      const payload = await callWxrankEndpoint('getMpHistoryPosts', { biz, begin });
-      const root = (payload || {}) as AnyRecord;
-      const data = (root.data || {}) as AnyRecord;
-      const publishList = Array.isArray(data.publish_list)
-        ? (data.publish_list as AnyRecord[])
-        : [];
-      const list: AnyRecord[] = [];
-      for (const block of publishList) {
-        const sentTime = typeof block.sent_info_time === 'string' ? block.sent_info_time : '';
-        const appList = Array.isArray(block.sent_appmsg_list)
-          ? (block.sent_appmsg_list as AnyRecord[])
-          : [];
-        for (const item of appList) {
-          list.push({
-            title: item.title,
-            url: item.art_url,
-            article_url: item.art_url,
-            pic_url: item.pic_url,
-            idx: item.idx,
-            publish_time: sentTime,
-            pub_time: sentTime,
-            source: 'getpc',
-          });
-        }
-      }
-      return {
-        ...root,
-        data: {
-          ...(typeof root.data === 'object' && root.data ? (root.data as AnyRecord) : {}),
-          list: list.slice(0, count),
-        },
-      };
-    }
 
     if (wxidRaw) {
       const payload = await callWxrankEndpoint('getMpHistoryPosts', {
         wxid: wxidRaw,
         cursor: typeof params.cursor === 'string' ? params.cursor : '',
       });
-      const root = (payload || {}) as AnyRecord;
-      const data = (root.data || {}) as AnyRecord;
-      const list = Array.isArray(data.list) ? (data.list as AnyRecord[]) : [];
-      return {
-        ...root,
-        data: {
-          ...data,
-          list: list.slice(0, count).map((item) => ({
-            title: item.title,
-            url: item.art_url,
-            article_url: item.art_url,
-            pic_url: item.pic_url,
-            sn: item.sn,
-            publish_time: item.pub_time,
-            pub_time: item.pub_time,
-            source: 'getps',
-          })),
-        },
-      };
+      return normalizeGetpsPayload(payload, count);
+    }
+
+    if (articleUrl) {
+      const detail = await callWxrankEndpoint('getArticleDetailTextRich', { url: articleUrl });
+      const data = ((detail || {}) as AnyRecord).data as AnyRecord | undefined;
+      const resolvedWxid = pickString(
+        data?.user_name,
+        data?.wxid,
+        data?.gh_id,
+        data?.origin_id,
+        data?.wx_user
+      );
+      if (resolvedWxid) {
+        const payload = await callWxrankEndpoint('getMpHistoryPosts', {
+          wxid: resolvedWxid,
+          cursor: typeof params.cursor === 'string' ? params.cursor : '',
+        });
+        const normalized = normalizeGetpsPayload(payload, count);
+        return {
+          ...normalized,
+          resolvedFromArticleUrl: true,
+          resolvedWxid,
+        };
+      }
+      if ((detail as AnyRecord)?.code !== 0) {
+        return detail;
+      }
+    }
+
+    if (biz) {
+      const begin = Number(params.begin) || 0;
+      const payload = await callWxrankEndpoint('getMpHistoryPostsByBiz', { biz, begin });
+      return normalizeGetpcPayload(payload, count);
     }
 
     return {
       code: 1001,
-      msg: 'biz 或 wxid 不能为空',
+      msg: 'biz、wxid 或文章链接不能为空',
       data: { list: [] },
     };
   },

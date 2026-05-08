@@ -113,6 +113,7 @@ export async function listArticlesByAccount(input: {
   wechatId?: string;
   name?: string;
   originId?: string;
+  lastArticleUrl?: string;
   page?: number;
   count?: number;
 }) {
@@ -121,6 +122,7 @@ export async function listArticlesByAccount(input: {
     wxid: input.wechatId,
     name: input.name,
     origin_id: input.originId,
+    last_article_url: input.lastArticleUrl,
     p: input.page || 1,
     count: input.count || 20,
   });

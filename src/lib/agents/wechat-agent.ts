@@ -82,6 +82,18 @@ function toArticleCandidates(sourceName: string, biz: string, payload: unknown):
     .filter((item) => item.url);
 }
 
+function getProviderError(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return '';
+  const root = payload as Record<string, unknown>;
+  const code = root.code;
+  const failed =
+    (typeof code === 'number' && code !== 0) ||
+    (typeof code === 'string' && code.trim() && code.trim() !== '0');
+  if (!failed) return '';
+  const msg = typeof root.msg === 'string' ? root.msg : typeof root.message === 'string' ? root.message : '';
+  return msg ? `code=${String(code)} ${msg}` : `code=${String(code)}`;
+}
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'string' && error.trim()) return error.trim();
@@ -222,6 +234,7 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
       const result = await listArticlesByAccount({
         biz: source.biz,
         name: source.displayName,
+        lastArticleUrl: source.lastArticleUrl,
         page: 1,
         count: Math.min(DEFAULT_ARTICLE_LIMIT, 20),
       });
@@ -238,13 +251,20 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
       });
       continue;
     }
+    const providerError = getProviderError(item.value.result);
     const articles = toArticleCandidates(item.value.source.displayName, item.value.source.biz, item.value.result);
     candidates.push(...articles);
     toolCalls.push({
       toolName: 'listArticlesByAccount',
-      status: 'SUCCESS',
-      args: { biz: item.value.source.biz, name: item.value.source.displayName },
-      result: { count: articles.length, sample: articles.slice(0, 3) },
+      status: providerError && articles.length === 0 ? 'ERROR' : 'SUCCESS',
+      args: {
+        biz: item.value.source.biz,
+        name: item.value.source.displayName,
+        lastArticleUrl: item.value.source.lastArticleUrl,
+      },
+      result: providerError
+        ? { error: providerError, count: articles.length, sample: articles.slice(0, 3) }
+        : { count: articles.length, sample: articles.slice(0, 3) },
     });
   }
 
