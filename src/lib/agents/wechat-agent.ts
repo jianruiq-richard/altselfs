@@ -10,8 +10,10 @@ import type { AgentBriefingItem, AgentRunInput, AgentRunResult, AgentRunToolCall
 
 const WECHAT_AGENT_TYPE = 'WECHAT';
 const HISTORY_PAGE_SIZE = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_HISTORY_PAGE_SIZE', 20);
-const MAX_PAGES_PER_SOURCE = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_MAX_PAGES_PER_SOURCE', 50);
-const RUN_BUDGET_MS = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_RUN_BUDGET_MS', 240_000);
+const RUN_BUDGET_MS = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_RUN_BUDGET_MS', 180_000);
+const MODEL_RESERVE_MS = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_MODEL_RESERVE_MS', 45_000);
+const DETAIL_FETCH_LIMIT = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_DETAIL_FETCH_LIMIT', 0);
+const METRICS_FETCH_LIMIT = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_METRICS_FETCH_LIMIT', 0);
 const PROFILE_STALE_DAYS = readPositiveIntEnv('EXECUTIVE_WECHAT_SOURCE_PROFILE_STALE_DAYS', 30);
 
 type SourceRecord = {
@@ -418,6 +420,11 @@ function renderArticles(candidates: ArticleCandidate[]) {
     .join('\n\n');
 }
 
+function selectForToolFetch(candidates: ArticleCandidate[], limit: number) {
+  if (limit <= 0) return [];
+  return candidates.slice(0, limit);
+}
+
 function buildFallbackAnswer(candidates: ArticleCandidate[], failures: AgentRunToolCall[]) {
   if (candidates.length === 0) {
     const failureText = failures
@@ -459,6 +466,7 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
   const toolCalls: AgentRunToolCall[] = [];
   const taskSpec = resolveTaskSpec(input);
   const deadlineAt = Date.now() + RUN_BUDGET_MS;
+  const toolDeadlineAt = Math.max(Date.now(), deadlineAt - MODEL_RESERVE_MS);
 
   if (!isWechatProviderReady()) {
     return {
@@ -524,8 +532,9 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
     : validSources;
   const refreshedValidSources = refreshedSources.filter((source) => isValidBiz(source.biz));
   const sourceSelection = await selectSourcesForTask(refreshedValidSources, taskSpec);
-  const selectedSources = sourceSelection.selected;
+  const selectedSources = [...new Map(sourceSelection.selected.map((source) => [source.biz, source])).values()];
   let candidates: ArticleCandidate[] = [];
+  const candidateUrlSet = new Set<string>();
 
   toolCalls.push({
     toolName: 'selectWechatSources',
@@ -545,18 +554,20 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
   });
 
   for (const source of selectedSources) {
-    if (Date.now() >= deadlineAt) {
+    if (Date.now() >= toolDeadlineAt) {
       toolCalls.push({
         toolName: 'wechat_run_budget',
         status: 'ERROR',
-        result: `Stopped before scanning all sources after ${RUN_BUDGET_MS}ms budget.`,
+        result: `Stopped before scanning all sources to reserve ${MODEL_RESERVE_MS}ms for summarization.`,
       });
       break;
     }
 
     const sourceArticles: ArticleCandidate[] = [];
-    for (let page = 1; page <= MAX_PAGES_PER_SOURCE; page += 1) {
-      if (Date.now() >= deadlineAt) break;
+    const sourceSeenUrls = new Set<string>();
+    let page = 1;
+    while (Date.now() < toolDeadlineAt) {
+      if (Date.now() >= toolDeadlineAt) break;
       try {
         const result = await listArticlesByAccount({
           biz: source.biz,
@@ -567,9 +578,40 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
         });
         const providerError = getProviderError(result);
         const articles = toArticleCandidates(source.displayName, source.biz, result);
+        const newArticles = articles.filter((article) => {
+          const key = article.url;
+          if (!key || sourceSeenUrls.has(key)) return false;
+          sourceSeenUrls.add(key);
+          return true;
+        });
+        if (articles.length > 0 && newArticles.length === 0) {
+          toolCalls.push({
+            toolName: 'listArticlesByAccount',
+            status: 'SUCCESS',
+            args: {
+              biz: source.biz,
+              name: source.displayName,
+              page,
+              count: HISTORY_PAGE_SIZE,
+              rollingWindow: taskSpec.timeWindow,
+            },
+            result: {
+              count: articles.length,
+              recentCount: 0,
+              stopped: 'duplicate_page',
+              sample: articles.slice(0, 3),
+            },
+          });
+          break;
+        }
         const recentArticles = articles.filter((article) => isWithinWindow(article, taskSpec.windowStart, taskSpec.windowEnd));
-        candidates.push(...recentArticles);
-        sourceArticles.push(...articles);
+        const newRecentArticles = recentArticles.filter((article) => {
+          if (candidateUrlSet.has(article.url)) return false;
+          candidateUrlSet.add(article.url);
+          return true;
+        });
+        candidates.push(...newRecentArticles);
+        sourceArticles.push(...newArticles);
         toolCalls.push({
           toolName: 'listArticlesByAccount',
           status: providerError && articles.length === 0 ? 'ERROR' : 'SUCCESS',
@@ -581,11 +623,12 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
             rollingWindow: taskSpec.timeWindow,
           },
           result: providerError
-            ? { error: providerError, count: articles.length, recentCount: recentArticles.length, sample: articles.slice(0, 3) }
-            : { count: articles.length, recentCount: recentArticles.length, sample: articles.slice(0, 3) },
+            ? { error: providerError, count: articles.length, newCount: newArticles.length, recentCount: newRecentArticles.length, sample: newArticles.slice(0, 3) }
+            : { count: articles.length, newCount: newArticles.length, recentCount: newRecentArticles.length, sample: newArticles.slice(0, 3) },
         });
         if (providerError && articles.length === 0) break;
-        if (shouldStopPaging(articles, taskSpec.windowStart)) break;
+        if (shouldStopPaging(newArticles, taskSpec.windowStart)) break;
+        page += 1;
       } catch (error) {
         toolCalls.push({
           toolName: 'listArticlesByAccount',
@@ -617,8 +660,9 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
     .sort((a, b) => (parsePublishDate(b.publishAt)?.getTime() || 0) - (parsePublishDate(a.publishAt)?.getTime() || 0));
 
   const details: Array<{ url: string; detail: unknown }> = [];
-  for (const article of candidates) {
-    if (Date.now() >= deadlineAt) break;
+  const detailTargets = selectForToolFetch(candidates, DETAIL_FETCH_LIMIT);
+  for (const article of detailTargets) {
+    if (Date.now() >= toolDeadlineAt) break;
     try {
       const detail = await getArticleDetail({ url: article.url });
       details.push({ url: article.url, detail });
@@ -639,8 +683,9 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
   }
 
   const metrics: Array<{ url: string; metrics: unknown }> = [];
-  for (const article of candidates) {
-    if (Date.now() >= deadlineAt) break;
+  const metricTargets = selectForToolFetch(candidates, METRICS_FETCH_LIMIT);
+  for (const article of metricTargets) {
+    if (Date.now() >= toolDeadlineAt) break;
     try {
       const metric = await getArticleMetrics({ url: article.url });
       metrics.push({ url: article.url, metrics: metric });
@@ -679,6 +724,7 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
           `微信agent任务：${JSON.stringify(taskSpec)}`,
           `选中的公众号：${selectedSources.map((source) => `${source.displayName}(${source.biz})`).join('、')}`,
           `跳过的公众号：${sourceSelection.skipped.map((source) => `${source.displayName}: ${source.reason}`).join('；') || '无'}`,
+          `候选文章总数：${candidates.length}。以下是所有本轮抓到且符合24小时窗口的候选文章，请按总裁秘书要求筛选、归类、去重、汇总。`,
           `候选文章：\n${renderArticles(candidates)}`,
           `正文抓取结果：\n${JSON.stringify(details.map((item) => ({ url: item.url, detail: compact(item.detail) })))}`,
           `指标抓取结果：\n${JSON.stringify(metrics.map((item) => ({ url: item.url, metrics: compact(item.metrics) })))}`,
@@ -710,6 +756,9 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
       articleCount: candidates.length,
       detailCount: details.length,
       metricsCount: metrics.length,
+      detailFetchLimit: DETAIL_FETCH_LIMIT,
+      metricsFetchLimit: METRICS_FETCH_LIMIT,
+      pagingStopPolicy: 'stop on duplicate page, empty/error response, all page articles older than rolling window, or runtime budget',
       profileRefreshCount: sourcesNeedingProfile.length,
     },
   };
