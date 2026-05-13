@@ -81,6 +81,10 @@ type PlannerStreamEvent =
       type: 'final';
       status: number;
       data: Record<string, unknown>;
+    }
+  | {
+      type: 'heartbeat';
+      timestamp: string;
     };
 
 const suggestedQuestions = [

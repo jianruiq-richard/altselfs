@@ -647,64 +647,95 @@ async function planExecutiveTurn(params: {
 async function loadExecutiveContext(investorId: string): Promise<LoadedExecutiveContext | null> {
   const investor = await prisma.user.findUnique({
     where: { id: investorId },
-    include: {
-      integrations: {
-        include: {
-          snapshots: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
-        },
-      },
-      wechatSources: {
-        orderBy: { updatedAt: 'desc' },
-      },
-      avatars: {
-        include: {
-          chats: {
-            select: {
-              needsInvestorReview: true,
-              qualificationStatus: true,
-            },
-          },
-        },
-      },
-      teamHires: {
-        select: {
-          teamKey: true,
-          status: true,
-        },
-      },
-      agentThreads: {
-        select: { agentType: true },
-      },
-    },
+    select: { id: true },
   });
 
   if (!investor) return null;
 
+  let integrationRows: Array<{ id: string; provider: string; status: string }> = [];
+  let latestSnapshots: Array<{ integrationId: string; summary: string; createdAt: Date }> = [];
+  try {
+    integrationRows = await prisma.investorIntegration.findMany({
+      where: { investorId },
+      select: {
+        id: true,
+        provider: true,
+        status: true,
+      },
+    });
+    latestSnapshots = integrationRows.length
+      ? await prisma.integrationSnapshot.findMany({
+          where: { integrationId: { in: integrationRows.map((item) => item.id) } },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            integrationId: true,
+            summary: true,
+            createdAt: true,
+          },
+        })
+      : [];
+  } catch (error) {
+    console.error('[executive-orchestrator] failed to load integration context:', error);
+  }
+  const snapshotByIntegration = new Map<string, Array<{ summary: string; createdAt: Date }>>();
+  for (const snapshot of latestSnapshots) {
+    if (snapshotByIntegration.has(snapshot.integrationId)) continue;
+    snapshotByIntegration.set(snapshot.integrationId, [{ summary: snapshot.summary, createdAt: snapshot.createdAt }]);
+  }
+  const integrations = integrationRows.map((item) => ({
+    provider: item.provider,
+    status: item.status,
+    snapshots: snapshotByIntegration.get(item.id) || [],
+  }));
+  const wechatSources = await prisma.investorWechatSource.findMany({
+    where: { investorId },
+    orderBy: { updatedAt: 'desc' },
+  });
+  const avatars = await prisma.avatar.findMany({
+    where: { investorId },
+    include: {
+      chats: {
+        select: {
+          needsInvestorReview: true,
+          qualificationStatus: true,
+        },
+      },
+    },
+  });
+  const teamHires = await prisma.investorTeamHire.findMany({
+    where: { investorId },
+    select: {
+      teamKey: true,
+      status: true,
+    },
+  });
+  const agentThreads = await prisma.agentThread.findMany({
+    where: { investorId },
+    select: { agentType: true },
+  });
+
   const hiredTeamKeys = resolveHiredTeamKeys({
-    teamHires: investor.teamHires,
+    teamHires,
     fallback: {
-      integrationCount: investor.integrations.length,
-      wechatSourceCount: investor.wechatSources.length,
-      avatarCount: investor.avatars.length,
-      agentTypes: investor.agentThreads.map((thread) => thread.agentType),
+      integrationCount: integrations.length,
+      wechatSourceCount: wechatSources.length,
+      avatarCount: avatars.length,
+      agentTypes: agentThreads.map((thread) => thread.agentType),
     },
   });
 
   const baseBriefing = buildExecutiveDailyBriefing({
-    integrations: investor.integrations,
-    wechatSources: investor.wechatSources,
-    avatars: investor.avatars,
+    integrations,
+    wechatSources,
+    avatars,
     hiredTeamKeys: Array.from(hiredTeamKeys),
   });
 
-  const integrationProviders = new Set(investor.integrations.map((item) => item.provider));
+  const integrationProviders = new Set(integrations.map((item) => item.provider));
   const internalFacts = [
-    `已接入集成：${investor.integrations.map((item) => item.provider).join('、') || '无'}`,
-    `已录入公众号：${investor.wechatSources.map((item) => item.displayName).join('、') || '无'}`,
-    `数字分身数量：${investor.avatars.length}`,
+    `已接入集成：${integrations.map((item) => item.provider).join('、') || '无'}`,
+    `已录入公众号：${wechatSources.map((item) => item.displayName).join('、') || '无'}`,
+    `数字分身数量：${avatars.length}`,
     `已雇佣团队：${Array.from(hiredTeamKeys).join('、') || '无'}`,
   ];
 
@@ -712,7 +743,7 @@ async function loadExecutiveContext(investorId: string): Promise<LoadedExecutive
     baseBriefing,
     hiredTeamKeys,
     integrationProviders,
-    hasWechatSources: investor.wechatSources.length > 0,
+    hasWechatSources: wechatSources.length > 0,
     internalFacts,
   };
 }

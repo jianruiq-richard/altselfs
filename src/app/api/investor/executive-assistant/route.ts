@@ -24,6 +24,9 @@ import { EXECUTIVE_MOMO_SYSTEM_PROMPT } from '@/lib/prompts/executive-momo';
 
 const EXECUTIVE_AGENT_TYPE = 'EXECUTIVE';
 const MAX_SYSTEM_PROMPT_LENGTH = 30000;
+const STREAM_HEARTBEAT_INTERVAL_MS = 10000;
+
+export const maxDuration = 300;
 
 type ClientMessage = {
   role: 'user' | 'assistant';
@@ -189,56 +192,87 @@ function normalizeMessages(raw: unknown): ClientMessage[] {
 async function loadBriefing(investorId: string) {
   const investor = await prisma.user.findUnique({
     where: { id: investorId },
-    include: {
-      integrations: {
-        include: {
-          snapshots: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
-        },
-      },
-      wechatSources: {
-        orderBy: { updatedAt: 'desc' },
-      },
-      avatars: {
-        include: {
-          chats: {
-            select: {
-              needsInvestorReview: true,
-              qualificationStatus: true,
-            },
-          },
-        },
-      },
-      teamHires: {
-        select: {
-          teamKey: true,
-          status: true,
-        },
-      },
-      agentThreads: {
-        select: { agentType: true },
-      },
-    },
+    select: { id: true },
   });
 
   if (!investor) return null;
 
+  let integrationRows: Array<{ id: string; provider: string; status: string }> = [];
+  let latestSnapshots: Array<{ integrationId: string; summary: string; createdAt: Date }> = [];
+  try {
+    integrationRows = await prisma.investorIntegration.findMany({
+      where: { investorId },
+      select: {
+        id: true,
+        provider: true,
+        status: true,
+      },
+    });
+    latestSnapshots = integrationRows.length
+      ? await prisma.integrationSnapshot.findMany({
+          where: { integrationId: { in: integrationRows.map((item) => item.id) } },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            integrationId: true,
+            summary: true,
+            createdAt: true,
+          },
+        })
+      : [];
+  } catch (error) {
+    console.error('[executive-assistant] failed to load integration context:', error);
+  }
+  const snapshotByIntegration = new Map<string, Array<{ summary: string; createdAt: Date }>>();
+  for (const snapshot of latestSnapshots) {
+    if (snapshotByIntegration.has(snapshot.integrationId)) continue;
+    snapshotByIntegration.set(snapshot.integrationId, [{ summary: snapshot.summary, createdAt: snapshot.createdAt }]);
+  }
+  const integrations = integrationRows.map((item) => ({
+    provider: item.provider,
+    status: item.status,
+    snapshots: snapshotByIntegration.get(item.id) || [],
+  }));
+  const wechatSources = await prisma.investorWechatSource.findMany({
+    where: { investorId },
+    orderBy: { updatedAt: 'desc' },
+  });
+  const avatars = await prisma.avatar.findMany({
+    where: { investorId },
+    include: {
+      chats: {
+        select: {
+          needsInvestorReview: true,
+          qualificationStatus: true,
+        },
+      },
+    },
+  });
+  const teamHires = await prisma.investorTeamHire.findMany({
+    where: { investorId },
+    select: {
+      teamKey: true,
+      status: true,
+    },
+  });
+  const agentThreads = await prisma.agentThread.findMany({
+    where: { investorId },
+    select: { agentType: true },
+  });
+
   const hiredTeamKeys = resolveHiredTeamKeys({
-    teamHires: investor.teamHires,
+    teamHires,
     fallback: {
-      integrationCount: investor.integrations.length,
-      wechatSourceCount: investor.wechatSources.length,
-      avatarCount: investor.avatars.length,
-      agentTypes: investor.agentThreads.map((thread) => thread.agentType),
+      integrationCount: integrations.length,
+      wechatSourceCount: wechatSources.length,
+      avatarCount: avatars.length,
+      agentTypes: agentThreads.map((thread) => thread.agentType),
     },
   });
 
   return buildExecutiveDailyBriefing({
-    integrations: investor.integrations,
-    wechatSources: investor.wechatSources,
-    avatars: investor.avatars,
+    integrations,
+    wechatSources,
+    avatars,
     hiredTeamKeys: Array.from(hiredTeamKeys),
   });
 }
@@ -444,9 +478,18 @@ function streamExecutiveAssistantTurn(params: {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
+      let closed = false;
       const write = (payload: unknown) => {
-        controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
+        } catch {
+          closed = true;
+        }
       };
+      const heartbeat = setInterval(() => {
+        write({ type: 'heartbeat', timestamp: new Date().toISOString() });
+      }, STREAM_HEARTBEAT_INTERVAL_MS);
 
       void (async () => {
         try {
@@ -467,7 +510,15 @@ function streamExecutiveAssistantTurn(params: {
             data: { error: `AI代理执行失败：${detail}` },
           });
         } finally {
-          controller.close();
+          clearInterval(heartbeat);
+          if (!closed) {
+            closed = true;
+            try {
+              controller.close();
+            } catch {
+              // The client may have disconnected after receiving the final event.
+            }
+          }
         }
       })();
     },
