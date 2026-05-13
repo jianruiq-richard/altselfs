@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { createChatCompletion, createJsonChatCompletion, type ChatMessage } from '@/lib/openrouter';
+import { createChatCompletion, createJsonChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import {
   appendThreadMessage,
@@ -318,7 +318,7 @@ export async function POST(req: NextRequest) {
     ];
     const plannerRaw = await createJsonChatCompletion(
       plannerMessages,
-      process.env.OPENROUTER_MODEL_XHS_PLANNER || 'openai/gpt-5.4'
+      getOpenRouterModel('XHS_PLANNER')
     );
     plan = safeParsePlan(plannerRaw);
     await appendToolCall({
@@ -367,7 +367,7 @@ export async function POST(req: NextRequest) {
     ];
     reply = await createChatCompletion(
       finalMessages,
-      process.env.OPENROUTER_MODEL_XHS_ASSISTANT || 'openai/gpt-5.4'
+      getOpenRouterModel('XHS_ASSISTANT')
     );
 
     const current = await upsertXhsIntegration({

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { createChatCompletion, createJsonChatCompletion, type ChatMessage } from '@/lib/openrouter';
+import { createChatCompletion, createJsonChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import {
   appendThreadMessage,
@@ -597,7 +597,7 @@ export async function POST(req: NextRequest) {
     args: { maxSources: DEFAULT_MAX_SOURCES, maxArticles: DEFAULT_MAX_ARTICLES },
   };
   try {
-    const raw = await createJsonChatCompletion(plannerInput);
+    const raw = await createJsonChatCompletion(plannerInput, getOpenRouterModel('WECHAT_SOURCES_PLANNER'));
     plan = safeParsePlan(raw);
   } catch {
     plan = {
@@ -934,7 +934,7 @@ export async function POST(req: NextRequest) {
   ];
 
   try {
-    const reply = await createChatCompletion(responseMessages);
+    const reply = await createChatCompletion(responseMessages, getOpenRouterModel('WECHAT_SOURCES_ASSISTANT'));
     const finalReply = reply || '已收到，但暂无回复。';
     await appendThreadMessage({
       threadId: thread.id,

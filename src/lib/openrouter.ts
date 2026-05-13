@@ -43,6 +43,32 @@ type ChatCompletionResult = {
   }>;
 };
 
+const DEFAULT_OPENROUTER_MODELS = {
+  primary: 'deepseek/deepseek-v3.2',
+  fallback: 'qwen/qwen3-max',
+  backup: 'z-ai/glm-4.6',
+  regionFallback1: 'moonshotai/kimi-k2-thinking',
+  regionFallback2: 'moonshotai/kimi-k2',
+};
+
+const DEFAULT_AGENT_MODELS = {
+  CHAT: 'qwen/qwen3-max',
+  EVALUATOR: 'qwen/qwen3-max',
+  EXECUTIVE: 'deepseek/deepseek-v3.2',
+  EXECUTIVE_PLANNER: 'z-ai/glm-4.6',
+  EXECUTIVE_STRUCTURER: 'qwen/qwen3-max',
+  WECHAT_AGENT: 'deepseek/deepseek-v3.2',
+  WECHAT_SOURCE_SELECTOR: 'qwen/qwen3-max',
+  WECHAT_SOURCES_PLANNER: 'z-ai/glm-4.6',
+  WECHAT_SOURCES_ASSISTANT: 'deepseek/deepseek-v3.2',
+  MAIL_AGENT_PRIMARY: 'qwen/qwen3-max',
+  MAIL_AGENT_FALLBACK: 'deepseek/deepseek-v3.2',
+  XHS_PLANNER: 'z-ai/glm-4.6',
+  XHS_ASSISTANT: 'qwen/qwen3-max',
+} as const;
+
+export type OpenRouterAgentModelKey = keyof typeof DEFAULT_AGENT_MODELS;
+
 export interface QualificationResult {
   status: 'PENDING' | 'NEEDS_INFO' | 'QUALIFIED' | 'REJECTED';
   score: number;
@@ -185,19 +211,26 @@ function uniqueModels(models: Array<string | undefined | null>) {
   return result;
 }
 
+export function getOpenRouterModel(key: OpenRouterAgentModelKey) {
+  return process.env[`OPENROUTER_MODEL_${key}`]?.trim() || DEFAULT_AGENT_MODELS[key];
+}
+
+export function getOpenRouterModelCandidates(keys: OpenRouterAgentModelKey[] = []) {
+  return uniqueModels([
+    ...keys.map((key) => getOpenRouterModel(key)),
+    process.env.OPENROUTER_MODEL_PRIMARY || DEFAULT_OPENROUTER_MODELS.primary,
+    process.env.OPENROUTER_MODEL_FALLBACK || DEFAULT_OPENROUTER_MODELS.fallback,
+    process.env.OPENROUTER_MODEL_BACKUP || DEFAULT_OPENROUTER_MODELS.backup,
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || DEFAULT_OPENROUTER_MODELS.regionFallback1,
+    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || DEFAULT_OPENROUTER_MODELS.regionFallback2,
+  ]);
+}
+
 export async function createChatCompletion(
   messages: ChatMessage[],
   model?: string
 ) {
-  const candidates = uniqueModels([
-    model,
-    process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.4',
-    process.env.OPENROUTER_MODEL_FALLBACK || 'openai/gpt-5.4-mini',
-    process.env.OPENROUTER_MODEL_BACKUP || 'openai/gpt-5.2',
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'openai/gpt-4o-mini',
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'openai/gpt-5.4-nano',
-    'openai/gpt-4o-mini',
-  ]);
+  const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]);
 
   let lastError: unknown;
   const tried: string[] = [];
@@ -221,15 +254,7 @@ export async function createJsonChatCompletion(
   model?: string,
   options?: { maxTokens?: number }
 ) {
-  const candidates = uniqueModels([
-    model,
-    process.env.OPENROUTER_MODEL_PRIMARY || 'openai/gpt-5.4',
-    process.env.OPENROUTER_MODEL_FALLBACK || 'openai/gpt-5.4-mini',
-    process.env.OPENROUTER_MODEL_BACKUP || 'openai/gpt-5.2',
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1 || 'openai/gpt-4o-mini',
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2 || 'openai/gpt-5.4-nano',
-    'openai/gpt-4o-mini',
-  ]);
+  const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]);
 
   let lastError: unknown;
   const tried: string[] = [];
@@ -285,14 +310,7 @@ ${avatarSystemPrompt}`;
     ...messages,
   ];
 
-  const candidates = [
-    process.env.OPENROUTER_MODEL_EVALUATOR,
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_1,
-    process.env.OPENROUTER_MODEL_REGION_FALLBACK_2,
-    process.env.OPENROUTER_MODEL_PRIMARY,
-    process.env.OPENROUTER_MODEL_FALLBACK,
-    'openai/gpt-4o-mini',
-  ].filter(Boolean) as string[];
+  const candidates = getOpenRouterModelCandidates(['EVALUATOR']);
 
   let raw = '';
   let lastError: unknown;
@@ -325,18 +343,23 @@ ${avatarSystemPrompt}`;
 // 可用的模型列表
 export const availableModels = [
   {
-    id: "openai/gpt-5.4",
-    name: "GPT-5.4",
-    description: "默认优先模型，适合联网检索、综合推理与对话"
+    id: "deepseek/deepseek-v3.2",
+    name: "DeepSeek V3.2",
+    description: "默认主模型，适合中文长上下文、agent规划与综合推理"
   },
   {
-    id: "openai/gpt-5.4-mini",
-    name: "GPT-5.4 Mini",
-    description: "作为回退模型，兼顾质量与成本"
+    id: "qwen/qwen3-max",
+    name: "Qwen3 Max",
+    description: "中文指令跟随和结构化输出稳定，适合对话、总结和JSON任务"
   },
   {
-    id: "openai/gpt-5.2-mini",
-    name: "GPT-5.2 Mini",
-    description: "成本敏感场景可选"
+    id: "z-ai/glm-4.6",
+    name: "GLM 4.6",
+    description: "适合planner、工具调用和搜索型agent任务"
+  },
+  {
+    id: "moonshotai/kimi-k2-thinking",
+    name: "Kimi K2 Thinking",
+    description: "适合长链路推理、复杂研究和多步骤agent任务"
   }
 ];

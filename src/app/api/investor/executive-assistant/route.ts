@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getInvestorOrNull } from '@/lib/investor-auth';
-import { createChatCompletion, type ChatMessage } from '@/lib/openrouter';
+import { createChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
 import {
   appendToolCall,
   appendThreadMessage,
@@ -147,8 +147,7 @@ async function generateExecutiveReply(
     ...messages.map((item) => ({ role: item.role, content: item.content })),
   ];
 
-  const model = process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4';
-  const reply = await createChatCompletion(chatMessages, model);
+  const reply = await createChatCompletion(chatMessages, getOpenRouterModel('EXECUTIVE'));
   return reply.trim();
 }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
-import { createChatCompletion, evaluateConversation } from '@/lib/openrouter';
+import { createChatCompletion, evaluateConversation, getOpenRouterModel } from '@/lib/openrouter';
 import { isDemoMode } from '@/lib/dev-auth';
 
 export async function POST(req: NextRequest) {
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
           },
         });
       } else {
-        const aiResponse = await createChatCompletion(messagesForAI);
+        const aiResponse = await createChatCompletion(messagesForAI, getOpenRouterModel('CHAT'));
 
         // Save AI message
         await prisma.message.create({

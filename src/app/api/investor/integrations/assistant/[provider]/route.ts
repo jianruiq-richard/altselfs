@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { createChatCompletion, createJsonChatCompletion, type ChatMessage } from '@/lib/openrouter';
+import { createChatCompletion, createJsonChatCompletion, getOpenRouterModelCandidates, type ChatMessage } from '@/lib/openrouter';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import {
   appendThreadMessage,
@@ -51,21 +51,7 @@ type GmailPlan = {
 const MAX_CUSTOM_PROMPT_LENGTH = 8000;
 
 function getMailAgentModelCandidates() {
-  const models = [
-    process.env.OPENROUTER_MODEL_MAIL_AGENT_PRIMARY || 'openai/gpt-5.4',
-    process.env.OPENROUTER_MODEL_MAIL_AGENT_FALLBACK || 'openai/gpt-5.4-mini',
-    process.env.OPENROUTER_MODEL_PRIMARY,
-    process.env.OPENROUTER_MODEL_FALLBACK,
-    process.env.OPENROUTER_MODEL_BACKUP,
-    'openai/gpt-4o-mini',
-  ].filter(Boolean) as string[];
-
-  const seen = new Set<string>();
-  return models.filter((m) => {
-    if (seen.has(m)) return false;
-    seen.add(m);
-    return true;
-  });
+  return getOpenRouterModelCandidates(['MAIL_AGENT_PRIMARY', 'MAIL_AGENT_FALLBACK']);
 }
 
 async function runMailAgentText(messages: ChatMessage[]) {

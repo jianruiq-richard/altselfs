@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { createChatCompletion, createJsonChatCompletion, type ChatMessage } from '@/lib/openrouter';
+import { createChatCompletion, createJsonChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
 import { runWechatAgent } from '@/lib/agents/wechat-agent';
 import type { AgentBriefingItem, AgentRunResult, AgentRunToolCall, AgentTaskSpec } from '@/lib/agents/types';
 import { buildExecutiveDailyBriefing, type ExecutiveDailyBriefing } from '@/lib/executive-office';
@@ -631,7 +631,7 @@ async function planExecutiveTurn(params: {
   try {
     const raw = await createJsonChatCompletion(
       messages,
-      process.env.OPENROUTER_MODEL_EXECUTIVE_PLANNER || process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4'
+      getOpenRouterModel('EXECUTIVE_PLANNER')
     );
     return normalizeExecutivePlan(raw, params.context, params.userQuery, params.executiveSystemPrompt);
   } catch (error) {
@@ -818,7 +818,7 @@ async function buildBriefingSummary(input: {
     },
   ];
 
-  return createChatCompletion(messages, process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4');
+  return createChatCompletion(messages, getOpenRouterModel('EXECUTIVE'));
 }
 
 function fallbackSummary(briefing: ExecutiveDailyBriefing, subagentResults: AgentRunResult[]) {
@@ -913,7 +913,7 @@ async function repairStructuredBriefingJson(raw: string) {
 
   return createJsonChatCompletion(
     messages,
-    process.env.OPENROUTER_MODEL_EXECUTIVE_STRUCTURER || process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4',
+    getOpenRouterModel('EXECUTIVE_STRUCTURER'),
     { maxTokens: 2600 }
   );
 }
@@ -1042,7 +1042,7 @@ async function buildStructuredBriefing(input: {
     });
     const raw = await createJsonChatCompletion(
       messages,
-      process.env.OPENROUTER_MODEL_EXECUTIVE_STRUCTURER || process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4',
+      getOpenRouterModel('EXECUTIVE_STRUCTURER'),
       { maxTokens: 3600 }
     );
     let structured: StructuredBriefingOutput;

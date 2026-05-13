@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { createChatCompletion, createJsonChatCompletion, type ChatMessage } from '@/lib/openrouter';
+import { createChatCompletion, createJsonChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
 import {
   getArticleDetail,
   getArticleMetrics,
@@ -339,7 +339,7 @@ async function selectSourcesForTask(sources: SourceRecord[], taskSpec: AgentTask
   try {
     const raw = await createJsonChatCompletion(
       messages,
-      process.env.OPENROUTER_MODEL_WECHAT_SOURCE_SELECTOR || process.env.OPENROUTER_MODEL_PRIMARY,
+      getOpenRouterModel('WECHAT_SOURCE_SELECTOR'),
       { maxTokens: 4000 }
     );
     const parsed = JSON.parse(raw) as { selectedBizes?: unknown; skipped?: unknown };
@@ -686,7 +686,7 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
       },
     ];
     try {
-      answer = (await createChatCompletion(messages)).trim();
+      answer = (await createChatCompletion(messages, getOpenRouterModel('WECHAT_AGENT'))).trim();
     } catch {
       answer = buildFallbackAnswer(candidates, toolCalls);
     }
