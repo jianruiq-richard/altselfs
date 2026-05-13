@@ -2,7 +2,27 @@ export type AgentRunInput = {
   investorId: string;
   userQuery: string;
   mode?: 'chat' | 'briefing' | 'digest' | 'tool';
-  context?: Record<string, unknown>;
+  context?: AgentRunContext;
+};
+
+export type RollingTimeWindow = {
+  type: 'rolling_hours';
+  hours: number;
+  endAt: string;
+};
+
+export type AgentTaskSpec = {
+  objective: string;
+  sourceSelectionCriteria: string[];
+  timeWindow?: RollingTimeWindow;
+  returnFormat?: {
+    sections: string[];
+    instructions: string;
+  };
+};
+
+export type AgentRunContext = Record<string, unknown> & {
+  taskSpec?: AgentTaskSpec;
 };
 
 export type AgentBriefingItem = {

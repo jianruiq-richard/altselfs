@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { createChatCompletion, createJsonChatCompletion, type ChatMessage } from '@/lib/openrouter';
 import { runWechatAgent } from '@/lib/agents/wechat-agent';
-import type { AgentBriefingItem, AgentRunResult, AgentRunToolCall } from '@/lib/agents/types';
+import type { AgentBriefingItem, AgentRunResult, AgentRunToolCall, AgentTaskSpec } from '@/lib/agents/types';
 import { buildExecutiveDailyBriefing, type ExecutiveDailyBriefing } from '@/lib/executive-office';
 import { resolveHiredTeamKeys } from '@/lib/team-library';
 
@@ -54,6 +54,7 @@ export type ExecutiveTurnPlan = {
   useWebSearch: boolean;
   skills: ExecutiveSkillId[];
   steps: ExecutivePlannerStepDefinition[];
+  wechatTaskSpec?: AgentTaskSpec;
   plannerSource: 'MODEL' | 'FALLBACK';
   plannerError?: string;
 };
@@ -322,6 +323,72 @@ function buildWebSearchIntent(userQuery: string, executiveSystemPrompt?: string)
   ].join('\n');
 }
 
+function buildWechatTaskSpec(params: {
+  userQuery: string;
+  objective: string;
+  executiveSystemPrompt?: string;
+  raw?: unknown;
+}): AgentTaskSpec {
+  const raw = params.raw && typeof params.raw === 'object' ? (params.raw as Record<string, unknown>) : {};
+  const rawCriteria = Array.isArray(raw.sourceSelectionCriteria)
+    ? raw.sourceSelectionCriteria
+    : Array.isArray(raw.criteria)
+      ? raw.criteria
+      : [];
+  const sourceSelectionCriteria = rawCriteria
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean)
+    .slice(0, 20);
+
+  const prompt = params.executiveSystemPrompt?.trim();
+  const fallbackCriteria = [
+    params.userQuery,
+    params.objective,
+    prompt ? prompt.slice(0, 600) : '',
+    'AI agent',
+    'vibe coding',
+    '技术趋势',
+    '竞品监控',
+    '投资机会',
+  ].filter(Boolean);
+
+  const rawSections =
+    raw.returnFormat && typeof raw.returnFormat === 'object' && Array.isArray((raw.returnFormat as Record<string, unknown>).sections)
+      ? ((raw.returnFormat as Record<string, unknown>).sections as unknown[])
+      : [];
+  const sections = rawSections
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean)
+    .slice(0, 8);
+  const instructions =
+    raw.returnFormat &&
+    typeof raw.returnFormat === 'object' &&
+    typeof (raw.returnFormat as Record<string, unknown>).instructions === 'string'
+      ? String((raw.returnFormat as Record<string, unknown>).instructions).trim().slice(0, 1200)
+      : [
+          '按晨报秘书可直接合并的格式返回。',
+          '每条信息必须包含来源公众号、文章标题、链接、发布时间、为什么重要。',
+          '优先输出行业动态、技术趋势、竞品监控、机会/风险信号。',
+        ].join('\n');
+
+  return {
+    objective:
+      typeof raw.objective === 'string' && raw.objective.trim()
+        ? raw.objective.trim().slice(0, 500)
+        : params.objective,
+    sourceSelectionCriteria: sourceSelectionCriteria.length > 0 ? sourceSelectionCriteria : fallbackCriteria,
+    timeWindow: {
+      type: 'rolling_hours',
+      hours: 24,
+      endAt: new Date().toISOString(),
+    },
+    returnFormat: {
+      sections: sections.length > 0 ? sections : ['核心结论', '证据文章', '机会/风险', '建议动作'],
+      instructions,
+    },
+  };
+}
+
 function hasSkill(plan: ExecutiveTurnPlan, skillId: ExecutiveSkillId) {
   return plan.skills.includes(skillId);
 }
@@ -411,12 +478,23 @@ function fallbackExecutivePlan(params: {
     useWebSearch,
     skills: Array.from(new Set(skills)),
     steps,
+    wechatTaskSpec: includeWechat
+      ? buildWechatTaskSpec({
+          userQuery: params.userQuery,
+          objective: updateBriefing ? '更新今日晨报' : params.userQuery,
+        })
+      : undefined,
     plannerSource: 'FALLBACK',
     plannerError: params.plannerError,
   };
 }
 
-function normalizeExecutivePlan(raw: string, context: LoadedExecutiveContext, userQuery: string): ExecutiveTurnPlan {
+function normalizeExecutivePlan(
+  raw: string,
+  context: LoadedExecutiveContext,
+  userQuery: string,
+  executiveSystemPrompt?: string
+): ExecutiveTurnPlan {
   const parsed = JSON.parse(raw) as Record<string, unknown>;
   const updateBriefing =
     typeof parsed.updateBriefing === 'boolean' ? parsed.updateBriefing : shouldUpdateBriefing(userQuery);
@@ -453,15 +531,26 @@ function normalizeExecutivePlan(raw: string, context: LoadedExecutiveContext, us
   if (updateBriefing) steps = ensurePlanStep(steps, getExecutivePlannerStepDefinition('persist_briefing'));
   steps = ensurePlanStep(steps, getExecutivePlannerStepDefinition('generate_reply'));
 
+  const objective =
+    typeof parsed.objective === 'string' && parsed.objective.trim()
+      ? parsed.objective.trim().slice(0, 160)
+      : fallbackExecutivePlan({ userQuery, context }).objective;
+  const includeWechat = normalizedSkills.includes('wechat_articles') && context.hasWechatSources;
+
   return {
-    objective:
-      typeof parsed.objective === 'string' && parsed.objective.trim()
-        ? parsed.objective.trim().slice(0, 160)
-        : fallbackExecutivePlan({ userQuery, context }).objective,
+    objective,
     updateBriefing,
     useWebSearch,
     skills: normalizedSkills,
     steps: steps.slice(0, 12),
+    wechatTaskSpec: includeWechat
+      ? buildWechatTaskSpec({
+          userQuery,
+          objective,
+          executiveSystemPrompt,
+          raw: parsed.wechatTaskSpec,
+        })
+      : undefined,
     plannerSource: 'MODEL',
   };
 }
@@ -517,6 +606,14 @@ async function planExecutiveTurn(params: {
           updateBriefing: 'boolean',
           useWebSearch: 'boolean',
           skills: ['web_search|wechat_articles|xiaohongshu_insights|gmail_insights|feishu_insights|internal_briefing|persist_briefing|chat_reply'],
+          wechatTaskSpec: {
+            objective: '微信agent需要搜集整理的信息目标',
+            sourceSelectionCriteria: ['用于筛选公众号画像的主题/领域/关键词/排除偏好'],
+            returnFormat: {
+              sections: ['核心结论', '证据文章', '机会/风险', '建议动作'],
+              instructions: '微信agent必须按此格式返回给晨报秘书，方便秘书合并其他渠道',
+            },
+          },
           steps: [
             {
               id: 'short_snake_case',
@@ -536,7 +633,7 @@ async function planExecutiveTurn(params: {
       messages,
       process.env.OPENROUTER_MODEL_EXECUTIVE_PLANNER || process.env.OPENROUTER_MODEL_EXECUTIVE || 'openai/gpt-5.4'
     );
-    return normalizeExecutivePlan(raw, params.context, params.userQuery);
+    return normalizeExecutivePlan(raw, params.context, params.userQuery, params.executiveSystemPrompt);
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'planner generation failed';
     return fallbackExecutivePlan({
@@ -1083,6 +1180,15 @@ export async function updateTodayExecutiveBriefing(params: {
         investorId: params.investorId,
         userQuery: params.userQuery,
         mode: 'briefing',
+        context: {
+          taskSpec:
+            plan.wechatTaskSpec ||
+            buildWechatTaskSpec({
+              userQuery: params.userQuery,
+              objective: plan.objective,
+              executiveSystemPrompt: params.executiveSystemPrompt,
+            }),
+        },
       })
         .then(async (result) => {
           calledAgents.push({

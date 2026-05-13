@@ -140,13 +140,18 @@ model AgentToolCall {
 }
 
 model InvestorWechatSource {
-  id             String   @id @default(cuid())
-  biz            String
-  displayName    String
-  description    String?
-  lastArticleUrl String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  biz                 String
+  displayName         String
+  description         String?
+  lastArticleUrl      String
+  profile             Json?
+  profileUpdatedAt    DateTime?
+  profileConfidence   Float?
+  lastProfileEvidence Json?
+  lastScannedAt       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   investorId String
   investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
