@@ -1,4 +1,6 @@
 import OpenAI from 'openai';
+import { mkdir, appendFile } from 'fs/promises';
+import path from 'path';
 
 // Initialize OpenRouter client
 const openai = new OpenAI({
@@ -57,6 +59,7 @@ const DEFAULT_AGENT_MODELS = {
   EXECUTIVE: 'deepseek/deepseek-v3.2',
   EXECUTIVE_PLANNER: 'z-ai/glm-4.6',
   EXECUTIVE_STRUCTURER: 'qwen/qwen3-max',
+  WEB_SEARCH: 'z-ai/glm-4.6',
   WECHAT_AGENT: 'deepseek/deepseek-v3.2',
   WECHAT_SOURCE_SELECTOR: 'qwen/qwen3-max',
   WECHAT_SOURCES_PLANNER: 'z-ai/glm-4.6',
@@ -92,6 +95,31 @@ function readPositiveIntEnv(key: string, fallback: number) {
   const value = Number(process.env[key]);
   if (!Number.isFinite(value) || value < 1) return fallback;
   return Math.round(value);
+}
+
+const OPENROUTER_REQUEST_TIMEOUT_MS = readPositiveIntEnv('OPENROUTER_REQUEST_TIMEOUT_MS', 60_000);
+const OPENROUTER_MAX_MODEL_ATTEMPTS = readPositiveIntEnv('OPENROUTER_MAX_MODEL_ATTEMPTS', 3);
+
+function isTraceEnabled() {
+  const raw = process.env.OPENROUTER_TRACE_ENABLED;
+  if (raw !== undefined) return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase());
+  return process.env.NODE_ENV === 'development';
+}
+
+async function appendOpenRouterTrace(entry: Record<string, unknown>) {
+  if (!isTraceEnabled()) return;
+  try {
+    const dir = process.env.OPENROUTER_TRACE_DIR || path.join(process.cwd(), '.debug', 'openrouter-traces');
+    await mkdir(dir, { recursive: true });
+    const date = new Date().toISOString().slice(0, 10);
+    await appendFile(
+      path.join(dir, `${date}.jsonl`),
+      `${JSON.stringify({ timestamp: new Date().toISOString(), ...entry })}\n`,
+      'utf8'
+    );
+  } catch (error) {
+    console.error('[openrouter] trace write failed', getErrorMessage(error));
+  }
 }
 
 function getOpenRouterServerTools(): OpenRouterServerTool[] {
@@ -148,16 +176,22 @@ function safeParseQualification(raw: string): QualificationResult {
   }
 }
 
-async function requestCompletion(messages: ChatMessage[], model: string) {
-  const tools = getOpenRouterServerTools();
+async function requestCompletion(
+  messages: ChatMessage[],
+  model: string,
+  options?: { enableWebTools?: boolean; maxTokens?: number }
+) {
+  const tools = options?.enableWebTools === false ? [] : getOpenRouterServerTools();
   const completion = (await openai.chat.completions.create({
     model,
     messages,
     temperature: 0.7,
-    max_tokens: 2000,
+    max_tokens: options?.maxTokens || 2000,
     stream: false,
     ...(tools.length > 0 ? { tools } : {}),
-  } as Parameters<typeof openai.chat.completions.create>[0])) as ChatCompletionResult;
+  } as Parameters<typeof openai.chat.completions.create>[0], {
+    timeout: OPENROUTER_REQUEST_TIMEOUT_MS,
+  })) as ChatCompletionResult;
 
   return completion.choices[0]?.message?.content || '';
 }
@@ -169,6 +203,8 @@ async function requestJsonCompletion(messages: ChatMessage[], model: string, max
     temperature: 0.1,
     max_tokens: maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 1800),
     response_format: { type: 'json_object' },
+  }, {
+    timeout: OPENROUTER_REQUEST_TIMEOUT_MS,
   });
 
   return completion.choices[0]?.message?.content || '';
@@ -228,19 +264,51 @@ export function getOpenRouterModelCandidates(keys: OpenRouterAgentModelKey[] = [
 
 export async function createChatCompletion(
   messages: ChatMessage[],
-  model?: string
+  model?: string,
+  options?: { enableWebTools?: boolean; maxTokens?: number }
 ) {
-  const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]);
+  const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]).slice(0, OPENROUTER_MAX_MODEL_ATTEMPTS);
 
   let lastError: unknown;
   const tried: string[] = [];
 
   for (const currentModel of candidates) {
     tried.push(currentModel);
+    const startedAt = Date.now();
+    console.log('[openrouter] chat start', {
+      model: currentModel,
+      timeoutMs: OPENROUTER_REQUEST_TIMEOUT_MS,
+    });
     try {
-      return await requestCompletion(messages, currentModel);
+      const result = await requestCompletion(messages, currentModel, options);
+      await appendOpenRouterTrace({
+        type: 'chat',
+        status: 'success',
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        messages,
+        output: result,
+      });
+      console.log('[openrouter] chat success', {
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+      });
+      return result;
     } catch (error) {
       lastError = error;
+      await appendOpenRouterTrace({
+        type: 'chat',
+        status: 'error',
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        messages,
+        error: getErrorMessage(error),
+      });
+      console.error('[openrouter] chat failed', {
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        error: getErrorMessage(error),
+      });
       console.error(`OpenRouter API error (${currentModel}):`, error);
     }
   }
@@ -254,20 +322,54 @@ export async function createJsonChatCompletion(
   model?: string,
   options?: { maxTokens?: number }
 ) {
-  const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]);
+  const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]).slice(0, OPENROUTER_MAX_MODEL_ATTEMPTS);
 
   let lastError: unknown;
   const tried: string[] = [];
 
   for (const currentModel of candidates) {
     tried.push(currentModel);
+    const startedAt = Date.now();
+    console.log('[openrouter] json start', {
+      model: currentModel,
+      timeoutMs: OPENROUTER_REQUEST_TIMEOUT_MS,
+      maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 1800),
+    });
     try {
       const raw = await requestJsonCompletion(messages, currentModel, options?.maxTokens);
+      await appendOpenRouterTrace({
+        type: 'json',
+        status: raw.trim() ? 'success' : 'empty',
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 1800),
+        messages,
+        output: raw,
+      });
+      console.log('[openrouter] json success', {
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        empty: !raw.trim(),
+      });
       if (raw.trim()) {
         return raw;
       }
     } catch (error) {
       lastError = error;
+      await appendOpenRouterTrace({
+        type: 'json',
+        status: 'error',
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 1800),
+        messages,
+        error: getErrorMessage(error),
+      });
+      console.error('[openrouter] json failed', {
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        error: getErrorMessage(error),
+      });
       console.error(`OpenRouter JSON API error (${currentModel}):`, error);
     }
   }

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { createChatCompletion, createJsonChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
 import { runWechatAgent } from '@/lib/agents/wechat-agent';
+import { runWebSearchAgent } from '@/lib/agents/web-search-agent';
 import type { AgentBriefingItem, AgentRunResult, AgentRunToolCall, AgentTaskSpec } from '@/lib/agents/types';
 import { buildExecutiveDailyBriefing, type ExecutiveDailyBriefing } from '@/lib/executive-office';
 import { resolveHiredTeamKeys } from '@/lib/team-library';
@@ -113,6 +114,8 @@ type LoadedExecutiveContext = {
   internalFacts: string[];
 };
 
+const STRUCTURED_AGENT_ITEM_LIMIT = 50;
+
 const EXECUTIVE_SKILL_REGISTRY: Array<{
   skillId: ExecutiveSkillId;
   name: string;
@@ -123,8 +126,9 @@ const EXECUTIVE_SKILL_REGISTRY: Array<{
   {
     skillId: 'web_search',
     name: '联网搜索',
-    description: '通过 OpenRouter 模型的 web_search/web_fetch 能力检索和打开网页，补充最新外部信息。',
+    description: '调用联网搜索助手，使用 OpenRouter 原生 web_search / web_fetch 工具检索公开网页并整理来源。',
     implemented: true,
+    agentType: 'WEB_SEARCH',
   },
   {
     skillId: 'wechat_articles',
@@ -222,8 +226,8 @@ export function getExecutivePlannerStepDefinition(id: ExecutivePlannerStepId): E
     },
     call_web_search: {
       id: 'call_web_search',
-      title: '使用联网搜索能力',
-      description: '在生成摘要时允许模型搜索和打开网页以获取最新外部信息。',
+      title: '调用联网搜索助手',
+      description: '调用独立 Web Search agent，使用 OpenRouter web_search / web_fetch 搜索和读取网页。',
       skillId: 'web_search',
     },
     call_wechat_agent: {
@@ -790,8 +794,8 @@ async function buildBriefingSummary(input: {
       content: [
         '你是总裁秘书Momo的晨报生成器。',
         '下面的“总裁秘书system prompt / 用户偏好”是最高优先级过滤规则。子agent可能返回冗余信息，你必须过滤掉不符合偏好的内容。',
-        '根据内部数据、子agent结果和必要的外部互联网搜索，生成一份面向创始人的今日晨报。',
-        '如果启用了联网工具，必须先根据总裁秘书system prompt / 用户偏好提炼搜索方向、关键词和来源范围，只搜索符合偏好的信息，不要泛搜。',
+        '根据内部数据、子agent结果和显式联网搜索结果，生成一份面向创始人的今日晨报。',
+        '如果子agent结果中包含 WEB_SEARCH，请只使用这些已记录的搜索结果，不要自行发起隐式搜索。',
         '联网搜索结果同样需要经过总裁秘书system prompt过滤；不符合偏好的内容不得进入最终晨报。',
         '必须把来源和不确定性说明清楚。',
         '输出中文，结构清晰，必须围绕行业动态、技术趋势、竞品监控三个模块给出重点、证据来源和建议行动。',
@@ -818,7 +822,7 @@ async function buildBriefingSummary(input: {
     },
   ];
 
-  return createChatCompletion(messages, getOpenRouterModel('EXECUTIVE'));
+  return createChatCompletion(messages, getOpenRouterModel('EXECUTIVE'), { enableWebTools: false });
 }
 
 function fallbackSummary(briefing: ExecutiveDailyBriefing, subagentResults: AgentRunResult[]) {
@@ -918,43 +922,6 @@ async function repairStructuredBriefingJson(raw: string) {
   );
 }
 
-function fallbackStructuredBriefing(input: {
-  summary: string;
-  briefing: ExecutiveDailyBriefing;
-  sources: AgentBriefingItem[];
-}): StructuredBriefingOutput {
-  const items = input.sources.slice(0, 8).map((item) => ({
-    title: item.title,
-    summary: item.summary,
-    source: item.source,
-    url: item.url,
-    publishedAt: item.publishedAt,
-  }));
-  return {
-    title: `总裁秘书Momo晨报 ${dateKey()}`,
-    summary: input.summary || input.briefing.headline,
-    modules: [
-      {
-        title: '行业动态',
-        content:
-          input.briefing.externalInsights.map((item) => `${item.category}：${item.content}`).join('\n\n') ||
-          '暂无明确行业动态。',
-        items,
-      },
-      {
-        title: '技术趋势',
-        content: input.summary || '暂无明确技术趋势。',
-        items: [],
-      },
-      {
-        title: '竞品监控',
-        content: '暂无明确竞品监控信号。',
-        items: [],
-      },
-    ],
-  };
-}
-
 async function buildStructuredBriefing(input: {
   userQuery: string;
   executiveSystemPrompt: string;
@@ -996,11 +963,11 @@ async function buildStructuredBriefing(input: {
         subagentResults: input.subagentResults.map((item) => ({
           agentType: item.agentType,
           answer: item.answer.slice(0, 2600),
-          briefingItems: item.briefingItems.slice(0, 12).map(compactBriefingSource),
+          briefingItems: item.briefingItems.slice(0, STRUCTURED_AGENT_ITEM_LIMIT).map(compactBriefingSource),
           debug: item.debug,
         })),
         constraints: [
-          '每个模块最多输出6条items',
+          '每个模块最多输出50条items',
           '每个summary不超过160字',
           'content使用一到三段中文，不要过长',
           '不要复制大段原文',
@@ -1063,13 +1030,9 @@ async function buildStructuredBriefing(input: {
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'structured briefing generation failed';
     await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'ERROR', {
-      error: `${detail}。已降级使用后端 fallback 结构。`,
+      error: detail,
     });
-    return fallbackStructuredBriefing({
-      summary: input.summary,
-      briefing: input.briefing,
-      sources: input.sources,
-    });
+    throw new Error(`结构化晨报 JSON 生成失败：${detail}`);
   }
 }
 
@@ -1193,15 +1156,6 @@ export async function updateTodayExecutiveBriefing(params: {
   const useWeb = plan.useWebSearch || hasSkill(plan, 'web_search');
   const webSearchIntent = buildWebSearchIntent(params.userQuery, params.executiveSystemPrompt);
 
-  if (useWeb) {
-    await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'SUCCESS', {
-      detail: '本轮已启用模型联网搜索/网页读取能力，搜索方向会按总裁秘书system prompt / 用户偏好收敛。',
-      payload: {
-        webSearchIntent,
-      },
-    });
-  }
-
   if (includeWechat) {
     await emitPlannerStep(params.onPlannerEvent, 'call_wechat_agent', 'RUNNING', {
       detail: '正在调用微信公众号助手抓取文章、正文和指标。',
@@ -1293,6 +1247,74 @@ export async function updateTodayExecutiveBriefing(params: {
     }
   }
 
+  if (useWeb) {
+    await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'RUNNING', {
+      detail: '正在调用联网搜索助手，通过 OpenRouter 原生 web tool 检索和整理公开网页信息。',
+      payload: { webSearchIntent },
+    });
+    try {
+      const compactSubagentSignals = subagentResults.map((result) => ({
+        agentType: result.agentType,
+        answer: result.answer.slice(0, 1200),
+        briefingItems: result.briefingItems.slice(0, 8).map((item) => ({
+          category: item.category,
+          title: item.title,
+          summary: item.summary.slice(0, 300),
+          source: item.source,
+          publishedAt: item.publishedAt,
+        })),
+      }));
+      const webResult = await runWebSearchAgent({
+        investorId: params.investorId,
+        userQuery: params.userQuery,
+        mode: 'briefing',
+        context: {
+          webSearchIntent,
+          subagentResults: compactSubagentSignals,
+          taskSpec: {
+            objective: `根据总裁秘书要求进行联网搜索，补充晨报所需外部公开信息：${plan.objective}`,
+            sourceSelectionCriteria: [
+              params.userQuery,
+              params.executiveSystemPrompt || '',
+              'AI agent',
+              'vibe coding',
+              '开发者工具',
+              '产品发布',
+              '竞品动态',
+              '技术趋势',
+            ].filter(Boolean),
+            timeWindow: {
+              type: 'rolling_hours',
+              hours: 24,
+              endAt: new Date().toISOString(),
+            },
+            returnFormat: {
+              sections: ['行业动态', '技术趋势', '竞品监控'],
+              instructions: '按三个模块返回结构化结果；每条信息必须有来源，能拿到URL时必须提供URL。',
+            },
+          },
+        },
+      });
+      subagentResults.push(webResult);
+      calledAgents.push({
+        agentType: 'WEB_SEARCH',
+        status: 'SUCCESS',
+        reason: `returned ${webResult.briefingItems.length} search results`,
+      });
+      await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'SUCCESS', {
+        detail: `联网搜索助手完成，返回 ${webResult.briefingItems.length} 条可合并信息。`,
+        payload: webResult.debug,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'web search agent failed';
+      calledAgents.push({ agentType: 'WEB_SEARCH', status: 'ERROR', reason: detail });
+      await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'ERROR', {
+        error: detail,
+        payload: { webSearchIntent },
+      });
+    }
+  }
+
   await emitPlannerStep(params.onPlannerEvent, 'merge_results', 'RUNNING', {
     detail: '正在把子 agent 结果合并进晨报上下文。',
   });
@@ -1311,7 +1333,7 @@ export async function updateTodayExecutiveBriefing(params: {
     try {
       await emitPlannerStep(params.onPlannerEvent, 'generate_briefing_summary', 'RUNNING', {
         detail: useWeb
-          ? '正在生成摘要，并允许模型按system prompt偏好进行有目的性的联网搜索。'
+          ? '正在基于已记录的联网搜索助手结果生成摘要。'
           : '正在基于现有上下文生成摘要。',
         payload: useWeb ? { webSearchIntent } : undefined,
       });

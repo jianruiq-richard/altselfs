@@ -54,3 +54,9 @@ Altselfsfigma/
 # clerk configuration (can include secrets)
 /.clerk/
 .env*.local
+
+# log
+docs/
+
+# .debug/
+.debug/

@@ -115,6 +115,7 @@ export async function listArticlesByAccount(input: {
   originId?: string;
   lastArticleUrl?: string;
   page?: number;
+  cursor?: string;
   count?: number;
 }) {
   return WechatProviderRaw.getMpHistoryPosts({
@@ -124,6 +125,7 @@ export async function listArticlesByAccount(input: {
     origin_id: input.originId,
     last_article_url: input.lastArticleUrl,
     p: input.page || 1,
+    cursor: input.cursor,
     count: input.count || 20,
   });
 }

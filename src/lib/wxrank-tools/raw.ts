@@ -255,29 +255,6 @@ export const WxrankRaw = {
 
     if (wxidRaw) return getpsByWxid(wxidRaw, params.cursor, count);
 
-    if (articleUrl) {
-      const detail = await callWxrankEndpoint('getArticleDetailTextRich', { url: articleUrl });
-      const data = ((detail || {}) as AnyRecord).data as AnyRecord | undefined;
-      const resolvedWxid = pickString(
-        data?.user_name,
-        data?.wxid,
-        data?.gh_id,
-        data?.origin_id,
-        data?.wx_user
-      );
-      if (resolvedWxid) {
-        const normalized = await getpsByWxid(resolvedWxid, params.cursor, count);
-        return {
-          ...normalized,
-          resolvedFromArticleUrl: true,
-          resolvedWxid,
-        };
-      }
-      if (!biz && (detail as AnyRecord)?.code !== 0) {
-        return detail;
-      }
-    }
-
     if (biz) {
       const subject = await callWxrankEndpoint('getMpSubjectInfo', { biz });
       const subjectData = ((subject || {}) as AnyRecord).data as AnyRecord | undefined;
@@ -297,6 +274,38 @@ export const WxrankRaw = {
         };
       }
 
+      if (!articleUrl) {
+        const begin = Number(params.begin) || 0;
+        const payload = await callWxrankEndpoint('getMpHistoryPostsByBiz', { biz, begin });
+        return normalizeGetpcPayload(payload, count);
+      }
+    }
+
+    if (articleUrl) {
+      const detail = await callWxrankEndpoint('getArticleDetailTextRich', { url: articleUrl });
+      const data = ((detail || {}) as AnyRecord).data as AnyRecord | undefined;
+      const resolvedWxid = pickString(
+        data?.user_name,
+        data?.wxid,
+        data?.gh_id,
+        data?.origin_id,
+        data?.wx_user
+      );
+      if (resolvedWxid) {
+        const normalized = await getpsByWxid(resolvedWxid, params.cursor, count);
+        return {
+          ...normalized,
+          resolvedFromArticleUrl: true,
+          resolvedWxid,
+        };
+      }
+
+      if (!biz && (detail as AnyRecord)?.code !== 0) {
+        return detail;
+      }
+    }
+
+    if (biz) {
       const begin = Number(params.begin) || 0;
       const payload = await callWxrankEndpoint('getMpHistoryPostsByBiz', { biz, begin });
       return normalizeGetpcPayload(payload, count);

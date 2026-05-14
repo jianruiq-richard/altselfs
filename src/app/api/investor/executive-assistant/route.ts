@@ -370,16 +370,20 @@ async function runExecutiveAssistantTurn(params: {
       toolArgs: { userQuery: latest.content },
       toolResult: { error: detail, plannerTrace },
     });
-    briefing = {
-      ...briefing,
-      externalInsights: [
-        {
-          category: '总裁秘书规划',
-          content: `本轮动态规划执行失败：${detail}`,
-          source: '总裁秘书Orchestrator',
+    return {
+      status: 500,
+      body: {
+        error: `晨报更新失败：${detail}`,
+        threadId: thread.id,
+        briefing,
+        planner: currentPlanner,
+        plannerTrace,
+        agentConfig: {
+          systemPrompt: promptConfig.systemPrompt,
+          defaultSystemPrompt: promptConfig.defaultSystemPrompt,
+          hasCustomPrompt: Boolean(promptConfig.customPrompt),
         },
-        ...briefing.externalInsights,
-      ],
+      },
     };
   }
 
@@ -614,6 +618,10 @@ export async function PUT(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  console.log('[executive-assistant] POST start', {
+    investorId: investor.id,
+    stream: req.nextUrl.searchParams.get('stream') === '1',
+  });
 
   const body = (await req.json().catch(() => null)) as { messages?: unknown; threadId?: string | null } | null;
   const messages = normalizeMessages(body?.messages);
