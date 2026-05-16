@@ -92,6 +92,13 @@ type StructuredBriefingModule = {
   items: StructuredBriefingItem[];
 };
 
+type StructuredBriefingModuleKey = 'industryDynamics' | 'technologyTrends' | 'competitorMonitoring';
+
+type StructuredBriefingModulePlan = {
+  key: StructuredBriefingModuleKey;
+  title: StructuredBriefingModule['title'];
+};
+
 type StructuredBriefingOutput = {
   title: string;
   summary: string;
@@ -115,6 +122,11 @@ type LoadedExecutiveContext = {
 };
 
 const STRUCTURED_AGENT_ITEM_LIMIT = 50;
+const STRUCTURED_MODULE_PLANS: StructuredBriefingModulePlan[] = [
+  { key: 'industryDynamics', title: '行业动态' },
+  { key: 'technologyTrends', title: '技术趋势' },
+  { key: 'competitorMonitoring', title: '竞品监控' },
+];
 
 const EXECUTIVE_SKILL_REGISTRY: Array<{
   skillId: ExecutiveSkillId;
@@ -273,6 +285,26 @@ export function getExecutivePlannerStepDefinition(id: ExecutivePlannerStepId): E
       title: '结构化晨报JSON',
       description: '由总裁秘书把已获得的信息归类为行业动态、技术趋势、竞品监控三个模块。',
     },
+    structure_industryDynamics: {
+      id: 'structure_industryDynamics',
+      title: '结构化行业动态',
+      description: '行业动态结构化子 agent 整理候选素材。',
+    },
+    structure_technologyTrends: {
+      id: 'structure_technologyTrends',
+      title: '结构化技术趋势',
+      description: '技术趋势结构化子 agent 整理候选素材。',
+    },
+    structure_competitorMonitoring: {
+      id: 'structure_competitorMonitoring',
+      title: '结构化竞品监控',
+      description: '竞品监控结构化子 agent 整理候选素材。',
+    },
+    aggregate_structured_briefing: {
+      id: 'aggregate_structured_briefing',
+      title: '聚合结构化晨报',
+      description: '聚合 agent 校验三个模块并生成最终标题与总述。',
+    },
     persist_briefing: {
       id: 'persist_briefing',
       title: '保存今日晨报',
@@ -323,7 +355,7 @@ function buildWebSearchIntent(userQuery: string, executiveSystemPrompt?: string)
   return [
     `用户当前指令：${userQuery}`,
     `总裁秘书system prompt / 用户偏好：${preference}`,
-    '联网搜索要求：先根据上述偏好收敛搜索方向和关键词，只搜索、打开和引用符合偏好的信息；忽略泛行业新闻、无关公司动态和不符合偏好的内容；优先查找权威媒体、公司公告、产品发布、技术博客、开发者工具、AI agent、vibe coding 和竞品相关来源。',
+    '联网搜索要求：搜索范围、关键词、是否过滤、信息保留策略都必须从上述总裁秘书system prompt和用户当前指令中读取，不要添加代码预设的业务主题偏好。优先查找有明确来源、发布时间和可验证URL的公开信息。',
   ].join('\n');
 }
 
@@ -349,11 +381,6 @@ function buildWechatTaskSpec(params: {
     params.userQuery,
     params.objective,
     prompt ? prompt.slice(0, 600) : '',
-    'AI agent',
-    'vibe coding',
-    '技术趋势',
-    '竞品监控',
-    '投资机会',
   ].filter(Boolean);
 
   const rawSections =
@@ -372,7 +399,7 @@ function buildWechatTaskSpec(params: {
       : [
           '按晨报秘书可直接合并的格式返回。',
           '每条信息必须包含来源公众号、文章标题、链接、发布时间、为什么重要。',
-          '优先输出行业动态、技术趋势、竞品监控、机会/风险信号。',
+          '业务偏好、筛选规则和保留策略必须以晨报秘书system prompt为准。',
         ].join('\n');
 
   return {
@@ -635,7 +662,8 @@ async function planExecutiveTurn(params: {
   try {
     const raw = await createJsonChatCompletion(
       messages,
-      getOpenRouterModel('EXECUTIVE_PLANNER')
+      getOpenRouterModel('EXECUTIVE_PLANNER'),
+      { maxTokens: 12000 }
     );
     return normalizeExecutivePlan(raw, params.context, params.userQuery, params.executiveSystemPrompt);
   } catch (error) {
@@ -759,7 +787,7 @@ function mergeBriefingWithItems(
 ): ExecutiveDailyBriefing {
   if (items.length === 0) return briefing;
   const content = items
-    .slice(0, 10)
+    .slice(0, 100)
     .map((item, index) => {
       const source = item.url ? `${item.source} ${item.url}` : item.source;
       return `${index + 1}. ${item.title}：${item.summary}（${source}）`;
@@ -793,10 +821,11 @@ async function buildBriefingSummary(input: {
       role: 'system',
       content: [
         '你是总裁秘书Momo的晨报生成器。',
-        '下面的“总裁秘书system prompt / 用户偏好”是最高优先级过滤规则。子agent可能返回冗余信息，你必须过滤掉不符合偏好的内容。',
+        '下面的“总裁秘书system prompt / 用户偏好”是业务偏好和用户倾向的唯一来源。',
+        '是否过滤、保留多少、哪些主题重要、如何排序，都必须从总裁秘书system prompt和用户当前命令中读取；不要添加代码预设的业务主题偏好。',
         '根据内部数据、子agent结果和显式联网搜索结果，生成一份面向创始人的今日晨报。',
         '如果子agent结果中包含 WEB_SEARCH，请只使用这些已记录的搜索结果，不要自行发起隐式搜索。',
-        '联网搜索结果同样需要经过总裁秘书system prompt过滤；不符合偏好的内容不得进入最终晨报。',
+        '如果总裁秘书system prompt要求不要二次过滤或要求保留子agent结果，你必须遵守；否则只按system prompt和用户命令指定的规则处理。',
         '必须把来源和不确定性说明清楚。',
         '输出中文，结构清晰，必须围绕行业动态、技术趋势、竞品监控三个模块给出重点、证据来源和建议行动。',
       ].join('\n'),
@@ -890,6 +919,7 @@ function normalizeStructuredBriefing(raw: string): StructuredBriefingOutput {
 
 function compactBriefingSource(item: AgentBriefingItem) {
   return {
+    category: item.category.slice(0, 80),
     title: item.title.slice(0, 160),
     summary: item.summary.slice(0, 360),
     source: item.source.slice(0, 120),
@@ -898,28 +928,194 @@ function compactBriefingSource(item: AgentBriefingItem) {
   };
 }
 
-async function repairStructuredBriefingJson(raw: string) {
+function compactBriefingSourceWithIndex(item: AgentBriefingItem, index: number) {
+  return {
+    sourceIndex: index,
+    ...compactBriefingSource(item),
+  };
+}
+
+function getModuleAgentStepId(module: StructuredBriefingModulePlan) {
+  return `structure_${module.key}`;
+}
+
+function normalizeModuleAgentOutput(raw: string, module: StructuredBriefingModulePlan): StructuredBriefingModule {
+  const parsed = JSON.parse(raw.trim()) as Record<string, unknown>;
+  const items = Array.isArray(parsed.items)
+    ? parsed.items
+        .map(normalizeStructuredItem)
+        .filter((item): item is StructuredBriefingItem => Boolean(item))
+        .slice(0, STRUCTURED_AGENT_ITEM_LIMIT)
+    : [];
+  return {
+    title: module.title,
+    content: asString(parsed.content, items.map((item) => item.summary).join('\n')).slice(0, 2200),
+    items,
+  };
+}
+
+function normalizeAggregatorOutput(raw: string) {
+  const parsed = JSON.parse(raw.trim()) as Record<string, unknown>;
+  return {
+    title: asString(parsed.title, `总裁秘书Momo晨报 ${dateKey()}`).slice(0, 160),
+    summary: asString(parsed.summary, '今日晨报已更新。').slice(0, 2400),
+  };
+}
+
+function buildModuleItemSchema() {
+  return {
+    title: 'string',
+    summary: 'string',
+    source: 'string',
+    url: 'string optional',
+    publishedAt: 'string optional',
+    whyItMatters: 'string optional',
+  };
+}
+
+async function runStructuredModuleAgent(input: {
+  module: StructuredBriefingModulePlan;
+  userQuery: string;
+  executiveSystemPrompt: string;
+  summary: string;
+  sources: AgentBriefingItem[];
+  calledAgents: ExecutiveBriefingDocument['calledAgents'];
+  useWeb: boolean;
+  onPlannerEvent?: ExecutivePlannerEmit;
+}) {
+  const stepId = getModuleAgentStepId(input.module);
+  await emitPlannerStep(input.onPlannerEvent, stepId, 'RUNNING', {
+    detail: `${input.module.title}结构化子 agent 正在整理候选素材。`,
+    payload: { sourceCount: input.sources.length },
+  });
+
   const messages: ChatMessage[] = [
     {
       role: 'system',
       content: [
-        '你是JSON修复器。',
-        '输入是一个可能被截断或存在未闭合字符串的JSON对象。',
-        '请只输出修复后的严格JSON，不要输出markdown。',
-        '必须保留 title、summary、modules.industryDynamics、modules.technologyTrends、modules.competitorMonitoring 结构。',
+        `你是总裁秘书Momo的晨报结构化子agent，只负责“${input.module.title}”模块。`,
+        '业务偏好、是否过滤、是否保留所有信息、排序规则，都必须从晨报秘书system prompt和用户当前命令中读取；不要添加代码预设的业务主题偏好。',
+        '如果晨报秘书system prompt要求不要二次过滤或要求保留子agent结果，你必须遵守。',
+        `你只能输出“${input.module.title}”模块，不要输出其他模块。`,
+        '不要编造，不要引入候选素材之外的信息；必须保留来源和URL。',
+        '只输出严格JSON，不要输出markdown或解释。',
+        '必须严格遵守 user message 中的 outputSchema，不得新增、删除、改名字段。',
       ].join('\n'),
     },
     {
       role: 'user',
-      content: raw.slice(0, 12000),
+      content: JSON.stringify({
+        executiveSystemPrompt: input.executiveSystemPrompt,
+        userQuery: input.userQuery,
+        useWeb: input.useWeb,
+        module: input.module,
+        generatedSummary: input.summary.slice(0, 6000),
+        calledAgents: input.calledAgents,
+        sources: input.sources.slice(0, 200).map(compactBriefingSourceWithIndex),
+        constraints: [
+          `只输出${input.module.title}模块`,
+          `items最多${STRUCTURED_AGENT_ITEM_LIMIT}条`,
+          '每个summary不超过160字',
+          'content使用一到三段中文，不要过长',
+          '不要复制大段原文',
+          '如果同一信息同时适合多个模块，请只在本模块确有商业意义时保留',
+        ],
+        outputSchema: {
+          moduleKey: input.module.key,
+          title: input.module.title,
+          content: 'string',
+          items: [buildModuleItemSchema()],
+        },
+      }),
     },
   ];
 
-  return createJsonChatCompletion(
-    messages,
-    getOpenRouterModel('EXECUTIVE_STRUCTURER'),
-    { maxTokens: 2600 }
-  );
+  try {
+    const raw = await createJsonChatCompletion(
+      messages,
+      getOpenRouterModel('EXECUTIVE_STRUCTURER'),
+      { maxTokens: 7000 }
+    );
+    const module = normalizeModuleAgentOutput(raw, input.module);
+    await emitPlannerStep(input.onPlannerEvent, stepId, 'SUCCESS', {
+      detail: `${input.module.title}结构化完成，返回 ${module.items.length} 条。`,
+      payload: { itemCount: module.items.length },
+    });
+    return module;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : `${input.module.title} module structure failed`;
+    await emitPlannerStep(input.onPlannerEvent, stepId, 'ERROR', { error: detail });
+    throw new Error(`${input.module.title}结构化失败：${detail}`);
+  }
+}
+
+async function runStructuredBriefingAggregator(input: {
+  userQuery: string;
+  executiveSystemPrompt: string;
+  summary: string;
+  modules: StructuredBriefingModule[];
+  sources: AgentBriefingItem[];
+  calledAgents: ExecutiveBriefingDocument['calledAgents'];
+  onPlannerEvent?: ExecutivePlannerEmit;
+}) {
+  await emitPlannerStep(input.onPlannerEvent, 'aggregate_structured_briefing', 'RUNNING', {
+    detail: '晨报聚合 agent 正在校验三个模块并生成标题与总述。',
+    payload: {
+      moduleItemCounts: input.modules.map((module) => ({ title: module.title, itemCount: module.items.length })),
+    },
+  });
+
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: [
+        '你是总裁秘书Momo的晨报聚合agent。',
+        '你会收到三个模块结构化子agent的结果。你只负责校验整体一致性，并生成最终晨报title和summary。',
+        '不要重写items，不要删除items，不要新增事实，不要二次过滤。',
+        '如果发现模块内容有轻微表达问题，只在summary中概括修正；items由系统按子agent结果原样装配。',
+        '只输出严格JSON，不要输出markdown或解释。',
+        '必须严格遵守 user message 中的 outputSchema，不得新增、删除、改名字段。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        executiveSystemPrompt: input.executiveSystemPrompt,
+        userQuery: input.userQuery,
+        generatedSummary: input.summary.slice(0, 6000),
+        calledAgents: input.calledAgents,
+        sourceCount: input.sources.length,
+        modules: input.modules.map((module) => ({
+          title: module.title,
+          content: module.content,
+          itemCount: module.items.length,
+          itemTitles: module.items.map((item) => item.title).slice(0, STRUCTURED_AGENT_ITEM_LIMIT),
+        })),
+        outputSchema: {
+          title: 'string',
+          summary: 'string',
+        },
+      }),
+    },
+  ];
+
+  try {
+    const raw = await createJsonChatCompletion(
+      messages,
+      getOpenRouterModel('EXECUTIVE_STRUCTURER'),
+      { maxTokens: 2500 }
+    );
+    const result = normalizeAggregatorOutput(raw);
+    await emitPlannerStep(input.onPlannerEvent, 'aggregate_structured_briefing', 'SUCCESS', {
+      detail: '晨报聚合 agent 已生成标题与总述。',
+      payload: { title: result.title },
+    });
+    return result;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'structured briefing aggregation failed';
+    await emitPlannerStep(input.onPlannerEvent, 'aggregate_structured_briefing', 'ERROR', { error: detail });
+    throw new Error(`结构化晨报聚合失败：${detail}`);
+  }
 }
 
 async function buildStructuredBriefing(input: {
@@ -933,97 +1129,48 @@ async function buildStructuredBriefing(input: {
   useWeb: boolean;
   onPlannerEvent?: ExecutivePlannerEmit;
 }) {
-  const messages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: [
-        '你是总裁秘书Momo的晨报结构化整理agent。',
-        '下面的“总裁秘书system prompt / 用户偏好”是最高优先级过滤规则。子agent可能返回冗余信息，最终晨报只能保留符合该偏好的内容。',
-        '你必须基于已经获得的信息、子agent结果和来源，自行判断哪些属于行业动态、技术趋势、竞品监控。',
-        '不要按关键词机械分类，要按商业含义分类。',
-        '如果某条信息不符合总裁秘书system prompt中的关注范围，必须从最终JSON中剔除，即使它来自子agent。',
-        '只输出严格JSON，不要输出markdown或解释。',
-      ].join('\n'),
-    },
-    {
-      role: 'user',
-      content: JSON.stringify({
-        executiveSystemPrompt: input.executiveSystemPrompt,
-        userQuery: input.userQuery,
-        useWeb: input.useWeb,
-        webSearchIntent: buildWebSearchIntent(input.userQuery, input.executiveSystemPrompt),
-        generatedSummary: input.summary.slice(0, 3000),
-        baseBriefing: {
-          headline: input.briefing.headline,
-          externalInsights: input.briefing.externalInsights.slice(0, 8),
-          priorityTasks: input.briefing.priorityTasks.slice(0, 5),
-        },
-        calledAgents: input.calledAgents,
-        sources: input.sources.slice(0, 24).map(compactBriefingSource),
-        subagentResults: input.subagentResults.map((item) => ({
-          agentType: item.agentType,
-          answer: item.answer.slice(0, 2600),
-          briefingItems: item.briefingItems.slice(0, STRUCTURED_AGENT_ITEM_LIMIT).map(compactBriefingSource),
-          debug: item.debug,
-        })),
-        constraints: [
-          '每个模块最多输出50条items',
-          '每个summary不超过160字',
-          'content使用一到三段中文，不要过长',
-          '不要复制大段原文',
-        ],
-        outputSchema: {
-          title: 'string',
-          summary: 'string',
-          modules: {
-            industryDynamics: {
-              content: 'string',
-              items: [
-                {
-                  title: 'string',
-                  summary: 'string',
-                  source: 'string',
-                  url: 'string optional',
-                  publishedAt: 'string optional',
-                  whyItMatters: 'string optional',
-                },
-              ],
-            },
-            technologyTrends: {
-              content: 'string',
-              items: 'same item schema',
-            },
-            competitorMonitoring: {
-              content: 'string',
-              items: 'same item schema',
-            },
-          },
-        },
-      }),
-    },
-  ];
-
   try {
     await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'RUNNING', {
-      detail: '总裁秘书正在把已获得的信息标准化为严格 JSON，并归类到三个晨报模块。',
+      detail: '总裁秘书正在并行调用三个结构化子 agent，并由聚合 agent 校验输出。',
+      payload: {
+        sourceCount: input.sources.length,
+        modules: STRUCTURED_MODULE_PLANS.map((module) => module.title),
+      },
     });
-    const raw = await createJsonChatCompletion(
-      messages,
-      getOpenRouterModel('EXECUTIVE_STRUCTURER'),
-      { maxTokens: 3600 }
+    const modules = await Promise.all(
+      STRUCTURED_MODULE_PLANS.map((module) =>
+        runStructuredModuleAgent({
+          module,
+          userQuery: input.userQuery,
+          executiveSystemPrompt: input.executiveSystemPrompt,
+          summary: input.summary,
+          sources: input.sources,
+          calledAgents: input.calledAgents,
+          useWeb: input.useWeb,
+          onPlannerEvent: input.onPlannerEvent,
+        })
+      )
     );
-    let structured: StructuredBriefingOutput;
-    try {
-      structured = normalizeStructuredBriefing(raw);
-    } catch {
-      const repaired = await repairStructuredBriefingJson(raw);
-      structured = normalizeStructuredBriefing(repaired);
-    }
+    const aggregate = await runStructuredBriefingAggregator({
+      userQuery: input.userQuery,
+      executiveSystemPrompt: input.executiveSystemPrompt,
+      summary: input.summary,
+      modules,
+      sources: input.sources,
+      calledAgents: input.calledAgents,
+      onPlannerEvent: input.onPlannerEvent,
+    });
+    const structured: StructuredBriefingOutput = {
+      title: aggregate.title,
+      summary: aggregate.summary,
+      modules,
+    };
     await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'SUCCESS', {
-      detail: '结构化晨报 JSON 已生成并通过校验。',
+      detail: '三个结构化子 agent 与聚合 agent 已完成，最终晨报 JSON 已通过校验。',
       payload: {
         moduleCount: structured.modules.length,
         itemCount: structured.modules.reduce((sum, item) => sum + item.items.length, 0),
+        moduleItemCounts: structured.modules.map((module) => ({ title: module.title, itemCount: module.items.length })),
       },
     });
     return structured;
@@ -1233,55 +1380,24 @@ export async function updateTodayExecutiveBriefing(params: {
     });
   }
 
-  const settled = await Promise.allSettled(subagentTasks);
-  const subagentResults: AgentRunResult[] = [];
-  for (const item of settled) {
-    if (item.status === 'fulfilled') {
-      subagentResults.push(item.value);
-    } else {
-      calledAgents.push({
-        agentType: 'UNKNOWN',
-        status: 'ERROR',
-        reason: item.reason instanceof Error ? item.reason.message : 'subagent failed',
-      });
-    }
-  }
-
   if (useWeb) {
     await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'RUNNING', {
-      detail: '正在调用联网搜索助手，通过 OpenRouter 原生 web tool 检索和整理公开网页信息。',
+      detail: '正在并行调用联网搜索助手，通过 OpenRouter 原生 web tool 检索和整理公开网页信息。',
       payload: { webSearchIntent },
     });
-    try {
-      const compactSubagentSignals = subagentResults.map((result) => ({
-        agentType: result.agentType,
-        answer: result.answer.slice(0, 1200),
-        briefingItems: result.briefingItems.slice(0, 8).map((item) => ({
-          category: item.category,
-          title: item.title,
-          summary: item.summary.slice(0, 300),
-          source: item.source,
-          publishedAt: item.publishedAt,
-        })),
-      }));
-      const webResult = await runWebSearchAgent({
+    subagentTasks.push(
+      runWebSearchAgent({
         investorId: params.investorId,
         userQuery: params.userQuery,
         mode: 'briefing',
         context: {
           webSearchIntent,
-          subagentResults: compactSubagentSignals,
+          subagentResults: [],
           taskSpec: {
             objective: `根据总裁秘书要求进行联网搜索，补充晨报所需外部公开信息：${plan.objective}`,
             sourceSelectionCriteria: [
               params.userQuery,
               params.executiveSystemPrompt || '',
-              'AI agent',
-              'vibe coding',
-              '开发者工具',
-              '产品发布',
-              '竞品动态',
-              '技术趋势',
             ].filter(Boolean),
             timeWindow: {
               type: 'rolling_hours',
@@ -1290,29 +1406,49 @@ export async function updateTodayExecutiveBriefing(params: {
             },
             returnFormat: {
               sections: ['行业动态', '技术趋势', '竞品监控'],
-              instructions: '按三个模块返回结构化结果；每条信息必须有来源，能拿到URL时必须提供URL。',
+              instructions:
+                '按三个模块返回结构化结果；每条信息必须有来源，能拿到URL时必须提供URL。本任务与其他信息源助手并行执行，不等待微信公众号助手结果。业务偏好、搜索范围和筛选/保留策略必须以晨报秘书system prompt为准。',
             },
           },
         },
-      });
-      subagentResults.push(webResult);
-      calledAgents.push({
-        agentType: 'WEB_SEARCH',
-        status: 'SUCCESS',
-        reason: `returned ${webResult.briefingItems.length} search results`,
-      });
-      await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'SUCCESS', {
-        detail: `联网搜索助手完成，返回 ${webResult.briefingItems.length} 条可合并信息。`,
-        payload: webResult.debug,
-      });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : 'web search agent failed';
-      calledAgents.push({ agentType: 'WEB_SEARCH', status: 'ERROR', reason: detail });
-      await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'ERROR', {
-        error: detail,
-        payload: { webSearchIntent },
-      });
+      })
+        .then(async (webResult) => {
+          calledAgents.push({
+            agentType: 'WEB_SEARCH',
+            status: 'SUCCESS',
+            reason: `returned ${webResult.briefingItems.length} search results`,
+          });
+          await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'SUCCESS', {
+            detail: `联网搜索助手完成，返回 ${webResult.briefingItems.length} 条可合并信息。`,
+            payload: webResult.debug,
+          });
+          return webResult;
+        })
+        .catch(async (error: unknown) => {
+          const detail = error instanceof Error ? error.message : 'web search agent failed';
+          calledAgents.push({ agentType: 'WEB_SEARCH', status: 'ERROR', reason: detail });
+          await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'ERROR', {
+            error: detail,
+            payload: { webSearchIntent },
+          });
+          throw new Error(`联网搜索助手失败：${detail}`);
+        })
+    );
+  }
+
+  const settled = await Promise.allSettled(subagentTasks);
+  const subagentResults: AgentRunResult[] = [];
+  const subagentErrors: string[] = [];
+  for (const item of settled) {
+    if (item.status === 'fulfilled') {
+      subagentResults.push(item.value);
+    } else {
+      const reason = item.reason instanceof Error ? item.reason.message : 'subagent failed';
+      subagentErrors.push(reason);
     }
+  }
+  if (subagentErrors.length > 0) {
+    throw new Error(`子 agent 执行失败：${subagentErrors.join('；')}`);
   }
 
   await emitPlannerStep(params.onPlannerEvent, 'merge_results', 'RUNNING', {
@@ -1351,9 +1487,9 @@ export async function updateTodayExecutiveBriefing(params: {
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'summary generation failed';
       await emitPlannerStep(params.onPlannerEvent, 'generate_briefing_summary', 'ERROR', {
-        error: `${detail}。已降级使用确定性摘要。`,
+        error: detail,
       });
-      summary = fallbackSummary(mergedBriefing, subagentResults);
+      throw new Error(`晨报摘要生成失败：${detail}`);
     }
   }
 

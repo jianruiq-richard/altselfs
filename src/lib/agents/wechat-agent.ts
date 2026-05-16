@@ -10,14 +10,13 @@ import type { AgentBriefingItem, AgentRunInput, AgentRunResult, AgentRunToolCall
 
 const WECHAT_AGENT_TYPE = 'WECHAT';
 const HISTORY_PAGE_SIZE = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_HISTORY_PAGE_SIZE', 20);
-const RUN_BUDGET_MS = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_RUN_BUDGET_MS', 180_000);
-const MODEL_RESERVE_MS = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_MODEL_RESERVE_MS', 45_000);
 const DETAIL_FETCH_LIMIT = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_DETAIL_FETCH_LIMIT', 0);
 const METRICS_FETCH_LIMIT = readPositiveIntEnv('EXECUTIVE_WECHAT_SUBAGENT_METRICS_FETCH_LIMIT', 0);
 const PROFILE_STALE_DAYS = readPositiveIntEnv('EXECUTIVE_WECHAT_SOURCE_PROFILE_STALE_DAYS', 30);
 const SOURCE_CONCURRENCY = readPositiveIntEnv('EXECUTIVE_WECHAT_SOURCE_CONCURRENCY', 4);
 const SELECTED_DETAIL_LIMIT = readPositiveIntEnv('EXECUTIVE_WECHAT_SELECTED_DETAIL_LIMIT', 50);
 const DETAIL_CONCURRENCY = readPositiveIntEnv('EXECUTIVE_WECHAT_DETAIL_CONCURRENCY', 3);
+const ARTICLE_SUMMARY_CONCURRENCY = readPositiveIntEnv('EXECUTIVE_WECHAT_ARTICLE_SUMMARY_CONCURRENCY', 5);
 
 const MODULE_TITLES = ['行业动态', '技术趋势', '竞品监控'] as const;
 type WechatModuleTitle = (typeof MODULE_TITLES)[number];
@@ -52,6 +51,14 @@ type SelectedArticle = ArticleCandidate & {
 type DetailedArticle = SelectedArticle & {
   detail?: unknown;
   detailText: string;
+};
+
+type ArticleInsight = {
+  article: SelectedArticle;
+  include: boolean;
+  category: WechatModuleTitle;
+  summary: string;
+  whyItMatters: string;
 };
 
 type WechatStructuredModule = {
@@ -373,12 +380,6 @@ function sourceSummaryForSelection(source: SourceRecord) {
   };
 }
 
-function localSourceMatch(source: SourceRecord, taskSpec: AgentTaskSpec) {
-  const haystack = JSON.stringify(sourceSummaryForSelection(source)).toLowerCase();
-  const criteria = [taskSpec.objective, ...taskSpec.sourceSelectionCriteria].map((item) => item.toLowerCase());
-  return criteria.some((item) => item && haystack.includes(item)) || /ai|agent|智能体|大模型|llm|coding|技术|竞品|投资/i.test(haystack);
-}
-
 async function selectSourcesForTask(sources: SourceRecord[], taskSpec: AgentTaskSpec): Promise<SourceSelection> {
   const sourceCards = sources.map(sourceSummaryForSelection);
   const messages: ChatMessage[] = [
@@ -409,12 +410,13 @@ async function selectSourcesForTask(sources: SourceRecord[], taskSpec: AgentTask
     },
   ];
 
+  const raw = await createJsonChatCompletion(
+    messages,
+    getOpenRouterModel('WECHAT_SOURCE_SELECTOR'),
+    { maxTokens: 12000 }
+  );
+
   try {
-    const raw = await createJsonChatCompletion(
-      messages,
-      getOpenRouterModel('WECHAT_SOURCE_SELECTOR'),
-      { maxTokens: 4000 }
-    );
     const parsed = JSON.parse(raw) as { selectedBizes?: unknown; skipped?: unknown };
     const selectedBizes = new Set(asStringArray(parsed.selectedBizes));
     const selected = sources.filter((source) => selectedBizes.has(source.biz));
@@ -437,18 +439,11 @@ async function selectSourcesForTask(sources: SourceRecord[], taskSpec: AgentTask
         : [];
       return { selected, skipped, source: 'MODEL' };
     }
-  } catch {
-    // Fall back to local profile matching.
+    throw new Error('微信源选择结果为空。');
+  } catch (error) {
+    const detail = getErrorMessage(error);
+    throw new Error(`微信源选择 JSON 解析失败：${detail}。原始输出开头：${raw.slice(0, 800)}`);
   }
-
-  const selected = sources.filter((source) => localSourceMatch(source, taskSpec));
-  return {
-    selected: selected.length > 0 ? selected : sources,
-    skipped: sources
-      .filter((source) => selected.length > 0 && !selected.some((item) => item.biz === source.biz))
-      .map((source) => ({ biz: source.biz, displayName: source.displayName, reason: '本地画像关键词不匹配' })),
-    source: 'FALLBACK',
-  };
 }
 
 function parsePublishDate(value: string | null) {
@@ -507,7 +502,6 @@ function toSelectionCards(candidates: ArticleCandidate[], sources: SourceRecord[
       title: article.title,
       source: article.sourceName,
       biz: article.biz,
-      url: article.url,
       publishedAt: article.publishAt,
       digest: article.summary,
       sourceProfile: profile
@@ -533,31 +527,23 @@ function normalizeSelectedArticles(raw: unknown, candidates: ArticleCandidate[])
   const seen = new Set<string>();
   const out: SelectedArticle[] = [];
   for (const item of selected) {
-    const index = Number(item.index);
+    const index = Number(item.index ?? item.i);
     const url = asString(item.url);
     const article = (Number.isInteger(index) ? byIndex.get(index) : undefined) || byUrl.get(url);
     if (!article || seen.has(article.url)) continue;
     seen.add(article.url);
-    const category = MODULE_TITLES.includes(item.category as WechatModuleTitle)
-      ? (item.category as WechatModuleTitle)
+    const rawCategory = item.category ?? item.c;
+    const category = MODULE_TITLES.includes(rawCategory as WechatModuleTitle)
+      ? (rawCategory as WechatModuleTitle)
       : classifyArticleByText(article);
     out.push({
       ...article,
       category,
-      reason: asString(item.reason, '符合本轮任务主题'),
-      priority: Number.isFinite(Number(item.priority)) ? Number(item.priority) : 50,
+      reason: asString(item.reason ?? item.r, '符合本轮任务主题').slice(0, 80),
+      priority: Number.isFinite(Number(item.priority ?? item.p)) ? Number(item.priority ?? item.p) : 50,
     });
   }
   return out.sort((a, b) => b.priority - a.priority);
-}
-
-function fallbackSelectArticles(candidates: ArticleCandidate[]) {
-  return candidates.slice(0, SELECTED_DETAIL_LIMIT).map((article, index) => ({
-    ...article,
-    category: classifyArticleByText(article),
-    reason: '本地标题规则命中',
-    priority: 100 - index,
-  }));
 }
 
 async function selectArticlesForDetail(input: {
@@ -575,6 +561,7 @@ async function selectArticlesForDetail(input: {
         '请只选择与任务目标明显相关、值得抓全文进一步分析的文章。',
         '每条选中文章必须归入一个模块：行业动态、技术趋势、竞品监控。',
         '不要为了平均覆盖公众号而选择无关文章；也不要遗漏明显重要的相关文章。',
+        '输出必须紧凑，selected里不要返回url、标题、摘要或长理由；后端会用index回填文章信息。',
       ].join('\n'),
     },
     {
@@ -591,33 +578,39 @@ async function selectArticlesForDetail(input: {
         outputSchema: {
           selected: [
             {
-              index: 0,
-              url: 'article url',
-              category: '行业动态|技术趋势|竞品监控',
-              reason: '为什么值得抓全文',
-              priority: 0,
+              i: 0,
+              c: '行业动态|技术趋势|竞品监控',
+              p: 0,
+              r: '20字内短理由',
             },
           ],
-          skippedReasonSummary: '一句话说明主要跳过了什么',
+          skippedReasonSummary: '30字内说明主要跳过了什么',
         },
+        hardRules: [
+          'selected数组只允许字段 i/c/p/r。',
+          '不要输出url。',
+          '不要输出标题。',
+          '不要输出摘要。',
+          'r必须很短，最长20个汉字。',
+        ],
       }),
     },
   ];
 
+  const raw = await createJsonChatCompletion(
+    messages,
+    getOpenRouterModel('WECHAT_SOURCE_SELECTOR'),
+    { maxTokens: 12000 }
+  );
+
   try {
-    const raw = await createJsonChatCompletion(
-      messages,
-      getOpenRouterModel('WECHAT_SOURCE_SELECTOR'),
-      { maxTokens: 5000 }
-    );
     const parsed = JSON.parse(raw);
     const selected = normalizeSelectedArticles(parsed, input.candidates).slice(0, SELECTED_DETAIL_LIMIT);
-    if (selected.length > 0) return { selected, raw: parsed, source: 'MODEL' };
-  } catch {
-    // Fall back to local title classification below.
+    return { selected, raw: parsed, source: 'MODEL' };
+  } catch (error) {
+    const detail = getErrorMessage(error);
+    throw new Error(`微信文章初筛 JSON 解析失败：${detail}。原始输出开头：${raw.slice(0, 800)}`);
   }
-
-  return { selected: fallbackSelectArticles(input.candidates), raw: null, source: 'FALLBACK' };
 }
 
 function extractDetailText(detail: unknown) {
@@ -674,47 +667,46 @@ function normalizeWechatStructuredSummary(raw: string): WechatStructuredSummary 
   };
 }
 
-function fallbackStructuredSummary(selected: SelectedArticle[]): WechatStructuredSummary {
-  const modules = MODULE_TITLES.map((title) => {
-    const items = selected
-      .filter((article) => article.category === title)
-      .slice(0, 6)
-      .map((article) => ({
-        category: title,
-        title: article.title,
-        summary: article.summary || article.reason,
-        source: article.sourceName,
-        url: article.url,
-        publishedAt: article.publishAt || undefined,
-      }));
-    return {
-      title,
-      content: items.length > 0 ? items.map((item) => `${item.title}：${item.summary}`).join('\n') : `暂无明确${title}。`,
-      items,
-    };
-  });
+function emptyStructuredSummary(): WechatStructuredSummary {
   return {
-    summary: `微信公众号助手初筛了 ${selected.length} 篇重点文章，并按三模块整理。`,
-    modules,
+    summary: '微信公众号助手没有找到符合本轮任务时间窗口的文章。',
+    modules: MODULE_TITLES.map((title) => ({
+      title,
+      content: `暂无明确${title}。`,
+      items: [],
+    })),
   };
 }
 
-async function buildWechatStructuredSummary(input: {
+function normalizeArticleInsight(raw: string, article: SelectedArticle): ArticleInsight {
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  const rawCategory = asString(parsed.category);
+  const category = MODULE_TITLES.includes(rawCategory as WechatModuleTitle)
+    ? (rawCategory as WechatModuleTitle)
+    : article.category;
+  return {
+    article,
+    include: parsed.include !== false,
+    category,
+    summary: asString(parsed.summary, article.summary || article.reason).slice(0, 700),
+    whyItMatters: asString(parsed.whyItMatters, article.reason).slice(0, 300),
+  };
+}
+
+async function summarizeArticleInsight(input: {
   userQuery: string;
   taskSpec: AgentTaskSpec;
-  selected: SelectedArticle[];
-  detailed: DetailedArticle[];
+  article: SelectedArticle;
+  detailText: string;
 }) {
-  if (input.selected.length === 0) return fallbackStructuredSummary([]);
   const messages: ChatMessage[] = [
     {
       role: 'system',
       content: [
-        '你是微信公众号AI员工，是总裁秘书Momo的子agent。',
-        '你已经完成标题初筛，并拿到了部分命中文章全文。',
-        '请只基于给定文章和全文做整理，不编造，不引入外部信息。',
-        '必须按照行业动态、技术趋势、竞品监控三个模块输出严格JSON。',
-        '每个模块最多50条items；每条必须有来源、链接、发布时间。',
+        '你是微信公众号文章分析员，只输出严格JSON。',
+        '你会收到一篇公众号文章的标题、摘要、初筛分类和正文摘录。',
+        '请基于总裁秘书任务判断是否保留，并提炼成短重点摘要。',
+        '不要复述全文，不要引入外部信息。',
       ].join('\n'),
     },
     {
@@ -722,47 +714,72 @@ async function buildWechatStructuredSummary(input: {
       content: JSON.stringify({
         executiveRequest: input.userQuery,
         task: input.taskSpec,
-        selectedArticles: input.selected.map((article) => ({
-          title: article.title,
-          source: article.sourceName,
-          url: article.url,
-          publishedAt: article.publishAt,
-          digest: article.summary,
-          selectedCategory: article.category,
-          selectedReason: article.reason,
-        })),
-        detailedArticles: input.detailed.map((article) => ({
-          title: article.title,
-          source: article.sourceName,
-          url: article.url,
-          publishedAt: article.publishAt,
-          selectedCategory: article.category,
-          selectedReason: article.reason,
-          digest: article.summary,
-          detailText: article.detailText,
-        })),
+        article: {
+          title: input.article.title,
+          source: input.article.sourceName,
+          publishedAt: input.article.publishAt,
+          digest: input.article.summary,
+          selectedCategory: input.article.category,
+          selectedReason: input.article.reason,
+          detailText: input.detailText || input.article.summary,
+        },
         outputSchema: {
-          summary: 'string',
-          modules: {
-            industryDynamics: { content: 'string', items: [{ title: 'string', summary: 'string', source: 'string', url: 'string', publishedAt: 'string', whyItMatters: 'string' }] },
-            technologyTrends: { content: 'string', items: 'same item schema' },
-            competitorMonitoring: { content: 'string', items: 'same item schema' },
-          },
+          include: true,
+          category: '行业动态|技术趋势|竞品监控',
+          summary: '120字以内，说明事实、进展和关键证据',
+          whyItMatters: '80字以内，说明为什么值得进入晨报',
         },
       }),
     },
   ];
 
+  const raw = await createJsonChatCompletion(
+    messages,
+    getOpenRouterModel('WECHAT_AGENT'),
+    { maxTokens: 1800 }
+  );
+
   try {
-    const raw = await createJsonChatCompletion(
-      messages,
-      getOpenRouterModel('WECHAT_AGENT'),
-      { maxTokens: 4200 }
-    );
-    return normalizeWechatStructuredSummary(raw);
-  } catch {
-    return fallbackStructuredSummary(input.selected);
+    return normalizeArticleInsight(raw, input.article);
+  } catch (error) {
+    const detail = getErrorMessage(error);
+    throw new Error(`微信文章重点摘要 JSON 解析失败：${detail}。文章：${input.article.title}。原始输出开头：${raw.slice(0, 800)}`);
   }
+}
+
+function buildModuleContent(title: WechatModuleTitle, items: AgentBriefingItem[]) {
+  if (items.length === 0) return `暂无明确${title}。`;
+  return items
+    .slice(0, 50)
+    .map((item, index) => `${index + 1}. ${item.title}：${item.summary}`)
+    .join('\n');
+}
+
+function buildWechatStructuredSummaryFromInsights(insights: ArticleInsight[]): WechatStructuredSummary {
+  const included = insights.filter((item) => item.include && item.summary);
+  if (included.length === 0) return emptyStructuredSummary();
+  const modules = MODULE_TITLES.map((title) => {
+    const items = included
+      .filter((item) => item.category === title)
+      .slice(0, 50)
+      .map((item) => ({
+        category: title,
+        title: item.article.title,
+        summary: item.whyItMatters ? `${item.summary}\n为什么重要：${item.whyItMatters}` : item.summary,
+        source: item.article.sourceName,
+        url: item.article.url,
+        publishedAt: item.article.publishAt || undefined,
+      }));
+    return {
+      title,
+      content: buildModuleContent(title, items),
+      items,
+    };
+  });
+  return {
+    summary: `微信公众号助手已筛选并压缩 ${included.length} 篇最近24小时相关文章，按行业动态、技术趋势、竞品监控整理。`,
+    modules,
+  };
 }
 
 function renderStructuredSummary(structured: WechatStructuredSummary) {
@@ -819,8 +836,6 @@ function toBriefingItems(candidates: ArticleCandidate[], answer: string, structu
 export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResult> {
   const toolCalls: AgentRunToolCall[] = [];
   const taskSpec = resolveTaskSpec(input);
-  const deadlineAt = Date.now() + RUN_BUDGET_MS;
-  const toolDeadlineAt = Math.max(Date.now(), deadlineAt - MODEL_RESERVE_MS);
   console.log('[wechat-agent] start', {
     investorId: input.investorId,
     objective: taskSpec.objective,
@@ -922,14 +937,6 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
   const scanSource = async (source: SourceRecord) => {
     const localToolCalls: AgentRunToolCall[] = [];
     const localCandidates: ArticleCandidate[] = [];
-    if (Date.now() >= toolDeadlineAt) {
-      localToolCalls.push({
-        toolName: 'wechat_run_budget',
-        status: 'ERROR',
-        result: `Stopped before scanning all sources to reserve ${MODEL_RESERVE_MS}ms for summarization.`,
-      });
-      return { candidates: localCandidates, toolCalls: localToolCalls };
-    }
 
     const sourceArticles: ArticleCandidate[] = [];
     const sourceSeenUrls = new Set<string>();
@@ -940,8 +947,7 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
       source: source.displayName,
       biz: source.biz,
     });
-    while (Date.now() < toolDeadlineAt) {
-      if (Date.now() >= toolDeadlineAt) break;
+    while (true) {
       try {
         const result = await listArticlesByAccount({
           biz: source.biz,
@@ -1069,7 +1075,7 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
   let nextSourceIndex = 0;
   const workerCount = Math.max(1, Math.min(SOURCE_CONCURRENCY, selectedSources.length));
   const workers = Array.from({ length: workerCount }, async () => {
-    while (Date.now() < toolDeadlineAt) {
+    while (true) {
       const index = nextSourceIndex;
       nextSourceIndex += 1;
       const source = selectedSources[index];
@@ -1078,13 +1084,6 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
     }
   });
   await Promise.all(workers);
-  if (nextSourceIndex < selectedSources.length && Date.now() >= toolDeadlineAt) {
-    toolCalls.push({
-      toolName: 'wechat_run_budget',
-      status: 'ERROR',
-      result: `Stopped before scanning all sources to reserve ${MODEL_RESERVE_MS}ms for summarization.`,
-    });
-  }
   for (const result of sourceResults) {
     if (!result) continue;
     candidates.push(...result.candidates);
@@ -1128,19 +1127,9 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
 
   const details: Array<{ url: string; detail: unknown }> = [];
   const detailedArticles: DetailedArticle[] = [];
+  const detailTextByUrl = new Map<string, string>();
   const detailTargets = selectForToolFetch(articleSelection.selected, DETAIL_FETCH_LIMIT > 0 ? DETAIL_FETCH_LIMIT : SELECTED_DETAIL_LIMIT);
   const detailResults = await mapWithConcurrency(detailTargets, DETAIL_CONCURRENCY, async (article) => {
-    if (Date.now() >= toolDeadlineAt) {
-      return {
-        article,
-        toolCall: {
-          toolName: 'getArticleDetail',
-          status: 'ERROR' as const,
-          args: { url: article.url },
-          result: `Skipped to reserve ${MODEL_RESERVE_MS}ms for summarization.`,
-        },
-      };
-    }
     try {
       const detail = await getArticleDetail({ url: article.url });
       return {
@@ -1169,18 +1158,19 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
     toolCalls.push(item.toolCall);
     if (item.detail !== undefined) {
       details.push({ url: item.article.url, detail: item.detail });
-      detailedArticles.push({
+      const detailedArticle = {
         ...item.article,
         detail: item.detail,
         detailText: extractDetailText(item.detail),
-      });
+      };
+      detailedArticles.push(detailedArticle);
+      detailTextByUrl.set(item.article.url, detailedArticle.detailText);
     }
   }
 
   const metrics: Array<{ url: string; metrics: unknown }> = [];
   const metricTargets = selectForToolFetch(articleSelection.selected, METRICS_FETCH_LIMIT);
   for (const article of metricTargets) {
-    if (Date.now() >= toolDeadlineAt) break;
     try {
       const metric = await getArticleMetrics({ url: article.url });
       metrics.push({ url: article.url, metrics: metric });
@@ -1202,19 +1192,27 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
 
   let answer = '';
   let structuredSummary: WechatStructuredSummary | undefined;
+  let articleInsights: ArticleInsight[] = [];
   if (candidates.length > 0) {
-    structuredSummary = await buildWechatStructuredSummary({
-      userQuery: input.userQuery,
-      taskSpec,
-      selected: articleSelection.selected,
-      detailed: detailedArticles,
-    });
+    articleInsights = await mapWithConcurrency(
+      articleSelection.selected,
+      ARTICLE_SUMMARY_CONCURRENCY,
+      async (article) => summarizeArticleInsight({
+        userQuery: input.userQuery,
+        taskSpec,
+        article,
+        detailText: detailTextByUrl.get(article.url) || article.summary,
+      })
+    );
+    structuredSummary = buildWechatStructuredSummaryFromInsights(articleInsights);
     toolCalls.push({
-      toolName: 'structureWechatBriefingModules',
+      toolName: 'summarizeWechatArticlesToModules',
       status: 'SUCCESS',
       args: {
         selectedCount: articleSelection.selected.length,
         detailedCount: detailedArticles.length,
+        insightCount: articleInsights.length,
+        articleSummaryConcurrency: ARTICLE_SUMMARY_CONCURRENCY,
         modules: MODULE_TITLES,
       },
       result: compact(structuredSummary),
@@ -1244,12 +1242,14 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
       detailFetchLimit: DETAIL_FETCH_LIMIT,
       selectedDetailLimit: SELECTED_DETAIL_LIMIT,
       detailConcurrency: DETAIL_CONCURRENCY,
+      articleSummaryConcurrency: ARTICLE_SUMMARY_CONCURRENCY,
+      articleInsightCount: articleInsights.length,
       metricsFetchLimit: METRICS_FETCH_LIMIT,
       sourceConcurrency: SOURCE_CONCURRENCY,
       structuredModules: structuredSummary
         ? structuredSummary.modules.map((module) => ({ title: module.title, itemCount: module.items.length }))
         : [],
-      pagingStopPolicy: 'stop on duplicate page, empty/error response, all page articles older than rolling window, or runtime budget',
+      pagingStopPolicy: 'stop on duplicate page, empty/error response, all page articles older than rolling window, or missing cursor',
       profileRefreshCount: sourcesNeedingProfile.length,
     },
   };

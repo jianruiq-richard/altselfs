@@ -41,33 +41,49 @@ type ChatCompletionResult = {
   choices: Array<{
     message?: {
       content?: string | null;
+      [key: string]: unknown;
     };
   }>;
+  [key: string]: unknown;
+};
+
+type ChatCompletionRequestResult = {
+  content: string;
+  completion: ChatCompletionResult;
+  tools: OpenRouterServerTool[];
+};
+
+export type ChatCompletionMetadata = {
+  content: string;
+  model: string;
+  tools: OpenRouterServerTool[];
+  rawMessage: ChatCompletionResult['choices'][number]['message'] | null;
+  rawCompletion: ChatCompletionResult;
 };
 
 const DEFAULT_OPENROUTER_MODELS = {
   primary: 'deepseek/deepseek-v3.2',
-  fallback: 'qwen/qwen3-max',
-  backup: 'z-ai/glm-4.6',
-  regionFallback1: 'moonshotai/kimi-k2-thinking',
-  regionFallback2: 'moonshotai/kimi-k2',
+  fallback: 'deepseek/deepseek-v3.2',
+  backup: 'deepseek/deepseek-v3.2',
+  regionFallback1: 'deepseek/deepseek-v3.2',
+  regionFallback2: 'deepseek/deepseek-v3.2',
 };
 
 const DEFAULT_AGENT_MODELS = {
-  CHAT: 'qwen/qwen3-max',
-  EVALUATOR: 'qwen/qwen3-max',
+  CHAT: 'deepseek/deepseek-v3.2',
+  EVALUATOR: 'deepseek/deepseek-v3.2',
   EXECUTIVE: 'deepseek/deepseek-v3.2',
-  EXECUTIVE_PLANNER: 'z-ai/glm-4.6',
-  EXECUTIVE_STRUCTURER: 'qwen/qwen3-max',
-  WEB_SEARCH: 'z-ai/glm-4.6',
+  EXECUTIVE_PLANNER: 'deepseek/deepseek-v3.2',
+  EXECUTIVE_STRUCTURER: 'deepseek/deepseek-v3.2',
+  WEB_SEARCH: 'deepseek/deepseek-v3.2',
   WECHAT_AGENT: 'deepseek/deepseek-v3.2',
-  WECHAT_SOURCE_SELECTOR: 'qwen/qwen3-max',
-  WECHAT_SOURCES_PLANNER: 'z-ai/glm-4.6',
+  WECHAT_SOURCE_SELECTOR: 'deepseek/deepseek-v3.2',
+  WECHAT_SOURCES_PLANNER: 'deepseek/deepseek-v3.2',
   WECHAT_SOURCES_ASSISTANT: 'deepseek/deepseek-v3.2',
-  MAIL_AGENT_PRIMARY: 'qwen/qwen3-max',
+  MAIL_AGENT_PRIMARY: 'deepseek/deepseek-v3.2',
   MAIL_AGENT_FALLBACK: 'deepseek/deepseek-v3.2',
-  XHS_PLANNER: 'z-ai/glm-4.6',
-  XHS_ASSISTANT: 'qwen/qwen3-max',
+  XHS_PLANNER: 'deepseek/deepseek-v3.2',
+  XHS_ASSISTANT: 'deepseek/deepseek-v3.2',
 } as const;
 
 export type OpenRouterAgentModelKey = keyof typeof DEFAULT_AGENT_MODELS;
@@ -180,20 +196,24 @@ async function requestCompletion(
   messages: ChatMessage[],
   model: string,
   options?: { enableWebTools?: boolean; maxTokens?: number }
-) {
+): Promise<ChatCompletionRequestResult> {
   const tools = options?.enableWebTools === false ? [] : getOpenRouterServerTools();
   const completion = (await openai.chat.completions.create({
     model,
     messages,
     temperature: 0.7,
-    max_tokens: options?.maxTokens || 2000,
+    max_tokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_CHAT_MAX_TOKENS', 12000),
     stream: false,
     ...(tools.length > 0 ? { tools } : {}),
   } as Parameters<typeof openai.chat.completions.create>[0], {
     timeout: OPENROUTER_REQUEST_TIMEOUT_MS,
-  })) as ChatCompletionResult;
+  })) as unknown as ChatCompletionResult;
 
-  return completion.choices[0]?.message?.content || '';
+  return {
+    content: completion.choices[0]?.message?.content || '',
+    completion,
+    tools,
+  };
 }
 
 async function requestJsonCompletion(messages: ChatMessage[], model: string, maxTokens?: number) {
@@ -201,7 +221,7 @@ async function requestJsonCompletion(messages: ChatMessage[], model: string, max
     model,
     messages,
     temperature: 0.1,
-    max_tokens: maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 1800),
+    max_tokens: maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
     response_format: { type: 'json_object' },
   }, {
     timeout: OPENROUTER_REQUEST_TIMEOUT_MS,
@@ -267,6 +287,15 @@ export async function createChatCompletion(
   model?: string,
   options?: { enableWebTools?: boolean; maxTokens?: number }
 ) {
+  const result = await createChatCompletionWithMetadata(messages, model, options);
+  return result.content;
+}
+
+export async function createChatCompletionWithMetadata(
+  messages: ChatMessage[],
+  model?: string,
+  options?: { enableWebTools?: boolean; maxTokens?: number }
+): Promise<ChatCompletionMetadata> {
   const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]).slice(0, OPENROUTER_MAX_MODEL_ATTEMPTS);
 
   let lastError: unknown;
@@ -286,14 +315,26 @@ export async function createChatCompletion(
         status: 'success',
         model: currentModel,
         durationMs: Date.now() - startedAt,
+        maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_CHAT_MAX_TOKENS', 12000),
+        tools: result.tools,
         messages,
-        output: result,
+        output: result.content,
+        rawMessage: result.completion.choices[0]?.message || null,
+        rawCompletion: result.completion,
       });
       console.log('[openrouter] chat success', {
         model: currentModel,
         durationMs: Date.now() - startedAt,
+        outputLength: result.content.length,
+        hasToolCalls: Boolean(result.completion.choices[0]?.message && 'tool_calls' in result.completion.choices[0].message),
       });
-      return result;
+      return {
+        content: result.content,
+        model: currentModel,
+        tools: result.tools,
+        rawMessage: result.completion.choices[0]?.message || null,
+        rawCompletion: result.completion,
+      };
     } catch (error) {
       lastError = error;
       await appendOpenRouterTrace({
@@ -333,7 +374,7 @@ export async function createJsonChatCompletion(
     console.log('[openrouter] json start', {
       model: currentModel,
       timeoutMs: OPENROUTER_REQUEST_TIMEOUT_MS,
-      maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 1800),
+      maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
     });
     try {
       const raw = await requestJsonCompletion(messages, currentModel, options?.maxTokens);
@@ -342,7 +383,7 @@ export async function createJsonChatCompletion(
         status: raw.trim() ? 'success' : 'empty',
         model: currentModel,
         durationMs: Date.now() - startedAt,
-        maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 1800),
+        maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
         messages,
         output: raw,
       });
@@ -361,7 +402,7 @@ export async function createJsonChatCompletion(
         status: 'error',
         model: currentModel,
         durationMs: Date.now() - startedAt,
-        maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 1800),
+        maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
         messages,
         error: getErrorMessage(error),
       });

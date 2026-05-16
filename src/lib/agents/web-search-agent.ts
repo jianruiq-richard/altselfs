@@ -1,4 +1,10 @@
-import { createChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
+import {
+  createChatCompletionWithMetadata,
+  createJsonChatCompletion,
+  getOpenRouterModel,
+  type ChatCompletionMetadata,
+  type ChatMessage,
+} from '@/lib/openrouter';
 import type { AgentBriefingItem, AgentRunInput, AgentRunResult, AgentRunToolCall, AgentTaskSpec } from '@/lib/agents/types';
 
 type WebSearchModuleKey = 'industryDynamics' | 'technologyTrends' | 'competitorMonitoring';
@@ -29,6 +35,28 @@ type WebSearchAgentOutput = {
   }>;
 };
 
+type WebSearchCitation = {
+  title: string;
+  url: string;
+  source: string;
+  content: string;
+};
+
+type WebSearchFinding = {
+  title: string;
+  url: string;
+  source: string;
+  publishedAt?: string;
+  summary: string;
+  evidence: string;
+  relevance: string;
+};
+
+type WebSearchSummaryOutput = {
+  summary?: string;
+  findings?: WebSearchFinding[];
+};
+
 const MODULE_LABELS: Record<WebSearchModuleKey, string> = {
   industryDynamics: '行业动态',
   technologyTrends: '技术趋势',
@@ -50,6 +78,40 @@ function extractJsonObject(raw: string) {
 
 function normalizeText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
+}
+
+function getDomain(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'OpenRouter Web Search';
+  }
+}
+
+function extractWebSearchCitations(message: ChatCompletionMetadata['rawMessage']): WebSearchCitation[] {
+  if (!message || !Array.isArray(message.annotations)) return [];
+  const citations: WebSearchCitation[] = [];
+  const seen = new Set<string>();
+  for (const annotation of message.annotations) {
+    if (!annotation || typeof annotation !== 'object') continue;
+    const record = annotation as Record<string, unknown>;
+    if (record.type !== 'url_citation') continue;
+    const citation = record.url_citation;
+    if (!citation || typeof citation !== 'object') continue;
+    const raw = citation as Record<string, unknown>;
+    const url = normalizeText(raw.url);
+    const title = normalizeText(raw.title);
+    const content = normalizeText(raw.content);
+    if (!url || !title || seen.has(url)) continue;
+    seen.add(url);
+    citations.push({
+      title,
+      url,
+      source: getDomain(url),
+      content: content.slice(0, 5000),
+    });
+  }
+  return citations;
 }
 
 function normalizeItems(rawItems: unknown): WebSearchSourceItem[] {
@@ -105,18 +167,45 @@ function parseWebSearchOutput(raw: string): WebSearchAgentOutput {
   };
 }
 
+function parseWebSearchSummary(raw: string): WebSearchSummaryOutput {
+  const json = extractJsonObject(raw);
+  if (!json) {
+    throw new Error(`联网搜索 Step2 没有返回 JSON。原始输出：${raw.slice(0, 600)}`);
+  }
+  const parsed = JSON.parse(json) as WebSearchSummaryOutput;
+  const findings = Array.isArray(parsed.findings)
+    ? parsed.findings
+        .map((item): WebSearchFinding | null => {
+          if (!item || typeof item !== 'object') return null;
+          const record = item as Record<string, unknown>;
+          const title = normalizeText(record.title).slice(0, 220);
+          const url = normalizeText(record.url);
+          const summary = normalizeText(record.summary).slice(0, 700);
+          if (!title || !url || !summary) return null;
+          return {
+            title,
+            url,
+            source: normalizeText(record.source, getDomain(url)).slice(0, 180),
+            publishedAt: normalizeText(record.publishedAt) || undefined,
+            summary,
+            evidence: normalizeText(record.evidence).slice(0, 700),
+            relevance: normalizeText(record.relevance).slice(0, 500),
+          };
+        })
+        .filter((item): item is WebSearchFinding => Boolean(item))
+    : [];
+  return {
+    summary: normalizeText(parsed.summary),
+    findings,
+  };
+}
+
 function buildDefaultTaskSpec(input: AgentRunInput): AgentTaskSpec {
   const now = new Date();
   return {
     objective: `根据用户指令进行联网搜索并整理晨报信息：${input.userQuery}`,
     sourceSelectionCriteria: [
       input.userQuery,
-      'AI agent',
-      'vibe coding',
-      '开发者工具',
-      '产品发布',
-      '竞品动态',
-      '技术趋势',
     ],
     timeWindow: {
       type: 'rolling_hours',
@@ -154,16 +243,38 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
   const subagentSignals = Array.isArray(input.context?.subagentResults)
     ? input.context.subagentResults
     : [];
+  const startedAt = Date.now();
+  const toolCalls: AgentRunToolCall[] = [];
+  const steps = [
+    {
+      id: 'web_search_collect',
+      goal: '按照晨报秘书指令调用 OpenRouter web_search / web_fetch 获取公开网页资料。',
+    },
+    {
+      id: 'web_search_summarize',
+      goal: '基于搜索资料精简为可用于晨报的信息点，不引入外部信息。',
+    },
+    {
+      id: 'web_search_structure',
+      goal: '把精简信息点结构化为行业动态、技术趋势、竞品监控三模块 JSON。',
+    },
+  ];
 
-  const messages: ChatMessage[] = [
+  toolCalls.push({
+    toolName: 'webSearchAgentPlan',
+    status: 'SUCCESS',
+    args: { taskSpec, searchIntent },
+    result: { steps },
+  });
+
+  const searchMessages: ChatMessage[] = [
     {
       role: 'system',
       content: [
-        '你是“联网搜索助手”，属于信息部门，和微信公众号助手平级。',
+        '你是“联网搜索助手”的 Step1 搜索执行器。',
         '你必须使用可用的 OpenRouter web_search / web_fetch 工具进行搜索和打开网页，不能只凭模型记忆回答。',
-        '你根据上级总裁秘书传达的任务要求，自行规划搜索query，优先查找最近24小时内的公开网页信息。',
-        '搜索范围必须服从任务要求和用户偏好，过滤掉泛行业新闻、无关公司动态和低质量转载。',
-        '输出必须是严格JSON，不要输出markdown。',
+        '你根据上级总裁秘书传达的任务要求，自行规划搜索 query，优先查找最近24小时内的公开网页信息。',
+        '本步骤只负责获得搜索资料；搜索完成后用一句话说明已完成，不需要输出最终晨报JSON。',
       ].join('\n'),
     },
     {
@@ -174,6 +285,115 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
         taskSpec,
         searchIntent,
         existingSignals: subagentSignals,
+        hardRules: [
+          '必须实际调用搜索工具。',
+          '搜索范围、关键词和筛选/保留策略必须以 taskSpec 和上级传达的 searchIntent 为准。',
+          '优先最近24小时内资料；无法确认发布时间的资料可以保留但后续需要标注不确定。',
+        ],
+      }),
+    },
+  ];
+
+  const searchStep = await createChatCompletionWithMetadata(searchMessages, getOpenRouterModel('WEB_SEARCH'), {
+    enableWebTools: true,
+    maxTokens: 12000,
+  });
+  const citations = extractWebSearchCitations(searchStep.rawMessage);
+  toolCalls.push({
+    toolName: 'webSearchCollect',
+    status: citations.length > 0 ? 'SUCCESS' : 'ERROR',
+    args: {
+      step: steps[0],
+      model: searchStep.model,
+      toolCount: searchStep.tools.length,
+      assistantContent: searchStep.content,
+    },
+    result: {
+      citationCount: citations.length,
+      citations: citations.map((item) => ({
+        title: item.title,
+        url: item.url,
+        source: item.source,
+        contentPreview: item.content.slice(0, 500),
+      })),
+    },
+  });
+  if (citations.length === 0) {
+    throw new Error(`联网搜索 Step1 未获得搜索结果。模型输出：${searchStep.content.slice(0, 600)}`);
+  }
+
+  const summarizeMessages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: [
+        '你是“联网搜索助手”的 Step2 信息精简器，只输出严格JSON。',
+        '你会收到 Step1 的搜索资料。请根据总裁秘书任务筛选、去重、精简。',
+        '不要引入搜索资料之外的信息。不要为了凑数保留低相关内容。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        userQuery: input.userQuery,
+        taskSpec,
+        searchIntent,
+        stepInput: {
+          citations,
+        },
+        outputSchema: {
+          summary: 'string',
+          findings: [
+            {
+              title: 'string',
+              url: 'string',
+              source: 'publisher/domain',
+              publishedAt: 'date if known, otherwise empty',
+              summary: '120字以内，提炼这条资料的关键事实',
+              evidence: '资料中的关键证据',
+              relevance: '为什么符合本轮晨报任务',
+            },
+          ],
+        },
+      }),
+    },
+  ];
+  const summarizedRaw = await createJsonChatCompletion(
+    summarizeMessages,
+    getOpenRouterModel('WEB_SEARCH'),
+    { maxTokens: 6000 }
+  );
+  const summarized = parseWebSearchSummary(summarizedRaw);
+  toolCalls.push({
+    toolName: 'webSearchSummarize',
+    status: summarized.findings && summarized.findings.length > 0 ? 'SUCCESS' : 'ERROR',
+    args: {
+      step: steps[1],
+      citationCount: citations.length,
+    },
+    result: {
+      summary: summarized.summary,
+      findingCount: summarized.findings?.length || 0,
+      findings: summarized.findings,
+    },
+  });
+
+  const structureMessages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: [
+        '你是“联网搜索助手”的 Step3 三模块结构化器，只输出严格JSON。',
+        '你会收到 Step2 的精简信息点。请按总裁秘书要求归类为行业动态、技术趋势、竞品监控。',
+        '每条 item 必须来自 Step2 findings，必须保留 source 和 url。',
+        '不要编造，不要引入搜索资料之外的信息。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        userQuery: input.userQuery,
+        taskSpec,
+        searchIntent,
+        stepInput: summarized,
         outputSchema: {
           summary: 'string',
           modules: {
@@ -185,7 +405,7 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
                   summary: 'string',
                   source: 'publisher/domain',
                   url: 'https://...',
-                  publishedAt: 'ISO/date string if known',
+                  publishedAt: 'date if known',
                   whyItMatters: 'string',
                 },
               ],
@@ -195,60 +415,58 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
           },
           searchLog: [
             {
-              query: 'string',
-              reason: 'why this query was searched',
+              query: 'derived from Step1 search intent',
+              reason: 'why this area was searched',
               importantSources: [{ title: 'string', url: 'string', source: 'string' }],
             },
           ],
         },
         hardRules: [
           '每个模块最多50条items。',
-          '每条item都必须来自搜索或网页读取结果，必须包含source，能拿到url时必须包含url。',
+          '每条item都必须来自Step2 findings。',
           '没有足够证据的内容不要编造；找不到某模块信息时items为空并在content说明。',
-          '只返回JSON对象。',
         ],
       }),
     },
   ];
-
-  const startedAt = Date.now();
-  const raw = await createChatCompletion(messages, getOpenRouterModel('WEB_SEARCH'), {
-    enableWebTools: true,
-    maxTokens: 4200,
-  });
-  const output = parseWebSearchOutput(raw);
+  const structuredRaw = await createJsonChatCompletion(
+    structureMessages,
+    getOpenRouterModel('WEB_SEARCH'),
+    { maxTokens: 8000 }
+  );
+  const output = parseWebSearchOutput(structuredRaw);
   const briefingItems = flattenBriefingItems(output);
-  const toolCalls: AgentRunToolCall[] = [
-    {
-      toolName: 'openrouterWebSearchAgent',
-      status: briefingItems.length > 0 ? 'SUCCESS' : 'ERROR',
-      args: {
-        taskSpec,
-        searchIntent,
-        enableWebTools: true,
-      },
-      result: {
-        summary: output.summary,
-        searchLog: output.searchLog,
-        moduleItemCounts: Object.fromEntries(
-          (Object.keys(MODULE_LABELS) as WebSearchModuleKey[]).map((key) => [
-            MODULE_LABELS[key],
-            output.modules?.[key]?.items?.length || 0,
-          ])
-        ),
-      },
+  toolCalls.push({
+    toolName: 'webSearchStructure',
+    status: briefingItems.length > 0 ? 'SUCCESS' : 'ERROR',
+    args: {
+      step: steps[2],
+      findingCount: summarized.findings?.length || 0,
     },
-  ];
+    result: {
+      summary: output.summary,
+      searchLog: output.searchLog,
+      moduleItemCounts: Object.fromEntries(
+        (Object.keys(MODULE_LABELS) as WebSearchModuleKey[]).map((key) => [
+          MODULE_LABELS[key],
+          output.modules?.[key]?.items?.length || 0,
+        ])
+      ),
+    },
+  });
 
   return {
     agentType: 'WEB_SEARCH',
-    answer: output.summary || raw.slice(0, 2000),
+    answer: output.summary || summarized.summary || searchStep.content.slice(0, 2000),
     briefingItems,
     toolCalls,
     debug: {
       provider: 'openrouter_native_web_tools',
       model: getOpenRouterModel('WEB_SEARCH'),
       durationMs: Date.now() - startedAt,
+      steps,
+      citationCount: citations.length,
+      findingCount: summarized.findings?.length || 0,
       itemCount: briefingItems.length,
       searchLog: output.searchLog,
       moduleItemCounts: Object.fromEntries(
