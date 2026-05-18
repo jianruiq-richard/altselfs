@@ -51,7 +51,32 @@ model User {
   // 总裁秘书每日晨报
   executiveBriefings ExecutiveBriefing[]
 
+  // 总裁秘书异步执行记录
+  executiveAssistantRuns ExecutiveAssistantRun[]
+
+  @@index([email], map: "users_email_idx")
   @@map("users")
+}
+
+model ExecutiveAssistantRun {
+  id            String    @id @default(cuid())
+  status        String    @default("QUEUED")
+  request       Json
+  result        Json?
+  error         String?
+  planner       Json?
+  plannerTrace  Json?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  @@index([investorId, createdAt])
+  @@index([status, updatedAt])
+  @@map("executive_assistant_runs")
 }
 
 model ExecutiveBriefing {

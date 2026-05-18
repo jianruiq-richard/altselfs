@@ -68,24 +68,15 @@ type PlannerTraceItem = PlannerStep & {
   payload?: unknown;
 };
 
-type PlannerStreamEvent =
-  | {
-      type: 'planner';
-      steps: PlannerStep[];
-    }
-  | {
-      type: 'step';
-      step: PlannerTraceItem;
-    }
-  | {
-      type: 'final';
-      status: number;
-      data: Record<string, unknown>;
-    }
-  | {
-      type: 'heartbeat';
-      timestamp: string;
-    };
+type ExecutiveRunPollResult = {
+  runId?: string;
+  status?: string;
+  result?: unknown;
+  error?: string | null;
+  planner?: unknown;
+  plannerTrace?: unknown;
+  pollIntervalMs?: number;
+};
 
 const suggestedQuestions = [
   '汇报一下各部门工作情况',
@@ -169,6 +160,29 @@ function formatPlannerPayload(payload: unknown) {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForExecutiveRun(
+  runId: string,
+  onUpdate: (run: ExecutiveRunPollResult) => void
+) {
+  for (let attempt = 0; attempt < 320; attempt += 1) {
+    const res = await fetch(`/api/investor/executive-assistant?runId=${encodeURIComponent(runId)}`, {
+      cache: 'no-store',
+    });
+    const data = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
+    if (!res.ok) {
+      throw new Error(typeof data.error === 'string' ? data.error : '查询任务状态失败');
+    }
+    onUpdate(data);
+    if (data.status === 'SUCCESS' || data.status === 'ERROR') return data;
+    await sleep(typeof data.pollIntervalMs === 'number' ? data.pollIntervalMs : 3000);
+  }
+  throw new Error('晨报执行仍未完成，请稍后刷新查看结果');
+}
+
 export default function InvestorAgentChatPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -212,16 +226,6 @@ export default function InvestorAgentChatPage() {
     setPromptSaved(systemPrompt);
     setDefaultPrompt(String(agentConfig.defaultSystemPrompt || ''));
     setHasCustomPrompt(Boolean(agentConfig.hasCustomPrompt));
-  }, []);
-
-  const applyPlannerEvent = useCallback((event: PlannerStreamEvent) => {
-    if (event.type === 'planner') {
-      setPlannerSteps(normalizePlannerSteps(event.steps));
-      return;
-    }
-    if (event.type === 'step') {
-      setPlannerTrace((items) => [...items, event.step]);
-    }
   }, []);
 
   const loadData = useCallback(async () => {
@@ -270,7 +274,7 @@ export default function InvestorAgentChatPage() {
     setPlannerPanelOpen(true);
 
     try {
-      const res = await fetch('/api/investor/executive-assistant?stream=1', {
+      const res = await fetch('/api/investor/executive-assistant?async=1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -279,67 +283,25 @@ export default function InvestorAgentChatPage() {
         }),
       });
 
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/x-ndjson')) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || '发送失败');
+      const startData = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
+      if (!res.ok || typeof startData.runId !== 'string') {
+        setError(typeof startData.error === 'string' ? startData.error : '发送失败');
         setMessages(messages);
         return;
       }
+      setPlannerSteps(normalizePlannerSteps(startData.planner));
+      setPlannerTrace(normalizePlannerTrace(startData.plannerTrace));
 
-      const reader = res.body?.getReader();
-      if (!reader) {
-        setError('网络错误，请稍后重试');
+      const run = await waitForExecutiveRun(startData.runId, (nextRun) => {
+        setPlannerSteps(normalizePlannerSteps(nextRun.planner));
+        setPlannerTrace(normalizePlannerTrace(nextRun.plannerTrace));
+      });
+      const data = isRecord(run.result) ? run.result : {};
+      if (run.status === 'ERROR') {
+        setError(run.error || (typeof data.error === 'string' ? data.error : '发送失败'));
         setMessages(messages);
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let finalData: Record<string, unknown> | null = null;
-      let finalStatus = 500;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const event = JSON.parse(line) as PlannerStreamEvent;
-          if (event.type === 'final') {
-            finalStatus = event.status;
-            finalData = event.data;
-          } else {
-            applyPlannerEvent(event);
-          }
-        }
-      }
-
-      if (buffer.trim()) {
-        const event = JSON.parse(buffer) as PlannerStreamEvent;
-        if (event.type === 'final') {
-          finalStatus = event.status;
-          finalData = event.data;
-        } else {
-          applyPlannerEvent(event);
-        }
-      }
-
-      if (!finalData) {
-        setError('AI代理执行失败：未收到最终结果');
-        setMessages(messages);
-        return;
-      }
-
-      const data = finalData;
-      if (finalStatus >= 400) {
-        setError(typeof data.error === 'string' ? data.error : '发送失败');
-        setMessages(messages);
-        setPlannerTrace(normalizePlannerTrace(data.plannerTrace));
-        setPlannerSteps(normalizePlannerSteps(data.planner));
+        setPlannerTrace(normalizePlannerTrace(run.plannerTrace || data.plannerTrace));
+        setPlannerSteps(normalizePlannerSteps(run.planner || data.planner));
         return;
       }
 

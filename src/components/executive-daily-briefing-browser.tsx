@@ -51,6 +51,14 @@ type BriefingFeedEntry = {
   imageUrls?: string[];
 };
 
+type ExecutiveRunPollResult = {
+  runId?: string;
+  status?: string;
+  result?: unknown;
+  error?: string | null;
+  pollIntervalMs?: number;
+};
+
 const briefingTabs: Array<{ key: BriefingTabKey; label: string }> = [
   { key: 'industryDynamics', label: '行业动态' },
   { key: 'technologyTrends', label: '技术趋势' },
@@ -138,6 +146,25 @@ function normalizePersistedBriefing(value: unknown): PersistedExecutiveBriefingV
     sections: value.sections,
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined,
   };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForExecutiveRun(runId: string) {
+  for (let attempt = 0; attempt < 320; attempt += 1) {
+    const res = await fetch(`/api/investor/executive-assistant?runId=${encodeURIComponent(runId)}`, {
+      cache: 'no-store',
+    });
+    const data = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
+    if (!res.ok) {
+      throw new Error(typeof data.error === 'string' ? data.error : '查询任务状态失败');
+    }
+    if (data.status === 'SUCCESS' || data.status === 'ERROR') return data;
+    await sleep(typeof data.pollIntervalMs === 'number' ? data.pollIntervalMs : 3000);
+  }
+  throw new Error('晨报执行仍未完成，请稍后刷新查看结果');
 }
 
 function titleToTabKey(title: string): BriefingTabKey {
@@ -338,7 +365,7 @@ export function ExecutiveDailyBriefingBrowser({
     setInternalUpdating(true);
     setError(null);
     try {
-      const res = await fetch('/api/investor/executive-assistant?stream=1', {
+      const res = await fetch('/api/investor/executive-assistant?async=1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -346,59 +373,21 @@ export function ExecutiveDailyBriefingBrowser({
         }),
       });
 
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/x-ndjson')) {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          setError(isRecord(data) && typeof data.error === 'string' ? data.error : '更新资讯失败');
-          return;
-        }
-        if (isRecord(data.briefing)) setBriefing(data.briefing as ExecutiveDailyBriefingView);
-        setPersistedBriefing(normalizePersistedBriefing(data.persistedBriefing));
-        setVisibleCount(20);
+      const startData = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
+      if (!res.ok || typeof startData.runId !== 'string') {
+        setError(typeof startData.error === 'string' ? startData.error : '更新资讯失败');
         return;
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) {
-        setError('更新资讯失败：未收到服务端响应');
+      const run = await waitForExecutiveRun(startData.runId);
+      const data = isRecord(run.result) ? run.result : {};
+      if (run.status === 'ERROR') {
+        setError(run.error || (typeof data.error === 'string' ? data.error : '更新资讯失败'));
         return;
       }
 
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let finalData: Record<string, unknown> = {};
-      let finalStatus = 500;
-      let hasFinalEvent = false;
-      const handleStreamLine = (line: string) => {
-        if (!line.trim()) return;
-        const event: unknown = JSON.parse(line);
-        if (!isRecord(event) || event.type !== 'final') return;
-        finalStatus = typeof event.status === 'number' ? event.status : 500;
-        finalData = isRecord(event.data) ? event.data : {};
-        hasFinalEvent = true;
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        lines.forEach(handleStreamLine);
-      }
-      if (buffer.trim()) handleStreamLine(buffer);
-
-      if (!hasFinalEvent) {
-        setError('更新资讯失败：未收到最终结果');
-        return;
-      }
-      if (finalStatus >= 400) {
-        setError(typeof finalData.error === 'string' ? finalData.error : '更新资讯失败');
-        return;
-      }
-      if (isRecord(finalData.briefing)) setBriefing(finalData.briefing as ExecutiveDailyBriefingView);
-      setPersistedBriefing(normalizePersistedBriefing(finalData.persistedBriefing));
+      if (isRecord(data.briefing)) setBriefing(data.briefing as ExecutiveDailyBriefingView);
+      setPersistedBriefing(normalizePersistedBriefing(data.persistedBriefing));
       setVisibleCount(20);
     } catch (err) {
       setError(err instanceof Error ? `更新资讯失败：${err.message}` : '更新资讯失败，请稍后重试');

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import { createChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
@@ -25,8 +26,9 @@ import { EXECUTIVE_MOMO_SYSTEM_PROMPT } from '@/lib/prompts/executive-momo';
 const EXECUTIVE_AGENT_TYPE = 'EXECUTIVE';
 const MAX_SYSTEM_PROMPT_LENGTH = 30000;
 const STREAM_HEARTBEAT_INTERVAL_MS = 10000;
+const ASYNC_POLL_INTERVAL_MS = 3000;
 
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 type ClientMessage = {
   role: 'user' | 'assistant';
@@ -45,6 +47,11 @@ type ExecutiveExecutionSnapshot = {
   subagents?: unknown;
   toolCalls?: unknown;
   recentToolCalls?: unknown;
+};
+
+type StoredExecutiveRunRequest = {
+  threadId?: string | null;
+  messages?: ClientMessage[];
 };
 
 function buildBriefingContext(briefing: {
@@ -186,6 +193,24 @@ function normalizeMessages(raw: unknown): ClientMessage[] {
       return null;
     })
     .filter(Boolean) as ClientMessage[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function toPrismaJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value === undefined ? null : value)) as Prisma.InputJsonValue;
+}
+
+function normalizeStoredRunRequest(value: unknown): StoredExecutiveRunRequest | null {
+  if (!isRecord(value)) return null;
+  const messages = normalizeMessages(value.messages);
+  if (messages.length === 0) return null;
+  return {
+    threadId: typeof value.threadId === 'string' ? value.threadId : null,
+    messages,
+  };
 }
 
 async function loadBriefing(investorId: string) {
@@ -536,9 +561,178 @@ function streamExecutiveAssistantTurn(params: {
   });
 }
 
-export async function GET() {
+async function executeExecutiveAssistantRun(runId: string, investorId: string) {
+  const claimed = await prisma.executiveAssistantRun.updateMany({
+    where: {
+      id: runId,
+      investorId,
+      status: 'QUEUED',
+    },
+    data: {
+      status: 'RUNNING',
+      startedAt: new Date(),
+      error: null,
+      planner: toPrismaJson(getExecutivePlannerDefinition()),
+      plannerTrace: toPrismaJson([]),
+    },
+  });
+  if (claimed.count === 0) return;
+
+  const run = await prisma.executiveAssistantRun.findUnique({
+    where: { id: runId },
+    select: { request: true },
+  });
+  const request = normalizeStoredRunRequest(run?.request);
+  if (!request) {
+    await prisma.executiveAssistantRun.update({
+      where: { id: runId },
+      data: {
+        status: 'ERROR',
+        error: '异步任务参数无效',
+        completedAt: new Date(),
+      },
+    });
+    return;
+  }
+
+  let planner: ExecutivePlannerStepDefinition[] = getExecutivePlannerDefinition();
+  const plannerTrace: ExecutivePlannerTraceItem[] = [];
+  const persistPlannerEvent = async (event: ExecutivePlannerEvent) => {
+    if (event.type === 'planner' && event.steps.length > 0) {
+      planner = event.steps;
+    }
+    if (event.type === 'step') {
+      plannerTrace.push(event.step);
+    }
+    await prisma.executiveAssistantRun.update({
+      where: { id: runId },
+      data: {
+        planner: toPrismaJson(planner),
+        plannerTrace: toPrismaJson(plannerTrace),
+      },
+    });
+  };
+
+  try {
+    const result = await runExecutiveAssistantTurn({
+      investorId,
+      threadId: request.threadId || null,
+      messages: request.messages || [],
+      onPlannerEvent: persistPlannerEvent,
+    });
+    const error = typeof result.body.error === 'string' ? result.body.error : null;
+    await prisma.executiveAssistantRun.update({
+      where: { id: runId },
+      data: {
+        status: result.status >= 400 ? 'ERROR' : 'SUCCESS',
+        result: toPrismaJson(result.body),
+        error,
+        planner: toPrismaJson(planner),
+        plannerTrace: toPrismaJson(plannerTrace),
+        completedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'unknown error';
+    await prisma.executiveAssistantRun.update({
+      where: { id: runId },
+      data: {
+        status: 'ERROR',
+        error: `AI代理执行失败：${detail}`,
+        result: toPrismaJson({ error: `AI代理执行失败：${detail}` }),
+        planner: toPrismaJson(planner),
+        plannerTrace: toPrismaJson(plannerTrace),
+        completedAt: new Date(),
+      },
+    });
+  }
+}
+
+function scheduleExecutiveAssistantRun(runId: string, investorId: string) {
+  after(async () => {
+    try {
+      await executeExecutiveAssistantRun(runId, investorId);
+    } catch (error) {
+      console.error('[executive-assistant] async run failed:', error);
+    }
+  });
+}
+
+function serializeExecutiveAssistantRun(run: {
+  id: string;
+  status: string;
+  result: Prisma.JsonValue | null;
+  error: string | null;
+  planner: Prisma.JsonValue | null;
+  plannerTrace: Prisma.JsonValue | null;
+  createdAt: Date;
+  updatedAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+}) {
+  return {
+    runId: run.id,
+    status: run.status,
+    result: run.result || null,
+    error: run.error || null,
+    planner: run.planner || getExecutivePlannerDefinition(),
+    plannerTrace: run.plannerTrace || [],
+    createdAt: run.createdAt.toISOString(),
+    updatedAt: run.updatedAt.toISOString(),
+    startedAt: run.startedAt?.toISOString() || null,
+    completedAt: run.completedAt?.toISOString() || null,
+    pollIntervalMs: ASYNC_POLL_INTERVAL_MS,
+  };
+}
+
+async function createExecutiveAssistantRun(params: {
+  investorId: string;
+  threadId?: string | null;
+  messages: ClientMessage[];
+}) {
+  const run = await prisma.executiveAssistantRun.create({
+    data: {
+      investorId: params.investorId,
+      status: 'QUEUED',
+      request: toPrismaJson({
+        threadId: params.threadId || null,
+        messages: params.messages,
+      }),
+      planner: toPrismaJson(getExecutivePlannerDefinition()),
+      plannerTrace: toPrismaJson([]),
+    },
+  });
+  scheduleExecutiveAssistantRun(run.id, params.investorId);
+  return run;
+}
+
+async function getExecutiveAssistantRunResponse(req: NextRequest, investorId: string) {
+  const runId = req.nextUrl.searchParams.get('runId')?.trim();
+  if (!runId) return null;
+
+  const run = await prisma.executiveAssistantRun.findFirst({
+    where: {
+      id: runId,
+      investorId,
+    },
+  });
+  if (!run) {
+    return NextResponse.json({ error: 'Run not found' }, { status: 404 });
+  }
+
+  if (run.status === 'QUEUED') {
+    scheduleExecutiveAssistantRun(run.id, investorId);
+  }
+
+  return NextResponse.json(serializeExecutiveAssistantRun(run));
+}
+
+export async function GET(req: NextRequest) {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const runResponse = await getExecutiveAssistantRunResponse(req, investor.id);
+  if (runResponse) return runResponse;
 
   const [briefing, promptConfig, persistedBriefing] = await Promise.all([
     loadBriefing(investor.id),
@@ -635,6 +829,20 @@ export async function POST(req: NextRequest) {
     threadId: body?.threadId || null,
     messages,
   };
+
+  if (req.nextUrl.searchParams.get('async') === '1') {
+    const run = await createExecutiveAssistantRun(turnParams);
+    return NextResponse.json(
+      {
+        runId: run.id,
+        status: run.status,
+        planner: run.planner || getExecutivePlannerDefinition(),
+        plannerTrace: run.plannerTrace || [],
+        pollIntervalMs: ASYNC_POLL_INTERVAL_MS,
+      },
+      { status: 202 }
+    );
+  }
 
   if (req.nextUrl.searchParams.get('stream') === '1') {
     return streamExecutiveAssistantTurn(turnParams);

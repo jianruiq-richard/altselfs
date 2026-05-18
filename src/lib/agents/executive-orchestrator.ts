@@ -1036,12 +1036,12 @@ async function runStructuredModuleAgent(input: {
       getOpenRouterModel('EXECUTIVE_STRUCTURER'),
       { maxTokens: 7000 }
     );
-    const module = normalizeModuleAgentOutput(raw, input.module);
+    const structuredModule = normalizeModuleAgentOutput(raw, input.module);
     await emitPlannerStep(input.onPlannerEvent, stepId, 'SUCCESS', {
-      detail: `${input.module.title}结构化完成，返回 ${module.items.length} 条。`,
-      payload: { itemCount: module.items.length },
+      detail: `${input.module.title}结构化完成，返回 ${structuredModule.items.length} 条。`,
+      payload: { itemCount: structuredModule.items.length },
     });
-    return module;
+    return structuredModule;
   } catch (error) {
     const detail = error instanceof Error ? error.message : `${input.module.title} module structure failed`;
     await emitPlannerStep(input.onPlannerEvent, stepId, 'ERROR', { error: detail });
