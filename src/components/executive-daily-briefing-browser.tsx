@@ -51,11 +51,24 @@ type BriefingFeedEntry = {
   imageUrls?: string[];
 };
 
+type PlannerStepStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'ERROR' | 'SKIPPED';
+
+type PlannerTraceItem = {
+  id: string;
+  title: string;
+  description?: string;
+  status: PlannerStepStatus;
+  detail?: string;
+  error?: string;
+  timestamp?: string;
+};
+
 type ExecutiveRunPollResult = {
   runId?: string;
   status?: string;
   result?: unknown;
   error?: string | null;
+  plannerTrace?: unknown;
   pollIntervalMs?: number;
 };
 
@@ -64,6 +77,22 @@ const briefingTabs: Array<{ key: BriefingTabKey; label: string }> = [
   { key: 'technologyTrends', label: '技术趋势' },
   { key: 'competitorMonitoring', label: '竞品监控' },
 ];
+
+const plannerStatusLabel: Record<PlannerStepStatus, string> = {
+  PENDING: '待执行',
+  RUNNING: '执行中',
+  SUCCESS: '完成',
+  ERROR: '错误',
+  SKIPPED: '跳过',
+};
+
+const plannerStatusClass: Record<PlannerStepStatus, string> = {
+  PENDING: 'bg-slate-100 text-slate-500',
+  RUNNING: 'bg-blue-100 text-blue-700',
+  SUCCESS: 'bg-emerald-100 text-emerald-700',
+  ERROR: 'bg-red-100 text-red-700',
+  SKIPPED: 'bg-amber-100 text-amber-700',
+};
 
 export const EXECUTIVE_UPDATE_BRIEFING_PROMPT =
   '更新今天的晨报，请调用可用子agent，尤其是微信公众号助手，并重新汇总当天信息，按照行业动态、技术趋势和竞品监控三个模块整理展示。';
@@ -148,11 +177,41 @@ function normalizePersistedBriefing(value: unknown): PersistedExecutiveBriefingV
   };
 }
 
+function normalizePlannerTrace(value: unknown): PlannerTraceItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!isRecord(item) || typeof item.id !== 'string' || typeof item.title !== 'string') return null;
+      const status = typeof item.status === 'string' ? item.status : 'PENDING';
+      if (!['PENDING', 'RUNNING', 'SUCCESS', 'ERROR', 'SKIPPED'].includes(status)) return null;
+      return {
+        id: item.id,
+        title: item.title,
+        description: typeof item.description === 'string' ? item.description : undefined,
+        status: status as PlannerStepStatus,
+        detail: typeof item.detail === 'string' ? item.detail : undefined,
+        error: typeof item.error === 'string' ? item.error : undefined,
+        timestamp: typeof item.timestamp === 'string' ? item.timestamp : undefined,
+      };
+    })
+    .filter(Boolean) as PlannerTraceItem[];
+}
+
+function getCurrentProgress(trace: PlannerTraceItem[]) {
+  if (trace.length === 0) return null;
+  return [...trace].reverse().find((item) => item.status === 'RUNNING') || trace[trace.length - 1] || null;
+}
+
+function getProgressText(progress: PlannerTraceItem | null) {
+  if (!progress) return '已提交任务，正在等待后台开始处理';
+  return progress.detail || progress.error || progress.title;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-async function waitForExecutiveRun(runId: string) {
+async function waitForExecutiveRun(runId: string, onUpdate?: (run: ExecutiveRunPollResult) => void) {
   for (let attempt = 0; attempt < 320; attempt += 1) {
     const res = await fetch(`/api/investor/executive-assistant?runId=${encodeURIComponent(runId)}`, {
       cache: 'no-store',
@@ -161,6 +220,7 @@ async function waitForExecutiveRun(runId: string) {
     if (!res.ok) {
       throw new Error(typeof data.error === 'string' ? data.error : '查询任务状态失败');
     }
+    onUpdate?.(data);
     if (data.status === 'SUCCESS' || data.status === 'ERROR') return data;
     await sleep(typeof data.pollIntervalMs === 'number' ? data.pollIntervalMs : 3000);
   }
@@ -294,6 +354,7 @@ export function ExecutiveDailyBriefingBrowser({
   const [visibleCount, setVisibleCount] = useState(20);
   const [internalUpdating, setInternalUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentProgress, setCurrentProgress] = useState<PlannerTraceItem | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -364,6 +425,7 @@ export function ExecutiveDailyBriefingBrowser({
     if (internalUpdating) return;
     setInternalUpdating(true);
     setError(null);
+    setCurrentProgress(null);
     try {
       const res = await fetch('/api/investor/executive-assistant?async=1', {
         method: 'POST',
@@ -379,7 +441,10 @@ export function ExecutiveDailyBriefingBrowser({
         return;
       }
 
-      const run = await waitForExecutiveRun(startData.runId);
+      const run = await waitForExecutiveRun(startData.runId, (nextRun) => {
+        const trace = normalizePlannerTrace(nextRun.plannerTrace);
+        setCurrentProgress(getCurrentProgress(trace));
+      });
       const data = isRecord(run.result) ? run.result : {};
       if (run.status === 'ERROR') {
         setError(run.error || (typeof data.error === 'string' ? data.error : '更新资讯失败'));
@@ -393,10 +458,16 @@ export function ExecutiveDailyBriefingBrowser({
       setError(err instanceof Error ? `更新资讯失败：${err.message}` : '更新资讯失败，请稍后重试');
     } finally {
       setInternalUpdating(false);
+      setCurrentProgress(null);
     }
   };
 
   const isUpdating = updating || internalUpdating;
+  const progressText = getProgressText(currentProgress);
+  const progressStatus = currentProgress?.status || 'RUNNING';
+  const progressKey = currentProgress
+    ? `${currentProgress.id}-${currentProgress.status}-${currentProgress.timestamp || currentProgress.detail || currentProgress.error || ''}`
+    : 'waiting-for-background-run';
 
   return (
     <div className={`${className} relative overflow-visible rounded-[2rem] border border-slate-200 bg-[#f7f9fc] text-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.08)]`}>
@@ -423,6 +494,25 @@ export function ExecutiveDailyBriefingBrowser({
           </button>
         </div>
         {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
+        {isUpdating ? (
+          <div className="mb-3 h-7 overflow-hidden">
+            <div
+              key={progressKey}
+              className="briefing-progress-line flex min-w-0 items-center gap-2 text-sm text-slate-600"
+              aria-live="polite"
+            >
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${plannerStatusClass[progressStatus]}`}>
+                {plannerStatusLabel[progressStatus]}
+              </span>
+              <span className="min-w-0 truncate">{progressText}</span>
+              <span className="inline-flex shrink-0 items-center gap-0.5" aria-hidden="true">
+                <span className="h-1 w-1 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.2s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.1s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-slate-400" />
+              </span>
+            </div>
+          </div>
+        ) : null}
         <div className="flex gap-6 overflow-x-auto">
           {briefingTabs.map((tab) => {
             const isActive = tab.key === activeBriefingTab;
