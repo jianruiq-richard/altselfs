@@ -54,10 +54,19 @@ export type ExecutiveTurnPlan = {
   updateBriefing: boolean;
   useWebSearch: boolean;
   skills: ExecutiveSkillId[];
+  skillDecisions: ExecutiveSkillDecision[];
   steps: ExecutivePlannerStepDefinition[];
   wechatTaskSpec?: AgentTaskSpec;
   plannerSource: 'MODEL' | 'FALLBACK';
   plannerError?: string;
+};
+
+export type ExecutiveSkillDecision = {
+  skillId: ExecutiveSkillId;
+  name: string;
+  available: boolean;
+  selected: boolean;
+  reason: string;
 };
 
 export type ExecutiveBriefingDocument = {
@@ -430,6 +439,89 @@ function normalizeSkillId(value: unknown): ExecutiveSkillId | null {
   return allowed.has(value as ExecutiveSkillId) ? (value as ExecutiveSkillId) : null;
 }
 
+function isSkillAvailable(skillId: ExecutiveSkillId, context: LoadedExecutiveContext) {
+  if (skillId === 'wechat_articles') return context.hasWechatSources;
+  if (skillId === 'xiaohongshu_insights') return context.integrationProviders.has('XIAOHONGSHU');
+  if (skillId === 'gmail_insights') return context.integrationProviders.has('GMAIL');
+  if (skillId === 'feishu_insights') return context.integrationProviders.has('FEISHU');
+  return true;
+}
+
+function buildFallbackSkillReason(params: {
+  skillId: ExecutiveSkillId;
+  selected: boolean;
+  available: boolean;
+  updateBriefing: boolean;
+  useWebSearch: boolean;
+  userQuery: string;
+}) {
+  if (!params.available) return '当前账户缺少这个 skill 所需的数据源或集成。';
+  if (params.selected) {
+    if (params.skillId === 'web_search') return 'Planner 判断本轮需要公开网络信息补充。';
+    if (params.skillId === 'wechat_articles') return 'Planner 判断本轮需要读取已追踪公众号文章。';
+    if (params.skillId === 'persist_briefing') return '本轮会更新今日晨报，需要保存结果。';
+    if (params.skillId === 'internal_briefing') return '每轮都需要读取账户上下文。';
+    if (params.skillId === 'chat_reply') return '每轮都需要生成最终回复。';
+    return 'Planner 选择在本轮调用这个 skill。';
+  }
+  if (params.skillId === 'web_search') {
+    if (!params.useWebSearch) {
+      return 'Planner 没有把本轮判断为需要公开网络检索；如果需要强制联网，请在指令中明确要求调用联网搜索助手或补充公开网页信息。';
+    }
+    return 'Planner 没有把 web_search 放入本轮执行技能列表。';
+  }
+  if (params.skillId === 'wechat_articles') return 'Planner 没有判断本轮需要公众号文章。';
+  if (params.skillId === 'persist_briefing' && !params.updateBriefing) return '本轮不是晨报更新任务，不需要保存今日晨报。';
+  return `Planner 未选择该 skill；用户指令：${params.userQuery.slice(0, 120)}`;
+}
+
+function normalizeSkillDecisions(params: {
+  raw: unknown;
+  skills: ExecutiveSkillId[];
+  context: LoadedExecutiveContext;
+  updateBriefing: boolean;
+  useWebSearch: boolean;
+  userQuery: string;
+}): ExecutiveSkillDecision[] {
+  const rawBySkill = new Map<ExecutiveSkillId, Record<string, unknown>>();
+  if (Array.isArray(params.raw)) {
+    for (const value of params.raw) {
+      if (!value || typeof value !== 'object') continue;
+      const item = value as Record<string, unknown>;
+      const skillId = normalizeSkillId(item.skillId);
+      if (skillId) rawBySkill.set(skillId, item);
+    }
+  }
+  const selected = new Set(params.skills);
+  return EXECUTIVE_SKILL_REGISTRY.map((skill) => {
+    const raw = rawBySkill.get(skill.skillId);
+    const available =
+      typeof raw?.available === 'boolean'
+        ? raw.available
+        : isSkillAvailable(skill.skillId, params.context);
+    const isSelected = selected.has(skill.skillId);
+    const rawSelected = typeof raw?.selected === 'boolean' ? raw.selected : undefined;
+    const fallbackReason = buildFallbackSkillReason({
+      skillId: skill.skillId,
+      selected: isSelected,
+      available,
+      updateBriefing: params.updateBriefing,
+      useWebSearch: params.useWebSearch,
+      userQuery: params.userQuery,
+    });
+    return {
+      skillId: skill.skillId,
+      name: skill.name,
+      available,
+      selected: isSelected,
+      reason:
+        (rawSelected === undefined || rawSelected === isSelected) && typeof raw?.reason === 'string' && raw.reason.trim()
+          ? raw.reason.trim().slice(0, 500)
+          : fallbackReason,
+    };
+  });
+}
+
 function normalizePlannerStep(value: unknown, index: number): ExecutivePlannerStepDefinition | null {
   if (!value || typeof value !== 'object') return null;
   const item = value as Record<string, unknown>;
@@ -508,6 +600,14 @@ function fallbackExecutivePlan(params: {
     updateBriefing,
     useWebSearch,
     skills: Array.from(new Set(skills)),
+    skillDecisions: normalizeSkillDecisions({
+      raw: undefined,
+      skills: Array.from(new Set(skills)),
+      context: params.context,
+      updateBriefing,
+      useWebSearch,
+      userQuery: params.userQuery,
+    }),
     steps,
     wechatTaskSpec: includeWechat
       ? buildWechatTaskSpec({
@@ -573,6 +673,14 @@ function normalizeExecutivePlan(
     updateBriefing,
     useWebSearch,
     skills: normalizedSkills,
+    skillDecisions: normalizeSkillDecisions({
+      raw: parsed.skillDecisions,
+      skills: normalizedSkills,
+      context,
+      updateBriefing,
+      useWebSearch,
+      userQuery,
+    }),
     steps: steps.slice(0, 12),
     wechatTaskSpec: includeWechat
       ? buildWechatTaskSpec({
@@ -596,16 +704,7 @@ async function planExecutiveTurn(params: {
     name: skill.name,
     description: skill.description,
     implemented: skill.implemented,
-    available:
-      skill.skillId === 'wechat_articles'
-        ? params.context.hasWechatSources
-        : skill.skillId === 'xiaohongshu_insights'
-          ? params.context.integrationProviders.has('XIAOHONGSHU')
-          : skill.skillId === 'gmail_insights'
-            ? params.context.integrationProviders.has('GMAIL')
-            : skill.skillId === 'feishu_insights'
-              ? params.context.integrationProviders.has('FEISHU')
-              : true,
+    available: isSkillAvailable(skill.skillId, params.context),
   }));
 
   const messages: ChatMessage[] = [
@@ -637,6 +736,14 @@ async function planExecutiveTurn(params: {
           updateBriefing: 'boolean',
           useWebSearch: 'boolean',
           skills: ['web_search|wechat_articles|xiaohongshu_insights|gmail_insights|feishu_insights|internal_briefing|persist_briefing|chat_reply'],
+          skillDecisions: [
+            {
+              skillId: 'web_search|wechat_articles|xiaohongshu_insights|gmail_insights|feishu_insights|internal_briefing|persist_briefing|chat_reply',
+              available: 'boolean',
+              selected: 'boolean',
+              reason: '为什么本轮选择或不选择这个 skill，尤其要说明 web_search 未选择的原因',
+            },
+          ],
           wechatTaskSpec: {
             objective: '微信agent需要搜集整理的信息目标',
             sourceSelectionCriteria: ['用于筛选公众号画像的主题/领域/关键词/排除偏好'],
@@ -1292,6 +1399,7 @@ export async function updateTodayExecutiveBriefing(params: {
       .join(' '),
     payload: {
       skills: plan.skills,
+      skillDecisions: plan.skillDecisions,
       updateBriefing: plan.updateBriefing,
       useWebSearch: plan.useWebSearch,
     },
@@ -1302,6 +1410,14 @@ export async function updateTodayExecutiveBriefing(params: {
   const includeWechat = hasSkill(plan, 'wechat_articles') && context.hasWechatSources;
   const useWeb = plan.useWebSearch || hasSkill(plan, 'web_search');
   const webSearchIntent = buildWebSearchIntent(params.userQuery, params.executiveSystemPrompt);
+  const webSearchDecision = plan.skillDecisions.find((item) => item.skillId === 'web_search');
+
+  if (!useWeb) {
+    await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'SKIPPED', {
+      detail: webSearchDecision?.reason || 'Planner 未选择联网搜索助手。',
+      payload: { selected: false, decision: webSearchDecision },
+    });
+  }
 
   if (includeWechat) {
     await emitPlannerStep(params.onPlannerEvent, 'call_wechat_agent', 'RUNNING', {
