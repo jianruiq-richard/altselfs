@@ -727,6 +727,22 @@ async function getExecutiveAssistantRunResponse(req: NextRequest, investorId: st
   return NextResponse.json(serializeExecutiveAssistantRun(run));
 }
 
+async function getLatestActiveExecutiveAssistantRun(investorId: string) {
+  const run = await prisma.executiveAssistantRun.findFirst({
+    where: {
+      investorId,
+      status: { in: ['QUEUED', 'RUNNING'] },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!run) return null;
+  if (run.status === 'QUEUED') {
+    scheduleExecutiveAssistantRun(run.id, investorId);
+  }
+  return serializeExecutiveAssistantRun(run);
+}
+
 export async function GET(req: NextRequest) {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -755,12 +771,15 @@ export async function GET(req: NextRequest) {
     thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
   }
 
+  const activeRun = await getLatestActiveExecutiveAssistantRun(investor.id);
+
   return NextResponse.json({
     threadId: thread?.id || null,
     messages: thread ? toClientMessages(thread.messages) : [],
     briefing,
     persistedBriefing,
     planner: getExecutivePlannerDefinition(),
+    activeRun,
     agentConfig: {
       systemPrompt: promptConfig.systemPrompt,
       defaultSystemPrompt: promptConfig.defaultSystemPrompt,

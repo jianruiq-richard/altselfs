@@ -78,6 +78,8 @@ type ExecutiveRunPollResult = {
   pollIntervalMs?: number;
 };
 
+const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
+
 const suggestedQuestions = [
   '汇报一下各部门工作情况',
   '今天有哪些重点事项需要处理？',
@@ -164,6 +166,24 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function getStoredActiveRunId() {
+  if (typeof window === 'undefined') return '';
+  return window.sessionStorage.getItem(EXECUTIVE_ACTIVE_RUN_STORAGE_KEY) || '';
+}
+
+function storeActiveRunId(runId: string) {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.setItem(EXECUTIVE_ACTIVE_RUN_STORAGE_KEY, runId);
+}
+
+function clearStoredActiveRunId(runId?: string) {
+  if (typeof window === 'undefined') return;
+  const current = getStoredActiveRunId();
+  if (!runId || current === runId) {
+    window.sessionStorage.removeItem(EXECUTIVE_ACTIVE_RUN_STORAGE_KEY);
+  }
+}
+
 async function waitForExecutiveRun(
   runId: string,
   onUpdate: (run: ExecutiveRunPollResult) => void
@@ -208,6 +228,7 @@ export default function InvestorAgentChatPage() {
   const [plannerTrace, setPlannerTrace] = useState<PlannerTraceItem[]>([]);
   const [plannerPanelOpen, setPlannerPanelOpen] = useState(false);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
 
   const title = useMemo(() => (isExecutive ? '总裁秘书Momo' : 'AI 助手'), [isExecutive]);
   const latestPlannerStatuses = useMemo(() => getLatestPlannerStatuses(plannerTrace), [plannerTrace]);
@@ -228,6 +249,69 @@ export default function InvestorAgentChatPage() {
     setHasCustomPrompt(Boolean(agentConfig.hasCustomPrompt));
   }, []);
 
+  const applyTerminalRun = useCallback(
+    (
+      run: ExecutiveRunPollResult,
+      fallbackMessages: ChatMessage[],
+      options: { closePlannerOnSuccess: boolean }
+    ) => {
+      const data = isRecord(run.result) ? run.result : {};
+      if (run.status === 'ERROR') {
+        setError(run.error || (typeof data.error === 'string' ? data.error : '发送失败'));
+        setMessages(fallbackMessages);
+        setPlannerTrace(normalizePlannerTrace(run.plannerTrace || data.plannerTrace));
+        setPlannerSteps(normalizePlannerSteps(run.planner || data.planner));
+        return;
+      }
+
+      setThreadId(typeof data.threadId === 'string' ? data.threadId : null);
+      if (Array.isArray(data.messages)) {
+        setMessages(data.messages as ChatMessage[]);
+      } else if (typeof data.reply === 'string') {
+        setMessages([...fallbackMessages, { role: 'assistant', content: data.reply }]);
+      }
+      if (data.briefing) {
+        setBriefing(data.briefing as Briefing);
+      }
+      setPersistedBriefing(isRecord(data.persistedBriefing) ? (data.persistedBriefing as PersistedBriefing) : null);
+      setPlannerSteps(normalizePlannerSteps(data.planner || run.planner));
+      setPlannerTrace(normalizePlannerTrace(data.plannerTrace || run.plannerTrace));
+      applyAgentConfig(data.agentConfig as AgentConfig | null | undefined);
+      if (options.closePlannerOnSuccess) setPlannerPanelOpen(false);
+    },
+    [applyAgentConfig]
+  );
+
+  const resumeExecutiveRun = useCallback(
+    async (
+      runId: string,
+      fallbackMessages: ChatMessage[],
+      options: { closePlannerOnSuccess: boolean }
+    ) => {
+      if (!runId || activeRunIdRef.current === runId) return;
+      activeRunIdRef.current = runId;
+      storeActiveRunId(runId);
+      setSending(true);
+      setError(null);
+      setPlannerPanelOpen(true);
+
+      try {
+        const run = await waitForExecutiveRun(runId, (nextRun) => {
+          setPlannerSteps(normalizePlannerSteps(nextRun.planner));
+          setPlannerTrace(normalizePlannerTrace(nextRun.plannerTrace));
+        });
+        applyTerminalRun(run, fallbackMessages, options);
+        clearStoredActiveRunId(runId);
+      } catch (err) {
+        setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
+      } finally {
+        activeRunIdRef.current = null;
+        setSending(false);
+      }
+    },
+    [applyTerminalRun]
+  );
+
   const loadData = useCallback(async () => {
     if (!isExecutive) return;
     setLoading(true);
@@ -240,17 +324,27 @@ export default function InvestorAgentChatPage() {
         return;
       }
       setThreadId(data.threadId || null);
-      setMessages(Array.isArray(data.messages) ? data.messages : []);
+      const loadedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+      setMessages(loadedMessages);
       setBriefing(data.briefing || null);
       setPersistedBriefing(isRecord(data.persistedBriefing) ? (data.persistedBriefing as PersistedBriefing) : null);
       setPlannerSteps(normalizePlannerSteps(data.planner));
+      const activeRun = isRecord(data.activeRun) ? (data.activeRun as ExecutiveRunPollResult) : null;
+      const resumeRunId = activeRun?.runId || getStoredActiveRunId();
+      if (activeRun) {
+        setPlannerSteps(normalizePlannerSteps(activeRun.planner));
+        setPlannerTrace(normalizePlannerTrace(activeRun.plannerTrace));
+      }
       applyAgentConfig(data.agentConfig);
+      if (resumeRunId) {
+        void resumeExecutiveRun(resumeRunId, loadedMessages, { closePlannerOnSuccess: false });
+      }
     } catch {
       setError('网络错误，请稍后重试');
     } finally {
       setLoading(false);
     }
-  }, [applyAgentConfig, isExecutive]);
+  }, [applyAgentConfig, isExecutive, resumeExecutiveRun]);
 
   useEffect(() => {
     void loadData();
@@ -289,40 +383,22 @@ export default function InvestorAgentChatPage() {
         setMessages(messages);
         return;
       }
+      storeActiveRunId(startData.runId);
       setPlannerSteps(normalizePlannerSteps(startData.planner));
       setPlannerTrace(normalizePlannerTrace(startData.plannerTrace));
 
+      activeRunIdRef.current = startData.runId;
       const run = await waitForExecutiveRun(startData.runId, (nextRun) => {
         setPlannerSteps(normalizePlannerSteps(nextRun.planner));
         setPlannerTrace(normalizePlannerTrace(nextRun.plannerTrace));
       });
-      const data = isRecord(run.result) ? run.result : {};
-      if (run.status === 'ERROR') {
-        setError(run.error || (typeof data.error === 'string' ? data.error : '发送失败'));
-        setMessages(messages);
-        setPlannerTrace(normalizePlannerTrace(run.plannerTrace || data.plannerTrace));
-        setPlannerSteps(normalizePlannerSteps(run.planner || data.planner));
-        return;
-      }
-
-      setThreadId(typeof data.threadId === 'string' ? data.threadId : null);
-      if (Array.isArray(data.messages)) {
-        setMessages(data.messages as ChatMessage[]);
-      } else if (typeof data.reply === 'string') {
-        setMessages([...nextMessages, { role: 'assistant', content: data.reply }]);
-      }
-      if (data.briefing) {
-        setBriefing(data.briefing as Briefing);
-      }
-      setPersistedBriefing(isRecord(data.persistedBriefing) ? (data.persistedBriefing as PersistedBriefing) : null);
-      setPlannerSteps(normalizePlannerSteps(data.planner));
-      setPlannerTrace(normalizePlannerTrace(data.plannerTrace));
-      applyAgentConfig(data.agentConfig as AgentConfig | null | undefined);
-      setPlannerPanelOpen(false);
+      applyTerminalRun(run, nextMessages, { closePlannerOnSuccess: true });
+      clearStoredActiveRunId(startData.runId);
     } catch (err) {
       setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
       setMessages(messages);
     } finally {
+      activeRunIdRef.current = null;
       setSending(false);
     }
   };
