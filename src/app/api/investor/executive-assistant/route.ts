@@ -22,6 +22,12 @@ import {
 } from '@/lib/agents/executive-orchestrator';
 import { resolveHiredTeamKeys } from '@/lib/team-library';
 import { EXECUTIVE_MOMO_SYSTEM_PROMPT } from '@/lib/prompts/executive-momo';
+import {
+  buildBpDemoDailyBriefing,
+  buildBpDemoDecisionChatMessages,
+  buildBpDemoPersistedBriefing,
+  isBpDemoUserEmail,
+} from '@/lib/bp-briefing-demo';
 
 const EXECUTIVE_AGENT_TYPE = 'EXECUTIVE';
 const MAX_SYSTEM_PROMPT_LENGTH = 30000;
@@ -216,10 +222,11 @@ function normalizeStoredRunRequest(value: unknown): StoredExecutiveRunRequest | 
 async function loadBriefing(investorId: string) {
   const investor = await prisma.user.findUnique({
     where: { id: investorId },
-    select: { id: true },
+    select: { id: true, email: true },
   });
 
   if (!investor) return null;
+  if (isBpDemoUserEmail(investor.email)) return buildBpDemoDailyBriefing();
 
   let integrationRows: Array<{ id: string; provider: string; status: string }> = [];
   let latestSnapshots: Array<{ integrationId: string; summary: string; createdAt: Date }> = [];
@@ -753,9 +760,29 @@ export async function GET(req: NextRequest) {
   const [briefing, promptConfig, persistedBriefing] = await Promise.all([
     loadBriefing(investor.id),
     getExecutiveAgentConfig(investor.id),
-    getTodayExecutiveBriefing(investor.id),
+    isBpDemoUserEmail(investor.email)
+      ? Promise.resolve(buildBpDemoPersistedBriefing())
+      : getTodayExecutiveBriefing(investor.id),
   ]);
   if (!briefing) return NextResponse.json({ error: 'Investor not found' }, { status: 404 });
+  const isBpDemoUser = isBpDemoUserEmail(investor.email);
+
+  if (isBpDemoUser) {
+    return NextResponse.json({
+      threadId: null,
+      messages: buildBpDemoDecisionChatMessages(),
+      briefing,
+      persistedBriefing,
+      demoMode: 'bp-decision-chat',
+      planner: getExecutivePlannerDefinition(),
+      activeRun: null,
+      agentConfig: {
+        systemPrompt: promptConfig.systemPrompt,
+        defaultSystemPrompt: promptConfig.defaultSystemPrompt,
+        hasCustomPrompt: Boolean(promptConfig.customPrompt),
+      },
+    });
+  }
 
   let thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
   if (!thread) {

@@ -18,6 +18,11 @@ import { ExecutiveDailyBriefingBrowser } from '@/components/executive-daily-brie
 import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
 import { getTodayExecutiveBriefing } from '@/lib/agents/executive-orchestrator';
 import { resolveHiredTeamKeys, TEAM_KEYS } from '@/lib/team-library';
+import {
+  buildBpDemoDailyBriefing,
+  buildBpDemoPersistedBriefing,
+  isBpDemoUserEmail,
+} from '@/lib/bp-briefing-demo';
 
 export default async function InvestorDashboardPage() {
   const { userId } = await auth();
@@ -28,6 +33,7 @@ export default async function InvestorDashboardPage() {
     relationLoadStrategy: 'join',
     select: {
       id: true,
+      email: true,
       role: true,
       nickname: true,
       phone: true,
@@ -224,22 +230,27 @@ export default async function InvestorDashboardPage() {
     },
   ] as const;
 
-  const dailyBriefing = buildExecutiveDailyBriefing({
-    integrations: dbUser.integrations,
-    wechatSources: dbUser.wechatSources,
-    avatars: dbUser.avatars,
-    hiredTeamKeys: Array.from(hiredTeamKeys),
-  });
-  const todayPersistedBriefing = await getTodayExecutiveBriefing(dbUser.id);
-  const persistedDailyBriefing = todayPersistedBriefing
-    ? {
-        dateKey: todayPersistedBriefing.dateKey,
-        title: todayPersistedBriefing.title,
-        summary: todayPersistedBriefing.summary,
-        sections: todayPersistedBriefing.sections,
-        updatedAt: todayPersistedBriefing.updatedAt.toISOString(),
-      }
-    : null;
+  const isBpDemoUser = isBpDemoUserEmail(dbUser.email);
+  const dailyBriefing = isBpDemoUser
+    ? buildBpDemoDailyBriefing()
+    : buildExecutiveDailyBriefing({
+        integrations: dbUser.integrations,
+        wechatSources: dbUser.wechatSources,
+        avatars: dbUser.avatars,
+        hiredTeamKeys: Array.from(hiredTeamKeys),
+      });
+  const todayPersistedBriefing = isBpDemoUser ? null : await getTodayExecutiveBriefing(dbUser.id);
+  const persistedDailyBriefing = isBpDemoUser
+    ? buildBpDemoPersistedBriefing()
+    : todayPersistedBriefing
+      ? {
+          dateKey: todayPersistedBriefing.dateKey,
+          title: todayPersistedBriefing.title,
+          summary: todayPersistedBriefing.summary,
+          sections: todayPersistedBriefing.sections,
+          updatedAt: todayPersistedBriefing.updatedAt.toISOString(),
+        }
+      : null;
 
   return (
     <FigmaShell
@@ -250,6 +261,9 @@ export default async function InvestorDashboardPage() {
         briefing={dailyBriefing}
         persistedBriefing={persistedDailyBriefing}
         className="mb-8"
+        updateDisabled={isBpDemoUser}
+        headerActionLabel={isBpDemoUser ? '与你的分身讨论' : undefined}
+        headerActionPrompt={isBpDemoUser ? '请和我的分身一起讨论今天晨报里的信息汇总，帮我判断哪些信息最值得放进 BP 展示。' : undefined}
       />
 
       <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">

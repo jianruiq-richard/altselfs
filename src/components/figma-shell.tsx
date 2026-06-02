@@ -80,8 +80,8 @@ export function FigmaShell({
         <div className="flex h-full flex-col">
           <div className="border-b border-gray-200 px-6 py-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">OPC平台</h1>
-              <p className="mt-1 text-sm text-gray-500">AI员工管理系统</p>
+              <h1 className="text-2xl font-bold text-gray-900">Altselfs</h1>
+              <p className="mt-1 text-sm text-gray-500">你的Decision OS</p>
             </div>
           </div>
 
@@ -135,8 +135,8 @@ export function FigmaShell({
       <div className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur md:hidden">
         <div className="mx-auto flex w-full items-center justify-between gap-3 px-4 py-3 [padding-top:max(0.75rem,env(safe-area-inset-top))]">
           <div className="min-w-0">
-            <p className="text-lg font-bold text-gray-900">OPC平台</p>
-            <p className="truncate text-xs text-gray-500">AI员工管理系统</p>
+            <p className="text-lg font-bold text-gray-900">Altselfs</p>
+            <p className="truncate text-xs text-gray-500">你的Decision OS</p>
           </div>
           <Link
             href="/profile"

@@ -80,14 +80,6 @@ type ExecutiveRunPollResult = {
 
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 
-const suggestedQuestions = [
-  '汇报一下各部门工作情况',
-  '今天有哪些重点事项需要处理？',
-  '外界有什么重要信息变化？',
-  '晨报的完整内容是什么？',
-  '更新今天的晨报，并重点汇总 AI agent 和 vibe coding 的外界信息。',
-];
-
 const plannerStatusLabel: Record<PlannerStepStatus, string> = {
   PENDING: '待执行',
   RUNNING: '执行中',
@@ -227,6 +219,7 @@ export default function InvestorAgentChatPage() {
   const [plannerSteps, setPlannerSteps] = useState<PlannerStep[]>([]);
   const [plannerTrace, setPlannerTrace] = useState<PlannerTraceItem[]>([]);
   const [plannerPanelOpen, setPlannerPanelOpen] = useState(false);
+  const [isBpDemoMode, setIsBpDemoMode] = useState(false);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
 
@@ -324,6 +317,7 @@ export default function InvestorAgentChatPage() {
         return;
       }
       setThreadId(data.threadId || null);
+      setIsBpDemoMode(data.demoMode === 'bp-decision-chat');
       const loadedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
       setMessages(loadedMessages);
       setBriefing(data.briefing || null);
@@ -556,6 +550,7 @@ export default function InvestorAgentChatPage() {
         </div>
       ) : null}
 
+      {!isBpDemoMode ? (
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -646,8 +641,9 @@ export default function InvestorAgentChatPage() {
           </div>
         ) : null}
       </div>
+      ) : null}
 
-      {briefing ? (
+      {briefing && !isBpDemoMode ? (
         <ExecutiveDailyBriefingBrowser
           briefing={briefing}
           persistedBriefing={persistedBriefing}
@@ -658,15 +654,15 @@ export default function InvestorAgentChatPage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white">
-        <div className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5">
+        <div className={`${isBpDemoMode ? 'overflow-visible p-4 sm:p-5' : 'h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5'}`}>
           {loading ? (
             <div className="py-8 text-center text-slate-600">加载中...</div>
           ) : (
-            <div className="mx-auto max-w-3xl space-y-4">
+            <div className={`mx-auto max-w-3xl ${isBpDemoMode ? 'space-y-3' : 'space-y-4'}`}>
               {messages.map((message, index) => (
                 <div key={`${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 sm:max-w-xs lg:max-w-md ${
+                    className={`${isBpDemoMode ? 'max-w-[88%] rounded-2xl px-4 py-2.5 sm:max-w-xl lg:max-w-2xl' : 'max-w-[85%] rounded-2xl px-4 py-3 sm:max-w-xs lg:max-w-md'} ${
                       message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
                     }`}
                   >
@@ -680,20 +676,6 @@ export default function InvestorAgentChatPage() {
         </div>
 
         <div className="border-t border-slate-200 p-4 [padding-bottom:max(1rem,env(safe-area-inset-bottom))]">
-          <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2">
-            {suggestedQuestions.map((question) => (
-              <button
-                key={question}
-                type="button"
-                onClick={() => void handleSend(question)}
-                disabled={sending}
-                className="rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {question}
-              </button>
-            ))}
-          </div>
-
           <form
             onSubmit={(e) => {
               e.preventDefault();
