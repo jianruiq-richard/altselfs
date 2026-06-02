@@ -1,5 +1,15 @@
 import { SignUp } from '@clerk/nextjs';
+import { headers } from 'next/headers';
 import Link from 'next/link';
+import { EmbeddedBrowserAuthGuard } from '@/components/embedded-browser-auth-guard';
+import { isOauthBlockedEmbeddedBrowser } from '@/lib/oauth-browser';
+
+function buildFallbackUrl(path: string, headersList: Headers): string {
+  const protocol = headersList.get('x-forwarded-proto') ?? 'https';
+  const host = headersList.get('x-forwarded-host') ?? headersList.get('host') ?? 'altselfs.com';
+
+  return `${protocol}://${host}${path}`;
+}
 
 export default async function Page({
   searchParams,
@@ -7,10 +17,13 @@ export default async function Page({
   searchParams: Promise<{ role?: string; method?: string }>;
 }) {
   const params = await searchParams;
+  const headersList = await headers();
   const method = params.method === 'email' ? 'email' : 'phone';
   const baseSignUpUrl = '/sign-up';
   const methodJoiner = baseSignUpUrl.includes('?') ? '&' : '?';
   const redirectUrl = '/dashboard';
+  const fallbackUrl = buildFallbackUrl(`${baseSignUpUrl}${methodJoiner}method=${method}`, headersList);
+  const isEmbeddedBrowser = isOauthBlockedEmbeddedBrowser(headersList.get('user-agent'));
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -42,12 +55,18 @@ export default async function Page({
             邮箱注册
           </Link>
         </div>
-        <SignUp
-          key={method}
-          forceRedirectUrl={redirectUrl}
-          fallbackRedirectUrl={redirectUrl}
-          initialValues={method === 'phone' ? { phoneNumber: '+86' } : { emailAddress: '' }}
-        />
+        <EmbeddedBrowserAuthGuard
+          fallbackUrl={fallbackUrl}
+          initiallyBlocked={isEmbeddedBrowser}
+          mode="sign-up"
+        >
+          <SignUp
+            key={method}
+            forceRedirectUrl={redirectUrl}
+            fallbackRedirectUrl={redirectUrl}
+            initialValues={method === 'phone' ? { phoneNumber: '+86' } : { emailAddress: '' }}
+          />
+        </EmbeddedBrowserAuthGuard>
       </div>
     </div>
   );
