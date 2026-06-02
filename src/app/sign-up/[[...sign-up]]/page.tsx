@@ -2,6 +2,7 @@ import { SignUp } from '@clerk/nextjs';
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { EmbeddedBrowserAuthGuard } from '@/components/embedded-browser-auth-guard';
+import { clerkAuthAppearance } from '@/lib/clerk-auth-appearance';
 import { isOauthBlockedEmbeddedBrowser } from '@/lib/oauth-browser';
 
 function buildFallbackUrl(path: string, headersList: Headers): string {
@@ -26,10 +27,10 @@ export default async function Page({
   const isEmbeddedBrowser = isOauthBlockedEmbeddedBrowser(headersList.get('user-agent'));
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full">
+    <div className="flex min-h-svh items-start justify-center overflow-x-hidden bg-gray-50 px-4 py-8 sm:items-center sm:py-10">
+      <div className="mx-auto w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">注册 OPC 账户</h1>
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">注册 OPC 账户</h1>
           <p className="text-gray-600 mt-2">完成注册后将进入数字分身工作台</p>
           <p className="text-xs text-gray-500 mt-2">支持邮箱、Google、手机号验证码注册</p>
         </div>
@@ -65,6 +66,7 @@ export default async function Page({
             forceRedirectUrl={redirectUrl}
             fallbackRedirectUrl={redirectUrl}
             initialValues={method === 'phone' ? { phoneNumber: '+86' } : { emailAddress: '' }}
+            appearance={clerkAuthAppearance}
           />
         </EmbeddedBrowserAuthGuard>
       </div>
