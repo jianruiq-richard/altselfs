@@ -6,17 +6,29 @@ import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 
 type FlowMode = "sign-in" | "sign-up";
 
-function normalizeChinaPhone(input: string): string {
-  const trimmed = input.trim();
-  if (trimmed.startsWith("+")) {
-    return trimmed.replace(/\s+/g, "");
-  }
+const COUNTRY_CODES = [
+  { code: "+86", label: "中国 +86" },
+  { code: "+1", label: "美国 / 加拿大 +1" },
+  { code: "+44", label: "英国 +44" },
+  { code: "+61", label: "澳大利亚 +61" },
+  { code: "+65", label: "新加坡 +65" },
+  { code: "+81", label: "日本 +81" },
+  { code: "+82", label: "韩国 +82" },
+  { code: "+852", label: "中国香港 +852" },
+  { code: "+853", label: "中国澳门 +853" },
+  { code: "+886", label: "中国台湾 +886" },
+];
 
-  const digits = trimmed.replace(/\D/g, "");
-  if (digits.startsWith("86")) {
+function buildE164Phone(countryCode: string, localNumber: string): string {
+  const digits = localNumber.replace(/\D/g, "");
+  const normalizedCode = countryCode.startsWith("+") ? countryCode : `+${countryCode}`;
+  const countryDigits = normalizedCode.replace(/\D/g, "");
+
+  if (digits.startsWith(countryDigits)) {
     return `+${digits}`;
   }
-  return `+86${digits}`;
+
+  return `${normalizedCode}${digits}`;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -41,7 +53,8 @@ export function PhoneCodeAuthForm() {
   const router = useRouter();
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
-  const [phoneNumber, setPhoneNumber] = useState("+86");
+  const [countryCode, setCountryCode] = useState("+86");
+  const [localPhoneNumber, setLocalPhoneNumber] = useState("");
   const [code, setCode] = useState("");
   const [mode, setMode] = useState<FlowMode>("sign-in");
   const [step, setStep] = useState<"phone" | "code">("phone");
@@ -55,8 +68,7 @@ export function PhoneCodeAuthForm() {
 
     setError("");
     setIsSubmitting(true);
-    const normalizedPhone = normalizeChinaPhone(phoneNumber);
-    setPhoneNumber(normalizedPhone);
+    const normalizedPhone = buildE164Phone(countryCode, localPhoneNumber);
 
     try {
       const signInAttempt = await signIn.create({ identifier: normalizedPhone });
@@ -127,19 +139,34 @@ export function PhoneCodeAuthForm() {
     <div className="rounded-xl border border-[#ead8bd] bg-white p-5 shadow-sm">
       <div className="space-y-4">
         <div>
-          <label htmlFor="phone" className="block text-sm font-medium text-stone-800">
-            中国手机号
+          <label htmlFor="phone-country" className="block text-sm font-medium text-stone-800">
+            手机号
           </label>
-          <input
-            id="phone"
-            type="tel"
-            inputMode="tel"
-            value={phoneNumber}
-            onChange={(event) => setPhoneNumber(event.target.value)}
-            disabled={step === "code" || isSubmitting}
-            className="mt-2 w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-            placeholder="+86 138 0000 0000"
-          />
+          <div className="mt-2 grid grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] gap-2">
+            <select
+              id="phone-country"
+              value={countryCode}
+              onChange={(event) => setCountryCode(event.target.value)}
+              disabled={step === "code" || isSubmitting}
+              className="w-full rounded-lg border border-[#d8c8b5] bg-white px-3 py-3 text-sm text-stone-950 outline-none transition-colors focus:border-[#7a451f]"
+            >
+              {COUNTRY_CODES.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.label}
+                </option>
+              ))}
+            </select>
+            <input
+              id="phone"
+              type="tel"
+              inputMode="tel"
+              value={localPhoneNumber}
+              onChange={(event) => setLocalPhoneNumber(event.target.value)}
+              disabled={step === "code" || isSubmitting}
+              className="w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
+              placeholder="138 0000 0000"
+            />
+          </div>
         </div>
 
         {step === "code" ? (
@@ -165,7 +192,7 @@ export function PhoneCodeAuthForm() {
           <button
             type="button"
             onClick={sendCode}
-            disabled={!isLoaded || isSubmitting}
+            disabled={!isLoaded || isSubmitting || localPhoneNumber.replace(/\D/g, "").length === 0}
             className="w-full rounded-lg bg-[#7a451f] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? "发送中..." : "发送验证码"}
