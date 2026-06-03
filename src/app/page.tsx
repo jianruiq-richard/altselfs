@@ -19,7 +19,7 @@ export default async function Home() {
         <div className="absolute inset-0 bg-[linear-gradient(105deg,rgba(35,24,17,0.88)_0%,rgba(80,53,35,0.62)_44%,rgba(180,132,82,0.18)_78%,rgba(245,224,190,0.08)_100%)]" />
         <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#f5f0e8] via-[#f5f0e8]/20 to-transparent" />
 
-        <div className="relative mx-auto flex min-h-[88vh] max-w-6xl flex-col justify-between px-5 py-6 sm:px-8 sm:py-8">
+        <div className="relative mx-auto flex min-h-[88vh] w-full max-w-6xl flex-col justify-between px-5 py-6 sm:px-8 sm:py-8">
           <nav className="flex items-center justify-between text-white">
             <Link href="/" className="text-lg font-semibold tracking-wide text-[#fff8ee]">
               Altselfs
@@ -32,7 +32,7 @@ export default async function Home() {
             </Link>
           </nav>
 
-          <div className="max-w-3xl pb-10 pt-20 sm:pb-16 sm:pt-28">
+          <div className="max-w-3xl pb-8 pt-16 sm:pb-16 sm:pt-28">
             <p className="mb-5 text-xs font-semibold uppercase tracking-[0.32em] text-[#f4c983]">
               Decision OS for high-agency minds
             </p>
@@ -59,7 +59,7 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="grid gap-4 rounded-2xl border border-[#f3d7aa]/20 bg-[#21150f]/58 p-5 text-[#fff8ee] shadow-2xl shadow-black/25 backdrop-blur-md sm:grid-cols-3">
+          <div className="grid gap-4 rounded-2xl border border-[#f3d7aa]/20 bg-[#21150f]/58 p-4 text-[#fff8ee] shadow-2xl shadow-black/25 backdrop-blur-md sm:grid-cols-3 sm:p-5">
             <div className="border-t border-[#f3d7aa]/35 pt-4 sm:border-t-0 sm:pt-0">
               <p className="text-sm font-semibold text-[#fffaf2]">跨平台 Context</p>
               <p className="mt-2 text-sm leading-6 text-[#f8e7cc]/82">
