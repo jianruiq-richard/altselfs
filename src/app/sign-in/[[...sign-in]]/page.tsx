@@ -2,6 +2,7 @@ import { SignIn } from '@clerk/nextjs';
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { EmbeddedBrowserAuthGuard } from '@/components/embedded-browser-auth-guard';
+import { PhoneCodeAuthForm } from '@/components/phone-code-auth-form';
 import { clerkAuthAppearance } from '@/lib/clerk-auth-appearance';
 import { isOauthBlockedEmbeddedBrowser } from '@/lib/oauth-browser';
 
@@ -12,9 +13,15 @@ function buildFallbackUrl(path: string, headersList: Headers): string {
   return `${protocol}://${host}${path}`;
 }
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ method?: string }>;
+}) {
+  const params = await searchParams;
+  const method = params.method === 'email' ? 'email' : 'phone';
   const headersList = await headers();
-  const fallbackUrl = buildFallbackUrl('/sign-in', headersList);
+  const fallbackUrl = buildFallbackUrl(`/sign-in?method=${method}`, headersList);
   const isEmbeddedBrowser = isOauthBlockedEmbeddedBrowser(headersList.get('user-agent'));
 
   return (
@@ -48,21 +55,47 @@ export default async function Page() {
               <div className="mb-6 text-center">
                 <h1 className="text-2xl font-semibold text-stone-950">欢迎回来</h1>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  登录 Altselfs，继续使用你的 Decision OS
+                  选择手机号验证码，或使用邮箱 / Google 登录
                 </p>
-                <p className="mt-1 text-xs text-stone-500">支持邮箱、Google、手机号验证码登录</p>
               </div>
-              <EmbeddedBrowserAuthGuard
-                fallbackUrl={fallbackUrl}
-                initiallyBlocked={isEmbeddedBrowser}
-                mode="sign-in"
-              >
-                <SignIn
-                  forceRedirectUrl="/dashboard"
-                  fallbackRedirectUrl="/dashboard"
-                  appearance={clerkAuthAppearance}
-                />
-              </EmbeddedBrowserAuthGuard>
+              <div className="mb-4 grid grid-cols-2 gap-2">
+                <Link
+                  href="/sign-in?method=phone"
+                  className={`rounded-lg border py-2.5 text-center text-sm font-medium transition-colors ${
+                    method === 'phone'
+                      ? 'border-[#7a451f] bg-[#7a451f] text-white'
+                      : 'border-[#d8c8b5] bg-white text-stone-700 hover:bg-[#fff4df]'
+                  }`}
+                >
+                  手机号验证码
+                </Link>
+                <Link
+                  href="/sign-in?method=email"
+                  className={`rounded-lg border py-2.5 text-center text-sm font-medium transition-colors ${
+                    method === 'email'
+                      ? 'border-[#7a451f] bg-[#7a451f] text-white'
+                      : 'border-[#d8c8b5] bg-white text-stone-700 hover:bg-[#fff4df]'
+                  }`}
+                >
+                  邮箱 / Google
+                </Link>
+              </div>
+              {method === 'phone' ? (
+                <PhoneCodeAuthForm />
+              ) : (
+                <EmbeddedBrowserAuthGuard
+                  fallbackUrl={fallbackUrl}
+                  initiallyBlocked={isEmbeddedBrowser}
+                  mode="sign-in"
+                >
+                  <SignIn
+                    forceRedirectUrl="/dashboard"
+                    fallbackRedirectUrl="/dashboard"
+                    signUpUrl="/sign-up"
+                    appearance={clerkAuthAppearance}
+                  />
+                </EmbeddedBrowserAuthGuard>
+              )}
               <div className="mt-4 text-center text-sm text-stone-600">
                 还没账号？
                 <Link href="/sign-up?method=phone" className="ml-1 font-medium text-[#7a451f] hover:underline">

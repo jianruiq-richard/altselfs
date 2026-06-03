@@ -2,6 +2,7 @@ import { SignUp } from '@clerk/nextjs';
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { EmbeddedBrowserAuthGuard } from '@/components/embedded-browser-auth-guard';
+import { PhoneCodeAuthForm } from '@/components/phone-code-auth-form';
 import { clerkAuthAppearance } from '@/lib/clerk-auth-appearance';
 import { isOauthBlockedEmbeddedBrowser } from '@/lib/oauth-browser';
 
@@ -15,15 +16,12 @@ function buildFallbackUrl(path: string, headersList: Headers): string {
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ role?: string; method?: string }>;
+  searchParams: Promise<{ method?: string }>;
 }) {
   const params = await searchParams;
-  const headersList = await headers();
   const method = params.method === 'email' ? 'email' : 'phone';
-  const baseSignUpUrl = '/sign-up';
-  const methodJoiner = baseSignUpUrl.includes('?') ? '&' : '?';
-  const redirectUrl = '/dashboard';
-  const fallbackUrl = buildFallbackUrl(`${baseSignUpUrl}${methodJoiner}method=${method}`, headersList);
+  const headersList = await headers();
+  const fallbackUrl = buildFallbackUrl(`/sign-up?method=${method}`, headersList);
   const isEmbeddedBrowser = isOauthBlockedEmbeddedBrowser(headersList.get('user-agent'));
 
   return (
@@ -54,44 +52,49 @@ export default async function Page({
               <div className="mb-4 text-center">
                 <h2 className="text-2xl font-semibold text-stone-950">注册 Altselfs</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  完成注册后进入你的 Decision OS 工作台
+                  选择手机号验证码，或使用邮箱 / Google 注册
                 </p>
               </div>
               <div className="mb-4 grid grid-cols-2 gap-2">
                 <Link
-                  href={`${baseSignUpUrl}${methodJoiner}method=phone`}
+                  href="/sign-up?method=phone"
                   className={`rounded-lg border py-2.5 text-center text-sm font-medium transition-colors ${
                     method === 'phone'
                       ? 'border-[#7a451f] bg-[#7a451f] text-white'
                       : 'border-[#d8c8b5] bg-white text-stone-700 hover:bg-[#fff4df]'
                   }`}
                 >
-                  手机号注册
+                  手机号验证码
                 </Link>
                 <Link
-                  href={`${baseSignUpUrl}${methodJoiner}method=email`}
+                  href="/sign-up?method=email"
                   className={`rounded-lg border py-2.5 text-center text-sm font-medium transition-colors ${
                     method === 'email'
                       ? 'border-[#7a451f] bg-[#7a451f] text-white'
                       : 'border-[#d8c8b5] bg-white text-stone-700 hover:bg-[#fff4df]'
                   }`}
                 >
-                  邮箱注册
+                  邮箱 / Google
                 </Link>
               </div>
-              <EmbeddedBrowserAuthGuard
-                fallbackUrl={fallbackUrl}
-                initiallyBlocked={isEmbeddedBrowser}
-                mode="sign-up"
-              >
-                <SignUp
-                  key={method}
-                  forceRedirectUrl={redirectUrl}
-                  fallbackRedirectUrl={redirectUrl}
-                  initialValues={method === 'phone' ? { phoneNumber: '+86' } : { emailAddress: '' }}
-                  appearance={clerkAuthAppearance}
-                />
-              </EmbeddedBrowserAuthGuard>
+
+              {method === 'phone' ? (
+                <PhoneCodeAuthForm />
+              ) : (
+                <EmbeddedBrowserAuthGuard
+                  fallbackUrl={fallbackUrl}
+                  initiallyBlocked={isEmbeddedBrowser}
+                  mode="sign-up"
+                >
+                  <SignUp
+                    forceRedirectUrl="/dashboard"
+                    fallbackRedirectUrl="/dashboard"
+                    signInUrl="/sign-in"
+                    initialValues={{ emailAddress: '' }}
+                    appearance={clerkAuthAppearance}
+                  />
+                </EmbeddedBrowserAuthGuard>
+              )}
             </div>
           </section>
         </div>
