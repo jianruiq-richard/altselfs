@@ -81,49 +81,58 @@ export default function SetupPage({
   }, [user, normalizedRole, handleSetup]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f5f7fb] px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+    <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-[#efe7dc] px-4">
+      <div
+        className="absolute inset-0 bg-cover bg-center opacity-60"
+        style={{ backgroundImage: "url('/office.png')" }}
+      />
+      <div className="absolute inset-0 bg-[linear-gradient(105deg,rgba(38,24,15,0.86)_0%,rgba(83,55,36,0.72)_48%,rgba(239,231,220,0.86)_100%)]" />
+
+      <div className="relative w-full max-w-md rounded-2xl border border-[#ead8bd] bg-[#fffaf2] p-8 shadow-2xl shadow-black/20">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 mb-4">
-            初始化 OPC 账户
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#9a5a28]">
+            Altselfs
+          </p>
+          <h1 className="mb-4 text-2xl font-semibold text-stone-950">
+            正在初始化你的 Decision OS
           </h1>
-          <p className="text-slate-600 mb-8">
-            完成基础设置后即可进入统一数字分身工作台
+          <p className="mb-8 text-sm leading-6 text-stone-600">
+            正在创建你的基础账户和默认 AI 决策分身
           </p>
 
           {error && (
-            <p className="text-sm text-red-600 mb-4">{error}</p>
+            <p className="mb-4 text-sm text-red-700">{error}</p>
           )}
 
           {normalizedRole === 'candidate' && (
             <div className="space-y-3 mb-6 text-left">
               <div>
-                <label className="block text-sm text-gray-700 mb-1">昵称 *</label>
+                <label className="mb-1 block text-sm text-stone-700">昵称 *</label>
                 <input
                   type="text"
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-xl border border-[#d8c8b5] bg-white px-3 py-2 text-stone-950 outline-none focus:border-[#7a451f]"
                   placeholder="请输入你的昵称"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">联系电话 *</label>
+                <label className="mb-1 block text-sm text-stone-700">联系电话 *</label>
                 <input
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-xl border border-[#d8c8b5] bg-white px-3 py-2 text-stone-950 outline-none focus:border-[#7a451f]"
                   placeholder="请输入手机号或电话"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">微信号 *</label>
+                <label className="mb-1 block text-sm text-stone-700">微信号 *</label>
                 <input
                   type="text"
                   value={wechatId}
                   onChange={(e) => setWechatId(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-xl border border-[#d8c8b5] bg-white px-3 py-2 text-stone-950 outline-none focus:border-[#7a451f]"
                   placeholder="请输入微信号"
                 />
               </div>
@@ -134,13 +143,13 @@ export default function SetupPage({
             <button
               onClick={handleSetup}
               disabled={isLoading}
-              className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-xl bg-[#7a451f] px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? '设置中...' : '确认并继续'}
             </button>
           ) : (
-            <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              {isLoading ? '正在自动初始化账户...' : '正在进入工作台...'}
+            <div className="w-full rounded-xl border border-[#ead8bd] bg-white px-4 py-3 text-sm text-stone-600">
+              {isLoading ? '正在创建账户...' : '正在进入 Decision OS 工作台...'}
             </div>
           )}
         </div>
