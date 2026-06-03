@@ -27,20 +27,20 @@ export default async function Page({
   const isEmbeddedBrowser = isOauthBlockedEmbeddedBrowser(headersList.get('user-agent'));
 
   return (
-    <main className="relative min-h-svh overflow-hidden bg-[#efe7dc] px-4 py-6 sm:px-6 lg:px-8">
+    <main className="relative min-h-svh overflow-hidden bg-[#efe7dc] px-4 py-4 sm:px-6 lg:px-8">
       <div
         className="absolute inset-0 bg-cover bg-center opacity-75"
         style={{ backgroundImage: "url('/office.png')" }}
       />
       <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(33,21,14,0.88)_0%,rgba(58,38,25,0.76)_46%,rgba(239,231,220,0.9)_100%)]" />
 
-      <div className="relative mx-auto flex min-h-[calc(100svh-3rem)] w-full max-w-6xl flex-col">
+      <div className="relative mx-auto flex min-h-[calc(100svh-2rem)] w-full max-w-6xl flex-col">
         <Link href="/" className="w-fit text-lg font-semibold tracking-wide text-[#fff8ee]">
           Altselfs
         </Link>
 
-        <div className="grid flex-1 gap-6 py-7 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:gap-8 lg:pt-24">
-          <section className="max-w-3xl pt-5 text-[#fff8ee] lg:pt-12">
+        <div className="grid flex-1 gap-5 py-5 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:gap-8 lg:pt-10">
+          <section className="max-w-3xl pt-4 text-[#fff8ee] lg:pt-14">
             <h1 className="text-4xl font-semibold leading-tight drop-shadow-[0_2px_18px_rgba(0,0,0,0.35)] sm:text-5xl lg:whitespace-nowrap lg:text-6xl">
               创建你的 AI 决策分身
             </h1>
@@ -50,8 +50,8 @@ export default async function Page({
           </section>
 
           <section className="flex justify-center lg:justify-end">
-            <div className="max-h-[calc(100svh-8rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-[#ead8bd] bg-[#fffaf2] p-5 shadow-2xl shadow-black/20 sm:p-7">
-              <div className="mb-5 text-center">
+            <div className="max-h-[calc(100svh-4rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-[#ead8bd] bg-[#fffaf2] p-4 shadow-2xl shadow-black/20 sm:p-6">
+              <div className="mb-4 text-center">
                 <h2 className="text-2xl font-semibold text-stone-950">注册 Altselfs</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
                   完成注册后进入你的 Decision OS 工作台
