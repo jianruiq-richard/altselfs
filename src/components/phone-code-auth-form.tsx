@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 
-type FlowMode = "sign-in" | "sign-up";
+type PhonePasswordAuthFormProps = {
+  mode: "sign-in" | "sign-up";
+};
 
 const COUNTRY_CODES = [
   { code: "+86", label: "中国 +86" },
@@ -49,87 +51,76 @@ function getErrorMessage(error: unknown): string {
   return "操作失败，请稍后重试。";
 }
 
-export function PhoneCodeAuthForm() {
+export function PhonePasswordAuthForm({ mode }: PhonePasswordAuthFormProps) {
   const router = useRouter();
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
   const [countryCode, setCountryCode] = useState("+86");
   const [localPhoneNumber, setLocalPhoneNumber] = useState("");
-  const [code, setCode] = useState("");
-  const [mode, setMode] = useState<FlowMode>("sign-in");
-  const [step, setStep] = useState<"phone" | "code">("phone");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const isLoaded = isSignInLoaded && isSignUpLoaded;
+  const phoneDigits = localPhoneNumber.replace(/\D/g, "");
+  const canSubmit =
+    isLoaded &&
+    phoneDigits.length > 0 &&
+    password.length > 0 &&
+    (mode === "sign-in" || confirmPassword.length > 0) &&
+    !isSubmitting;
 
-  async function sendCode() {
+  async function submit() {
     if (!isLoaded || !signIn || !signUp) return;
 
     setError("");
+
+    if (mode === "sign-up" && password !== confirmPassword) {
+      setError("两次输入的密码不一致。");
+      return;
+    }
+
     setIsSubmitting(true);
     const normalizedPhone = buildE164Phone(countryCode, localPhoneNumber);
 
     try {
-      const signInAttempt = await signIn.create({ identifier: normalizedPhone });
-      const phoneFactor = signInAttempt.supportedFirstFactors?.find(
-        (factor) => factor.strategy === "phone_code",
-      );
-
-      if (phoneFactor?.strategy === "phone_code") {
-        await signIn.prepareFirstFactor({
-          strategy: "phone_code",
-          phoneNumberId: phoneFactor.phoneNumberId,
+      if (mode === "sign-in") {
+        const result = await signIn.create({
+          strategy: "password",
+          identifier: normalizedPhone,
+          password,
         });
-        setMode("sign-in");
-        setStep("code");
+
+        if (result.status === "complete" && result.createdSessionId) {
+          await setSignInActive?.({ session: result.createdSessionId });
+          router.push("/dashboard");
+          return;
+        }
+
+        setError("登录尚未完成，请确认该手机号已设置密码。");
         return;
       }
 
-      throw new Error("当前账号未开启手机号验证码登录。");
-    } catch (signInError) {
-      try {
-        await signUp.create({ phoneNumber: normalizedPhone });
-        await signUp.preparePhoneNumberVerification({ strategy: "phone_code" });
-        setMode("sign-up");
-        setStep("code");
-      } catch (signUpError) {
-        setError(getErrorMessage(signUpError) || getErrorMessage(signInError));
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+      const result = await signUp.create({
+        phoneNumber: normalizedPhone,
+        password,
+      });
 
-  async function verifyCode() {
-    if (!isLoaded || !signIn || !signUp || !setSignInActive || !setSignUpActive) return;
-
-    setError("");
-    setIsSubmitting(true);
-
-    try {
-      if (mode === "sign-in") {
-        const result = await signIn.attemptFirstFactor({
-          strategy: "phone_code",
-          code,
-        });
-        if (result.status === "complete" && result.createdSessionId) {
-          await setSignInActive({ session: result.createdSessionId });
-          router.push("/dashboard");
-          return;
-        }
-      } else {
-        const result = await signUp.attemptPhoneNumberVerification({ code });
-        if (result.status === "complete" && result.createdSessionId) {
-          await setSignUpActive({ session: result.createdSessionId });
-          router.push("/dashboard");
-          return;
-        }
+      if (result.status === "complete" && result.createdSessionId) {
+        await setSignUpActive?.({ session: result.createdSessionId });
+        router.push("/dashboard");
+        return;
       }
 
-      setError("验证码已提交，但登录尚未完成，请稍后重试。");
-    } catch (verifyError) {
-      setError(getErrorMessage(verifyError));
+      if (result.unverifiedFields?.includes("phone_number")) {
+        setError("Clerk 当前仍要求手机号验证。请在 Dashboard 里关闭 Phone 的 Verify at sign-up 后再试。");
+        return;
+      }
+
+      setError("注册尚未完成，请检查 Clerk 的手机号和密码注册设置。");
+    } catch (submitError) {
+      setError(getErrorMessage(submitError));
     } finally {
       setIsSubmitting(false);
     }
@@ -147,7 +138,7 @@ export function PhoneCodeAuthForm() {
               id="phone-country"
               value={countryCode}
               onChange={(event) => setCountryCode(event.target.value)}
-              disabled={step === "code" || isSubmitting}
+              disabled={isSubmitting}
               className="w-full rounded-lg border border-[#d8c8b5] bg-white px-3 py-3 text-sm text-stone-950 outline-none transition-colors focus:border-[#7a451f]"
             >
               {COUNTRY_CODES.map((country) => (
@@ -162,64 +153,57 @@ export function PhoneCodeAuthForm() {
               inputMode="tel"
               value={localPhoneNumber}
               onChange={(event) => setLocalPhoneNumber(event.target.value)}
-              disabled={step === "code" || isSubmitting}
+              disabled={isSubmitting}
               className="w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
               placeholder="138 0000 0000"
             />
           </div>
         </div>
 
-        {step === "code" ? (
+        <div>
+          <label htmlFor="phone-password" className="block text-sm font-medium text-stone-800">
+            密码
+          </label>
+          <input
+            id="phone-password"
+            type="password"
+            autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            disabled={isSubmitting}
+            className="mt-2 w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
+            placeholder={mode === "sign-in" ? "输入密码" : "设置登录密码"}
+          />
+        </div>
+
+        {mode === "sign-up" ? (
           <div>
-            <label htmlFor="code" className="block text-sm font-medium text-stone-800">
-              短信验证码
+            <label htmlFor="phone-confirm-password" className="block text-sm font-medium text-stone-800">
+              确认密码
             </label>
             <input
-              id="code"
-              type="text"
-              inputMode="numeric"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
+              id="phone-confirm-password"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              disabled={isSubmitting}
               className="mt-2 w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-              placeholder="输入 6 位验证码"
+              placeholder="再次输入密码"
             />
           </div>
         ) : null}
 
         {error ? <p className="text-sm leading-6 text-red-700">{error}</p> : null}
 
-        {step === "phone" ? (
-          <button
-            type="button"
-            onClick={sendCode}
-            disabled={!isLoaded || isSubmitting || localPhoneNumber.replace(/\D/g, "").length === 0}
-            className="w-full rounded-lg bg-[#7a451f] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSubmitting ? "发送中..." : "发送验证码"}
-          </button>
-        ) : (
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={verifyCode}
-              disabled={!isLoaded || isSubmitting || code.trim().length === 0}
-              className="w-full rounded-lg bg-[#7a451f] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSubmitting ? "验证中..." : "验证码登录"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setStep("phone");
-                setCode("");
-                setError("");
-              }}
-              className="w-full rounded-lg border border-[#d8c8b5] px-4 py-3 text-sm font-medium text-stone-700 transition-colors hover:bg-[#fff4df]"
-            >
-              修改手机号
-            </button>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canSubmit}
+          className="w-full rounded-lg bg-[#7a451f] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSubmitting ? "提交中..." : mode === "sign-in" ? "手机号登录" : "手机号注册"}
+        </button>
       </div>
     </div>
   );

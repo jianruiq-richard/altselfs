@@ -2,7 +2,7 @@ import { SignUp } from '@clerk/nextjs';
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { EmbeddedBrowserAuthGuard } from '@/components/embedded-browser-auth-guard';
-import { PhoneCodeAuthForm } from '@/components/phone-code-auth-form';
+import { PhonePasswordAuthForm } from '@/components/phone-code-auth-form';
 import { clerkAuthAppearance } from '@/lib/clerk-auth-appearance';
 import { isOauthBlockedEmbeddedBrowser } from '@/lib/oauth-browser';
 
@@ -52,7 +52,7 @@ export default async function Page({
               <div className="mb-4 text-center">
                 <h2 className="text-2xl font-semibold text-stone-950">注册 Altselfs</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  选择手机号验证码，或使用邮箱 / Google 注册
+                  选择手机号和密码，或使用邮箱 / Google 注册
                 </p>
               </div>
               <div className="mb-4 grid grid-cols-2 gap-2">
@@ -64,7 +64,7 @@ export default async function Page({
                       : 'border-[#d8c8b5] bg-white text-stone-700 hover:bg-[#fff4df]'
                   }`}
                 >
-                  手机号验证码
+                  手机号 / 密码
                 </Link>
                 <Link
                   href="/sign-up?method=email"
@@ -79,7 +79,7 @@ export default async function Page({
               </div>
 
               {method === 'phone' ? (
-                <PhoneCodeAuthForm />
+                <PhonePasswordAuthForm mode="sign-up" />
               ) : (
                 <EmbeddedBrowserAuthGuard
                   fallbackUrl={fallbackUrl}
