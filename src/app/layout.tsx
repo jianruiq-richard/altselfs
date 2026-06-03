@@ -3,8 +3,8 @@ import { ClerkProvider } from '@clerk/nextjs';
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OPC平台 - 数字分身工作台",
-  description: "统一的 OPC 数字分身协作平台",
+  title: "Altselfs - 每个人的 Decision OS",
+  description: "Altselfs 为高能个体构建 AI 决策分身，聚合跨平台工作 context，沉淀个人决策偏好。",
 };
 
 export const viewport: Viewport = {
