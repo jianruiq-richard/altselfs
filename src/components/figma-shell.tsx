@@ -75,13 +75,13 @@ export function FigmaShell({
   }, [navItems, pathname]);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-slate-900 md:flex md:h-screen md:overflow-hidden">
-      <aside className="hidden h-full w-64 shrink-0 border-r border-gray-200 bg-white md:block">
+    <div className="min-h-screen bg-[#f6efe7] text-stone-950 md:flex md:h-screen md:overflow-hidden">
+      <aside className="hidden h-full w-64 shrink-0 border-r border-[#e4d5c3] bg-[#fffaf3] md:block">
         <div className="flex h-full flex-col">
-          <div className="border-b border-gray-200 px-6 py-6">
+          <div className="border-b border-[#e4d5c3] px-6 py-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">OPC平台</h1>
-              <p className="mt-1 text-sm text-gray-500">AI员工管理系统</p>
+              <h1 className="text-2xl font-bold text-stone-950">Altselfs</h1>
+              <p className="mt-1 text-sm text-stone-500">Decision OS</p>
             </div>
           </div>
 
@@ -93,7 +93,7 @@ export function FigmaShell({
                   key={item.key}
                   href={item.href}
                   className={`flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
-                    isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'
+                    isActive ? 'bg-[#efe0ce] text-[#8a4d22]' : 'text-stone-700 hover:bg-[#f5eadc]'
                   }`}
                 >
                   <item.icon className="h-5 w-5" />
@@ -103,10 +103,10 @@ export function FigmaShell({
             })}
           </nav>
 
-          <div className="border-t border-gray-200 p-4">
+          <div className="border-t border-[#e4d5c3] p-4">
             <Link href="/profile" className="block rounded-lg px-4 py-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-xl font-semibold text-white">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#b77a3d] to-[#5b3725] text-xl font-semibold text-white">
                   {(user?.fullName || '用').slice(0, 1)}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -122,7 +122,7 @@ export function FigmaShell({
             <SignOutButton redirectUrl="/">
               <button
                 type="button"
-                className="mt-2 flex w-full items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                className="mt-2 flex w-full items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-[#f5eadc] hover:text-stone-950"
               >
                 <LogOut className="h-4 w-4" />
                 退出登录
@@ -132,22 +132,22 @@ export function FigmaShell({
         </div>
       </aside>
 
-      <div className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur md:hidden">
+      <div className="sticky top-0 z-20 border-b border-[#e4d5c3] bg-[#fffaf3]/95 backdrop-blur md:hidden">
         <div className="mx-auto flex w-full items-center justify-between gap-3 px-4 py-3 [padding-top:max(0.75rem,env(safe-area-inset-top))]">
           <div className="min-w-0">
-            <p className="text-lg font-bold text-gray-900">OPC平台</p>
-            <p className="truncate text-xs text-gray-500">AI员工管理系统</p>
+            <p className="text-lg font-bold text-stone-950">Altselfs</p>
+            <p className="truncate text-xs text-stone-500">Decision OS</p>
           </div>
           <Link
             href="/profile"
-            className="flex min-w-0 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2"
+            className="flex min-w-0 items-center gap-3 rounded-xl border border-[#e4d5c3] bg-[#f6efe7] px-3 py-2"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-sm font-semibold text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#b77a3d] to-[#5b3725] text-sm font-semibold text-white">
               {(user?.fullName || '用').slice(0, 1)}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-gray-900">{user?.fullName || '用户名'}</p>
-              <p className="truncate text-xs text-gray-500">{user?.primaryEmailAddress?.emailAddress || 'user@example.com'}</p>
+              <p className="truncate text-sm font-medium text-stone-950">{user?.fullName || '用户名'}</p>
+              <p className="truncate text-xs text-stone-500">{user?.primaryEmailAddress?.emailAddress || 'user@example.com'}</p>
             </div>
           </Link>
         </div>
@@ -168,7 +168,7 @@ export function FigmaShell({
         </div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[#e4d5c3] bg-[#fffaf3]/95 backdrop-blur md:hidden">
         <div className="overflow-x-auto px-2 py-2 [padding-bottom:max(0.5rem,env(safe-area-inset-bottom))]">
           <div className="flex min-w-max items-center gap-1">
             {navItems.map((item) => {
@@ -178,7 +178,7 @@ export function FigmaShell({
                   key={item.key}
                   href={item.href}
                   className={`flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs transition-colors ${
-                    isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
+                    isActive ? 'bg-[#efe0ce] text-[#8a4d22]' : 'text-stone-600 hover:bg-[#f5eadc]'
                   }`}
                 >
                   <item.icon className="h-4 w-4" />

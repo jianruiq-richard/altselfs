@@ -140,7 +140,7 @@ export default function ChatPage() {
     <FigmaShell
       homeHref="/candidate"
       title={avatar.name}
-      subtitle={`来自 ${avatar.investor.name || 'OPC成员'} 的数字分身`}
+      subtitle={`来自 ${avatar.investor.name || 'Altselfs 用户'} 的数字分身`}
       actions={
         <Link href="/candidate" className="text-sm text-blue-700 hover:underline">
           返回分身大厅

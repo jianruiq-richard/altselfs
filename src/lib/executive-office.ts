@@ -81,19 +81,15 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
   const engineeringProgress = clampProgress(input.avatars.length > 0 ? 50 + Math.min(40, totalChats * 4) : 0);
   const hiredTeamSet = new Set(input.hiredTeamKeys || []);
 
-  const opcTracks = 'AI视频、AI Agent 等 OPC 预设产品领域赛道';
-  const technologyInsight =
+  const decisionTracks = '个人决策分身、AI 工作流、跨渠道 context 聚合与行动建议';
+  const crossChannelInsight =
     connectedIntegrations.length > 0 || input.wechatSources.length > 0
-      ? `技术趋势围绕 ${opcTracks} 进行，已由当前雇佣员工在各自渠道持续搜集信号；建议继续细化赛道关键词与技术标签，提升趋势判断精度。`
-      : `技术趋势围绕 ${opcTracks} 进行，但当前尚未接入可用渠道，建议先完成至少 1 个外部渠道接入后再启动趋势追踪。`;
-  const competitorInsight =
+      ? `已围绕 ${decisionTracks} 建立基础信息链路，当前 AI 员工会从已接入渠道持续搜集信号；建议继续细化关注领域与排除偏好，提升判断精度。`
+      : `Decision OS 将围绕 ${decisionTracks} 汇总信息，当前尚未接入可用渠道，建议先完成至少 1 个外部渠道接入。`;
+  const twinRecommendationInsight =
     input.wechatSources.length > 0
-      ? `竞品监控由已雇佣的“公众号助手”及“小红书助手”（含未来新增渠道助手）按你的监控指令每日整理，重点跟踪是否有新竞品发布、在各渠道的推广动作与声量变化。`
-      : '竞品监控暂缺可用渠道样本，建议先补齐公众号与小红书等来源，并配置需要重点监控的赛道与产品名单。';
-  const industryTrackInsight =
-    connectedIntegrations.length > 0 || input.wechatSources.length > 0
-      ? `行业动态围绕 ${opcTracks} 汇总，按员工负责渠道持续采集并更新。`
-      : `行业动态将围绕 ${opcTracks} 汇总，待接入渠道后自动启动采集。`;
+      ? '已具备公众号等外部信号源，后续可把关键人物、产品线索和合作机会交给个人决策分身继续拆解。'
+      : '分身推荐暂缺可用渠道样本，建议先补齐公众号、小红书、Gmail、飞书等来源。';
 
   const priorityTasks: ExecutivePriorityTask[] = [];
   if (hiredTeamSet.has('info_ops') && !gmailConnected) {
@@ -131,7 +127,7 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
   if (priorityTasks.length < 3) {
     priorityTasks.push({
       priority: 'medium',
-      task: '审阅今日摘要并补充团队行动项',
+      task: '审阅今日 Decision Briefing 并补充个人决策偏好',
       deadline: '今日 20:00 前',
       assignedBy: '总裁秘书Momo',
     });
@@ -190,19 +186,22 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
     departmentOverview,
     externalInsights: [
       {
-        category: '行业动态',
-        content: industryTrackInsight,
-        source: '来自已接入渠道',
+        category: '信息汇总',
+        content: crossChannelInsight,
+        source: 'Decision OS',
       },
       {
-        category: '技术趋势',
-        content: technologyInsight,
-        source: '系统链路评估',
+        category: '今日to do',
+        content:
+          priorityTasks.length > 0
+            ? `当前有 ${priorityTasks.length} 个待办，建议优先处理 ${priorityTasks.filter((item) => item.priority === 'high').length} 个高优先级事项。`
+            : '更新晨报后，总裁秘书会从所有消息渠道提取可执行事项。',
+        source: '总裁秘书Momo',
       },
       {
-        category: '竞品监控',
-        content: competitorInsight,
-        source: '渠道覆盖评估',
+        category: '分身推荐',
+        content: twinRecommendationInsight,
+        source: '个人决策分身',
       },
     ],
     priorityTasks: priorityTasks.slice(0, 4),
@@ -225,10 +224,10 @@ export function buildExecutiveAssistantReply(question: string, briefing: Executi
 
   if (/外界|行业|动态|趋势|情报/.test(normalized)) {
     return [
-      '外界与渠道信息摘要：',
+      '信息汇总：',
       ...briefing.externalInsights.map((item) => `- ${item.category}：${item.content}（${item.source}）`),
       '',
-      '如需，我可以把这些信息按“投资判断/执行风险/机会窗口”三类再重排一次。',
+      '如需，我可以把这些信息按“判断依据/执行风险/下一步动作”三类再重排一次。',
     ].join('\n');
   }
 
@@ -249,20 +248,20 @@ export function buildExecutiveAssistantReply(question: string, briefing: Executi
       briefing.headline,
       '',
       '包含三个模块：',
-      '1) 外界信息精选',
-      '2) 各部门工作概览',
-      '3) 今日重点事项',
+      '1) 信息汇总',
+      '2) 今日to do',
+      '3) 分身推荐',
       '',
-      '你可以直接问我“展开部门概览 / 展开重点任务 / 展开外界趋势”。',
+      '你可以直接问我“展开信息汇总 / 展开今日待办 / 展开分身推荐”。',
     ].join('\n');
   }
 
   return [
     `晨报已就绪：${briefing.headline}`,
     '你可以让我做以下任一项：',
-    '- 汇报各部门工作情况',
+    '- 汇报 Decision OS 工作情况',
     '- 列出今天的重点事项',
-    '- 总结外界信息变化',
+    '- 总结跨渠道信息变化',
     '- 给出执行优先级建议',
   ].join('\n');
 }

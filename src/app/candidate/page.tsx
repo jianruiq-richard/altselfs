@@ -101,7 +101,7 @@ export default async function CandidateDashboard() {
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-slate-900">{chat.avatar.name}</h3>
-                    <p className="text-sm text-slate-500">来自 {chat.avatar.investor.name || 'OPC成员'}</p>
+                    <p className="text-sm text-slate-500">来自 {chat.avatar.investor.name || 'Altselfs 用户'}</p>
                   </div>
                   <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">进行中</span>
                 </div>
@@ -123,7 +123,7 @@ export default async function CandidateDashboard() {
       {avatars.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
           <h2 className="text-2xl font-bold text-slate-900">暂无可用的数字分身</h2>
-          <p className="mt-2 text-slate-600">请稍后再来查看，OPC 成员正在创建他们的数字分身。</p>
+          <p className="mt-2 text-slate-600">请稍后再来查看，Altselfs 用户正在创建他们的数字分身。</p>
         </div>
       ) : (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -138,7 +138,7 @@ export default async function CandidateDashboard() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">{avatar.name}</h3>
-                  <p className="text-sm text-slate-500">来自 {avatar.investor.name || 'OPC成员'}</p>
+                  <p className="text-sm text-slate-500">来自 {avatar.investor.name || 'Altselfs 用户'}</p>
                 </div>
               </div>
 

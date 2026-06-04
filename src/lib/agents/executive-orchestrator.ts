@@ -96,12 +96,12 @@ type StructuredBriefingItem = {
 };
 
 type StructuredBriefingModule = {
-  title: '行业动态' | '技术趋势' | '竞品监控';
+  title: '信息汇总' | '今日to do' | '分身推荐';
   content: string;
   items: StructuredBriefingItem[];
 };
 
-type StructuredBriefingModuleKey = 'industryDynamics' | 'technologyTrends' | 'competitorMonitoring';
+type StructuredBriefingModuleKey = 'informationSummary' | 'todayTodo' | 'twinRecommendation';
 
 type StructuredBriefingModulePlan = {
   key: StructuredBriefingModuleKey;
@@ -132,9 +132,9 @@ type LoadedExecutiveContext = {
 
 const STRUCTURED_AGENT_ITEM_LIMIT = 50;
 const STRUCTURED_MODULE_PLANS: StructuredBriefingModulePlan[] = [
-  { key: 'industryDynamics', title: '行业动态' },
-  { key: 'technologyTrends', title: '技术趋势' },
-  { key: 'competitorMonitoring', title: '竞品监控' },
+  { key: 'informationSummary', title: '信息汇总' },
+  { key: 'todayTodo', title: '今日to do' },
+  { key: 'twinRecommendation', title: '分身推荐' },
 ];
 
 const EXECUTIVE_SKILL_REGISTRY: Array<{
@@ -292,22 +292,22 @@ export function getExecutivePlannerStepDefinition(id: ExecutivePlannerStepId): E
     structure_briefing_json: {
       id: 'structure_briefing_json',
       title: '结构化晨报JSON',
-      description: '由总裁秘书把已获得的信息归类为行业动态、技术趋势、竞品监控三个模块。',
+      description: '由总裁秘书把已获得的信息归类为信息汇总、今日to do、分身推荐三个模块。',
     },
-    structure_industryDynamics: {
-      id: 'structure_industryDynamics',
-      title: '结构化行业动态',
-      description: '行业动态结构化子 agent 整理候选素材。',
+    structure_informationSummary: {
+      id: 'structure_informationSummary',
+      title: '结构化信息汇总',
+      description: '信息汇总结构化子 agent 整理所有渠道候选素材。',
     },
-    structure_technologyTrends: {
-      id: 'structure_technologyTrends',
-      title: '结构化技术趋势',
-      description: '技术趋势结构化子 agent 整理候选素材。',
+    structure_todayTodo: {
+      id: 'structure_todayTodo',
+      title: '结构化今日to do',
+      description: '今日to do结构化子 agent 从所有消息渠道提取行动项。',
     },
-    structure_competitorMonitoring: {
-      id: 'structure_competitorMonitoring',
-      title: '结构化竞品监控',
-      description: '竞品监控结构化子 agent 整理候选素材。',
+    structure_twinRecommendation: {
+      id: 'structure_twinRecommendation',
+      title: '结构化分身推荐',
+      description: '分身推荐结构化子 agent 整理适合继续讨论或匹配的人/事。',
     },
     aggregate_structured_briefing: {
       id: 'aggregate_structured_briefing',
@@ -871,11 +871,18 @@ async function loadExecutiveContext(investorId: string): Promise<LoadedExecutive
   });
 
   const integrationProviders = new Set(integrations.map((item) => item.provider));
+  const integrationSnapshotFacts = integrations.flatMap((item) =>
+    item.snapshots.slice(0, 1).map((snapshot) => {
+      const createdAt = snapshot.createdAt.toISOString();
+      return `${item.provider} 最新消息摘要（${createdAt}）：${snapshot.summary}`;
+    })
+  );
   const internalFacts = [
     `已接入集成：${integrations.map((item) => item.provider).join('、') || '无'}`,
     `已录入公众号：${wechatSources.map((item) => item.displayName).join('、') || '无'}`,
     `数字分身数量：${avatars.length}`,
     `已雇佣团队：${Array.from(hiredTeamKeys).join('、') || '无'}`,
+    ...integrationSnapshotFacts,
   ];
 
   return {
@@ -934,7 +941,8 @@ async function buildBriefingSummary(input: {
         '如果子agent结果中包含 WEB_SEARCH，请只使用这些已记录的搜索结果，不要自行发起隐式搜索。',
         '如果总裁秘书system prompt要求不要二次过滤或要求保留子agent结果，你必须遵守；否则只按system prompt和用户命令指定的规则处理。',
         '必须把来源和不确定性说明清楚。',
-        '输出中文，结构清晰，必须围绕行业动态、技术趋势、竞品监控三个模块给出重点、证据来源和建议行动。',
+        '输出中文，结构清晰，必须围绕信息汇总、今日to do、分身推荐三个模块给出重点、证据来源和建议行动。',
+        '今日to do必须从所有已调用消息渠道和内部上下文里提炼可执行事项，按红色P0、黄色P1、绿色P2排序。',
       ].join('\n'),
     },
     {
@@ -1017,9 +1025,9 @@ function normalizeStructuredBriefing(raw: string): StructuredBriefingOutput {
     title: asString(parsed.title, `总裁秘书Momo晨报 ${dateKey()}`).slice(0, 160),
     summary: asString(parsed.summary, '今日晨报已更新。').slice(0, 2400),
     modules: [
-      normalizeStructuredModule(modules.industryDynamics, '行业动态'),
-      normalizeStructuredModule(modules.technologyTrends, '技术趋势'),
-      normalizeStructuredModule(modules.competitorMonitoring, '竞品监控'),
+      normalizeStructuredModule(modules.informationSummary, '信息汇总'),
+      normalizeStructuredModule(modules.todayTodo, '今日to do'),
+      normalizeStructuredModule(modules.twinRecommendation, '分身推荐'),
     ],
   };
 }
@@ -1104,6 +1112,15 @@ async function runStructuredModuleAgent(input: {
         '业务偏好、是否过滤、是否保留所有信息、排序规则，都必须从晨报秘书system prompt和用户当前命令中读取；不要添加代码预设的业务主题偏好。',
         '如果晨报秘书system prompt要求不要二次过滤或要求保留子agent结果，你必须遵守。',
         `你只能输出“${input.module.title}”模块，不要输出其他模块。`,
+        input.module.key === 'todayTodo'
+          ? '本模块只输出可执行待办，不输出纯新闻。每个title必须用“红色P0 ”、“黄色P1 ”或“绿色P2 ”开头，summary说明为什么要做、涉及哪个渠道或来源、建议何时处理。'
+          : '',
+        input.module.key === 'informationSummary'
+          ? '本模块汇总公众号、Gmail、飞书、小红书、联网搜索等所有已调用渠道中的关键信号，优先保留和用户当前决策有关的信息。'
+          : '',
+        input.module.key === 'twinRecommendation'
+          ? '本模块给出适合用个人决策分身继续讨论、复盘、匹配或跟进的人/事。没有明确推荐时输出1条“暂无明确分身推荐”，summary说明缺少什么信号。'
+          : '',
         '不要编造，不要引入候选素材之外的信息；必须保留来源和URL。',
         '只输出严格JSON，不要输出markdown或解释。',
         '必须严格遵守 user message 中的 outputSchema，不得新增、删除、改名字段。',
@@ -1125,7 +1142,9 @@ async function runStructuredModuleAgent(input: {
           '每个summary不超过160字',
           'content使用一到三段中文，不要过长',
           '不要复制大段原文',
-          '如果同一信息同时适合多个模块，请只在本模块确有商业意义时保留',
+          input.module.key === 'todayTodo'
+            ? '待办必须具体可执行，避免“关注一下”“持续观察”这类空泛表达'
+            : '如果同一信息同时适合多个模块，请只在本模块确有商业意义时保留',
         ],
         outputSchema: {
           moduleKey: input.module.key,
@@ -1521,9 +1540,9 @@ export async function updateTodayExecutiveBriefing(params: {
               endAt: new Date().toISOString(),
             },
             returnFormat: {
-              sections: ['行业动态', '技术趋势', '竞品监控'],
+              sections: ['信息汇总', '今日to do', '分身推荐'],
               instructions:
-                '按三个模块返回结构化结果；每条信息必须有来源，能拿到URL时必须提供URL。本任务与其他信息源助手并行执行，不等待微信公众号助手结果。业务偏好、搜索范围和筛选/保留策略必须以晨报秘书system prompt为准。',
+                '按三个模块返回结构化结果；信息汇总覆盖重要信号，今日to do提取可执行事项并标注优先级，分身推荐给出适合用个人决策分身继续讨论或匹配的人/事。每条信息必须有来源，能拿到URL时必须提供URL。本任务与其他信息源助手并行执行，不等待微信公众号助手结果。业务偏好、搜索范围和筛选/保留策略必须以晨报秘书system prompt为准。',
             },
           },
         },

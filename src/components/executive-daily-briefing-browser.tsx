@@ -6,6 +6,12 @@ export type ExecutiveDailyBriefingView = {
   date: string;
   generatedTime: string;
   headline: string;
+  priorityTasks?: Array<{
+    priority: 'high' | 'medium' | 'low';
+    task: string;
+    deadline: string;
+    assignedBy: string;
+  }>;
   externalInsights?: Array<{
     category: string;
     content: string;
@@ -22,6 +28,7 @@ export type PersistedExecutiveBriefingView = {
 } | null;
 
 type BriefingModule = {
+  key: string;
   title: string;
   content: string;
   items?: Array<{
@@ -38,7 +45,7 @@ type BriefingModule = {
 
 type BriefingItem = NonNullable<BriefingModule['items']>[number];
 
-type BriefingTabKey = 'industryDynamics' | 'technologyTrends' | 'competitorMonitoring';
+type BriefingTabKey = string;
 
 type BriefingFeedEntry = {
   id: string;
@@ -49,6 +56,7 @@ type BriefingFeedEntry = {
   url?: string;
   publishedAt?: string;
   imageUrls?: string[];
+  compact?: boolean;
 };
 
 type PlannerStepStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'ERROR' | 'SKIPPED';
@@ -72,11 +80,7 @@ type ExecutiveRunPollResult = {
   pollIntervalMs?: number;
 };
 
-const briefingTabs: Array<{ key: BriefingTabKey; label: string }> = [
-  { key: 'industryDynamics', label: '行业动态' },
-  { key: 'technologyTrends', label: '技术趋势' },
-  { key: 'competitorMonitoring', label: '竞品监控' },
-];
+const defaultBriefingTitles = ['信息汇总', '今日to do', '分身推荐'];
 
 const plannerStatusLabel: Record<PlannerStepStatus, string> = {
   PENDING: '待执行',
@@ -95,7 +99,7 @@ const plannerStatusClass: Record<PlannerStepStatus, string> = {
 };
 
 export const EXECUTIVE_UPDATE_BRIEFING_PROMPT =
-  '更新今天的晨报，请调用可用子agent，尤其是微信公众号助手，并重新汇总当天信息，按照行业动态、技术趋势和竞品监控三个模块整理展示。';
+  '更新今天的晨报，请调用可用子agent，尤其是微信公众号助手、邮件助手、飞书助手和小红书助手，并重新汇总当天信息。请按照“信息汇总、今日to do、分身推荐”三个模块整理：信息汇总覆盖所有消息渠道的重要信号；今日to do要从所有渠道里提取可执行事项并按红色P0、黄色P1、绿色P2排序；分身推荐给出值得我用个人决策分身进一步讨论或匹配的人/事。';
 
 const dayTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
   month: 'numeric',
@@ -110,48 +114,81 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function normalizeBriefingModules(sections: unknown): BriefingModule[] {
-  const expectedTitles = ['行业动态', '技术趋势', '竞品监控'];
-  if (!Array.isArray(sections)) {
-    return expectedTitles.map((title) => ({
-      title,
-      content: '点击“更新资讯”后，总裁秘书会重新汇总当天信息并填充这个模块。',
-    }));
-  }
+function moduleKey(title: string, index: number) {
+  return `${index}-${title}`;
+}
 
-  return expectedTitles.map((title) => {
-    const matched = sections.find((section) => {
-      if (!isRecord(section) || typeof section.title !== 'string') return false;
-      return section.title.includes(title);
-    });
-    if (!isRecord(matched)) {
+function defaultPriorityLabel(priority: 'high' | 'medium' | 'low') {
+  if (priority === 'high') return '红色P0';
+  if (priority === 'medium') return '黄色P1';
+  return '绿色P2';
+}
+
+function defaultBriefingModules(briefing?: ExecutiveDailyBriefingView): BriefingModule[] {
+  const taskItems = (briefing?.priorityTasks || []).map((task) => ({
+    title: `${defaultPriorityLabel(task.priority)} ${task.task}`,
+    summary: `截止：${task.deadline}。来源：${task.assignedBy}`,
+    source: task.assignedBy,
+    publishedAt: briefing?.generatedTime,
+  }));
+
+  return defaultBriefingTitles.map((title, index) => {
+    if (title === '今日to do') {
       return {
+        key: moduleKey(title, index),
         title,
-        content: '点击“更新资讯”后，总裁秘书会重新汇总当天信息并填充这个模块。',
+        content: taskItems.length > 0 ? '基于当前已接入渠道和账户状态整理的今日待办。' : '更新晨报后，总裁秘书会从所有消息渠道里提取今日待办。',
+        items: taskItems.length > 0 ? taskItems : undefined,
       };
     }
 
-    const rawItems = Array.isArray(matched.items) ? matched.items : [];
     return {
+      key: moduleKey(title, index),
       title,
-      content: typeof matched.content === 'string' && matched.content.trim() ? matched.content : '暂无明确内容。',
-      items: rawItems
-        .map((item) => {
-          if (!isRecord(item)) return null;
-          return {
-            title: typeof item.title === 'string' ? item.title : undefined,
-            summary: typeof item.summary === 'string' ? item.summary : undefined,
-            source: typeof item.source === 'string' ? item.source : undefined,
-            url: typeof item.url === 'string' ? item.url : undefined,
-            publishedAt: typeof item.publishedAt === 'string' ? item.publishedAt : undefined,
-            cover: typeof item.cover === 'string' ? item.cover : undefined,
-            imageUrls: Array.isArray(item.imageUrls) ? item.imageUrls.filter((value): value is string => typeof value === 'string') : undefined,
-            images: Array.isArray(item.images) ? item.images : undefined,
-          };
-        })
-        .filter(Boolean) as BriefingModule['items'],
+      content:
+        title === '信息汇总'
+          ? '点击“更新资讯”后，总裁秘书会重新汇总公众号、Gmail、飞书、小红书等渠道的重要信息。'
+          : '更新晨报后，这里会展示适合用个人决策分身继续讨论、跟进或匹配的人/事。',
     };
   });
+}
+
+function normalizeBriefingModules(sections: unknown, briefing?: ExecutiveDailyBriefingView): BriefingModule[] {
+  if (!Array.isArray(sections)) {
+    return defaultBriefingModules(briefing);
+  }
+
+  const modules = sections
+    .map((section, index) => {
+      if (!isRecord(section) || typeof section.title !== 'string') return null;
+      const title = section.title.trim();
+      if (!title || title === '总览') return null;
+
+      const rawItems = Array.isArray(section.items) ? section.items : [];
+      return {
+        key: moduleKey(title, index),
+        title,
+        content: typeof section.content === 'string' && section.content.trim() ? section.content : '暂无明确内容。',
+        items: rawItems
+          .map((item) => {
+            if (!isRecord(item)) return null;
+            return {
+              title: typeof item.title === 'string' ? item.title : undefined,
+              summary: typeof item.summary === 'string' ? item.summary : undefined,
+              source: typeof item.source === 'string' ? item.source : undefined,
+              url: typeof item.url === 'string' ? item.url : undefined,
+              publishedAt: typeof item.publishedAt === 'string' ? item.publishedAt : undefined,
+              cover: typeof item.cover === 'string' ? item.cover : undefined,
+              imageUrls: Array.isArray(item.imageUrls) ? item.imageUrls.filter((value): value is string => typeof value === 'string') : undefined,
+              images: Array.isArray(item.images) ? item.images : undefined,
+            };
+          })
+          .filter(Boolean) as BriefingModule['items'],
+      };
+    })
+    .filter(Boolean) as BriefingModule[];
+
+  return modules.length > 0 ? modules : defaultBriefingModules(briefing);
 }
 
 function clampText(value: string, maxLength: number) {
@@ -235,12 +272,6 @@ async function waitForExecutiveRun(runId: string, onUpdate?: (run: ExecutiveRunP
   throw new Error('晨报执行仍未完成，请稍后刷新查看结果');
 }
 
-function titleToTabKey(title: string): BriefingTabKey {
-  if (title.includes('技术趋势')) return 'technologyTrends';
-  if (title.includes('竞品监控')) return 'competitorMonitoring';
-  return 'industryDynamics';
-}
-
 function normalizeImageUrls(item: BriefingItem | undefined) {
   if (!item) return [];
   const fromImageUrls = Array.isArray(item.imageUrls) ? item.imageUrls.filter((value): value is string => typeof value === 'string') : [];
@@ -263,7 +294,8 @@ function normalizeBriefingEntries(
   persistedBriefing: PersistedExecutiveBriefingView
 ): BriefingFeedEntry[] {
   return modules.flatMap((module, index) => {
-    const categoryKey = titleToTabKey(module.title);
+    const categoryKey = module.key;
+    const compact = module.title === '信息汇总' || module.title === '今日to do' || module.title === '分身推荐';
     const insight = briefing.externalInsights?.find((item) => item.category.includes(module.title));
     const fallbackTitle = module.title;
     const fallbackSummary = insight?.content || module.content || '今日暂无新的资讯更新。';
@@ -283,14 +315,32 @@ function normalizeBriefingEntries(
     return rawItems.map((item, itemIndex) => ({
       id: `${categoryKey}-${index}-${itemIndex}-${item.url || item.title || fallbackTitle}`,
       categoryKey,
-      title: clampText(item.title || fallbackTitle, 60),
-      summary: clampText(item.summary || fallbackSummary, 140),
+      title: compact ? item.title || fallbackTitle : clampText(item.title || fallbackTitle, 60),
+      summary: compact ? item.summary || fallbackSummary : clampText(item.summary || fallbackSummary, 140),
       source: item.source || insight?.source || '总裁秘书Momo',
       url: item.url,
       publishedAt: item.publishedAt || persistedBriefing?.updatedAt || briefing.generatedTime,
       imageUrls: normalizeImageUrls(item),
+      compact,
     }));
   });
+}
+
+function initialBriefingTab(persistedBriefing: PersistedExecutiveBriefingView | undefined, briefing: ExecutiveDailyBriefingView) {
+  return normalizeBriefingModules(persistedBriefing?.sections, briefing)[0]?.key || moduleKey(defaultBriefingTitles[0], 0);
+}
+
+function getTodoPriorityDisplay(title: string) {
+  const matched = /^(红色P0|黄色P1|绿色P2)\s+(.+)$/.exec(title);
+  if (!matched) return { title };
+  const [, level, restTitle] = matched;
+  const tone = level === '红色P0' ? 'bg-red-500' : level === '黄色P1' ? 'bg-amber-400' : 'bg-emerald-500';
+
+  return {
+    title: restTitle,
+    tone,
+    label: level,
+  };
 }
 
 function PreviewCarousel({
@@ -346,6 +396,9 @@ export function ExecutiveDailyBriefingBrowser({
   persistedBriefing: initialPersistedBriefing,
   className = 'mb-6',
   updating = false,
+  updateDisabled = false,
+  headerActionLabel,
+  headerActionPrompt,
   onUpdateBriefing,
   onPromptRequest,
 }: {
@@ -353,12 +406,17 @@ export function ExecutiveDailyBriefingBrowser({
   persistedBriefing?: PersistedExecutiveBriefingView;
   className?: string;
   updating?: boolean;
+  updateDisabled?: boolean;
+  headerActionLabel?: string;
+  headerActionPrompt?: string;
   onUpdateBriefing?: () => void;
   onPromptRequest?: (prompt: string) => void;
 }) {
   const [briefing, setBriefing] = useState(initialBriefing);
   const [persistedBriefing, setPersistedBriefing] = useState(initialPersistedBriefing || null);
-  const [activeBriefingTab, setActiveBriefingTab] = useState<BriefingTabKey>('industryDynamics');
+  const [activeBriefingTab, setActiveBriefingTab] = useState<BriefingTabKey>(() =>
+    initialBriefingTab(initialPersistedBriefing, initialBriefing)
+  );
   const [visibleCount, setVisibleCount] = useState(20);
   const [internalUpdating, setInternalUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -374,8 +432,12 @@ export function ExecutiveDailyBriefingBrowser({
   }, [initialPersistedBriefing]);
 
   const briefingModules = useMemo(
-    () => normalizeBriefingModules(persistedBriefing?.sections),
-    [persistedBriefing]
+    () => normalizeBriefingModules(persistedBriefing?.sections, briefing),
+    [briefing, persistedBriefing]
+  );
+  const briefingTabs = useMemo(
+    () => briefingModules.map((module) => ({ key: module.key, label: module.title })),
+    [briefingModules]
   );
   const briefingEntries = useMemo(
     () => normalizeBriefingEntries(briefingModules, briefing, persistedBriefing),
@@ -391,10 +453,20 @@ export function ExecutiveDailyBriefingBrowser({
     [visibleEntries, visibleCount]
   );
   const hasMore = visibleCount < visibleEntries.length;
+  const compactEntries = renderedEntries.length > 0 && renderedEntries.every((entry) => entry.compact);
+  const activeTab = briefingTabs.find((tab) => tab.key === activeBriefingTab);
+  const hideHeaderSummary = compactEntries || activeTab?.label === '今日to do' || activeTab?.label === '分身推荐';
 
   useEffect(() => {
     setVisibleCount(20);
   }, [activeBriefingTab]);
+
+  useEffect(() => {
+    if (briefingTabs.length === 0) return;
+    if (!briefingTabs.some((tab) => tab.key === activeBriefingTab)) {
+      setActiveBriefingTab(briefingTabs[0].key);
+    }
+  }, [activeBriefingTab, briefingTabs]);
 
   useEffect(() => {
     if (!hasMore || !loadMoreRef.current) return;
@@ -426,6 +498,11 @@ export function ExecutiveDailyBriefingBrowser({
   };
 
   const handleUpdateBriefing = async () => {
+    if (headerActionPrompt) {
+      requestPrompt(headerActionPrompt);
+      return;
+    }
+    if (updateDisabled) return;
     if (onUpdateBriefing) {
       onUpdateBriefing();
       return;
@@ -476,29 +553,32 @@ export function ExecutiveDailyBriefingBrowser({
   const progressKey = currentProgress
     ? `${currentProgress.id}-${currentProgress.status}-${currentProgress.timestamp || currentProgress.detail || currentProgress.error || ''}`
     : 'waiting-for-background-run';
+  const headerButtonLabel = headerActionLabel || (updateDisabled ? '演示数据' : isUpdating ? '更新中...' : '更新资讯');
 
   return (
-    <div className={`${className} relative overflow-visible rounded-[2rem] border border-slate-200 bg-[#f7f9fc] text-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.08)]`}>
-      <div className="sticky top-0 z-20 border-b border-slate-200 bg-[#f7f9fc]/95 px-4 pt-4 backdrop-blur-md sm:px-6">
+    <div className={`${className} relative overflow-visible rounded-[1.75rem] border border-[#e1d2bf] bg-[#f9f4ec] text-stone-950 shadow-[0_28px_70px_rgba(73,48,31,0.10)]`}>
+      <div className="sticky top-0 z-20 border-b border-[#e8dccb] bg-[#f9f4ec]/95 px-4 pt-4 backdrop-blur-md sm:px-6">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-2xl font-bold text-slate-950 sm:text-3xl">每日晨报</h2>
-              <span className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-500 shadow-sm">
+              <h2 className="text-2xl font-bold text-stone-950 sm:text-3xl">Decision Briefing</h2>
+              <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs text-stone-500 shadow-sm">
                 {persistedBriefing?.dateKey || briefing.date}
               </span>
             </div>
-            <p className="mt-2 line-clamp-2 max-w-4xl text-sm leading-6 text-slate-500">
-              {persistedBriefing?.summary || briefing.headline}
-            </p>
+            {!hideHeaderSummary ? (
+              <p className="mt-2 line-clamp-2 max-w-4xl text-sm leading-6 text-stone-600">
+                {persistedBriefing?.summary || briefing.headline}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
             onClick={() => void handleUpdateBriefing()}
-            disabled={isUpdating}
-            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isUpdating || (updateDisabled && !headerActionPrompt)}
+            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#8a4d22] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#743f1b] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isUpdating ? '更新中...' : '更新资讯'}
+            {headerButtonLabel}
           </button>
         </div>
         {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
@@ -506,17 +586,17 @@ export function ExecutiveDailyBriefingBrowser({
           <div className="mb-3 h-7 overflow-hidden">
             <div
               key={progressKey}
-              className="briefing-progress-line flex min-w-0 items-center gap-2 text-sm text-slate-600"
+              className="briefing-progress-line flex min-w-0 items-center gap-2 text-sm text-stone-600"
               aria-live="polite"
             >
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${plannerStatusClass[progressStatus]}`}>
                 {plannerStatusLabel[progressStatus]}
               </span>
-              <span className="min-w-0 truncate">{progressText}</span>
+                <span className="min-w-0 truncate">{progressText}</span>
               <span className="inline-flex shrink-0 items-center gap-0.5" aria-hidden="true">
-                <span className="h-1 w-1 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.2s]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.1s]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-slate-400" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.2s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.1s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-stone-400" />
               </span>
             </div>
           </div>
@@ -532,12 +612,12 @@ export function ExecutiveDailyBriefingBrowser({
                 type="button"
                 onClick={() => setActiveBriefingTab(tab.key)}
                 className={`relative shrink-0 pb-4 text-sm font-medium transition-colors ${
-                  isActive ? 'text-slate-950' : 'text-slate-500 hover:text-slate-800'
+                  isActive ? 'text-stone-950' : 'text-stone-500 hover:text-stone-800'
                 }`}
               >
                 {tab.label}
-                <span className="ml-1 text-xs text-slate-400">{itemCount}</span>
-                {isActive ? <span className="absolute inset-x-0 bottom-0 h-1 rounded-full bg-blue-600" /> : null}
+                <span className="ml-1 text-xs text-stone-400">{itemCount}</span>
+                {isActive ? <span className="absolute inset-x-0 bottom-0 h-1 rounded-full bg-[#c78b45]" /> : null}
               </button>
             );
           })}
@@ -545,22 +625,45 @@ export function ExecutiveDailyBriefingBrowser({
       </div>
 
       <div className="p-4 sm:p-6">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className={`grid md:grid-cols-2 ${compactEntries ? 'gap-2.5' : 'gap-4'}`}>
           {renderedEntries.map((entry) => {
             const hasImages = Boolean(entry.imageUrls?.length);
+            const isCompact = Boolean(entry.compact);
+            const isTodoTab = activeTab?.label === '今日to do';
+            const priorityDisplay = isTodoTab ? getTodoPriorityDisplay(entry.title) : { title: entry.title };
             const card = (
-              <div className="h-full rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
-                <div className={`grid h-full items-start gap-4 ${hasImages ? 'lg:grid-cols-[minmax(0,1fr)_15rem]' : ''}`}>
+              <div
+                className={`h-full border border-[#e5d6c5] bg-white transition hover:-translate-y-0.5 ${
+                  isCompact
+                    ? 'rounded-xl p-3 shadow-[0_8px_20px_rgba(73,48,31,0.05)] hover:shadow-[0_12px_24px_rgba(73,48,31,0.07)]'
+                    : 'rounded-[1.5rem] p-5 shadow-[0_12px_32px_rgba(73,48,31,0.06)] hover:shadow-[0_18px_40px_rgba(73,48,31,0.09)]'
+                }`}
+              >
+                <div className={`grid h-full items-start ${isCompact ? 'gap-1.5' : `gap-4 ${hasImages ? 'lg:grid-cols-[minmax(0,1fr)_15rem]' : ''}`}`}>
                   <div className="flex min-w-0 flex-col">
-                    <h3 className="line-clamp-2 text-lg font-semibold leading-8 text-slate-900">{entry.title}</h3>
-                    <p className="mt-[14px] line-clamp-2 text-sm leading-7 text-slate-500">{entry.summary}</p>
-                    <div className="mt-[14px] flex items-center gap-3 overflow-hidden text-sm text-slate-400">
-                      <p className="min-w-0 truncate">{formatDateTime(entry.publishedAt)}</p>
-                      <span className="shrink-0 text-slate-300">·</span>
-                      <p className="min-w-0 truncate">{entry.source}</p>
-                    </div>
+                    <h3 className={isCompact ? 'text-sm font-semibold leading-5 text-stone-900' : 'line-clamp-2 text-lg font-semibold leading-8 text-stone-900'}>
+                      <span className="inline-flex items-start gap-2">
+                        {priorityDisplay.tone ? (
+                          <span
+                            aria-label={priorityDisplay.label}
+                            className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${priorityDisplay.tone}`}
+                          />
+                        ) : null}
+                        <span>{priorityDisplay.title}</span>
+                      </span>
+                    </h3>
+                    <p className={isCompact ? 'mt-1 text-xs leading-5 text-stone-500' : 'mt-[14px] line-clamp-2 text-sm leading-7 text-stone-500'}>
+                      {entry.summary}
+                    </p>
+                    {!isTodoTab ? (
+                      <div className={`${isCompact ? 'mt-1.5 flex flex-wrap items-center gap-2 text-[11px]' : 'mt-[14px] flex items-center gap-3 overflow-hidden text-sm'} text-stone-400`}>
+                        <p className={isCompact ? '' : 'min-w-0 truncate'}>{formatDateTime(entry.publishedAt)}</p>
+                        <span className="shrink-0 text-stone-300">·</span>
+                        <p className={isCompact ? '' : 'min-w-0 truncate'}>{entry.source}</p>
+                      </div>
+                    ) : null}
                   </div>
-                  {hasImages ? <PreviewCarousel images={entry.imageUrls || []} title={entry.title} /> : null}
+                  {hasImages && !isCompact ? <PreviewCarousel images={entry.imageUrls || []} title={entry.title} /> : null}
                 </div>
               </div>
             );
@@ -588,11 +691,11 @@ export function ExecutiveDailyBriefingBrowser({
 
         {visibleEntries.length === 0 ? (
           <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
-            当前分类暂时还没有可展示的资讯。
+            当前分类暂时还没有可展示的信息。
           </div>
         ) : null}
 
-        {visibleEntries.length > 0 ? (
+        {visibleEntries.length > 0 && !compactEntries ? (
           <div className="pt-5">
             {hasMore ? (
               <div ref={loadMoreRef} className="py-3 text-center text-sm text-slate-400">

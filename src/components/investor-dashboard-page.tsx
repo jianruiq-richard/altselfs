@@ -144,10 +144,10 @@ export default async function InvestorDashboardPage() {
   const efficiency = `${Math.min(95, 60 + dbUser.integrations.length * 8 + dbUser.wechatSources.length * 2)}%`;
 
   const stats = [
-    { label: '今日处理', value: totalProcessed, change: '+12%', icon: Mail, color: 'text-blue-600' },
-    { label: '未读信息', value: unreadInfo, change: '-8%', icon: MessageCircle, color: 'text-green-600' },
-    { label: '生成摘要', value: generatedSummaries, change: '+23%', icon: FileText, color: 'text-purple-600' },
-    { label: '效率提升', value: efficiency, change: '+5%', icon: TrendingUp, color: 'text-orange-600' },
+    { label: '今日处理', value: totalProcessed, change: '+12%', icon: Mail, color: 'text-[#8a4d22]' },
+    { label: '未读信息', value: unreadInfo, change: '-8%', icon: MessageCircle, color: 'text-emerald-700' },
+    { label: '生成摘要', value: generatedSummaries, change: '+23%', icon: FileText, color: 'text-[#b77a3d]' },
+    { label: '效率提升', value: efficiency, change: '+5%', icon: TrendingUp, color: 'text-[#c78b45]' },
   ] as const;
 
   const infoOpsSummaryBlocks = infoOpsAssistants.map((assistant) => ({
@@ -254,14 +254,14 @@ export default async function InvestorDashboardPage() {
 
       <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
-          <div key={stat.label} className="rounded-2xl border border-gray-200 bg-white p-6">
+          <div key={stat.label} className="rounded-2xl border border-[#e4d5c3] bg-[#fffaf3] p-6 shadow-[0_12px_30px_rgba(73,48,31,0.05)]">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">{stat.label}</p>
-                <p className="mt-1 text-3xl font-bold text-gray-900">{stat.value}</p>
-                <p className="mt-1 text-sm text-green-600">{stat.change}</p>
+                <p className="text-sm text-stone-500">{stat.label}</p>
+                <p className="mt-1 text-3xl font-bold text-stone-950">{stat.value}</p>
+                <p className="mt-1 text-sm text-emerald-700">{stat.change}</p>
               </div>
-              <div className={`rounded-lg bg-gray-50 p-3 ${stat.color}`}>
+              <div className={`rounded-lg bg-[#f5eadc] p-3 ${stat.color}`}>
                 <stat.icon className="h-6 w-6" />
               </div>
             </div>
@@ -271,31 +271,31 @@ export default async function InvestorDashboardPage() {
 
       <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">工作台</h1>
-          <p className="mt-2 max-w-3xl text-sm text-gray-500 sm:text-base">欢迎回来，这是你的 AI 员工工作概览</p>
+          <h1 className="text-2xl font-bold text-stone-950 sm:text-3xl">Decision OS 工作台</h1>
+          <p className="mt-2 max-w-3xl text-sm text-stone-500 sm:text-base">欢迎回来，这是你的跨渠道信息、分身和今日行动概览</p>
         </div>
         <div className="shrink-0 self-start">
           <Link
             href="/avatar"
-            className="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            className="inline-flex items-center rounded-xl bg-[#8a4d22] px-4 py-2 text-sm font-semibold text-white hover:bg-[#743f1b]"
           >
             管理分身
           </Link>
         </div>
       </div>
 
-      <div className="mb-8 rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4 sm:p-6">
+      <div className="mb-8 rounded-2xl border border-[#e4d5c3] bg-gradient-to-br from-[#fffaf3] to-[#efe0ce] p-4 shadow-[0_18px_45px_rgba(73,48,31,0.07)] sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#b77a3d] to-[#5b3725]">
               <Sparkles className="h-6 w-6 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">我的数字分身</h2>
-              <p className="text-sm text-gray-500">你的 AI 化身，越使用越懂你</p>
+              <h2 className="text-xl font-bold text-stone-950 sm:text-2xl">我的决策分身</h2>
+              <p className="text-sm text-stone-500">持续学习你的工作场景、判断框架和协作偏好</p>
             </div>
           </div>
-          <Link href="/avatar" className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 sm:py-2">
+          <Link href="/avatar" className="inline-flex items-center justify-center rounded-xl bg-[#8a4d22] px-4 py-3 text-sm font-semibold text-white hover:bg-[#743f1b] sm:py-2">
             管理分身
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
@@ -303,16 +303,16 @@ export default async function InvestorDashboardPage() {
 
         <div className="mt-6 grid gap-6 md:grid-cols-3">
           <div className="text-center">
-            <div className="mb-1 text-3xl font-bold text-purple-600">{completion}%</div>
-            <p className="text-sm text-gray-600">完整度</p>
+            <div className="mb-1 text-3xl font-bold text-[#8a4d22]">{completion}%</div>
+            <p className="text-sm text-stone-600">完整度</p>
           </div>
           <div className="text-center">
-            <div className="mb-1 text-3xl font-bold text-blue-600">{tokens.toLocaleString()}</div>
-            <p className="text-sm text-gray-600">知识库 tokens</p>
+            <div className="mb-1 text-3xl font-bold text-[#b77a3d]">{tokens.toLocaleString()}</div>
+            <p className="text-sm text-stone-600">Context tokens</p>
           </div>
           <div className="text-center">
-            <div className="mb-1 text-3xl font-bold text-green-600">{learnedSkills}</div>
-            <p className="text-sm text-gray-600">已学习技能</p>
+            <div className="mb-1 text-3xl font-bold text-emerald-700">{learnedSkills}</div>
+            <p className="text-sm text-stone-600">已学习信号源</p>
           </div>
         </div>
       </div>

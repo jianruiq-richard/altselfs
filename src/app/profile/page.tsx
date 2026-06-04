@@ -109,7 +109,7 @@ export default function ProfilePage() {
       <form onSubmit={onSave} className="max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
         <div>
           <label className="block text-sm text-slate-600 mb-1">身份</label>
-          <p className="text-slate-900 font-medium">OPC成员</p>
+          <p className="text-slate-900 font-medium">Altselfs 用户</p>
         </div>
         <div>
           <label className="block text-sm text-slate-600 mb-1">邮箱</label>
