@@ -147,7 +147,7 @@ function defaultBriefingModules(briefing?: ExecutiveDailyBriefingView): Briefing
       title,
       content:
         title === '信息汇总'
-          ? '点击“更新资讯”后，总裁秘书会重新汇总公众号、Gmail、飞书、小红书等渠道的重要信息。'
+          ? '点击“更新信息”后，总裁秘书会重新汇总公众号、Gmail、飞书、小红书等渠道的重要信息。'
           : '更新晨报后，这里会展示适合用个人决策分身继续讨论、跟进或匹配的人/事。',
     };
   });
@@ -522,7 +522,7 @@ export function ExecutiveDailyBriefingBrowser({
 
       const startData = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
       if (!res.ok || typeof startData.runId !== 'string') {
-        setError(typeof startData.error === 'string' ? startData.error : '更新资讯失败');
+        setError(typeof startData.error === 'string' ? startData.error : '更新信息失败');
         return;
       }
 
@@ -532,7 +532,7 @@ export function ExecutiveDailyBriefingBrowser({
       });
       const data = isRecord(run.result) ? run.result : {};
       if (run.status === 'ERROR') {
-        setError(run.error || (typeof data.error === 'string' ? data.error : '更新资讯失败'));
+        setError(run.error || (typeof data.error === 'string' ? data.error : '更新信息失败'));
         return;
       }
 
@@ -540,7 +540,7 @@ export function ExecutiveDailyBriefingBrowser({
       setPersistedBriefing(normalizePersistedBriefing(data.persistedBriefing));
       setVisibleCount(20);
     } catch (err) {
-      setError(err instanceof Error ? `更新资讯失败：${err.message}` : '更新资讯失败，请稍后重试');
+      setError(err instanceof Error ? `更新信息失败：${err.message}` : '更新信息失败，请稍后重试');
     } finally {
       setInternalUpdating(false);
       setCurrentProgress(null);
@@ -553,7 +553,7 @@ export function ExecutiveDailyBriefingBrowser({
   const progressKey = currentProgress
     ? `${currentProgress.id}-${currentProgress.status}-${currentProgress.timestamp || currentProgress.detail || currentProgress.error || ''}`
     : 'waiting-for-background-run';
-  const headerButtonLabel = headerActionLabel || (updateDisabled ? '演示数据' : isUpdating ? '更新中...' : '更新资讯');
+  const headerButtonLabel = headerActionLabel || (updateDisabled ? '演示数据' : isUpdating ? '更新中...' : '更新信息');
 
   return (
     <div className={`${className} relative overflow-visible rounded-[1.75rem] border border-[#e1d2bf] bg-[#f9f4ec] text-stone-950 shadow-[0_28px_70px_rgba(73,48,31,0.10)]`}>
@@ -572,14 +572,25 @@ export function ExecutiveDailyBriefingBrowser({
               </p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={() => void handleUpdateBriefing()}
-            disabled={isUpdating || (updateDisabled && !headerActionPrompt)}
-            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#8a4d22] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#743f1b] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {headerButtonLabel}
-          </button>
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => void handleUpdateBriefing()}
+              disabled={isUpdating || (updateDisabled && !headerActionPrompt)}
+              className="inline-flex items-center justify-center rounded-xl bg-[#8a4d22] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#743f1b] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {headerButtonLabel}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                requestPrompt('请基于今天的 Decision Briefing，和我的个人决策分身一起讨论：哪些信息最重要、今天应该先做什么、哪些判断需要进一步验证。')
+              }
+              className="inline-flex items-center justify-center rounded-xl border border-[#d9c5af] bg-white/70 px-4 py-2.5 text-sm font-semibold text-[#6b3d1d] transition hover:bg-white hover:text-[#4f2b15]"
+            >
+              与分身进行讨论
+            </button>
+          </div>
         </div>
         {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
         {isUpdating ? (
