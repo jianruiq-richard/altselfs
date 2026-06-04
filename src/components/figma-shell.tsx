@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Users, Settings, Sparkles, Briefcase, UserCircle, Mail, MessageSquare, LogOut } from 'lucide-react';
 import { SignOutButton, useUser } from '@clerk/nextjs';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 type NavItem = {
   key: string;
@@ -31,6 +31,7 @@ export function FigmaShell({
 }) {
   const pathname = usePathname();
   const { user } = useUser();
+  const [mobileUserMenuOpen, setMobileUserMenuOpen] = useState(false);
 
   const navItems = useMemo<NavItem[]>(
     () => [
@@ -138,18 +139,49 @@ export function FigmaShell({
             <p className="text-lg font-bold text-stone-950">Altselfs</p>
             <p className="truncate text-xs text-stone-500">Decision OS</p>
           </div>
-          <Link
-            href="/profile"
-            className="flex min-w-0 items-center gap-3 rounded-xl border border-[#e4d5c3] bg-[#f6efe7] px-3 py-2"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#b77a3d] to-[#5b3725] text-sm font-semibold text-white">
-              {(user?.fullName || '用').slice(0, 1)}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-stone-950">{user?.fullName || '用户名'}</p>
-              <p className="truncate text-xs text-stone-500">{user?.primaryEmailAddress?.emailAddress || 'user@example.com'}</p>
-            </div>
-          </Link>
+          <div className="relative min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileUserMenuOpen((open) => !open)}
+              aria-expanded={mobileUserMenuOpen}
+              aria-haspopup="menu"
+              className="flex min-w-0 items-center gap-3 rounded-xl border border-[#e4d5c3] bg-[#f6efe7] px-3 py-2 text-left"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#b77a3d] to-[#5b3725] text-sm font-semibold text-white">
+                {(user?.fullName || '用').slice(0, 1)}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-stone-950">{user?.fullName || '用户名'}</p>
+                <p className="max-w-[8.5rem] truncate text-xs text-stone-500">{user?.primaryEmailAddress?.emailAddress || 'user@example.com'}</p>
+              </div>
+            </button>
+            {mobileUserMenuOpen ? (
+              <div
+                role="menu"
+                className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-44 overflow-hidden rounded-xl border border-[#e4d5c3] bg-[#fffaf3] py-1 shadow-[0_18px_45px_rgba(73,48,31,0.16)]"
+              >
+                <Link
+                  href="/profile"
+                  role="menuitem"
+                  onClick={() => setMobileUserMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-stone-700 hover:bg-[#f5eadc] hover:text-stone-950"
+                >
+                  <UserCircle className="h-4 w-4" />
+                  编辑资料
+                </Link>
+                <SignOutButton redirectUrl="/">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-stone-700 hover:bg-[#f5eadc] hover:text-stone-950"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    退出登录
+                  </button>
+                </SignOutButton>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
