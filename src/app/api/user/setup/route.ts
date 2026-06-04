@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
 import { isDemoMode } from '@/lib/dev-auth';
 import { buildFallbackEmail } from '@/lib/user-identifier';
+import { Prisma } from '@prisma/client';
 
 function deriveTwinDisplayBase(input: {
   name?: string | null;
@@ -35,6 +36,52 @@ function defaultTwinName(input: {
 
 const DEFAULT_TWIN_PROMPT =
   '你是该用户的数字分身。请保持专业、清晰、真诚的表达，基于已知信息回答问题；信息不足时主动追问，不要编造事实。';
+
+const DEFAULT_WECHAT_SOURCE_OWNER_EMAIL = 'jianruiq@163.com';
+
+async function seedDefaultWechatSourcesForInvestor(investorId: string) {
+  const templateUser = await prisma.user.findFirst({
+    where: { email: DEFAULT_WECHAT_SOURCE_OWNER_EMAIL },
+    select: {
+      id: true,
+      wechatSources: {
+        select: {
+          biz: true,
+          displayName: true,
+          description: true,
+          lastArticleUrl: true,
+          profile: true,
+          profileUpdatedAt: true,
+          profileConfidence: true,
+          lastProfileEvidence: true,
+          lastScannedAt: true,
+        },
+      },
+    },
+  });
+
+  if (!templateUser || templateUser.id === investorId || templateUser.wechatSources.length === 0) {
+    return;
+  }
+
+  await prisma.investorWechatSource.createMany({
+    data: templateUser.wechatSources.map((source) => ({
+      investorId,
+      biz: source.biz,
+      displayName: source.displayName,
+      description: source.description,
+      lastArticleUrl: source.lastArticleUrl,
+      profileUpdatedAt: source.profileUpdatedAt,
+      profileConfidence: source.profileConfidence,
+      lastScannedAt: source.lastScannedAt,
+      ...(source.profile === null ? {} : { profile: source.profile as Prisma.InputJsonValue }),
+      ...(source.lastProfileEvidence === null
+        ? {}
+        : { lastProfileEvidence: source.lastProfileEvidence as Prisma.InputJsonValue }),
+    })),
+    skipDuplicates: true,
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -123,6 +170,7 @@ export async function POST(req: NextRequest) {
             },
           });
         }
+        await seedDefaultWechatSourcesForInvestor(user.id);
       }
 
       return NextResponse.json({ user });
@@ -155,6 +203,7 @@ export async function POST(req: NextRequest) {
           status: 'ACTIVE',
         },
       });
+      await seedDefaultWechatSourcesForInvestor(user.id);
     }
 
     return NextResponse.json({ user });
