@@ -212,14 +212,22 @@ function sleep(ms: number) {
 }
 
 async function waitForExecutiveRun(runId: string, onUpdate?: (run: ExecutiveRunPollResult) => void) {
+  let transientUnauthorizedCount = 0;
   for (let attempt = 0; attempt < 320; attempt += 1) {
     const res = await fetch(`/api/investor/executive-assistant?runId=${encodeURIComponent(runId)}`, {
       cache: 'no-store',
+      credentials: 'same-origin',
     });
     const data = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
     if (!res.ok) {
+      if (res.status === 401 && transientUnauthorizedCount < 3) {
+        transientUnauthorizedCount += 1;
+        await sleep(1500);
+        continue;
+      }
       throw new Error(typeof data.error === 'string' ? data.error : '查询任务状态失败');
     }
+    transientUnauthorizedCount = 0;
     onUpdate?.(data);
     if (data.status === 'SUCCESS' || data.status === 'ERROR') return data;
     await sleep(typeof data.pollIntervalMs === 'number' ? data.pollIntervalMs : 3000);

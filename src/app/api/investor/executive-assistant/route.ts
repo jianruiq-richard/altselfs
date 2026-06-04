@@ -27,6 +27,7 @@ const EXECUTIVE_AGENT_TYPE = 'EXECUTIVE';
 const MAX_SYSTEM_PROMPT_LENGTH = 30000;
 const STREAM_HEARTBEAT_INTERVAL_MS = 10000;
 const ASYNC_POLL_INTERVAL_MS = 3000;
+const ACTIVE_RUN_STATUSES = ['QUEUED', 'RUNNING'] as const;
 
 export const maxDuration = 800;
 
@@ -731,7 +732,7 @@ async function getLatestActiveExecutiveAssistantRun(investorId: string) {
   const run = await prisma.executiveAssistantRun.findFirst({
     where: {
       investorId,
-      status: { in: ['QUEUED', 'RUNNING'] },
+      status: { in: [...ACTIVE_RUN_STATUSES] },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -850,6 +851,11 @@ export async function POST(req: NextRequest) {
   };
 
   if (req.nextUrl.searchParams.get('async') === '1') {
+    const activeRun = await getLatestActiveExecutiveAssistantRun(investor.id);
+    if (activeRun) {
+      return NextResponse.json(activeRun, { status: 202 });
+    }
+
     const run = await createExecutiveAssistantRun(turnParams);
     return NextResponse.json(
       {
