@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export type ExecutiveDailyBriefingView = {
   date: string;
@@ -422,6 +422,7 @@ export function ExecutiveDailyBriefingBrowser({
   const [error, setError] = useState<string | null>(null);
   const [currentProgress, setCurrentProgress] = useState<PlannerTraceItem | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setBriefing(initialBriefing);
@@ -497,6 +498,74 @@ export function ExecutiveDailyBriefingBrowser({
     window.location.href = `/investor/chat/100?prompt=${encodeURIComponent(prompt)}`;
   };
 
+  const applyRunResult = useCallback((run: ExecutiveRunPollResult) => {
+    const data = isRecord(run.result) ? run.result : {};
+    if (run.status === 'ERROR') {
+      setError(run.error || (typeof data.error === 'string' ? data.error : '更新信息失败'));
+      return;
+    }
+
+    if (isRecord(data.briefing)) setBriefing(data.briefing as ExecutiveDailyBriefingView);
+    setPersistedBriefing(normalizePersistedBriefing(data.persistedBriefing));
+    setVisibleCount(20);
+  }, []);
+
+  const resumeExecutiveRun = useCallback(
+    async (runId: string) => {
+      if (!runId || activeRunIdRef.current === runId) return;
+      activeRunIdRef.current = runId;
+      setInternalUpdating(true);
+      setError(null);
+      try {
+        const run = await waitForExecutiveRun(runId, (nextRun) => {
+          const trace = normalizePlannerTrace(nextRun.plannerTrace);
+          setCurrentProgress(getCurrentProgress(trace));
+        });
+        applyRunResult(run);
+      } catch (err) {
+        setError(err instanceof Error ? `更新信息失败：${err.message}` : '更新信息失败，请稍后重试');
+      } finally {
+        activeRunIdRef.current = null;
+        setInternalUpdating(false);
+        setCurrentProgress(null);
+      }
+    },
+    [applyRunResult]
+  );
+
+  useEffect(() => {
+    if (onUpdateBriefing) return;
+    let cancelled = false;
+
+    async function loadActiveRun() {
+      try {
+        const res = await fetch('/api/investor/executive-assistant', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        });
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        if (cancelled || !res.ok) return;
+
+        if (isRecord(data.briefing)) setBriefing(data.briefing as ExecutiveDailyBriefingView);
+        setPersistedBriefing(normalizePersistedBriefing(data.persistedBriefing));
+
+        const activeRun = isRecord(data.activeRun) ? (data.activeRun as ExecutiveRunPollResult) : null;
+        if (activeRun?.runId && activeRun.status !== 'SUCCESS' && activeRun.status !== 'ERROR') {
+          const trace = normalizePlannerTrace(activeRun.plannerTrace);
+          setCurrentProgress(getCurrentProgress(trace));
+          void resumeExecutiveRun(activeRun.runId);
+        }
+      } catch {
+        // Keep the server-rendered briefing visible if the status refresh fails.
+      }
+    }
+
+    void loadActiveRun();
+    return () => {
+      cancelled = true;
+    };
+  }, [onUpdateBriefing, resumeExecutiveRun]);
+
   const handleUpdateBriefing = async () => {
     if (headerActionPrompt) {
       requestPrompt(headerActionPrompt);
@@ -526,22 +595,16 @@ export function ExecutiveDailyBriefingBrowser({
         return;
       }
 
+      activeRunIdRef.current = startData.runId;
       const run = await waitForExecutiveRun(startData.runId, (nextRun) => {
         const trace = normalizePlannerTrace(nextRun.plannerTrace);
         setCurrentProgress(getCurrentProgress(trace));
       });
-      const data = isRecord(run.result) ? run.result : {};
-      if (run.status === 'ERROR') {
-        setError(run.error || (typeof data.error === 'string' ? data.error : '更新信息失败'));
-        return;
-      }
-
-      if (isRecord(data.briefing)) setBriefing(data.briefing as ExecutiveDailyBriefingView);
-      setPersistedBriefing(normalizePersistedBriefing(data.persistedBriefing));
-      setVisibleCount(20);
+      applyRunResult(run);
     } catch (err) {
       setError(err instanceof Error ? `更新信息失败：${err.message}` : '更新信息失败，请稍后重试');
     } finally {
+      activeRunIdRef.current = null;
       setInternalUpdating(false);
       setCurrentProgress(null);
     }
