@@ -27,6 +27,7 @@ const EXECUTIVE_AGENT_TYPE = 'EXECUTIVE';
 const MAX_SYSTEM_PROMPT_LENGTH = 30000;
 const STREAM_HEARTBEAT_INTERVAL_MS = 10000;
 const ASYNC_POLL_INTERVAL_MS = 3000;
+const ASYNC_RUN_STALE_AFTER_MS = 30 * 60 * 1000;
 const ACTIVE_RUN_STATUSES = ['QUEUED', 'RUNNING'] as const;
 
 export const maxDuration = 800;
@@ -56,6 +57,7 @@ type StoredExecutiveRunRequest = {
 };
 
 const USER_CANCELLED_RUN_ERROR = '用户已强制停止本次执行';
+const STALE_RUN_ERROR = '任务已超过 30 分钟未更新，系统已自动终止旧的执行状态。';
 
 function buildBriefingContext(briefing: {
   date: string;
@@ -803,6 +805,53 @@ function serializeExecutiveAssistantRun(run: {
   };
 }
 
+function isStaleExecutiveAssistantRun(run: { status: string; updatedAt: Date }) {
+  if (!ACTIVE_RUN_STATUSES.includes(run.status as (typeof ACTIVE_RUN_STATUSES)[number])) return false;
+  return Date.now() - run.updatedAt.getTime() > ASYNC_RUN_STALE_AFTER_MS;
+}
+
+async function expireStaleExecutiveAssistantRun(run: {
+  id: string;
+  investorId: string;
+  plannerTrace: Prisma.JsonValue | null;
+}) {
+  const plannerTrace = [
+    ...normalizeStoredPlannerTrace(run.plannerTrace),
+    {
+      ...getExecutivePlannerStepDefinition('generate_reply'),
+      status: 'ERROR',
+      detail: STALE_RUN_ERROR,
+      error: STALE_RUN_ERROR,
+      timestamp: new Date().toISOString(),
+      payload: {
+        staleRunExpired: true,
+      },
+    },
+  ] satisfies ExecutivePlannerTraceItem[];
+
+  await prisma.executiveAssistantRun.updateMany({
+    where: {
+      id: run.id,
+      investorId: run.investorId,
+      status: { in: [...ACTIVE_RUN_STATUSES] },
+    },
+    data: {
+      status: 'ERROR',
+      error: STALE_RUN_ERROR,
+      result: toPrismaJson({
+        error: STALE_RUN_ERROR,
+        plannerTrace,
+      }),
+      plannerTrace: toPrismaJson(plannerTrace),
+      completedAt: new Date(),
+    },
+  });
+
+  return prisma.executiveAssistantRun.findUnique({
+    where: { id: run.id },
+  });
+}
+
 async function createExecutiveAssistantRun(params: {
   investorId: string;
   threadId?: string | null;
@@ -838,6 +887,11 @@ async function getExecutiveAssistantRunResponse(req: NextRequest, investorId: st
     return NextResponse.json({ error: 'Run not found' }, { status: 404 });
   }
 
+  if (isStaleExecutiveAssistantRun(run)) {
+    const expiredRun = await expireStaleExecutiveAssistantRun(run);
+    return NextResponse.json(serializeExecutiveAssistantRun(expiredRun || run));
+  }
+
   if (run.status === 'QUEUED') {
     scheduleExecutiveAssistantRun(run.id, investorId);
   }
@@ -846,19 +900,27 @@ async function getExecutiveAssistantRunResponse(req: NextRequest, investorId: st
 }
 
 async function getLatestActiveExecutiveAssistantRun(investorId: string) {
-  const run = await prisma.executiveAssistantRun.findFirst({
+  const runs = await prisma.executiveAssistantRun.findMany({
     where: {
       investorId,
       status: { in: [...ACTIVE_RUN_STATUSES] },
     },
     orderBy: { createdAt: 'desc' },
+    take: 10,
   });
 
-  if (!run) return null;
-  if (run.status === 'QUEUED') {
-    scheduleExecutiveAssistantRun(run.id, investorId);
+  for (const run of runs) {
+    if (isStaleExecutiveAssistantRun(run)) {
+      await expireStaleExecutiveAssistantRun(run);
+      continue;
+    }
+    if (run.status === 'QUEUED') {
+      scheduleExecutiveAssistantRun(run.id, investorId);
+    }
+    return serializeExecutiveAssistantRun(run);
   }
-  return serializeExecutiveAssistantRun(run);
+
+  return null;
 }
 
 export async function GET(req: NextRequest) {
