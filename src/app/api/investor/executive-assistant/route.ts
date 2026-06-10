@@ -206,6 +206,23 @@ function toPrismaJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value === undefined ? null : value)) as Prisma.InputJsonValue;
 }
 
+function formatRouteError(error: unknown) {
+  if (error instanceof Error && error.message) return error.message.slice(0, 500);
+  return String(error || 'unknown error').slice(0, 500);
+}
+
+function routeErrorResponse(operation: string, error: unknown) {
+  const detail = formatRouteError(error);
+  console.error(`[executive-assistant] ${operation} failed:`, error);
+  return NextResponse.json(
+    {
+      error: `${operation}失败：${detail}`,
+      code: 'EXECUTIVE_ASSISTANT_ROUTE_ERROR',
+    },
+    { status: 500 }
+  );
+}
+
 function normalizeStoredPlannerTrace(value: Prisma.JsonValue | null): ExecutivePlannerTraceItem[] {
   if (!Array.isArray(value)) return [];
   return (value as unknown[])
@@ -845,156 +862,172 @@ async function getLatestActiveExecutiveAssistantRun(investorId: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const investor = await getInvestorOrNull();
-  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const investor = await getInvestorOrNull();
+    if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const runResponse = await getExecutiveAssistantRunResponse(req, investor.id);
-  if (runResponse) return runResponse;
+    const runResponse = await getExecutiveAssistantRunResponse(req, investor.id);
+    if (runResponse) return runResponse;
 
-  const [briefing, promptConfig, persistedBriefing] = await Promise.all([
-    loadBriefing(investor.id),
-    getExecutiveAgentConfig(investor.id),
-    getTodayExecutiveBriefing(investor.id),
-  ]);
-  if (!briefing) return NextResponse.json({ error: 'Investor not found' }, { status: 404 });
+    const [briefing, promptConfig, persistedBriefing] = await Promise.all([
+      loadBriefing(investor.id),
+      getExecutiveAgentConfig(investor.id),
+      getTodayExecutiveBriefing(investor.id),
+    ]);
+    if (!briefing) return NextResponse.json({ error: 'Investor not found' }, { status: 404 });
 
-  let thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
-  if (!thread) {
-    const created = await ensureThread({
-      investorId: investor.id,
-      agentType: EXECUTIVE_AGENT_TYPE,
+    let thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
+    if (!thread) {
+      const created = await ensureThread({
+        investorId: investor.id,
+        agentType: EXECUTIVE_AGENT_TYPE,
+      });
+      await appendThreadMessage({
+        threadId: created.id,
+        role: 'ASSISTANT',
+        content: `早上好！我是总裁秘书Momo。\n\n${briefing.headline}\n\n你可以问我：\n1) 各部门工作情况\n2) 今日重点事项\n3) 外界信息变化`,
+      });
+      thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
+    }
+
+    const activeRun = await getLatestActiveExecutiveAssistantRun(investor.id);
+
+    return NextResponse.json({
+      threadId: thread?.id || null,
+      messages: thread ? toClientMessages(thread.messages) : [],
+      briefing,
+      persistedBriefing,
+      planner: getExecutivePlannerDefinition(),
+      activeRun,
+      agentConfig: {
+        systemPrompt: promptConfig.systemPrompt,
+        defaultSystemPrompt: promptConfig.defaultSystemPrompt,
+        hasCustomPrompt: Boolean(promptConfig.customPrompt),
+      },
     });
-    await appendThreadMessage({
-      threadId: created.id,
-      role: 'ASSISTANT',
-      content: `早上好！我是总裁秘书Momo。\n\n${briefing.headline}\n\n你可以问我：\n1) 各部门工作情况\n2) 今日重点事项\n3) 外界信息变化`,
-    });
-    thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
+  } catch (error) {
+    return routeErrorResponse('查询任务状态', error);
   }
-
-  const activeRun = await getLatestActiveExecutiveAssistantRun(investor.id);
-
-  return NextResponse.json({
-    threadId: thread?.id || null,
-    messages: thread ? toClientMessages(thread.messages) : [],
-    briefing,
-    persistedBriefing,
-    planner: getExecutivePlannerDefinition(),
-    activeRun,
-    agentConfig: {
-      systemPrompt: promptConfig.systemPrompt,
-      defaultSystemPrompt: promptConfig.defaultSystemPrompt,
-      hasCustomPrompt: Boolean(promptConfig.customPrompt),
-    },
-  });
 }
 
 export async function PUT(req: NextRequest) {
-  const investor = await getInvestorOrNull();
-  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const investor = await getInvestorOrNull();
+    if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = (await req.json().catch(() => null)) as { systemPrompt?: unknown; resetToDefault?: boolean } | null;
-  const resetToDefault = Boolean(body?.resetToDefault);
-  const systemPrompt = resetToDefault ? '' : normalizeSystemPrompt(body?.systemPrompt);
+    const body = (await req.json().catch(() => null)) as { systemPrompt?: unknown; resetToDefault?: boolean } | null;
+    const resetToDefault = Boolean(body?.resetToDefault);
+    const systemPrompt = resetToDefault ? '' : normalizeSystemPrompt(body?.systemPrompt);
 
-  if (!resetToDefault && !systemPrompt) {
-    return NextResponse.json({ error: 'system prompt 不能为空' }, { status: 400 });
-  }
+    if (!resetToDefault && !systemPrompt) {
+      return NextResponse.json({ error: 'system prompt 不能为空' }, { status: 400 });
+    }
 
-  const saved = await prisma.investorAgentConfig.upsert({
-    where: {
-      investorId_agentType: {
+    const saved = await prisma.investorAgentConfig.upsert({
+      where: {
+        investorId_agentType: {
+          investorId: investor.id,
+          agentType: EXECUTIVE_AGENT_TYPE,
+        },
+      },
+      update: {
+        systemPrompt: resetToDefault ? null : systemPrompt,
+      },
+      create: {
         investorId: investor.id,
         agentType: EXECUTIVE_AGENT_TYPE,
+        systemPrompt: resetToDefault ? null : systemPrompt,
       },
-    },
-    update: {
-      systemPrompt: resetToDefault ? null : systemPrompt,
-    },
-    create: {
-      investorId: investor.id,
-      agentType: EXECUTIVE_AGENT_TYPE,
-      systemPrompt: resetToDefault ? null : systemPrompt,
-    },
-  });
+    });
 
-  const customPrompt = saved.systemPrompt?.trim() || '';
-  return NextResponse.json({
-    ok: true,
-    agentConfig: {
-      systemPrompt: customPrompt || EXECUTIVE_MOMO_SYSTEM_PROMPT,
-      defaultSystemPrompt: EXECUTIVE_MOMO_SYSTEM_PROMPT,
-      hasCustomPrompt: Boolean(customPrompt),
-    },
-  });
+    const customPrompt = saved.systemPrompt?.trim() || '';
+    return NextResponse.json({
+      ok: true,
+      agentConfig: {
+        systemPrompt: customPrompt || EXECUTIVE_MOMO_SYSTEM_PROMPT,
+        defaultSystemPrompt: EXECUTIVE_MOMO_SYSTEM_PROMPT,
+        hasCustomPrompt: Boolean(customPrompt),
+      },
+    });
+  } catch (error) {
+    return routeErrorResponse('保存 system prompt', error);
+  }
 }
 
 export async function POST(req: NextRequest) {
-  const investor = await getInvestorOrNull();
-  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  console.log('[executive-assistant] POST start', {
-    investorId: investor.id,
-    stream: req.nextUrl.searchParams.get('stream') === '1',
-  });
+  try {
+    const investor = await getInvestorOrNull();
+    if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.log('[executive-assistant] POST start', {
+      investorId: investor.id,
+      stream: req.nextUrl.searchParams.get('stream') === '1',
+    });
 
-  const body = (await req.json().catch(() => null)) as { messages?: unknown; threadId?: string | null } | null;
-  const messages = normalizeMessages(body?.messages);
-  const latest = messages[messages.length - 1];
-  if (!latest || latest.role !== 'user') {
-    return NextResponse.json({ error: '最后一条消息必须是用户消息' }, { status: 400 });
-  }
-
-  const turnParams = {
-    investorId: investor.id,
-    threadId: body?.threadId || null,
-    messages,
-  };
-
-  if (req.nextUrl.searchParams.get('async') === '1') {
-    const activeRun = await getLatestActiveExecutiveAssistantRun(investor.id);
-    if (activeRun) {
-      return NextResponse.json(activeRun, { status: 202 });
+    const body = (await req.json().catch(() => null)) as { messages?: unknown; threadId?: string | null } | null;
+    const messages = normalizeMessages(body?.messages);
+    const latest = messages[messages.length - 1];
+    if (!latest || latest.role !== 'user') {
+      return NextResponse.json({ error: '最后一条消息必须是用户消息' }, { status: 400 });
     }
 
-    const run = await createExecutiveAssistantRun(turnParams);
-    return NextResponse.json(
-      {
-        runId: run.id,
-        status: run.status,
-        planner: run.planner || getExecutivePlannerDefinition(),
-        plannerTrace: run.plannerTrace || [],
-        pollIntervalMs: ASYNC_POLL_INTERVAL_MS,
-      },
-      { status: 202 }
-    );
-  }
+    const turnParams = {
+      investorId: investor.id,
+      threadId: body?.threadId || null,
+      messages,
+    };
 
-  if (req.nextUrl.searchParams.get('stream') === '1') {
-    return streamExecutiveAssistantTurn(turnParams);
-  }
+    if (req.nextUrl.searchParams.get('async') === '1') {
+      const activeRun = await getLatestActiveExecutiveAssistantRun(investor.id);
+      if (activeRun) {
+        return NextResponse.json(activeRun, { status: 202 });
+      }
 
-  const result = await runExecutiveAssistantTurn(turnParams);
-  return NextResponse.json(result.body, { status: result.status });
+      const run = await createExecutiveAssistantRun(turnParams);
+      return NextResponse.json(
+        {
+          runId: run.id,
+          status: run.status,
+          planner: run.planner || getExecutivePlannerDefinition(),
+          plannerTrace: run.plannerTrace || [],
+          pollIntervalMs: ASYNC_POLL_INTERVAL_MS,
+        },
+        { status: 202 }
+      );
+    }
+
+    if (req.nextUrl.searchParams.get('stream') === '1') {
+      return streamExecutiveAssistantTurn(turnParams);
+    }
+
+    const result = await runExecutiveAssistantTurn(turnParams);
+    return NextResponse.json(result.body, { status: result.status });
+  } catch (error) {
+    return routeErrorResponse('启动秘书任务', error);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
-  const investor = await getInvestorOrNull();
-  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const investor = await getInvestorOrNull();
+    if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = (await req.json().catch(() => null)) as { threadId?: string | null; runId?: string | null } | null;
-  const runId = typeof body?.runId === 'string' ? body.runId.trim() : '';
-  if (runId) return cancelExecutiveAssistantRun(runId, investor.id);
+    const body = (await req.json().catch(() => null)) as { threadId?: string | null; runId?: string | null } | null;
+    const runId = typeof body?.runId === 'string' ? body.runId.trim() : '';
+    if (runId) return cancelExecutiveAssistantRun(runId, investor.id);
 
-  const threadId = typeof body?.threadId === 'string' ? body.threadId : '';
-  if (!threadId) return NextResponse.json({ ok: true });
+    const threadId = typeof body?.threadId === 'string' ? body.threadId : '';
+    if (!threadId) return NextResponse.json({ ok: true });
 
-  await prisma.agentThread.deleteMany({
-    where: {
-      id: threadId,
-      investorId: investor.id,
-      agentType: EXECUTIVE_AGENT_TYPE,
-    },
-  });
+    await prisma.agentThread.deleteMany({
+      where: {
+        id: threadId,
+        investorId: investor.id,
+        agentType: EXECUTIVE_AGENT_TYPE,
+      },
+    });
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return routeErrorResponse('停止或删除秘书任务', error);
+  }
 }

@@ -166,6 +166,11 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function getRunPollErrorMessage(data: ExecutiveRunPollResult, status: number) {
+  const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : '查询任务状态失败';
+  return `查询任务状态失败（HTTP ${status}）：${detail}`;
+}
+
 function getStoredActiveRunId() {
   if (typeof window === 'undefined') return '';
   return window.sessionStorage.getItem(EXECUTIVE_ACTIVE_RUN_STORAGE_KEY) || '';
@@ -201,7 +206,7 @@ async function waitForExecutiveRun(
         await sleep(1500);
         continue;
       }
-      throw Object.assign(new Error(typeof data.error === 'string' ? data.error : '查询任务状态失败'), {
+      throw Object.assign(new Error(getRunPollErrorMessage(data, res.status)), {
         status: res.status,
       });
     }

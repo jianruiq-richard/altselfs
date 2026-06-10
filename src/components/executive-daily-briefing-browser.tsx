@@ -248,6 +248,11 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function getRunPollErrorMessage(data: ExecutiveRunPollResult, status: number) {
+  const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : '查询任务状态失败';
+  return `查询任务状态失败（HTTP ${status}）：${detail}`;
+}
+
 async function waitForExecutiveRun(runId: string, onUpdate?: (run: ExecutiveRunPollResult) => void) {
   let transientUnauthorizedCount = 0;
   for (let attempt = 0; attempt < 320; attempt += 1) {
@@ -262,7 +267,7 @@ async function waitForExecutiveRun(runId: string, onUpdate?: (run: ExecutiveRunP
         await sleep(1500);
         continue;
       }
-      throw new Error(typeof data.error === 'string' ? data.error : '查询任务状态失败');
+      throw new Error(getRunPollErrorMessage(data, res.status));
     }
     transientUnauthorizedCount = 0;
     onUpdate?.(data);
