@@ -201,7 +201,9 @@ async function waitForExecutiveRun(
         await sleep(1500);
         continue;
       }
-      throw new Error(typeof data.error === 'string' ? data.error : '查询任务状态失败');
+      throw Object.assign(new Error(typeof data.error === 'string' ? data.error : '查询任务状态失败'), {
+        status: res.status,
+      });
     }
     transientUnauthorizedCount = 0;
     onUpdate(data);
@@ -235,6 +237,8 @@ export default function InvestorAgentChatPage() {
   const [plannerSteps, setPlannerSteps] = useState<PlannerStep[]>([]);
   const [plannerTrace, setPlannerTrace] = useState<PlannerTraceItem[]>([]);
   const [plannerPanelOpen, setPlannerPanelOpen] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [stoppingRun, setStoppingRun] = useState(false);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
 
@@ -298,6 +302,7 @@ export default function InvestorAgentChatPage() {
     ) => {
       if (!runId || activeRunIdRef.current === runId) return;
       activeRunIdRef.current = runId;
+      setActiveRunId(runId);
       storeActiveRunId(runId);
       setSending(true);
       setError(null);
@@ -311,14 +316,46 @@ export default function InvestorAgentChatPage() {
         applyTerminalRun(run, fallbackMessages, options);
         clearStoredActiveRunId(runId);
       } catch (err) {
+        if (isRecord(err) && err.status === 404) clearStoredActiveRunId(runId);
         setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
       } finally {
         activeRunIdRef.current = null;
+        setActiveRunId(null);
         setSending(false);
+        setStoppingRun(false);
       }
     },
     [applyTerminalRun]
   );
+
+  const stopExecutiveRun = useCallback(async () => {
+    const runId = activeRunIdRef.current || activeRunId;
+    if (!runId || stoppingRun) return;
+    setStoppingRun(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/investor/executive-assistant', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
+      if (!res.ok) {
+        setError(typeof data.error === 'string' ? data.error : '停止任务失败');
+        return;
+      }
+      activeRunIdRef.current = null;
+      setActiveRunId(null);
+      setSending(false);
+      clearStoredActiveRunId(runId);
+      setPlannerTrace(normalizePlannerTrace(data.plannerTrace || (isRecord(data.result) ? data.result.plannerTrace : null)));
+      setError('已停止本次执行。');
+    } catch (err) {
+      setError(err instanceof Error ? `停止任务失败：${err.message}` : '停止任务失败，请稍后重试');
+    } finally {
+      setStoppingRun(false);
+    }
+  }, [activeRunId, stoppingRun]);
 
   const loadData = useCallback(async () => {
     if (!isExecutive) return;
@@ -396,6 +433,7 @@ export default function InvestorAgentChatPage() {
       setPlannerTrace(normalizePlannerTrace(startData.plannerTrace));
 
       activeRunIdRef.current = startData.runId;
+      setActiveRunId(startData.runId);
       const run = await waitForExecutiveRun(startData.runId, (nextRun) => {
         setPlannerSteps(normalizePlannerSteps(nextRun.planner));
         setPlannerTrace(normalizePlannerTrace(nextRun.plannerTrace));
@@ -407,7 +445,9 @@ export default function InvestorAgentChatPage() {
       setMessages(messages);
     } finally {
       activeRunIdRef.current = null;
+      setActiveRunId(null);
       setSending(false);
+      setStoppingRun(false);
     }
   };
 
@@ -572,17 +612,29 @@ export default function InvestorAgentChatPage() {
               Momo 会根据每条指令动态生成本轮计划；发送后实时显示，完成后自动收起。
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setPlannerPanelOpen((open) => !open)}
-            className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-              hasPlannerErrors
-                ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
-                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            {plannerPanelOpen ? '收起过程' : plannerButtonText}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {sending && activeRunId ? (
+              <button
+                type="button"
+                onClick={() => void stopExecutiveRun()}
+                disabled={stoppingRun}
+                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                {stoppingRun ? '停止中...' : '强制停止'}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setPlannerPanelOpen((open) => !open)}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                hasPlannerErrors
+                  ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {plannerPanelOpen ? '收起过程' : plannerButtonText}
+            </button>
+          </div>
         </div>
 
         {plannerPanelOpen ? (

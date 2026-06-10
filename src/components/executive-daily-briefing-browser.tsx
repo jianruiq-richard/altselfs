@@ -419,6 +419,8 @@ export function ExecutiveDailyBriefingBrowser({
   );
   const [visibleCount, setVisibleCount] = useState(20);
   const [internalUpdating, setInternalUpdating] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [stoppingRun, setStoppingRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentProgress, setCurrentProgress] = useState<PlannerTraceItem | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -514,6 +516,7 @@ export function ExecutiveDailyBriefingBrowser({
     async (runId: string) => {
       if (!runId || activeRunIdRef.current === runId) return;
       activeRunIdRef.current = runId;
+      setActiveRunId(runId);
       setInternalUpdating(true);
       setError(null);
       try {
@@ -526,12 +529,43 @@ export function ExecutiveDailyBriefingBrowser({
         setError(err instanceof Error ? `更新信息失败：${err.message}` : '更新信息失败，请稍后重试');
       } finally {
         activeRunIdRef.current = null;
+        setActiveRunId(null);
         setInternalUpdating(false);
         setCurrentProgress(null);
+        setStoppingRun(false);
       }
     },
     [applyRunResult]
   );
+
+  const handleStopRun = async () => {
+    const runId = activeRunIdRef.current || activeRunId;
+    if (!runId || stoppingRun) return;
+    setStoppingRun(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/investor/executive-assistant', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ runId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
+      if (!res.ok) {
+        setError(typeof data.error === 'string' ? data.error : '停止任务失败');
+        return;
+      }
+      activeRunIdRef.current = null;
+      setActiveRunId(null);
+      setInternalUpdating(false);
+      setCurrentProgress(null);
+      setError('已停止本次更新。');
+    } catch (err) {
+      setError(err instanceof Error ? `停止任务失败：${err.message}` : '停止任务失败，请稍后重试');
+    } finally {
+      setStoppingRun(false);
+    }
+  };
 
   useEffect(() => {
     if (onUpdateBriefing) return;
@@ -596,6 +630,7 @@ export function ExecutiveDailyBriefingBrowser({
       }
 
       activeRunIdRef.current = startData.runId;
+      setActiveRunId(startData.runId);
       const run = await waitForExecutiveRun(startData.runId, (nextRun) => {
         const trace = normalizePlannerTrace(nextRun.plannerTrace);
         setCurrentProgress(getCurrentProgress(trace));
@@ -605,8 +640,10 @@ export function ExecutiveDailyBriefingBrowser({
       setError(err instanceof Error ? `更新信息失败：${err.message}` : '更新信息失败，请稍后重试');
     } finally {
       activeRunIdRef.current = null;
+      setActiveRunId(null);
       setInternalUpdating(false);
       setCurrentProgress(null);
+      setStoppingRun(false);
     }
   };
 
@@ -636,6 +673,16 @@ export function ExecutiveDailyBriefingBrowser({
             ) : null}
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+            {isUpdating && activeRunId ? (
+              <button
+                type="button"
+                onClick={() => void handleStopRun()}
+                disabled={stoppingRun}
+                className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-white/80 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {stoppingRun ? '停止中...' : '停止'}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => void handleUpdateBriefing()}

@@ -55,6 +55,8 @@ type StoredExecutiveRunRequest = {
   messages?: ClientMessage[];
 };
 
+const USER_CANCELLED_RUN_ERROR = '用户已强制停止本次执行';
+
 function buildBriefingContext(briefing: {
   date: string;
   generatedTime: string;
@@ -202,6 +204,48 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function toPrismaJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value === undefined ? null : value)) as Prisma.InputJsonValue;
+}
+
+function normalizeStoredPlannerTrace(value: Prisma.JsonValue | null): ExecutivePlannerTraceItem[] {
+  if (!Array.isArray(value)) return [];
+  return (value as unknown[])
+    .map((item) => {
+      if (!isRecord(item) || typeof item.id !== 'string' || typeof item.title !== 'string') return null;
+      const status = typeof item.status === 'string' ? item.status : 'PENDING';
+      if (!['PENDING', 'RUNNING', 'SUCCESS', 'ERROR', 'SKIPPED'].includes(status)) return null;
+      return {
+        id: item.id,
+        title: item.title,
+        description: typeof item.description === 'string' ? item.description : '',
+        agentType: typeof item.agentType === 'string' ? item.agentType : undefined,
+        skillId: typeof item.skillId === 'string' ? (item.skillId as ExecutivePlannerTraceItem['skillId']) : undefined,
+        status: status as ExecutivePlannerTraceItem['status'],
+        detail: typeof item.detail === 'string' ? item.detail : undefined,
+        error: typeof item.error === 'string' ? item.error : undefined,
+        timestamp: typeof item.timestamp === 'string' ? item.timestamp : '',
+        payload: item.payload,
+      };
+    })
+    .filter(Boolean) as ExecutivePlannerTraceItem[];
+}
+
+function buildCancelledPlannerTrace(value: Prisma.JsonValue | null) {
+  const trace = normalizeStoredPlannerTrace(value);
+  const last = trace[trace.length - 1];
+  const stopStepId = last?.id || 'generate_reply';
+  return [
+    ...trace,
+    {
+      ...getExecutivePlannerStepDefinition(stopStepId),
+      status: 'ERROR',
+      detail: USER_CANCELLED_RUN_ERROR,
+      error: USER_CANCELLED_RUN_ERROR,
+      timestamp: new Date().toISOString(),
+      payload: {
+        cancelledByUser: true,
+      },
+    },
+  ] satisfies ExecutivePlannerTraceItem[];
 }
 
 function normalizeStoredRunRequest(value: unknown): StoredExecutiveRunRequest | null {
@@ -585,8 +629,8 @@ async function executeExecutiveAssistantRun(runId: string, investorId: string) {
   });
   const request = normalizeStoredRunRequest(run?.request);
   if (!request) {
-    await prisma.executiveAssistantRun.update({
-      where: { id: runId },
+    await prisma.executiveAssistantRun.updateMany({
+      where: { id: runId, status: 'RUNNING' },
       data: {
         status: 'ERROR',
         error: '异步任务参数无效',
@@ -605,8 +649,8 @@ async function executeExecutiveAssistantRun(runId: string, investorId: string) {
     if (event.type === 'step') {
       plannerTrace.push(event.step);
     }
-    await prisma.executiveAssistantRun.update({
-      where: { id: runId },
+    await prisma.executiveAssistantRun.updateMany({
+      where: { id: runId, status: 'RUNNING' },
       data: {
         planner: toPrismaJson(planner),
         plannerTrace: toPrismaJson(plannerTrace),
@@ -622,8 +666,8 @@ async function executeExecutiveAssistantRun(runId: string, investorId: string) {
       onPlannerEvent: persistPlannerEvent,
     });
     const error = typeof result.body.error === 'string' ? result.body.error : null;
-    await prisma.executiveAssistantRun.update({
-      where: { id: runId },
+    await prisma.executiveAssistantRun.updateMany({
+      where: { id: runId, status: 'RUNNING' },
       data: {
         status: result.status >= 400 ? 'ERROR' : 'SUCCESS',
         result: toPrismaJson(result.body),
@@ -635,8 +679,8 @@ async function executeExecutiveAssistantRun(runId: string, investorId: string) {
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown error';
-    await prisma.executiveAssistantRun.update({
-      where: { id: runId },
+    await prisma.executiveAssistantRun.updateMany({
+      where: { id: runId, status: 'RUNNING' },
       data: {
         status: 'ERROR',
         error: `AI代理执行失败：${detail}`,
@@ -647,6 +691,62 @@ async function executeExecutiveAssistantRun(runId: string, investorId: string) {
       },
     });
   }
+}
+
+async function cancelExecutiveAssistantRun(runId: string, investorId: string) {
+  const run = await prisma.executiveAssistantRun.findFirst({
+    where: {
+      id: runId,
+      investorId,
+    },
+    select: {
+      id: true,
+      status: true,
+      result: true,
+      error: true,
+      planner: true,
+      plannerTrace: true,
+      createdAt: true,
+      updatedAt: true,
+      startedAt: true,
+      completedAt: true,
+    },
+  });
+
+  if (!run) {
+    return NextResponse.json({ error: 'Run not found' }, { status: 404 });
+  }
+
+  if (!ACTIVE_RUN_STATUSES.includes(run.status as (typeof ACTIVE_RUN_STATUSES)[number])) {
+    return NextResponse.json(serializeExecutiveAssistantRun(run));
+  }
+
+  const plannerTrace = buildCancelledPlannerTrace(run.plannerTrace);
+  const result = {
+    error: USER_CANCELLED_RUN_ERROR,
+    plannerTrace,
+  };
+
+  await prisma.executiveAssistantRun.updateMany({
+    where: {
+      id: run.id,
+      investorId,
+      status: { in: [...ACTIVE_RUN_STATUSES] },
+    },
+    data: {
+      status: 'ERROR',
+      error: USER_CANCELLED_RUN_ERROR,
+      result: toPrismaJson(result),
+      plannerTrace: toPrismaJson(plannerTrace),
+      completedAt: new Date(),
+    },
+  });
+
+  const cancelledRun = await prisma.executiveAssistantRun.findUnique({
+    where: { id: run.id },
+  });
+
+  return NextResponse.json(cancelledRun ? serializeExecutiveAssistantRun(cancelledRun) : { ok: true });
 }
 
 function scheduleExecutiveAssistantRun(runId: string, investorId: string) {
@@ -881,7 +981,10 @@ export async function DELETE(req: NextRequest) {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = (await req.json().catch(() => null)) as { threadId?: string | null } | null;
+  const body = (await req.json().catch(() => null)) as { threadId?: string | null; runId?: string | null } | null;
+  const runId = typeof body?.runId === 'string' ? body.runId.trim() : '';
+  if (runId) return cancelExecutiveAssistantRun(runId, investor.id);
+
   const threadId = typeof body?.threadId === 'string' ? body.threadId : '';
   if (!threadId) return NextResponse.json({ ok: true });
 
