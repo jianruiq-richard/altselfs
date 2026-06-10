@@ -137,6 +137,147 @@ const STRUCTURED_MODULE_PLANS: StructuredBriefingModulePlan[] = [
   { key: 'twinRecommendation', title: '分身推荐' },
 ];
 
+const EXECUTIVE_SKILL_IDS: ExecutiveSkillId[] = [
+  'web_search',
+  'wechat_articles',
+  'xiaohongshu_insights',
+  'gmail_insights',
+  'feishu_insights',
+  'internal_briefing',
+  'persist_briefing',
+  'chat_reply',
+];
+
+export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
+  name: 'executive_turn_plan',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      objective: {
+        type: 'string',
+        description: '本轮执行目标，用一句中文说明要完成什么。',
+      },
+      updateBriefing: {
+        type: 'boolean',
+        description: '本轮是否需要更新并持久化今日晨报。',
+      },
+      useWebSearch: {
+        type: 'boolean',
+        description: '本轮是否需要调用联网搜索助手。',
+      },
+      skills: {
+        type: 'array',
+        description: '本轮实际需要执行或明确说明不可用的 skill id。',
+        items: {
+          type: 'string',
+          enum: EXECUTIVE_SKILL_IDS,
+        },
+      },
+      skillDecisions: {
+        type: 'array',
+        description: '对每个候选 skill 的选择/跳过决策。必须覆盖 availableSkills 中出现的 skillId。',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            skillId: {
+              type: 'string',
+              enum: EXECUTIVE_SKILL_IDS,
+            },
+            available: {
+              type: 'boolean',
+              description: '该 skill 对当前账户和当前代码实现是否可用。',
+            },
+            selected: {
+              type: 'boolean',
+              description: '本轮是否选择执行该 skill。',
+            },
+            reason: {
+              type: 'string',
+              description: '为什么本轮选择或不选择该 skill。不可用时必须说明是未实现、缺少集成还是没有数据源。',
+            },
+          },
+          required: ['skillId', 'available', 'selected', 'reason'],
+        },
+      },
+      wechatTaskSpec: {
+        anyOf: [
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              objective: {
+                type: 'string',
+                description: '微信公众号助手本轮需要搜集整理的信息目标。',
+              },
+              sourceSelectionCriteria: {
+                type: 'array',
+                items: { type: 'string' },
+                description: '用于筛选公众号画像的主题、领域、关键词或排除偏好。',
+              },
+              returnFormat: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  sections: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                  instructions: {
+                    type: 'string',
+                    description: '微信 agent 返回给晨报秘书时必须遵守的格式说明。',
+                  },
+                },
+                required: ['sections', 'instructions'],
+              },
+            },
+            required: ['objective', 'sourceSelectionCriteria', 'returnFormat'],
+          },
+          { type: 'null' },
+        ],
+      },
+      steps: {
+        type: 'array',
+        description: '按执行顺序列出本轮 planner step。只输出本轮真正需要执行或说明跳过的步骤。',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            id: {
+              type: 'string',
+              description: '短 snake_case step id。优先使用系统已有 step id。',
+            },
+            title: {
+              type: 'string',
+              description: '中文步骤标题。',
+            },
+            description: {
+              type: 'string',
+              description: '为什么本轮需要该步骤。',
+            },
+            skillId: {
+              anyOf: [
+                { type: 'string', enum: EXECUTIVE_SKILL_IDS },
+                { type: 'null' },
+              ],
+            },
+            agentType: {
+              anyOf: [
+                { type: 'string' },
+                { type: 'null' },
+              ],
+            },
+          },
+          required: ['id', 'title', 'description', 'skillId', 'agentType'],
+        },
+      },
+    },
+    required: ['objective', 'updateBriefing', 'useWebSearch', 'skills', 'skillDecisions', 'wechatTaskSpec', 'steps'],
+  },
+};
+
 const EXECUTIVE_SKILL_REGISTRY: Array<{
   skillId: ExecutiveSkillId;
   name: string;
@@ -715,7 +856,11 @@ async function planExecutiveTurn(params: {
         '每轮都要根据用户指令、已雇佣AI员工、可用skill和权限生成本轮执行计划。',
         '不要输出固定全量能力清单；只输出本轮真正需要执行或需要说明不可用的步骤。',
         '如果选择 web_search，必须根据总裁秘书system prompt / 用户偏好规划有目的的搜索范围，不要泛搜。',
-        '只输出JSON，不要输出markdown。',
+        '你必须只输出一个符合 response_format JSON Schema 的 JSON 对象，不要输出 markdown、解释文字或额外字段。',
+        'skills 只能包含本轮真实要执行或需要说明不可用的 skillId；不可用的 skill 不要标 selected=true。',
+        'skillDecisions 必须覆盖所有 availableSkills，并解释每个 skill 为什么选择或跳过。',
+        '如果不选择 wechat_articles，wechatTaskSpec 必须为 null；如果选择，则必须给出可执行的 objective/sourceSelectionCriteria/returnFormat。',
+        'steps 只描述本轮执行计划，不要编造代码里没有实现的 runner；skillId/agentType 没有时使用 null。',
       ].join('\n'),
     },
     {
@@ -731,37 +876,22 @@ async function planExecutiveTurn(params: {
           hiredTeams: Array.from(params.context.hiredTeamKeys),
           internalFacts: params.context.internalFacts,
         },
-        outputSchema: {
-          objective: 'string',
-          updateBriefing: 'boolean',
-          useWebSearch: 'boolean',
-          skills: ['web_search|wechat_articles|xiaohongshu_insights|gmail_insights|feishu_insights|internal_briefing|persist_briefing|chat_reply'],
-          skillDecisions: [
-            {
-              skillId: 'web_search|wechat_articles|xiaohongshu_insights|gmail_insights|feishu_insights|internal_briefing|persist_briefing|chat_reply',
-              available: 'boolean',
-              selected: 'boolean',
-              reason: '为什么本轮选择或不选择这个 skill，尤其要说明 web_search 未选择的原因',
-            },
-          ],
-          wechatTaskSpec: {
-            objective: '微信agent需要搜集整理的信息目标',
-            sourceSelectionCriteria: ['用于筛选公众号画像的主题/领域/关键词/排除偏好'],
-            returnFormat: {
-              sections: ['核心结论', '证据文章', '机会/风险', '建议动作'],
-              instructions: '微信agent必须按此格式返回给晨报秘书，方便秘书合并其他渠道',
-            },
-          },
-          steps: [
-            {
-              id: 'short_snake_case',
-              title: '中文步骤标题',
-              description: '为什么本轮需要这个步骤',
-              skillId: 'optional skill id',
-              agentType: 'optional subagent type',
-            },
-          ],
-        },
+        requiredOutputContract:
+          '输出必须匹配本请求的 response_format JSON Schema：objective/updateBriefing/useWebSearch/skills/skillDecisions/wechatTaskSpec/steps。不要新增字段。',
+        stepIdHints: [
+          'load_context',
+          'plan_subagents',
+          'call_web_search',
+          'call_wechat_agent',
+          'call_xiaohongshu_agent',
+          'call_gmail_agent',
+          'call_feishu_agent',
+          'merge_results',
+          'generate_briefing_summary',
+          'structure_briefing_json',
+          'persist_briefing',
+          'generate_reply',
+        ],
       }),
     },
   ];
@@ -770,7 +900,7 @@ async function planExecutiveTurn(params: {
     const raw = await createJsonChatCompletion(
       messages,
       getOpenRouterModel('EXECUTIVE_PLANNER'),
-      { maxTokens: 12000 }
+      { maxTokens: 12000, jsonSchema: EXECUTIVE_PLANNER_JSON_SCHEMA }
     );
     return normalizeExecutivePlan(raw, params.context, params.userQuery, params.executiveSystemPrompt);
   } catch (error) {

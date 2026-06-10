@@ -18,6 +18,12 @@ export interface ChatMessage {
   content: string;
 }
 
+type JsonSchemaResponseFormat = {
+  name: string;
+  strict?: boolean;
+  schema: Record<string, unknown>;
+};
+
 type OpenRouterServerTool =
   | {
       type: 'openrouter:web_search';
@@ -216,13 +222,19 @@ async function requestCompletion(
   };
 }
 
-async function requestJsonCompletion(messages: ChatMessage[], model: string, maxTokens?: number) {
+async function requestJsonCompletion(
+  messages: ChatMessage[],
+  model: string,
+  options?: { maxTokens?: number; jsonSchema?: JsonSchemaResponseFormat }
+) {
   const completion = await openai.chat.completions.create({
     model,
     messages,
     temperature: 0.1,
-    max_tokens: maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
-    response_format: { type: 'json_object' },
+    max_tokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
+    response_format: options?.jsonSchema
+      ? { type: 'json_schema', json_schema: options.jsonSchema }
+      : { type: 'json_object' },
   }, {
     timeout: OPENROUTER_REQUEST_TIMEOUT_MS,
   });
@@ -361,7 +373,7 @@ export async function createChatCompletionWithMetadata(
 export async function createJsonChatCompletion(
   messages: ChatMessage[],
   model?: string,
-  options?: { maxTokens?: number }
+  options?: { maxTokens?: number; jsonSchema?: JsonSchemaResponseFormat }
 ) {
   const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]).slice(0, OPENROUTER_MAX_MODEL_ATTEMPTS);
 
@@ -375,15 +387,17 @@ export async function createJsonChatCompletion(
       model: currentModel,
       timeoutMs: OPENROUTER_REQUEST_TIMEOUT_MS,
       maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
+      responseFormat: options?.jsonSchema ? { type: 'json_schema', name: options.jsonSchema.name } : { type: 'json_object' },
     });
     try {
-      const raw = await requestJsonCompletion(messages, currentModel, options?.maxTokens);
+      const raw = await requestJsonCompletion(messages, currentModel, options);
       await appendOpenRouterTrace({
         type: 'json',
         status: raw.trim() ? 'success' : 'empty',
         model: currentModel,
         durationMs: Date.now() - startedAt,
         maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
+        responseFormat: options?.jsonSchema ? { type: 'json_schema', name: options.jsonSchema.name } : { type: 'json_object' },
         messages,
         output: raw,
       });
