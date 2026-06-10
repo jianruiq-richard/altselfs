@@ -138,8 +138,9 @@ const STRUCTURED_MODULE_PLANS: StructuredBriefingModulePlan[] = [
   { key: 'twinRecommendation', title: '分身推荐' },
 ];
 
-const EXECUTIVE_SKILL_IDS: ExecutiveSkillId[] = [
-  'web_search',
+const WEB_SEARCH_ASSISTANT_ENABLED = false;
+
+const EXECUTIVE_PLANNER_SKILL_IDS: ExecutiveSkillId[] = [
   'wechat_articles',
   'xiaohongshu_insights',
   'gmail_insights',
@@ -166,14 +167,15 @@ export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
       },
       useWebSearch: {
         type: 'boolean',
-        description: '本轮是否需要调用联网搜索助手。',
+        enum: [false],
+        description: '本轮是否需要调用联网搜索助手。当前默认禁用，必须为 false。',
       },
       skills: {
         type: 'array',
         description: '本轮实际需要执行或明确说明不可用的 skill id。',
         items: {
           type: 'string',
-          enum: EXECUTIVE_SKILL_IDS,
+          enum: EXECUTIVE_PLANNER_SKILL_IDS,
         },
       },
       skillDecisions: {
@@ -185,7 +187,7 @@ export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
           properties: {
             skillId: {
               type: 'string',
-              enum: EXECUTIVE_SKILL_IDS,
+              enum: EXECUTIVE_PLANNER_SKILL_IDS,
             },
             available: {
               type: 'boolean',
@@ -260,7 +262,7 @@ export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
             },
             skillId: {
               anyOf: [
-                { type: 'string', enum: EXECUTIVE_SKILL_IDS },
+                { type: 'string', enum: EXECUTIVE_PLANNER_SKILL_IDS },
                 { type: 'null' },
               ],
             },
@@ -345,8 +347,14 @@ export function getExecutivePlannerDefinition() {
   return [];
 }
 
+function getActiveExecutiveSkillRegistry() {
+  return WEB_SEARCH_ASSISTANT_ENABLED
+    ? EXECUTIVE_SKILL_REGISTRY
+    : EXECUTIVE_SKILL_REGISTRY.filter((skill) => skill.skillId !== 'web_search');
+}
+
 export function getExecutiveSkillRegistry() {
-  return EXECUTIVE_SKILL_REGISTRY;
+  return getActiveExecutiveSkillRegistry();
 }
 
 async function emitPlannerStep(
@@ -603,11 +611,12 @@ function hasSkill(plan: ExecutiveTurnPlan, skillId: ExecutiveSkillId) {
 
 function normalizeSkillId(value: unknown): ExecutiveSkillId | null {
   if (typeof value !== 'string') return null;
-  const allowed = new Set<ExecutiveSkillId>(EXECUTIVE_SKILL_REGISTRY.map((skill) => skill.skillId));
+  const allowed = new Set<ExecutiveSkillId>(getActiveExecutiveSkillRegistry().map((skill) => skill.skillId));
   return allowed.has(value as ExecutiveSkillId) ? (value as ExecutiveSkillId) : null;
 }
 
 function isSkillAvailable(skillId: ExecutiveSkillId, context: LoadedExecutiveContext) {
+  if (skillId === 'web_search') return WEB_SEARCH_ASSISTANT_ENABLED;
   if (skillId === 'wechat_articles') return context.hasWechatSources;
   if (skillId === 'xiaohongshu_insights') return context.integrationProviders.has('XIAOHONGSHU');
   if (skillId === 'gmail_insights') return context.integrationProviders.has('GMAIL');
@@ -661,7 +670,7 @@ function normalizeSkillDecisions(params: {
     }
   }
   const selected = new Set(params.skills);
-  return EXECUTIVE_SKILL_REGISTRY.map((skill) => {
+  return getActiveExecutiveSkillRegistry().map((skill) => {
     const raw = rawBySkill.get(skill.skillId);
     const available =
       typeof raw?.available === 'boolean'
@@ -725,7 +734,7 @@ function fallbackExecutivePlan(params: {
   plannerError?: string;
 }): ExecutiveTurnPlan {
   const updateBriefing = shouldUpdateBriefing(params.userQuery);
-  const useWebSearch = shouldUseExternalWeb(params.userQuery);
+  const useWebSearch = WEB_SEARCH_ASSISTANT_ENABLED && shouldUseExternalWeb(params.userQuery);
   const includeWechat = shouldIncludeWechat(params.userQuery, params.context);
   const skills: ExecutiveSkillId[] = ['internal_briefing', 'chat_reply'];
   const steps: ExecutivePlannerStepDefinition[] = [
@@ -799,8 +808,9 @@ function normalizeExecutivePlan(
   const parsed = JSON.parse(raw) as Record<string, unknown>;
   const updateBriefing =
     typeof parsed.updateBriefing === 'boolean' ? parsed.updateBriefing : shouldUpdateBriefing(userQuery);
-  const useWebSearch =
+  const parsedUseWebSearch =
     typeof parsed.useWebSearch === 'boolean' ? parsed.useWebSearch : shouldUseExternalWeb(userQuery);
+  const useWebSearch = WEB_SEARCH_ASSISTANT_ENABLED && parsedUseWebSearch;
   const skills = Array.isArray(parsed.skills)
     ? parsed.skills.map(normalizeSkillId).filter((skill): skill is ExecutiveSkillId => Boolean(skill))
     : [];
@@ -869,7 +879,7 @@ async function planExecutiveTurn(params: {
   context: LoadedExecutiveContext;
   executiveSystemPrompt?: string;
 }): Promise<ExecutiveTurnPlan> {
-  const availableSkills = EXECUTIVE_SKILL_REGISTRY.map((skill) => ({
+  const availableSkills = getActiveExecutiveSkillRegistry().map((skill) => ({
     skillId: skill.skillId,
     name: skill.name,
     description: skill.description,
@@ -884,7 +894,6 @@ async function planExecutiveTurn(params: {
         '你是总裁秘书Momo的动态planner。',
         '每轮都要根据用户指令、已雇佣AI员工、可用skill和权限生成本轮执行计划。',
         '不要输出固定全量能力清单；只输出本轮真正需要执行或需要说明不可用的步骤。',
-        '如果选择 web_search，必须根据总裁秘书system prompt / 用户偏好规划有目的的搜索范围，不要泛搜。',
         '你必须只输出一个符合 response_format JSON Schema 的 JSON 对象，不要输出 markdown、解释文字或额外字段。',
         'skills 只能包含本轮真实要执行或需要说明不可用的 skillId；不可用的 skill 不要标 selected=true。',
         'skillDecisions 必须覆盖所有 availableSkills，并解释每个 skill 为什么选择或跳过。',
@@ -897,7 +906,6 @@ async function planExecutiveTurn(params: {
       content: JSON.stringify({
         userQuery: params.userQuery,
         executiveSystemPrompt: params.executiveSystemPrompt || '',
-        webSearchPolicy: buildWebSearchIntent(params.userQuery, params.executiveSystemPrompt),
         availableSkills,
         accountContext: {
           hasWechatSources: params.context.hasWechatSources,
@@ -910,7 +918,6 @@ async function planExecutiveTurn(params: {
         stepIdHints: [
           'load_context',
           'plan_subagents',
-          'call_web_search',
           'call_wechat_agent',
           'call_xiaohongshu_agent',
           'call_gmail_agent',
@@ -1266,7 +1273,7 @@ async function runStructuredModuleAgent(input: {
   });
 
   if (input.module.key === 'twinRecommendation') {
-    const module: StructuredBriefingModule = {
+    const structuredModule: StructuredBriefingModule = {
       title: '分身推荐',
       content: '分身推荐模块暂未开通；本轮不基于信息汇总素材生成推荐。',
       items: [],
@@ -1275,7 +1282,7 @@ async function runStructuredModuleAgent(input: {
       detail: '分身推荐模块暂未开通，已跳过素材推荐生成。',
       payload: { itemCount: 0, unavailable: true },
     });
-    return module;
+    return structuredModule;
   }
 
   const messages: ChatMessage[] = [
@@ -1600,12 +1607,12 @@ export async function updateTodayExecutiveBriefing(params: {
   const calledAgents: ExecutiveBriefingDocument['calledAgents'] = [];
   const subagentTasks: Array<Promise<AgentRunResult>> = [];
   const includeWechat = hasSkill(plan, 'wechat_articles') && context.hasWechatSources;
-  const useWeb = plan.useWebSearch || hasSkill(plan, 'web_search');
+  const useWeb = WEB_SEARCH_ASSISTANT_ENABLED && (plan.useWebSearch || hasSkill(plan, 'web_search'));
   const webSearchChannelInstruction = buildWebSearchChannelInstruction(params.userQuery);
   const webSearchIntent = buildWebSearchIntent(params.userQuery, params.executiveSystemPrompt);
   const webSearchDecision = plan.skillDecisions.find((item) => item.skillId === 'web_search');
 
-  if (!useWeb) {
+  if (!useWeb && WEB_SEARCH_ASSISTANT_ENABLED) {
     await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'SKIPPED', {
       detail: webSearchDecision?.reason || 'Planner 未选择联网搜索助手。',
       payload: { selected: false, decision: webSearchDecision },
