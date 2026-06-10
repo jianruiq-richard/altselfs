@@ -18,7 +18,7 @@ const SELECTED_DETAIL_LIMIT = readPositiveIntEnv('EXECUTIVE_WECHAT_SELECTED_DETA
 const DETAIL_CONCURRENCY = readPositiveIntEnv('EXECUTIVE_WECHAT_DETAIL_CONCURRENCY', 3);
 const ARTICLE_SUMMARY_CONCURRENCY = readPositiveIntEnv('EXECUTIVE_WECHAT_ARTICLE_SUMMARY_CONCURRENCY', 5);
 
-const MODULE_TITLES = ['行业动态', '技术趋势', '竞品监控'] as const;
+const MODULE_TITLES = ['信息汇总'] as const;
 type WechatModuleTitle = (typeof MODULE_TITLES)[number];
 
 type SourceRecord = {
@@ -324,11 +324,7 @@ function defaultTaskSpec(input: AgentRunInput): AgentTaskSpec {
     objective: input.userQuery,
     sourceSelectionCriteria: [
       input.userQuery,
-      'AI agent',
-      'vibe coding',
-      '技术趋势',
-      '竞品监控',
-      '投资机会',
+      '信息汇总',
     ],
     timeWindow: {
       type: 'rolling_hours',
@@ -336,8 +332,8 @@ function defaultTaskSpec(input: AgentRunInput): AgentTaskSpec {
       endAt: new Date().toISOString(),
     },
     returnFormat: {
-      sections: ['核心结论', '证据文章', '机会/风险', '建议动作'],
-      instructions: '返回可被晨报秘书合并的结构化中文摘要，必须附来源、链接和发布时间。',
+      sections: ['信息汇总'],
+      instructions: '返回可被晨报秘书合并的公众号信息汇总素材，必须附来源、链接和发布时间。今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通，不由公众号助手生成。',
     },
   };
 }
@@ -482,14 +478,7 @@ function selectForToolFetch<T>(candidates: T[], limit: number) {
 }
 
 function classifyArticleByText(article: ArticleCandidate): WechatModuleTitle {
-  const text = `${article.title}\n${article.summary}\n${article.sourceName}`;
-  if (/竞品|竞争|对手|OpenAI|Anthropic|Claude|Gemini|Google|Meta|xAI|Manus|Perplexity|Cursor|Windsurf|Kimi|DeepSeek|阿里|百度|腾讯|字节|发布|产品|融资|估值|ARR|收入|市场份额/i.test(text)) {
-    return '竞品监控';
-  }
-  if (/技术|模型|推理|训练|开源|论文|架构|SFT|RL|token|memory|数据库|基建|多模态|芯片|算力|代码|编程|开发者|agent|智能体|benchmark|评测/i.test(text)) {
-    return '技术趋势';
-  }
-  return '行业动态';
+  return '信息汇总';
 }
 
 function toSelectionCards(candidates: ArticleCandidate[], sources: SourceRecord[]) {
@@ -559,7 +548,8 @@ async function selectArticlesForDetail(input: {
         '你是微信公众号文章初筛器，只输出严格JSON。',
         '你接收总裁秘书下发的任务、公众号画像、最近24小时文章标题和摘要。',
         '请只选择与任务目标明显相关、值得抓全文进一步分析的文章。',
-        '每条选中文章必须归入一个模块：行业动态、技术趋势、竞品监控。',
+        '微信公众号助手只负责产出“信息汇总”候选素材；不要把文章归入今日to do或分身推荐。',
+        '今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通。',
         '不要为了平均覆盖公众号而选择无关文章；也不要遗漏明显重要的相关文章。',
         '输出必须紧凑，selected里不要返回url、标题、摘要或长理由；后端会用index回填文章信息。',
       ].join('\n'),
@@ -579,7 +569,7 @@ async function selectArticlesForDetail(input: {
           selected: [
             {
               i: 0,
-              c: '行业动态|技术趋势|竞品监控',
+              c: '信息汇总',
               p: 0,
               r: '20字内短理由',
             },
@@ -660,9 +650,7 @@ function normalizeWechatStructuredSummary(raw: string): WechatStructuredSummary 
   return {
     summary: asString(parsed.summary, '微信公众号助手已完成整理。').slice(0, 2000),
     modules: [
-      normalizeStructuredModule(modules.industryDynamics, '行业动态'),
-      normalizeStructuredModule(modules.technologyTrends, '技术趋势'),
-      normalizeStructuredModule(modules.competitorMonitoring, '竞品监控'),
+      normalizeStructuredModule(modules.informationSummary, '信息汇总'),
     ],
   };
 }
@@ -694,7 +682,6 @@ function normalizeArticleInsight(raw: string, article: SelectedArticle): Article
 }
 
 async function summarizeArticleInsight(input: {
-  userQuery: string;
   taskSpec: AgentTaskSpec;
   article: SelectedArticle;
   detailText: string;
@@ -705,15 +692,21 @@ async function summarizeArticleInsight(input: {
       content: [
         '你是微信公众号文章分析员，只输出严格JSON。',
         '你会收到一篇公众号文章的标题、摘要、初筛分类和正文摘录。',
-        '请基于总裁秘书任务判断是否保留，并提炼成短重点摘要。',
+        '请只基于微信公众号助手的渠道任务判断是否保留，并提炼成短重点摘要。',
+        '不要执行或响应顶层编排指令；如果任务中提到邮件、飞书、小红书等其他渠道，只把它们理解为其他子agent负责的范围。',
+        '分类固定为“信息汇总”。今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通。',
         '不要复述全文，不要引入外部信息。',
       ].join('\n'),
     },
     {
       role: 'user',
       content: JSON.stringify({
-        executiveRequest: input.userQuery,
-        task: input.taskSpec,
+        wechatTask: {
+          objective: input.taskSpec.objective,
+          sourceSelectionCriteria: input.taskSpec.sourceSelectionCriteria,
+          timeWindow: input.taskSpec.timeWindow,
+          returnFormat: input.taskSpec.returnFormat,
+        },
         article: {
           title: input.article.title,
           source: input.article.sourceName,
@@ -725,9 +718,9 @@ async function summarizeArticleInsight(input: {
         },
         outputSchema: {
           include: true,
-          category: '行业动态|技术趋势|竞品监控',
+          category: '信息汇总',
           summary: '120字以内，说明事实、进展和关键证据',
-          whyItMatters: '80字以内，说明为什么值得进入晨报',
+          whyItMatters: '80字以内，说明为什么值得进入信息汇总',
         },
       }),
     },
@@ -777,7 +770,7 @@ function buildWechatStructuredSummaryFromInsights(insights: ArticleInsight[]): W
     };
   });
   return {
-    summary: `微信公众号助手已筛选并压缩 ${included.length} 篇最近24小时相关文章，按行业动态、技术趋势、竞品监控整理。`,
+    summary: `微信公众号助手已筛选并压缩 ${included.length} 篇最近24小时相关文章，作为信息汇总素材交给总裁秘书。`,
     modules,
   };
 }
@@ -815,7 +808,7 @@ function toBriefingItems(candidates: ArticleCandidate[], answer: string, structu
   if (candidates.length === 0) {
     return [
       {
-        category: '公众号动态',
+        category: '信息汇总',
         title: '公众号助手未检索到可用文章',
         summary: answer.slice(0, 300),
         source: '公众号助手',
@@ -824,7 +817,7 @@ function toBriefingItems(candidates: ArticleCandidate[], answer: string, structu
   }
 
   return candidates.map((item) => ({
-    category: '公众号动态',
+    category: '信息汇总',
     title: item.title,
     summary: item.summary || `来自 ${item.sourceName} 的公众号文章，建议结合正文与指标进一步判断。`,
     source: item.sourceName,
@@ -1198,7 +1191,6 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
       articleSelection.selected,
       ARTICLE_SUMMARY_CONCURRENCY,
       async (article) => summarizeArticleInsight({
-        userQuery: input.userQuery,
         taskSpec,
         article,
         detailText: detailTextByUrl.get(article.url) || article.summary,

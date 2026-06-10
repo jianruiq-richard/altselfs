@@ -215,13 +215,60 @@
     }
     .canvas-wrap {
       overflow: auto;
+      max-height: 68vh;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #ffffff;
     }
+    .canvas-inputs {
+      margin-top: 10px;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 11px 12px;
+    }
+    .canvas-inputs h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+    }
+    .input-source-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px;
+    }
+    .input-source {
+      border: 1px solid #d9dee7;
+      background: white;
+      border-radius: 7px;
+      padding: 8px;
+      min-width: 0;
+    }
+    .input-source strong {
+      display: block;
+      font-size: 12px;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+    .input-source p {
+      margin: 0;
+      color: #475569;
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+    .input-source .tag {
+      display: inline-block;
+      margin-bottom: 5px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #075985;
+      font-size: 10px;
+      font-weight: 700;
+    }
     #callCanvas {
       display: block;
-      min-height: 420px;
+      min-width: 760px;
+      min-height: 520px;
       cursor: pointer;
     }
     .canvas-legend {
@@ -580,6 +627,7 @@
         <div class="canvas-wrap" id="canvasWrap">
           <canvas id="callCanvas"></canvas>
         </div>
+        <div class="canvas-inputs" id="canvasInputs"></div>
       </section>
 
       <div class="grid">
@@ -628,7 +676,8 @@
       selected: null,
       tab: 'code',
       view: 'timeline',
-      canvasNodes: []
+      canvasNodes: [],
+      canvasFocus: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -732,6 +781,251 @@
       const purposes = new Set(modelPurposesForStep(step));
       return data.modelTraces.filter((trace) => purposes.has(trace.purpose));
     };
+    const formatDuration = (ms) => {
+      if (!Number.isFinite(ms) || ms < 0) return '';
+      if (ms < 1000) return Math.round(ms) + 'ms';
+      const totalSeconds = ms / 1000;
+      if (totalSeconds < 60) return totalSeconds.toFixed(totalSeconds < 10 ? 1 : 0) + 's';
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = Math.round(totalSeconds % 60);
+      if (minutes < 60) return minutes + 'm' + String(seconds).padStart(2, '0') + 's';
+      const hours = Math.floor(minutes / 60);
+      const remainMinutes = minutes % 60;
+      return hours + 'h' + String(remainMinutes).padStart(2, '0') + 'm';
+    };
+    const timeMs = (value) => {
+      const time = new Date(value || '').getTime();
+      return Number.isFinite(time) ? time : null;
+    };
+    const plannerMetaFromStep = (step) => {
+      const detail = String(step?.detail || '');
+      const sourceMatch = detail.match(/Planner来源：([^ ]+)/);
+      const reasonMatch = detail.match(/Planner降级原因：(.+)$/);
+      return {
+        plannerSource: sourceMatch?.[1] || null,
+        fallbackReason: reasonMatch?.[1] || null,
+        isFallback: sourceMatch?.[1] === 'FALLBACK'
+      };
+    };
+    const canvasBadgesForStep = (step, index) => {
+      const id = step?.id || '';
+      const meta = plannerMetaFromStep(step);
+      if (id === 'load_context') return ['代码固定', 'DB上下文', '非完整入参'];
+      if (id === 'plan_subagents') {
+        if (meta.isFallback) return ['LLM失败', 'fallback规则', '正则+上下文'];
+        return ['LLM planner', step.status === 'RUNNING' ? '等待模型' : 'plan产物'];
+      }
+      if (id === 'call_wechat_agent') return ['固定阶段', '内部小决策器', '并发'];
+      if (id === 'call_web_search') return ['工具+LLM', '联网', '动态意图'];
+      if (id.includes('xiaohongshu') || id.includes('gmail') || id.includes('feishu')) return ['能力未接入', 'SKIPPED'];
+      if (id === 'merge_results') return ['代码合并', '内存变量'];
+      if (id === 'generate_briefing_summary') return ['LLM摘要', '业务上下文'];
+      if (id.startsWith('structure_')) return ['LLM结构化', '模块输出'];
+      if (id === 'aggregate_structured_briefing') return ['LLM聚合', '标题/总述'];
+      if (id === 'persist_briefing') return ['DB upsert', '落库'];
+      if (id === 'generate_reply') return ['LLM回复', '写消息'];
+      return ['trace事件'];
+    };
+    const canvasBadgesForModel = (trace) => {
+      if (trace.purpose === 'planner') return ['system固定', 'user上下文', 'JSON输出'];
+      if (trace.purpose === 'wechat_source_selector') return ['源选择器', '动态task+sources'];
+      if (trace.purpose === 'wechat_article_selector') return ['文章初筛', '候选列表'];
+      if (trace.purpose === 'wechat_article_insight') return ['逐篇摘要', '并发x5'];
+      if (trace.purpose === 'web_search_collect') return ['搜索规划', 'web tool'];
+      if (trace.purpose === 'web_search_summarize') return ['搜索摘要'];
+      if (trace.purpose === 'web_search_structure') return ['搜索结构化'];
+      if (trace.purpose === 'briefing_summary') return ['晨报摘要'];
+      if (String(trace.purpose || '').startsWith('structure_')) return ['模块结构化'];
+      if (trace.purpose === 'aggregate_structured_briefing') return ['聚合校验'];
+      if (trace.purpose === 'generate_reply') return ['最终回复'];
+      return ['LLM'];
+    };
+    const compactText = (value, limit = 180) => {
+      if (value === undefined) return 'undefined';
+      if (value === null) return 'null';
+      const raw = typeof value === 'string' ? value : JSON.stringify(value);
+      if (!raw) return '';
+      return raw.length > limit ? raw.slice(0, limit) + '...' : raw;
+    };
+    const parseModelUserJson = (trace) => {
+      const message = (trace?.messages || []).find((item) => item.role === 'user');
+      if (!message?.content) return null;
+      try {
+        return JSON.parse(message.content);
+      } catch {
+        return null;
+      }
+    };
+    const sourceCard = (kind, label, value, note) => ({ kind, label, value: compactText(value), rawValue: value, note });
+    const inputSourcesForModel = (trace) => {
+      const userJson = parseModelUserJson(trace);
+      const system = (trace?.messages || []).find((item) => item.role === 'system')?.content || '';
+      if (trace?.purpose === 'planner') {
+        return [
+          sourceCard('固定prompt', 'system prompt', system, '代码写死的 planner 角色和输出规则。'),
+          sourceCard('用户请求', 'userQuery', userJson?.userQuery, '来自前端用户消息。'),
+          sourceCard('系统偏好', 'executiveSystemPrompt', userJson?.executiveSystemPrompt, '来自总裁秘书配置，影响 planner 选择。'),
+          sourceCard('DB上下文', 'accountContext', userJson?.accountContext, '来自 loadExecutiveContext 的账户上下文摘要。'),
+          sourceCard('代码生成', 'availableSkills', userJson?.availableSkills?.map((item) => ({ skillId: item.skillId, available: item.available, implemented: item.implemented })), '由 skill registry + 当前账户上下文生成。'),
+        ];
+      }
+      if (trace?.purpose === 'wechat_source_selector') {
+        return [
+          sourceCard('固定prompt', 'system prompt', system, '代码写死的微信公众号源选择原则。'),
+          sourceCard('上层任务', 'task.objective', userJson?.task?.objective, '来自总裁秘书 planner/fallback 生成的 taskSpec。'),
+          sourceCard('上层任务', 'task.sourceSelectionCriteria', userJson?.task?.sourceSelectionCriteria, '来自 buildWechatTaskSpec；这次没有显式带完整 executiveSystemPrompt。'),
+          sourceCard('代码默认', 'task.timeWindow', userJson?.task?.timeWindow, 'resolveTaskSpec 生成的滚动时间窗口。'),
+          sourceCard('DB公众号源', 'sources', userJson?.sources?.map((item) => ({ name: item.name, domains: item.domains, topics: item.topics })), '来自 investorWechatSource 表和 profile/inferProfile。'),
+        ];
+      }
+      if (trace?.purpose === 'wechat_article_selector') {
+        return [
+          sourceCard('固定prompt', 'system prompt', system, '代码写死的文章初筛规则。'),
+          sourceCard('上层任务', 'task', userJson?.task, '同一个微信 taskSpec。'),
+          sourceCard('工具结果', 'articles', userJson?.articles?.slice?.(0, 8), '来自 listArticlesByAccount 拉取并去重排序后的候选文章。'),
+          sourceCard('代码配置', 'maxSelected', userJson?.maxSelected, 'SELECTED_DETAIL_LIMIT。'),
+        ];
+      }
+      if (trace?.purpose === 'wechat_article_insight') {
+        return [
+          sourceCard('固定prompt', 'system prompt', system, '代码写死的逐篇摘要规则。'),
+          sourceCard('用户请求', 'executiveRequest', userJson?.executiveRequest, '来自本轮用户消息。'),
+          sourceCard('上层任务', 'task', userJson?.task, '微信 taskSpec。'),
+          sourceCard('文章输入', 'article', userJson?.article, '来自文章初筛结果 + 详情正文摘录。'),
+        ];
+      }
+      return [
+        sourceCard('固定prompt', 'system prompt', system, '模型角色/规则。'),
+        sourceCard('动态输入', 'user JSON/text', userJson || (trace?.messages || []).find((item) => item.role === 'user')?.content, '模型 user message。'),
+      ];
+    };
+    const inputSourcesForStep = (step, index) => {
+      const id = step?.id || '';
+      const relatedModels = modelCallsForStep(step);
+      if (id === 'load_context') {
+        return [
+          sourceCard('函数参数', 'investorId', data.user?.id, '传给 loadExecutiveContext 的账户 id。'),
+          sourceCard('DB上下文', 'user/thread', { user: data.user?.email, threadId: data.thread?.id }, '从本次 raw audit 可观测。'),
+          sourceCard('DB上下文', 'wechatSources', data.wechatSources.map((item) => item.displayName), '来自 investorWechatSource。'),
+          sourceCard('可观测结果', 'plannerTrace payload', step.payload, 'RUNNING 事件没有 payload；SUCCESS 事件有摘要。'),
+        ];
+      }
+      if (id === 'plan_subagents') {
+        const plannerJson = parseModelUserJson(relatedModels[0]);
+        return [
+          sourceCard('用户请求', 'userQuery', data.request?.userQuery, '来自点击更新晨报后的用户消息。'),
+          sourceCard('系统偏好', 'executiveSystemPrompt', plannerJson?.executiveSystemPrompt || data.executiveAgentConfig?.systemPrompt, '传给 planner 的总裁秘书偏好。'),
+          sourceCard('DB上下文', 'accountContext', plannerJson?.accountContext, '由 loadExecutiveContext 生成后传入 planner。'),
+          sourceCard('代码生成', 'availableSkills', plannerJson?.availableSkills?.map((item) => ({ skillId: item.skillId, available: item.available })), 'skill registry + 账户可用性。'),
+          sourceCard('fallback', 'plannerMeta', plannerMetaFromStep(step), '如果 LLM 失败，代码 fallbackExecutivePlan 接管。'),
+        ];
+      }
+      if (id === 'call_wechat_agent') {
+        const sourceSelector = data.modelTraces.find((trace) => trace.purpose === 'wechat_source_selector');
+        const sourceJson = parseModelUserJson(sourceSelector);
+        return [
+          sourceCard('上层任务', 'wechat taskSpec', sourceJson?.task, '来自 planner/fallback buildWechatTaskSpec。'),
+          sourceCard('DB公众号源', 'sources', sourceJson?.sources?.map((item) => ({ name: item.name, domains: item.domains, topics: item.topics })), '传给微信源选择器的公众号画像。'),
+          sourceCard('工具/Provider', 'selected agent debug', data.subagents.find((item) => item.agentType === 'WECHAT')?.debug, '微信 agent 执行后的可观测 debug。'),
+          sourceCard('LLM内部阶段', 'model calls', relatedModels.map((trace) => ({ purpose: trace.purpose, status: trace.status })), '源选择、文章初筛、逐篇摘要。'),
+        ];
+      }
+      if (id === 'call_web_search') {
+        return [
+          sourceCard('渠道任务', 'channelInstruction / historical userQuery', data.request?.userQuery, '历史日志里可能仍是原始用户请求；当前代码会先把多渠道编排请求收敛成联网搜索渠道任务。'),
+          sourceCard('代码生成', 'webSearchIntent', step.payload?.webSearchIntent || step.payload, '当前代码由 buildWebSearchChannelInstruction + executiveSystemPrompt 生成，只要求公开互联网搜索信息汇总素材。历史日志按当时 raw input 展示。'),
+          sourceCard('LLM/工具', 'model calls', relatedModels.map((trace) => ({ purpose: trace.purpose, status: trace.status })), '搜索、摘要、结构化。'),
+        ];
+      }
+      if (id === 'merge_results') {
+        return [
+          sourceCard('上游结果', 'subagentResults', data.subagents.map((item) => ({ agentType: item.agentType, itemCount: item.briefingItems?.length || 0 })), '微信/搜索等 agent 输出。'),
+          sourceCard('内存变量', 'baseBriefing', 'context.baseBriefing', '未逐字节持久化，来自 loadExecutiveContext。'),
+        ];
+      }
+      if (id === 'persist_briefing') {
+        return [
+          sourceCard('最终文档', 'document', { dateKey: data.document.dateKey, title: data.document.title, sections: data.document.sections?.map((section) => ({ title: section.title, items: section.items?.length || 0 })) }, 'buildDocument 输出。'),
+          sourceCard('DB key', 'investorId_dateKey', { investorId: data.user?.id, dateKey: data.document.dateKey }, 'prisma.upsert 唯一键。'),
+        ];
+      }
+      return [
+        sourceCard('trace事件', 'step', { id: step.id, status: step.status, detail: step.detail, payload: step.payload }, 'plannerTrace 中可观测到的事件。'),
+        sourceCard('关联LLM', 'model calls', relatedModels.map((trace) => ({ purpose: trace.purpose, status: trace.status })), '如果为空，说明这一步主要是代码/DB/tool。'),
+      ];
+    };
+    const inputSourcesForParent = (node) => [
+      sourceCard('外层函数', node.title, node.codeTrace, 'Canvas 父级函数节点。它本身不是持久化 span，而是根据代码路径和当前播放进度推断。'),
+      sourceCard('共享输入', 'request', data.request, '点击更新晨报后进入外层函数的用户请求。'),
+      sourceCard('账户上下文', 'user/thread', { user: data.user, thread: data.thread }, '外层函数读取并传入下游的账户和会话上下文。')
+    ];
+    function activeCanvasInputSubject() {
+      if (state.canvasFocus?.kind === 'step' && data.plannerTrace[state.canvasFocus.index]) {
+        return { type: 'step', index: state.canvasFocus.index, step: data.plannerTrace[state.canvasFocus.index] };
+      }
+      if (state.canvasFocus?.kind === 'model' && data.modelTraces[state.canvasFocus.traceIndex]) {
+        return { type: 'model', traceIndex: state.canvasFocus.traceIndex, trace: data.modelTraces[state.canvasFocus.traceIndex] };
+      }
+      if (state.canvasFocus?.kind === 'parent') {
+        return { type: 'parent', node: state.canvasFocus.node };
+      }
+      if (state.index >= 0 && data.plannerTrace[state.index]) {
+        return { type: 'step', index: state.index, step: data.plannerTrace[state.index] };
+      }
+      return { type: 'request' };
+    }
+    function renderCanvasInputPanel() {
+      const panel = $('canvasInputs');
+      if (!panel) return;
+      const subject = activeCanvasInputSubject();
+      let title = '当前节点输入来源';
+      let sources = [];
+      if (subject.type === 'step') {
+        title = '当前节点输入来源：步骤 ' + (subject.index + 1) + ' · ' + (subject.step.title || subject.step.id);
+        sources = inputSourcesForStep(subject.step, subject.index);
+      } else if (subject.type === 'model') {
+        const label = modelPurposeLabels[subject.trace.purpose] || subject.trace.purpose;
+        title = '当前节点输入来源：LLM · ' + label;
+        sources = inputSourcesForModel(subject.trace);
+      } else if (subject.type === 'parent') {
+        title = '当前节点输入来源：函数 · ' + subject.node.title;
+        sources = inputSourcesForParent(subject.node);
+      } else {
+        title = '当前节点输入来源：请求入口';
+        sources = [
+          sourceCard('前端请求', 'userQuery', data.request?.userQuery, '点击“更新晨报”提交的用户请求。本页面只复现历史日志。'),
+          sourceCard('账户', 'user', data.user, '当前复现使用的账户。'),
+          sourceCard('工具参数', 'selectedToolCall.toolArgs', data.selectedToolCall?.toolArgs, '历史工具调用记录里的参数。')
+        ];
+      }
+      panel.innerHTML = '<h3>' + escapeHtml(title) + '</h3>' +
+        '<div class="input-source-grid">' + sources.map((source, index) =>
+          '<article class="input-source" data-source-index="' + index + '">' +
+            '<span class="tag">' + escapeHtml(source.kind) + '</span>' +
+            '<strong>' + escapeHtml(source.label) + '</strong>' +
+            '<p>' + escapeHtml(source.value) + '</p>' +
+            '<p style="margin-top:6px;color:#64748b">' + escapeHtml(source.note || '') + '</p>' +
+          '</article>'
+        ).join('') + '</div>';
+      panel.querySelectorAll('.input-source').forEach((el) => {
+        el.addEventListener('click', () => {
+          const source = sources[Number(el.dataset.sourceIndex)];
+          setDetail('输入来源: ' + source.label, source.note || '', {
+            kind: source.kind,
+            label: source.label,
+            value: source.rawValue,
+            compactValue: source.value,
+            note: source.note
+          }, {
+            usedAs: '该输入会进入当前画布节点对应的函数参数、模型 user/system message，或作为下游拼接上下文。'
+          }, source, { key: 'code', label: '输入来源' }, {
+            producedBy: source.kind,
+            usedByNext: [source.note || '见当前节点输入来源说明'],
+            persistence: '如果是 raw trace 捕获的模型 message，会保存在 .debug/openrouter-traces；如果只是代码局部变量且未审计，则只能用最近可观测值复原。'
+          });
+        });
+      });
+    }
     const codeLocation = {
       routeRun: 'src/app/api/investor/executive-assistant/route.ts:305',
       asyncRun: 'src/app/api/investor/executive-assistant/route.ts:565',
@@ -753,12 +1047,47 @@
       }
       return finalEvent;
     };
+    const runningEventForStep = (step, index) => {
+      if (step?.status === 'RUNNING') return step;
+      for (let i = index - 1; i >= 0; i -= 1) {
+        const candidate = data.plannerTrace[i];
+        if (candidate.id === step.id && candidate.status === 'RUNNING') return candidate;
+      }
+      return null;
+    };
+    const stepDurationInfo = (step, index) => {
+      const startEvent = runningEventForStep(step, index);
+      const endEvent = finalEventForStep(step, index);
+      const start = timeMs(startEvent?.timestamp);
+      const end = timeMs(endEvent?.timestamp);
+      if (start === null || end === null || end < start) return { ms: null, label: '', startEvent, endEvent };
+      return { ms: end - start, label: formatDuration(end - start), startEvent, endEvent };
+    };
+    const overallDurationInfo = () => {
+      const first = data.plannerTrace[0];
+      const last = data.plannerTrace[data.plannerTrace.length - 1];
+      const start = timeMs(first?.timestamp);
+      const end = timeMs(last?.timestamp);
+      if (start === null || end === null || end < start) return { ms: null, label: '' };
+      return { ms: end - start, label: formatDuration(end - start) };
+    };
+    const modelDurationLabel = (trace) => formatDuration(Number(trace?.durationMs));
+    const modelDurationSumLabel = (traces) => {
+      const total = traces.reduce((sum, trace) => {
+        const value = Number(trace?.durationMs);
+        return Number.isFinite(value) ? sum + value : sum;
+      }, 0);
+      return total > 0 ? 'sum ' + formatDuration(total) : '';
+    };
     const usageForStep = (step, index) => {
       const id = step?.id || '';
       const finalEvent = finalEventForStep(step, index);
+      const duration = stepDurationInfo(step, index);
       const base = {
         eventStatus: step.status,
         finalStatusForSameStepId: finalEvent.status,
+        duration: duration.label || undefined,
+        durationMs: duration.ms,
         isAppendOnlyTraceEvent: finalEvent !== step,
         note: finalEvent !== step
           ? 'plannerTrace 是追加式事件日志；这条记录保留当时状态，后面同 id 记录才代表该步骤最终状态。'
@@ -939,8 +1268,17 @@
             'emitPlannerStep(..., "plan_subagents", "SUCCESS", { payload })'
           ],
           observedVariablesAfterCall: {
+            plannerMeta: plannerMetaFromStep(step),
             planPayloadPersistedInPlannerTrace: step.payload || null,
-            relatedRawModelCalls: modelIoForStep(step).outputs
+            relatedRawModelCalls: modelIoForStep(step).outputs,
+            fallbackPlanRuleSummary: [
+              'fallbackExecutivePlan 不是单一固定 JSON；它按规则生成。',
+              '先根据 userQuery 判断 updateBriefing。',
+              '根据 userQuery/executiveSystemPrompt 判断 useWebSearch。',
+              '如果更新晨报且账户有公众号源，则加入 wechat_articles。',
+              '如果 updateBriefing=true，则加入 persist_briefing。',
+              'internal_briefing 和 chat_reply 每轮都会加入。'
+            ]
           },
           returnedVariable: 'plan: ExecutiveTurnPlan',
           returnedVariableVisibleFields: step.payload || null
@@ -982,15 +1320,17 @@
           currentOuterCall: {
             function: 'runWebSearchAgent',
             file: 'src/lib/agents/web-search-agent.ts',
-            callExpression: 'subagentTasks.push(runWebSearchAgent({ investorId, userQuery, mode: "briefing", context: { webSearchIntent, subagentResults: [], taskSpec } }).then(...))',
+            callExpression: 'subagentTasks.push(runWebSearchAgent({ investorId, userQuery: webSearchChannelInstruction, mode: "briefing", context: { webSearchIntent, subagentResults: [], taskSpec } }).then(...))',
             observedArguments: {
               investorId: data.user?.id,
-              userQuery: data.request?.userQuery,
+              historicalUserQuery: data.request?.userQuery,
+              currentCodeUserQuery: 'buildWebSearchChannelInstruction(params.userQuery)',
               mode: 'briefing',
               webSearchIntent: step.payload?.webSearchIntent || step.payload || null
             }
           },
           directChildCalls: [
+            'buildWebSearchChannelInstruction(params.userQuery)',
             'buildWebSearchIntent(params.userQuery, params.executiveSystemPrompt)',
             'emitPlannerStep(..., "call_web_search", "RUNNING", { payload: { webSearchIntent } })',
             'runWebSearchAgent(...)',
@@ -1303,6 +1643,45 @@
         ctx.fillStyle = '#475569';
         ctx.fillText(fitCanvasText(ctx, node.subtitle || '', node.w - 20), node.x + 10, node.y + 40);
       }
+      if (node.durationLabel) {
+        ctx.font = '700 10px Inter, sans-serif';
+        const durationLabel = fitCanvasText(ctx, node.durationLabel, 72);
+        const durationW = Math.min(82, Math.max(42, ctx.measureText(durationLabel).width + 14));
+        const durationX = node.x + node.w - durationW - 8;
+        const durationY = node.h >= 64 ? node.y + node.h - 46 : node.y + node.h - 20;
+        drawRoundRect(ctx, durationX, durationY, durationW, 18, 9);
+        ctx.fillStyle = '#111827';
+        ctx.globalAlpha = 0.82;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffffff';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(durationLabel, durationX + 7, durationY + 9);
+        ctx.textBaseline = 'alphabetic';
+      }
+      if (Array.isArray(node.badges) && node.badges.length > 0 && node.h >= 64) {
+        let badgeX = node.x + 10;
+        const badgeY = node.y + node.h - 24;
+        ctx.font = '700 10px Inter, sans-serif';
+        for (const badge of node.badges.slice(0, 3)) {
+          const label = fitCanvasText(ctx, badge, 70);
+          const badgeW = Math.min(78, Math.max(34, ctx.measureText(label).width + 12));
+          if (badgeX + badgeW > node.x + node.w - 8) break;
+          drawRoundRect(ctx, badgeX, badgeY, badgeW, 17, 8);
+          ctx.fillStyle = '#ffffff';
+          ctx.globalAlpha = 0.72;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = 'rgba(100, 116, 139, .28)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.fillStyle = '#334155';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, badgeX + 6, badgeY + 8.5);
+          ctx.textBaseline = 'alphabetic';
+          badgeX += badgeW + 5;
+        }
+      }
       ctx.restore();
     }
 
@@ -1342,8 +1721,11 @@
       const columns = Math.max(1, visibleCount);
       const left = 230;
       const colW = 190;
+      const maxVisibleModelCalls = data.plannerTrace
+        .slice(0, visibleCount)
+        .reduce((max, step) => Math.max(max, Math.min(modelCallsForStep(step).length, 4)), 0);
       const width = Math.max(wrap.clientWidth || 760, left + columns * colW + 80);
-      const height = 470;
+      const height = Math.max(660, 440 + maxVisibleModelCalls * 62);
       canvas.style.width = width + 'px';
       canvas.style.height = height + 'px';
       canvas.width = Math.floor(width * dpr);
@@ -1361,6 +1743,7 @@
       const visibleSteps = data.plannerTrace.slice(0, visibleCount);
       const updateDone = complete || visibleSteps.some((step) => step.id === 'generate_reply');
       const updateStatus = state.index < 0 ? 'PENDING' : updateDone ? 'SUCCESS' : 'RUNNING';
+      const overallDuration = overallDurationInfo();
       const spanW = Math.max(260, columns * colW + 20);
       const parentNodes = [
         {
@@ -1368,32 +1751,38 @@
           x: 20,
           y: 18,
           w: spanW,
-          h: 46,
+          h: 68,
           title: 'executeExecutiveAssistantRun',
           subtitle: '异步 run 包装层',
           status: runStatus,
+          durationLabel: overallDuration.label,
+          badges: ['代码固定', '异步run', '写run状态'],
           codeTrace: { function: 'executeExecutiveAssistantRun', file: codeLocation.asyncRun, callStackRole: 'claim run、读取 request、持久化 plannerTrace/result' }
         },
         {
           kind: 'parent',
           x: 52,
-          y: 82,
+          y: 96,
           w: Math.max(230, spanW - 32),
-          h: 46,
+          h: 68,
           title: 'runExecutiveAssistantTurn',
           subtitle: '秘书一轮对话主流程',
           status: runStatus,
+          durationLabel: overallDuration.label,
+          badges: ['代码固定', '写消息', '调晨报'],
           codeTrace: { function: 'runExecutiveAssistantTurn', file: codeLocation.routeRun, callStackRole: '写用户消息、调用晨报更新、写工具审计、生成回复' }
         },
         {
           kind: 'parent',
           x: 84,
-          y: 146,
+          y: 174,
           w: Math.max(200, spanW - 64),
-          h: 46,
+          h: 68,
           title: 'updateTodayExecutiveBriefing',
           subtitle: '晨报更新 orchestrator',
           status: updateStatus,
+          durationLabel: overallDuration.label,
+          badges: ['代码固定流程', '编排器', 'plannerTrace'],
           codeTrace: { function: 'updateTodayExecutiveBriefing', file: codeLocation.updateBriefing, callStackRole: '读取上下文、规划、调用子 agent、合并、落库' }
         }
       ];
@@ -1407,7 +1796,7 @@
       for (let i = 0; i < columns; i += 1) {
         const x = left + i * colW + 72;
         ctx.beginPath();
-        ctx.moveTo(x, 202);
+        ctx.moveTo(x, 250);
         ctx.lineTo(x, height - 28);
         ctx.stroke();
       }
@@ -1419,30 +1808,33 @@
         const x = left + index * colW;
         const io = deriveStepIO(step, index);
         const fn = io.codeTrace?.currentOuterCall?.function || step.id;
+        const stepDuration = stepDurationInfo(step, index);
         const stepNode = {
           kind: 'step',
           index,
           x,
-          y: 218,
+          y: 274,
           w: 164,
-          h: 72,
+          h: 92,
           title: (index + 1) + '. ' + fn,
           subtitle: step.title || step.id,
           status: step.status,
-          active: index === state.index,
+          durationLabel: stepDuration.label,
+          badges: canvasBadgesForStep(step, index),
+          active: state.canvasFocus?.kind === 'step' ? state.canvasFocus.index === index : index === state.index,
           codeTrace: io.codeTrace
         };
         drawBox(ctx, stepNode);
         state.canvasNodes.push(stepNode);
 
         ctx.strokeStyle = '#cbd5e1';
-        ctx.beginPath();
-        ctx.moveTo(x + 82, 192);
-        ctx.lineTo(x + 82, 218);
-        ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(x + 82, 242);
+          ctx.lineTo(x + 82, 274);
+          ctx.stroke();
 
         const modelCalls = modelCallsForStep(step);
-        const modelLimit = Math.min(modelCalls.length, 3);
+        const modelLimit = Math.min(modelCalls.length, 4);
         for (let j = 0; j < modelLimit; j += 1) {
           const trace = modelCalls[j];
           const label = modelPurposeLabels[trace.purpose] || trace.purpose;
@@ -1450,12 +1842,15 @@
             kind: 'model',
             traceIndex: data.modelTraces.indexOf(trace),
             x,
-            y: 315 + j * 48,
+            y: 400 + j * 58,
             w: 164,
-            h: 38,
+            h: 52,
             title: 'LLM: ' + label,
             subtitle: trace.model || '',
             status: trace.status,
+            durationLabel: modelDurationLabel(trace),
+            badges: canvasBadgesForModel(trace),
+            active: state.canvasFocus?.kind === 'model' && state.canvasFocus.traceIndex === data.modelTraces.indexOf(trace),
             palette: trace.status === 'SUCCESS'
               ? { bg: '#ede9fe', border: '#8b5cf6', text: '#4c1d95' }
               : canvasStatus(trace.status)
@@ -1464,7 +1859,7 @@
           state.canvasNodes.push(modelNode);
           ctx.strokeStyle = '#c4b5fd';
           ctx.beginPath();
-          ctx.moveTo(x + 82, 290);
+          ctx.moveTo(x + 82, 366);
           ctx.lineTo(x + 82, modelNode.y);
           ctx.stroke();
         }
@@ -1473,18 +1868,20 @@
             kind: 'modelGroup',
             stepIndex: index,
             x,
-            y: 315 + modelLimit * 48,
+            y: 400 + modelLimit * 58,
             w: 164,
-            h: 34,
+            h: 40,
             title: '+' + (modelCalls.length - modelLimit) + ' 次 LLM',
             subtitle: '点击看本步骤详情',
             status: 'RUNNING',
+            durationLabel: modelDurationSumLabel(modelCalls.slice(modelLimit)),
             palette: { bg: '#f5f3ff', border: '#a78bfa', text: '#5b21b6' }
           };
           drawBox(ctx, moreNode);
           state.canvasNodes.push(moreNode);
         }
       });
+      renderCanvasInputPanel();
     }
 
     function handleCanvasClick(event) {
@@ -1497,6 +1894,7 @@
       state.tab = 'code';
       if (node.kind === 'step' || node.kind === 'modelGroup') {
         const index = node.kind === 'step' ? node.index : node.stepIndex;
+        state.canvasFocus = { kind: 'step', index };
         const step = data.plannerTrace[index];
         const io = deriveStepIO(step, index);
         setDetail('步骤 ' + (index + 1) + ': ' + (step.title || step.id), step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
@@ -1504,11 +1902,13 @@
         return;
       }
       if (node.kind === 'model') {
+        state.canvasFocus = { kind: 'model', traceIndex: node.traceIndex };
         setModelDetail(data.modelTraces[node.traceIndex]);
         renderCallCanvas();
         return;
       }
       if (node.kind === 'parent') {
+        state.canvasFocus = { kind: 'parent', node };
         setDetail('函数: ' + node.title, node.subtitle, node.codeTrace, { status: node.status }, node.codeTrace, { key: 'code', label: '代码函数' }, {
           producedBy: 'Canvas 调用栈中的外层函数节点',
           usedByNext: ['包裹并调度下层函数调用'],
@@ -1568,6 +1968,7 @@
             rawModelInputs: modelIo.inputs
           },
           output: {
+            plannerMeta: plannerMetaFromStep(step),
             rawPlannerTraceEvent: step,
             rawModelOutputs: modelIo.outputs
           },
@@ -1737,6 +2138,7 @@
       const rows = [
         ['事件状态', explanation.eventStatus],
         ['最终状态', explanation.finalStatusForSameStepId],
+        ['耗时', explanation.duration],
         ['日志形态', explanation.note],
         ['由谁产生', explanation.producedBy],
         ['后续怎么用', usedByNext],
@@ -1806,19 +2208,22 @@
         const kind = callKind(step);
         const finalEvent = finalEventForStep(step, index);
         const finalCls = statusClass(finalEvent.status);
+        const duration = stepDurationInfo(step, index);
         return `<article class="step ${cls}" data-index="${index}" style="${visible ? '' : 'opacity:.38'}">
           <h3><span>${index + 1}. ${escapeHtml(step.title || step.id)}</span><span class="badge ${cls}">事件 ${escapeHtml(visible ? step.status : 'PENDING')}</span></h3>
           <p><span class="kind ${kind.key}">${escapeHtml(kind.label)}</span> ${modelCallsForStep(step).length ? `<span class="kind model">${modelCallsForStep(step).length} 次模型调用</span>` : ''}</p>
-          <p><span class="badge ${finalCls}">最终 ${escapeHtml(finalEvent.status || step.status)}</span> ${finalEvent !== step ? '后续同一步骤已更新状态' : '该步骤最终事件'}</p>
+          <p><span class="badge ${finalCls}">最终 ${escapeHtml(finalEvent.status || step.status)}</span> ${duration.label ? `<span class="badge">耗时 ${escapeHtml(duration.label)}</span>` : ''} ${finalEvent !== step ? '后续同一步骤已更新状态' : '该步骤最终事件'}</p>
           <p>${escapeHtml(visible ? (step.detail || step.error || step.description || '') : '等待执行')}</p>
         </article>`;
       }).join('');
       $('timeline').querySelectorAll('.step').forEach((el) => {
         el.addEventListener('click', () => {
           const index = Number(el.dataset.index);
+          state.canvasFocus = { kind: 'step', index };
           const step = data.plannerTrace[index];
           const io = deriveStepIO(step, index);
           setDetail(`步骤 ${index + 1}: ${step.title || step.id}`, step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
+          renderCallCanvas();
         });
       });
     }
@@ -1887,6 +2292,7 @@
       $('models').querySelectorAll('.tool').forEach((el) => {
         el.addEventListener('click', () => {
           const trace = data.modelTraces[Number(el.dataset.index)];
+          state.canvasFocus = { kind: 'model', traceIndex: Number(el.dataset.index) };
           const label = modelPurposeLabels[trace.purpose] || trace.purpose;
           setDetail(`大模型调用: ${label}`, `模型：${trace.model}；类型：${trace.type}；耗时：${trace.durationMs || '未知'}ms`, {
             messages: trace.messages,
@@ -1902,6 +2308,7 @@
             usedByNext: ['调用方代码解析 output/rawMessage 后生成 planner、briefingItems、sections 或最终回复'],
             persistence: '这类完整 prompt/completion 当前来自本地 debug trace；数据库审计通常只保存被解析后的业务结果。'
           });
+          renderCallCanvas();
         });
       });
     }
@@ -1977,12 +2384,14 @@
       const total = data.plannerTrace.length;
       state.index = Math.max(-1, Math.min(total - 1, index));
       if (state.index < 0) {
+        state.canvasFocus = null;
         setDetail('请求输入', '点击“更新晨报”会提交这个用户请求；本页面只使用历史日志复现。', data.request, { note: '未调用接口，未创建新任务。' }, data.rawAudit, { key: 'code', label: '前端请求' }, {
           producedBy: '历史 selectedToolCall.toolArgs',
           usedByNext: ['播放复现入口'],
           persistence: '页面内嵌历史日志；不会调用接口。'
         });
       } else {
+        state.canvasFocus = { kind: 'step', index: state.index };
         const step = data.plannerTrace[state.index];
         const io = deriveStepIO(step, state.index);
         setDetail(`步骤 ${state.index + 1}: ${step.title || step.id}`, step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
@@ -2002,6 +2411,7 @@
       if (!state.playing || state.paused) return;
       if (state.index < data.plannerTrace.length - 1) {
         state.index += 1;
+        state.canvasFocus = { kind: 'step', index: state.index };
         const step = data.plannerTrace[state.index];
         const io = deriveStepIO(step, state.index);
         setDetail(`步骤 ${state.index + 1}: ${step.title || step.id}`, step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
@@ -2021,6 +2431,7 @@
       state.playing = true;
       state.paused = false;
       state.index = -1;
+      state.canvasFocus = null;
       $('startBtn').disabled = true;
       $('pauseBtn').disabled = false;
       $('pauseBtn').textContent = '暂停';
@@ -2047,6 +2458,7 @@
       state.playing = false;
       state.paused = false;
       state.index = -1;
+      state.canvasFocus = null;
       $('startBtn').disabled = false;
       $('pauseBtn').disabled = true;
       $('pauseBtn').textContent = '暂停';

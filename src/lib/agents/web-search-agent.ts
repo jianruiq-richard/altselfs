@@ -7,7 +7,7 @@ import {
 } from '@/lib/openrouter';
 import type { AgentBriefingItem, AgentRunInput, AgentRunResult, AgentRunToolCall, AgentTaskSpec } from '@/lib/agents/types';
 
-type WebSearchModuleKey = 'industryDynamics' | 'technologyTrends' | 'competitorMonitoring';
+type WebSearchModuleKey = 'informationSummary';
 
 type WebSearchSourceItem = {
   title: string;
@@ -58,9 +58,7 @@ type WebSearchSummaryOutput = {
 };
 
 const MODULE_LABELS: Record<WebSearchModuleKey, string> = {
-  industryDynamics: '行业动态',
-  technologyTrends: '技术趋势',
-  competitorMonitoring: '竞品监控',
+  informationSummary: '信息汇总',
 };
 
 function extractJsonObject(raw: string) {
@@ -150,17 +148,9 @@ function parseWebSearchOutput(raw: string): WebSearchAgentOutput {
   return {
     summary: normalizeText(parsed.summary),
     modules: {
-      industryDynamics: {
-        content: normalizeText(parsed.modules?.industryDynamics?.content),
-        items: normalizeItems(parsed.modules?.industryDynamics?.items),
-      },
-      technologyTrends: {
-        content: normalizeText(parsed.modules?.technologyTrends?.content),
-        items: normalizeItems(parsed.modules?.technologyTrends?.items),
-      },
-      competitorMonitoring: {
-        content: normalizeText(parsed.modules?.competitorMonitoring?.content),
-        items: normalizeItems(parsed.modules?.competitorMonitoring?.items),
+      informationSummary: {
+        content: normalizeText(parsed.modules?.informationSummary?.content),
+        items: normalizeItems(parsed.modules?.informationSummary?.items),
       },
     },
     searchLog: Array.isArray(parsed.searchLog) ? parsed.searchLog : [],
@@ -213,8 +203,8 @@ function buildDefaultTaskSpec(input: AgentRunInput): AgentTaskSpec {
       endAt: now.toISOString(),
     },
     returnFormat: {
-      sections: ['行业动态', '技术趋势', '竞品监控'],
-      instructions: '每条信息必须有来源；优先最近24小时内的公开网页；无法确认时间时标注不确定。',
+      sections: ['信息汇总'],
+      instructions: '每条信息必须有来源；优先最近24小时内的公开网页；无法确认时间时标注不确定。联网搜索助手只输出信息汇总素材；今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通。',
     },
   };
 }
@@ -256,7 +246,7 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     },
     {
       id: 'web_search_structure',
-      goal: '把精简信息点结构化为行业动态、技术趋势、竞品监控三模块 JSON。',
+      goal: '把精简信息点结构化为信息汇总素材 JSON。',
     },
   ];
 
@@ -280,11 +270,11 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     {
       role: 'user',
       content: JSON.stringify({
-        userQuery: input.userQuery,
+        channelInstruction: input.userQuery,
         mode: input.mode || 'briefing',
         taskSpec,
         searchIntent,
-        existingSignals: subagentSignals,
+        ...(subagentSignals.length > 0 ? { existingSignals: subagentSignals } : {}),
         hardRules: [
           '必须实际调用搜索工具。',
           '搜索范围、关键词和筛选/保留策略必须以 taskSpec 和上级传达的 searchIntent 为准。',
@@ -334,7 +324,7 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     {
       role: 'user',
       content: JSON.stringify({
-        userQuery: input.userQuery,
+        channelInstruction: input.userQuery,
         taskSpec,
         searchIntent,
         stepInput: {
@@ -381,8 +371,9 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     {
       role: 'system',
       content: [
-        '你是“联网搜索助手”的 Step3 三模块结构化器，只输出严格JSON。',
-        '你会收到 Step2 的精简信息点。请按总裁秘书要求归类为行业动态、技术趋势、竞品监控。',
+        '你是“联网搜索助手”的 Step3 信息汇总结构化器，只输出严格JSON。',
+        '你会收到 Step2 的精简信息点。请只整理为信息汇总素材。',
+        '今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通，不由联网搜索助手生成。',
         '每条 item 必须来自 Step2 findings，必须保留 source 和 url。',
         '不要编造，不要引入搜索资料之外的信息。',
       ].join('\n'),
@@ -390,14 +381,14 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     {
       role: 'user',
       content: JSON.stringify({
-        userQuery: input.userQuery,
+        channelInstruction: input.userQuery,
         taskSpec,
         searchIntent,
         stepInput: summarized,
         outputSchema: {
           summary: 'string',
           modules: {
-            industryDynamics: {
+            informationSummary: {
               content: 'string',
               items: [
                 {
@@ -410,8 +401,6 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
                 },
               ],
             },
-            technologyTrends: { content: 'string', items: [] },
-            competitorMonitoring: { content: 'string', items: [] },
           },
           searchLog: [
             {

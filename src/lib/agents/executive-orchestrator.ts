@@ -131,6 +131,7 @@ type LoadedExecutiveContext = {
 };
 
 const STRUCTURED_AGENT_ITEM_LIMIT = 50;
+const INFORMATION_SUMMARY_ITEM_LIMIT = 200;
 const STRUCTURED_MODULE_PLANS: StructuredBriefingModulePlan[] = [
   { key: 'informationSummary', title: '信息汇总' },
   { key: 'todayTodo', title: '今日to do' },
@@ -433,7 +434,7 @@ export function getExecutivePlannerStepDefinition(id: ExecutivePlannerStepId): E
     structure_briefing_json: {
       id: 'structure_briefing_json',
       title: '结构化晨报JSON',
-      description: '由总裁秘书把已获得的信息归类为信息汇总、今日to do、分身推荐三个模块。',
+      description: '由总裁秘书把已获得的信息整理为信息汇总，并从所有信息里提取今日to do；分身推荐模块暂未开通。',
     },
     structure_informationSummary: {
       id: 'structure_informationSummary',
@@ -448,7 +449,7 @@ export function getExecutivePlannerStepDefinition(id: ExecutivePlannerStepId): E
     structure_twinRecommendation: {
       id: 'structure_twinRecommendation',
       title: '结构化分身推荐',
-      description: '分身推荐结构化子 agent 整理适合继续讨论或匹配的人/事。',
+      description: '分身推荐模块暂未开通，当前只输出占位说明。',
     },
     aggregate_structured_briefing: {
       id: 'aggregate_structured_briefing',
@@ -497,15 +498,30 @@ function shouldUseExternalWeb(userQuery: string) {
   return shouldUpdateBriefing(userQuery) || /外界|行业|动态|趋势|竞品|情报|新闻|ai\s*agent|agent|vibe\s*coding|vibe|coding/i.test(userQuery);
 }
 
+function isMultiChannelOrchestrationQuery(userQuery: string) {
+  return /子agent|子 agent|微信公众号|公众号|小红书|邮件|邮箱|gmail|飞书|feishu/i.test(userQuery);
+}
+
+function buildWebSearchChannelInstruction(userQuery: string) {
+  if (!isMultiChannelOrchestrationQuery(userQuery)) return userQuery;
+  return [
+    '用户要求更新今日晨报并汇总多渠道信息。',
+    '联网搜索助手只负责公开互联网搜索，补充可验证URL的信息汇总素材。',
+    '微信公众号、邮件、飞书、小红书等渠道由其他子agent处理；不要搜索或模拟这些私有/垂直渠道的内部结果。',
+    '今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通。',
+  ].join(' ');
+}
+
 function buildWebSearchIntent(userQuery: string, executiveSystemPrompt?: string) {
   const preference = executiveSystemPrompt?.trim()
     ? executiveSystemPrompt.trim().slice(0, 1600)
     : '无额外偏好。';
+  const channelInstruction = buildWebSearchChannelInstruction(userQuery);
 
   return [
-    `用户当前指令：${userQuery}`,
+    `联网搜索渠道任务：${channelInstruction}`,
     `总裁秘书system prompt / 用户偏好：${preference}`,
-    '联网搜索要求：搜索范围、关键词、是否过滤、信息保留策略都必须从上述总裁秘书system prompt和用户当前指令中读取，不要添加代码预设的业务主题偏好。优先查找有明确来源、发布时间和可验证URL的公开信息。',
+    '联网搜索要求：只搜索公开互联网资料，只产出信息汇总素材。搜索范围、关键词、是否过滤、信息保留策略都必须从总裁秘书system prompt / 用户偏好和上述渠道任务中读取，不要添加代码预设的业务主题偏好。优先查找有明确来源、发布时间和可验证URL的公开信息。',
   ].join('\n');
 }
 
@@ -521,17 +537,22 @@ function buildWechatTaskSpec(params: {
     : Array.isArray(raw.criteria)
       ? raw.criteria
       : [];
-  const sourceSelectionCriteria = rawCriteria
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean)
-    .slice(0, 20);
-
   const prompt = params.executiveSystemPrompt?.trim();
-  const fallbackCriteria = [
-    params.userQuery,
+  const orchestrationQuery = /子agent|子 agent|小红书|邮件|邮箱|gmail|飞书|feishu/i.test(params.userQuery);
+  const scopedUserInstruction = orchestrationQuery
+    ? '原始用户请求是更新今日晨报并汇总多渠道信息；微信公众号助手只处理公众号文章，邮件、飞书、小红书等其他渠道由各自子agent处理。'
+    : params.userQuery;
+  const channelScope = '微信渠道任务范围：只从微信公众号来源提取可合并的信息汇总素材。今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通，不由微信公众号助手生成。';
+  const sourceSelectionCriteria = Array.from(new Set([
+    ...rawCriteria,
+    scopedUserInstruction,
     params.objective,
-    prompt ? prompt.slice(0, 600) : '',
-  ].filter(Boolean);
+    channelScope,
+    prompt ? prompt.slice(0, 900) : '',
+  ]
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean)))
+    .slice(0, 20);
 
   const rawSections =
     raw.returnFormat && typeof raw.returnFormat === 'object' && Array.isArray((raw.returnFormat as Record<string, unknown>).sections)
@@ -539,16 +560,22 @@ function buildWechatTaskSpec(params: {
       : [];
   const sections = rawSections
     .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean)
-    .slice(0, 8);
+    .filter((item) => item === '信息汇总')
+    .slice(0, 1);
+  const wechatReturnFormatGuard = [
+    '微信公众号助手只提供信息汇总候选素材。',
+    '今日to do由总裁秘书顶层从所有信息源统一提取，微信公众号助手不要生成待办模块。',
+    '分身推荐暂未开通，微信公众号助手不要生成分身推荐模块。',
+  ].join('\n');
   const instructions =
     raw.returnFormat &&
     typeof raw.returnFormat === 'object' &&
     typeof (raw.returnFormat as Record<string, unknown>).instructions === 'string'
-      ? String((raw.returnFormat as Record<string, unknown>).instructions).trim().slice(0, 1200)
+      ? `${String((raw.returnFormat as Record<string, unknown>).instructions).trim().slice(0, 1200)}\n${wechatReturnFormatGuard}`
       : [
           '按晨报秘书可直接合并的格式返回。',
           '每条信息必须包含来源公众号、文章标题、链接、发布时间、为什么重要。',
+          wechatReturnFormatGuard,
           '业务偏好、筛选规则和保留策略必须以晨报秘书system prompt为准。',
         ].join('\n');
 
@@ -557,14 +584,14 @@ function buildWechatTaskSpec(params: {
       typeof raw.objective === 'string' && raw.objective.trim()
         ? raw.objective.trim().slice(0, 500)
         : params.objective,
-    sourceSelectionCriteria: sourceSelectionCriteria.length > 0 ? sourceSelectionCriteria : fallbackCriteria,
+    sourceSelectionCriteria,
     timeWindow: {
       type: 'rolling_hours',
       hours: 24,
       endAt: new Date().toISOString(),
     },
     returnFormat: {
-      sections: sections.length > 0 ? sections : ['核心结论', '证据文章', '机会/风险', '建议动作'],
+      sections: sections.length > 0 ? sections : ['信息汇总'],
       instructions,
     },
   };
@@ -694,6 +721,7 @@ function ensurePlanStep(
 function fallbackExecutivePlan(params: {
   userQuery: string;
   context: LoadedExecutiveContext;
+  executiveSystemPrompt?: string;
   plannerError?: string;
 }): ExecutiveTurnPlan {
   const updateBriefing = shouldUpdateBriefing(params.userQuery);
@@ -754,6 +782,7 @@ function fallbackExecutivePlan(params: {
       ? buildWechatTaskSpec({
           userQuery: params.userQuery,
           objective: updateBriefing ? '更新今日晨报' : params.userQuery,
+          executiveSystemPrompt: params.executiveSystemPrompt,
         })
       : undefined,
     plannerSource: 'FALLBACK',
@@ -806,7 +835,7 @@ function normalizeExecutivePlan(
   const objective =
     typeof parsed.objective === 'string' && parsed.objective.trim()
       ? parsed.objective.trim().slice(0, 160)
-      : fallbackExecutivePlan({ userQuery, context }).objective;
+      : fallbackExecutivePlan({ userQuery, context, executiveSystemPrompt }).objective;
   const includeWechat = normalizedSkills.includes('wechat_articles') && context.hasWechatSources;
 
   return {
@@ -908,6 +937,7 @@ async function planExecutiveTurn(params: {
     return fallbackExecutivePlan({
       userQuery: params.userQuery,
       context: params.context,
+      executiveSystemPrompt: params.executiveSystemPrompt,
       plannerError: detail,
     });
   }
@@ -1071,7 +1101,7 @@ async function buildBriefingSummary(input: {
         '如果子agent结果中包含 WEB_SEARCH，请只使用这些已记录的搜索结果，不要自行发起隐式搜索。',
         '如果总裁秘书system prompt要求不要二次过滤或要求保留子agent结果，你必须遵守；否则只按system prompt和用户命令指定的规则处理。',
         '必须把来源和不确定性说明清楚。',
-        '输出中文，结构清晰，必须围绕信息汇总、今日to do、分身推荐三个模块给出重点、证据来源和建议行动。',
+        '输出中文，结构清晰：信息汇总覆盖所有已调用信息源的重要信号；今日to do从所有信息和内部上下文中提炼行动项；分身推荐模块暂未开通，不要硬凑推荐。',
         '今日to do必须从所有已调用消息渠道和内部上下文里提炼可执行事项，按红色P0、黄色P1、绿色P2排序。',
       ].join('\n'),
     },
@@ -1186,11 +1216,12 @@ function getModuleAgentStepId(module: StructuredBriefingModulePlan) {
 
 function normalizeModuleAgentOutput(raw: string, module: StructuredBriefingModulePlan): StructuredBriefingModule {
   const parsed = JSON.parse(raw.trim()) as Record<string, unknown>;
+  const itemLimit = module.key === 'informationSummary' ? INFORMATION_SUMMARY_ITEM_LIMIT : STRUCTURED_AGENT_ITEM_LIMIT;
   const items = Array.isArray(parsed.items)
     ? parsed.items
         .map(normalizeStructuredItem)
         .filter((item): item is StructuredBriefingItem => Boolean(item))
-        .slice(0, STRUCTURED_AGENT_ITEM_LIMIT)
+        .slice(0, itemLimit)
     : [];
   return {
     title: module.title,
@@ -1234,6 +1265,19 @@ async function runStructuredModuleAgent(input: {
     payload: { sourceCount: input.sources.length },
   });
 
+  if (input.module.key === 'twinRecommendation') {
+    const module: StructuredBriefingModule = {
+      title: '分身推荐',
+      content: '分身推荐模块暂未开通；本轮不基于信息汇总素材生成推荐。',
+      items: [],
+    };
+    await emitPlannerStep(input.onPlannerEvent, stepId, 'SUCCESS', {
+      detail: '分身推荐模块暂未开通，已跳过素材推荐生成。',
+      payload: { itemCount: 0, unavailable: true },
+    });
+    return module;
+  }
+
   const messages: ChatMessage[] = [
     {
       role: 'system',
@@ -1243,13 +1287,10 @@ async function runStructuredModuleAgent(input: {
         '如果晨报秘书system prompt要求不要二次过滤或要求保留子agent结果，你必须遵守。',
         `你只能输出“${input.module.title}”模块，不要输出其他模块。`,
         input.module.key === 'todayTodo'
-          ? '本模块只输出可执行待办，不输出纯新闻。每个title必须用“红色P0 ”、“黄色P1 ”或“绿色P2 ”开头，summary说明为什么要做、涉及哪个渠道或来源、建议何时处理。'
+          ? '本模块由总裁秘书顶层从所有信息汇总素材中提取可执行待办，不输出纯新闻。每个title必须用“红色P0 ”、“黄色P1 ”或“绿色P2 ”开头，summary说明为什么要做、涉及哪个渠道或来源、建议何时处理。'
           : '',
         input.module.key === 'informationSummary'
-          ? '本模块汇总公众号、Gmail、飞书、小红书、联网搜索等所有已调用渠道中的关键信号，优先保留和用户当前决策有关的信息。'
-          : '',
-        input.module.key === 'twinRecommendation'
-          ? '本模块给出适合用个人决策分身继续讨论、复盘、匹配或跟进的人/事。没有明确推荐时输出1条“暂无明确分身推荐”，summary说明缺少什么信号。'
+          ? '本模块汇总所有已调用渠道的候选素材。是否筛选完全服从晨报秘书system prompt和用户当前命令：如果要求不要二次过滤、尽量保留、所有来源都展示，就必须保留所有非重复sources；只有在明确要求筛选/精简/只保留重点时才筛选。'
           : '',
         '不要编造，不要引入候选素材之外的信息；必须保留来源和URL。',
         '只输出严格JSON，不要输出markdown或解释。',
@@ -1273,7 +1314,9 @@ async function runStructuredModuleAgent(input: {
           'content使用一到三段中文，不要过长',
           '不要复制大段原文',
           input.module.key === 'todayTodo'
-            ? '待办必须具体可执行，避免“关注一下”“持续观察”这类空泛表达'
+            ? '待办必须从sources里的具体信息推导，必须具体可执行，避免“关注一下”“持续观察”这类空泛表达'
+            : input.module.key === 'informationSummary'
+              ? '如果不筛选，items数量应接近去重后的sources数量；如果筛选，content必须说明筛选依据，并尽量覆盖不同渠道来源'
             : '如果同一信息同时适合多个模块，请只在本模块确有商业意义时保留',
         ],
         outputSchema: {
@@ -1558,6 +1601,7 @@ export async function updateTodayExecutiveBriefing(params: {
   const subagentTasks: Array<Promise<AgentRunResult>> = [];
   const includeWechat = hasSkill(plan, 'wechat_articles') && context.hasWechatSources;
   const useWeb = plan.useWebSearch || hasSkill(plan, 'web_search');
+  const webSearchChannelInstruction = buildWebSearchChannelInstruction(params.userQuery);
   const webSearchIntent = buildWebSearchIntent(params.userQuery, params.executiveSystemPrompt);
   const webSearchDecision = plan.skillDecisions.find((item) => item.skillId === 'web_search');
 
@@ -1653,7 +1697,7 @@ export async function updateTodayExecutiveBriefing(params: {
     subagentTasks.push(
       runWebSearchAgent({
         investorId: params.investorId,
-        userQuery: params.userQuery,
+        userQuery: webSearchChannelInstruction,
         mode: 'briefing',
         context: {
           webSearchIntent,
@@ -1661,7 +1705,7 @@ export async function updateTodayExecutiveBriefing(params: {
           taskSpec: {
             objective: `根据总裁秘书要求进行联网搜索，补充晨报所需外部公开信息：${plan.objective}`,
             sourceSelectionCriteria: [
-              params.userQuery,
+              webSearchChannelInstruction,
               params.executiveSystemPrompt || '',
             ].filter(Boolean),
             timeWindow: {
@@ -1670,9 +1714,9 @@ export async function updateTodayExecutiveBriefing(params: {
               endAt: new Date().toISOString(),
             },
             returnFormat: {
-              sections: ['信息汇总', '今日to do', '分身推荐'],
+              sections: ['信息汇总'],
               instructions:
-                '按三个模块返回结构化结果；信息汇总覆盖重要信号，今日to do提取可执行事项并标注优先级，分身推荐给出适合用个人决策分身继续讨论或匹配的人/事。每条信息必须有来源，能拿到URL时必须提供URL。本任务与其他信息源助手并行执行，不等待微信公众号助手结果。业务偏好、搜索范围和筛选/保留策略必须以晨报秘书system prompt为准。',
+                '只返回信息汇总素材；每条信息必须有来源，能拿到URL时必须提供URL。本任务与其他信息源助手并行执行，不等待微信公众号助手结果。今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通。业务偏好、搜索范围和筛选/保留策略必须以晨报秘书system prompt为准。',
             },
           },
         },
