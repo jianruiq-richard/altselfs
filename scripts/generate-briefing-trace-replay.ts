@@ -1248,6 +1248,45 @@ const html = `<!doctype html>
       if (start === null || end === null || end < start) return { ms: null, label: '', startEvent, endEvent };
       return { ms: end - start, label: formatDuration(end - start), startEvent, endEvent };
     };
+    const durationSemanticsForStep = (step) => {
+      const id = step?.id || '';
+      if (id === 'structure_briefing_json') {
+        return {
+          prefix: '包含 ',
+          label: '父步骤包含子步骤',
+          note: '这是父步骤的 inclusive duration，已经包含信息汇总、今日to do、分身推荐三个结构化子步骤和后续聚合耗时，不能再和这些子步骤相加。'
+        };
+      }
+      if (id === 'structure_informationSummary' || id === 'structure_todayTodo' || id === 'structure_twinRecommendation') {
+        return {
+          prefix: '自身 ',
+          label: '并行子步骤自身耗时',
+          note: '这是并行结构化子步骤自己的耗时；同级结构化模块同时启动，整体等待最慢的一个完成。'
+        };
+      }
+      if (id === 'aggregate_structured_briefing') {
+        return {
+          prefix: '自身 ',
+          label: '结构化聚合自身耗时',
+          note: '这是三个结构化子步骤全部结束后，聚合 agent 生成标题和总述的自身耗时。'
+        };
+      }
+      return {
+        prefix: '',
+        label: '步骤自身耗时',
+        note: '这是该 step id 从 RUNNING 到最终状态的耗时。'
+      };
+    };
+    const stepDurationDisplayInfo = (step, index) => {
+      const duration = stepDurationInfo(step, index);
+      const semantics = durationSemanticsForStep(step);
+      return {
+        ...duration,
+        rawLabel: duration.label,
+        label: duration.label ? semantics.prefix + duration.label : '',
+        semantics,
+      };
+    };
     const overallDurationInfo = () => {
       const first = data.plannerTrace[0];
       const last = data.plannerTrace[data.plannerTrace.length - 1];
@@ -1267,16 +1306,17 @@ const html = `<!doctype html>
     const usageForStep = (step, index) => {
       const id = step?.id || '';
       const finalEvent = finalEventForStep(step, index);
-      const duration = stepDurationInfo(step, index);
+      const duration = stepDurationDisplayInfo(step, index);
       const base = {
         eventStatus: step.status,
         finalStatusForSameStepId: finalEvent.status,
         duration: duration.label || undefined,
         durationMs: duration.ms,
+        durationSemantics: duration.semantics?.label,
         isAppendOnlyTraceEvent: finalEvent !== step,
         note: finalEvent !== step
-          ? 'plannerTrace 是追加式事件日志；这条记录保留当时状态，后面同 id 记录才代表该步骤最终状态。'
-          : '这是该 step id 在 trace 中的最后一条事件。'
+          ? 'plannerTrace 是追加式事件日志；这条记录保留当时状态，后面同 id 记录才代表该步骤最终状态。' + (duration.semantics?.note ? ' ' + duration.semantics.note : '')
+          : '这是该 step id 在 trace 中的最后一条事件。' + (duration.semantics?.note ? ' ' + duration.semantics.note : '')
       };
       if (id === 'load_context') {
         return {
@@ -1870,6 +1910,44 @@ const html = `<!doctype html>
       ctx.restore();
     }
 
+    function drawStructureGroup(ctx, group) {
+      drawRoundRect(ctx, group.x, group.y, group.w, group.h, 12);
+      ctx.fillStyle = '#fff7ed';
+      ctx.globalAlpha = 0.62;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.setLineDash([8, 6]);
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = '#f97316';
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.font = '700 12px Inter, sans-serif';
+      ctx.fillStyle = '#9a3412';
+      ctx.fillText(fitCanvasText(ctx, group.title, group.w - 170), group.x + 14, group.y + 22);
+
+      ctx.font = '700 10px Inter, sans-serif';
+      const label = fitCanvasText(ctx, group.durationLabel || '', 96);
+      const labelW = Math.min(110, Math.max(54, ctx.measureText(label).width + 16));
+      drawRoundRect(ctx, group.x + group.w - labelW - 12, group.y + 8, labelW, 20, 10);
+      ctx.fillStyle = '#9a3412';
+      ctx.globalAlpha = 0.12;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#fdba74';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#9a3412';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, group.x + group.w - labelW - 4, group.y + 18);
+      ctx.textBaseline = 'alphabetic';
+
+      ctx.font = '11px Inter, sans-serif';
+      ctx.fillStyle = '#c2410c';
+      ctx.fillText(fitCanvasText(ctx, group.subtitle, group.w - 28), group.x + 14, group.y + group.h - 14);
+    }
+
     function setModelDetail(trace) {
       const label = modelPurposeLabels[trace.purpose] || trace.purpose;
       setDetail('大模型调用: ' + label, '模型：' + trace.model + '；类型：' + trace.type + '；耗时：' + (trace.durationMs || '未知') + 'ms', {
@@ -1987,13 +2065,49 @@ const html = `<!doctype html>
       }
       ctx.fillStyle = '#64748b';
       ctx.font = '12px Inter, sans-serif';
-      ctx.fillText('外层函数未结束时保持 RUNNING；下面每列是一个 plannerTrace 事件。', 20, height - 12);
+      ctx.fillText('外层函数未结束时保持 RUNNING；父步骤耗时包含子步骤，并行子步骤耗时不可相加。', 20, height - 12);
+
+      const structureIds = new Set([
+        'structure_briefing_json',
+        'structure_informationSummary',
+        'structure_todayTodo',
+        'structure_twinRecommendation',
+        'aggregate_structured_briefing',
+      ]);
+      const visibleStructureIndices = visibleSteps
+        .map((step, index) => (structureIds.has(step.id) ? index : -1))
+        .filter((index) => index >= 0);
+      const structureParentIndex = visibleSteps.findIndex((step) => step.id === 'structure_briefing_json');
+      if (structureParentIndex >= 0 && visibleStructureIndices.length > 0) {
+        const minIndex = Math.min(...visibleStructureIndices);
+        const maxIndex = Math.max(...visibleStructureIndices);
+        const parentDuration = stepDurationDisplayInfo(visibleSteps[structureParentIndex], structureParentIndex);
+        const groupNode = {
+          kind: 'structureGroup',
+          x: left + minIndex * colW - 14,
+          y: 258,
+          w: (maxIndex - minIndex + 1) * colW - 12,
+          h: 128,
+          title: 'structure_briefing_json 父步骤',
+          subtitle: '包含三个并行结构化子步骤，随后进入聚合；子步骤耗时不要与父步骤相加。',
+          status: finalEventForStep(visibleSteps[structureParentIndex], structureParentIndex).status,
+          durationLabel: parentDuration.label,
+          stepIndex: structureParentIndex,
+          codeTrace: {
+            function: 'buildStructuredBriefing',
+            file: codeLocation.structured,
+            callStackRole: '父步骤：Promise.all 并行运行三个结构化模块，再调用聚合 agent。'
+          }
+        };
+        drawStructureGroup(ctx, groupNode);
+        state.canvasNodes.push(groupNode);
+      }
 
       visibleSteps.forEach((step, index) => {
         const x = left + index * colW;
         const io = deriveStepIO(step, index);
         const fn = io.codeTrace?.currentOuterCall?.function || step.id;
-        const stepDuration = stepDurationInfo(step, index);
+        const stepDuration = stepDurationDisplayInfo(step, index);
         const stepNode = {
           kind: 'step',
           index,
@@ -2089,6 +2203,32 @@ const html = `<!doctype html>
       if (node.kind === 'model') {
         state.canvasFocus = { kind: 'model', traceIndex: node.traceIndex };
         setModelDetail(data.modelTraces[node.traceIndex]);
+        renderCallCanvas();
+        return;
+      }
+      if (node.kind === 'structureGroup') {
+        state.canvasFocus = { kind: 'structureGroup', node };
+        const step = data.plannerTrace[node.stepIndex];
+        const duration = stepDurationDisplayInfo(step, node.stepIndex);
+        setDetail('父步骤: ' + node.title, node.subtitle, {
+          parentFunction: node.codeTrace,
+          parentStep: step,
+          childSteps: data.plannerTrace.filter((item) =>
+            ['structure_informationSummary', 'structure_todayTodo', 'structure_twinRecommendation', 'aggregate_structured_briefing'].includes(item.id)
+          ),
+        }, {
+          duration: duration.label,
+          durationSemantics: duration.semantics,
+          note: '父步骤耗时已经包含并行结构化子步骤和聚合步骤。整体等待最慢子步骤完成，再继续聚合。',
+        }, node, { key: 'code', label: '父步骤容器' }, {
+          eventStatus: step.status,
+          finalStatusForSameStepId: finalEventForStep(step, node.stepIndex).status,
+          duration: duration.label,
+          durationSemantics: duration.semantics?.label,
+          producedBy: 'buildStructuredBriefing 父函数',
+          usedByNext: ['等待三个结构化模块完成', '调用 aggregate_structured_briefing', '生成最终 document.sections'],
+          persistence: '父步骤本身作为 plannerTrace 的 structure_briefing_json 事件落库；子步骤分别以自己的 step id 追加落库。'
+        }, node.codeTrace);
         renderCallCanvas();
         return;
       }
@@ -2324,6 +2464,7 @@ const html = `<!doctype html>
         ['事件状态', explanation.eventStatus],
         ['最终状态', explanation.finalStatusForSameStepId],
         ['耗时', explanation.duration],
+        ['耗时口径', explanation.durationSemantics],
         ['日志形态', explanation.note],
         ['由谁产生', explanation.producedBy],
         ['后续怎么用', usedByNext],
@@ -2393,7 +2534,7 @@ const html = `<!doctype html>
         const kind = callKind(step);
         const finalEvent = finalEventForStep(step, index);
         const finalCls = statusClass(finalEvent.status);
-        const duration = stepDurationInfo(step, index);
+        const duration = stepDurationDisplayInfo(step, index);
         return \`<article class="step \${cls}" data-index="\${index}" style="\${visible ? '' : 'opacity:.38'}">
           <h3><span>\${index + 1}. \${escapeHtml(step.title || step.id)}</span><span class="badge \${cls}">事件 \${escapeHtml(visible ? step.status : 'PENDING')}</span></h3>
           <p><span class="kind \${kind.key}">\${escapeHtml(kind.label)}</span> \${modelCallsForStep(step).length ? \`<span class="kind model">\${modelCallsForStep(step).length} 次模型调用</span>\` : ''}</p>

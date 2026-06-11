@@ -59,6 +59,21 @@ type ChatCompletionRequestResult = {
   tools: OpenRouterServerTool[];
 };
 
+type OpenRouterProviderRouting = {
+  order?: string[];
+  only?: string[];
+  ignore?: string[];
+  sort?: string;
+  allow_fallbacks?: boolean;
+  require_parameters?: boolean;
+};
+
+type JsonCompletionRequestResult = {
+  content: string;
+  completion: ChatCompletionResult;
+  providerRouting?: OpenRouterProviderRouting;
+};
+
 export type ChatCompletionMetadata = {
   content: string;
   model: string;
@@ -92,6 +107,8 @@ const DEFAULT_AGENT_MODELS = {
   XHS_ASSISTANT: 'deepseek/deepseek-v3.2',
 } as const;
 
+const DEFAULT_JSON_PROVIDER_ORDER = ['Friendli', 'Baidu', 'Alibaba'];
+
 export type OpenRouterAgentModelKey = keyof typeof DEFAULT_AGENT_MODELS;
 
 export interface QualificationResult {
@@ -117,6 +134,15 @@ function readPositiveIntEnv(key: string, fallback: number) {
   const value = Number(process.env[key]);
   if (!Number.isFinite(value) || value < 1) return fallback;
   return Math.round(value);
+}
+
+function readCsvEnv(key: string, fallback: string[]) {
+  const raw = process.env[key];
+  if (raw === undefined) return fallback;
+  return raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 const OPENROUTER_REQUEST_TIMEOUT_MS = readPositiveIntEnv('OPENROUTER_REQUEST_TIMEOUT_MS', 60_000);
@@ -174,6 +200,17 @@ function getOpenRouterServerTools(): OpenRouterServerTool[] {
   return tools;
 }
 
+function getJsonProviderRouting(): OpenRouterProviderRouting | undefined {
+  const order = readCsvEnv('OPENROUTER_JSON_PROVIDER_ORDER', DEFAULT_JSON_PROVIDER_ORDER);
+  if (order.length === 0) return undefined;
+
+  return {
+    order,
+    allow_fallbacks: readBoolEnv('OPENROUTER_JSON_PROVIDER_ALLOW_FALLBACKS', true),
+    require_parameters: readBoolEnv('OPENROUTER_JSON_PROVIDER_REQUIRE_PARAMETERS', true),
+  };
+}
+
 function safeParseQualification(raw: string): QualificationResult {
   try {
     const parsed = JSON.parse(extractJsonObject(raw) ?? raw) as Partial<QualificationResult>;
@@ -227,7 +264,8 @@ async function requestJsonCompletion(
   model: string,
   options?: { maxTokens?: number; jsonSchema?: JsonSchemaResponseFormat }
 ) {
-  const completion = await openai.chat.completions.create({
+  const providerRouting = getJsonProviderRouting();
+  const completion = (await openai.chat.completions.create({
     model,
     messages,
     temperature: 0.1,
@@ -235,11 +273,16 @@ async function requestJsonCompletion(
     response_format: options?.jsonSchema
       ? { type: 'json_schema', json_schema: options.jsonSchema }
       : { type: 'json_object' },
-  }, {
+    ...(providerRouting ? { provider: providerRouting } : {}),
+  } as Parameters<typeof openai.chat.completions.create>[0], {
     timeout: OPENROUTER_REQUEST_TIMEOUT_MS,
-  });
+  })) as unknown as ChatCompletionResult;
 
-  return completion.choices[0]?.message?.content || '';
+  return {
+    content: completion.choices[0]?.message?.content || '',
+    completion,
+    providerRouting,
+  } satisfies JsonCompletionRequestResult;
 }
 
 function extractJsonObject(raw: string): string | null {
@@ -388,9 +431,11 @@ export async function createJsonChatCompletion(
       timeoutMs: OPENROUTER_REQUEST_TIMEOUT_MS,
       maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
       responseFormat: options?.jsonSchema ? { type: 'json_schema', name: options.jsonSchema.name } : { type: 'json_object' },
+      provider: getJsonProviderRouting(),
     });
     try {
-      const raw = await requestJsonCompletion(messages, currentModel, options);
+      const result = await requestJsonCompletion(messages, currentModel, options);
+      const raw = result.content;
       await appendOpenRouterTrace({
         type: 'json',
         status: raw.trim() ? 'success' : 'empty',
@@ -398,11 +443,15 @@ export async function createJsonChatCompletion(
         durationMs: Date.now() - startedAt,
         maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_JSON_MAX_TOKENS', 16000),
         responseFormat: options?.jsonSchema ? { type: 'json_schema', name: options.jsonSchema.name } : { type: 'json_object' },
+        providerRouting: result.providerRouting,
+        provider: result.completion.provider,
         messages,
         output: raw,
+        rawCompletion: result.completion,
       });
       console.log('[openrouter] json success', {
         model: currentModel,
+        provider: result.completion.provider,
         durationMs: Date.now() - startedAt,
         empty: !raw.trim(),
       });
@@ -474,7 +523,7 @@ ${avatarSystemPrompt}`;
 
   for (const model of candidates) {
     try {
-      raw = await requestJsonCompletion(evaluationMessages, model);
+      raw = (await requestJsonCompletion(evaluationMessages, model)).content;
       if (raw.trim()) break;
     } catch (error) {
       lastError = error;
