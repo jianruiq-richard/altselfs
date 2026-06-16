@@ -1,0 +1,606 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { CodexJsonRpcClient } from './json-rpc-client.js';
+import { projectCodexNotification } from './event-projector.js';
+import { buildMemoryContext } from '../memory-store.js';
+import { isRecord, nowIso, safeJson, truncate } from '../util.js';
+import type { ChildAgentRunInput, ChildAgentRunResult, ChildAgentRuntime, AgentEvent } from '../types.js';
+import type { ServerConfig } from '../config.js';
+
+export class CodexAgentRuntime implements ChildAgentRuntime {
+  id = 'codex';
+  description = 'Original Codex app-server runtime for code, files, shell, patching, sandbox, MCP, and complex execution.';
+
+  constructor(private config: ServerConfig) {}
+
+  canHandle(input: ChildAgentRunInput) {
+    return /代码|修改|修复|部署|git|文件|脚本|终端|shell|build|lint|测试|canvas|API|数据库|Prisma|Next/i.test(input.message);
+  }
+
+  async run(input: ChildAgentRunInput): Promise<ChildAgentRunResult> {
+    const events: AgentEvent[] = [];
+    const emit = async (event: AgentEvent) => {
+      events.push(event);
+      await input.onEvent?.(event);
+    };
+
+    const codexHome = await this.ensureCodexHome(input.userId);
+    const workspace = await this.ensureWorkspace(input.userId, input.threadId);
+    const client = new CodexJsonRpcClient({
+      codexBin: this.config.codexBin,
+      codexHome,
+    });
+
+    let finalText = '';
+    let assistantBuffer = '';
+    let codexThreadId = '';
+    let policyViolationMessage: string | null = null;
+    let usedExternalSearch = false;
+    const generalProfile = this.isGeneralProfile(input.profileId);
+    const localEnvironmentDisabled = generalProfile && this.config.disableLocalEnvironmentForGeneral;
+
+    try {
+      await emit({
+        type: 'codex.session.starting',
+        timestamp: nowIso(),
+        payload: {
+          codexHome,
+          workspace,
+          profileId: input.profileId || 'codex',
+          localEnvironmentDisabled,
+          webSearchMode: this.config.codexWebSearchMode,
+          webSearchProvider: this.config.webSearchProvider,
+        },
+      });
+      await client.initialize();
+      const thread = await client.request(
+        'thread/start',
+        {
+          cwd: workspace,
+          ...(localEnvironmentDisabled ? { environments: [] } : {}),
+          ...(generalProfile ? { dynamicTools: [createWebSearchDynamicTool()] } : {}),
+          ...(this.config.codexModel ? { model: this.config.codexModel } : {}),
+          ...(this.config.codexModelProvider ? { modelProvider: this.config.codexModelProvider } : {}),
+          developerInstructions: this.buildDeveloperInstructions(input.profileId),
+          personality: 'pragmatic',
+        },
+        15_000
+      );
+      codexThreadId = extractThreadId(thread);
+      await emit({ type: 'codex.thread.started', timestamp: nowIso(), payload: { codexThreadId, raw: thread } });
+
+      client.on('serverRequest', (request: Record<string, unknown>) => {
+        this.handleServerRequest(client, request, emit).then((handled) => {
+          if (handled === 'web_search') usedExternalSearch = true;
+        });
+      });
+
+      client.on('notification', (notification: Record<string, unknown>) => {
+        if (localEnvironmentDisabled && this.isProhibitedLocalToolNotification(notification)) {
+          policyViolationMessage = 'codex-general is not allowed to use local command, file, patch, or image tools';
+          void emit({
+            type: 'codex.policy_violation',
+            timestamp: nowIso(),
+            payload: safeJson({ notification, policy: policyViolationMessage }),
+          });
+          client.close();
+          return;
+        }
+        const projected = projectCodexNotification(notification);
+        if (projected.assistantDelta) assistantBuffer += projected.assistantDelta;
+        if (projected.finalText) finalText = projected.finalText;
+        void emit({
+          type: `codex.${String(notification.method || 'notification')}`,
+          timestamp: nowIso(),
+          payload: safeJson({ notification: truncate(JSON.stringify(notification), 20000), projected }),
+        });
+      });
+
+      const prompt = [
+        buildMemoryContext(input.memorySnapshot),
+        '',
+        `Selected agent profile: ${input.profileId || 'codex'}`,
+        '',
+        'User turn:',
+        input.message,
+      ].join('\n');
+      const turn = await client.request(
+        'turn/start',
+        {
+          threadId: codexThreadId,
+          ...(localEnvironmentDisabled ? { environments: [] } : {}),
+          input: [{ type: 'text', text: prompt }],
+        },
+        15_000
+      );
+      await emit({ type: 'codex.turn.started', timestamp: nowIso(), payload: { raw: turn } });
+      await this.waitForTurnCompletion(client, emit);
+      if (policyViolationMessage) throw new Error(policyViolationMessage);
+      if (this.requiresCurrentExternalInfo(input.message) && !usedExternalSearch) {
+        await emit({
+          type: 'codex.web_search.not_used',
+          timestamp: nowIso(),
+          payload: {
+            warning: 'The user requested current external information, but no non-local web search tool call was observed.',
+          },
+        });
+      }
+
+      return {
+        route: 'codex',
+        reply: (finalText || assistantBuffer || 'Codex turn completed without a final assistant message.').trim(),
+        events,
+        raw: { codexThreadId },
+      };
+    } catch (error) {
+      const message = policyViolationMessage || (error instanceof Error ? error.message : String(error));
+      await emit({
+        type: 'codex.error',
+        timestamp: nowIso(),
+        payload: { error: message, stderr: client.stderrTail(20) },
+      });
+      return {
+        route: 'codex',
+        reply: `Codex app-server 执行失败：${message}`,
+        events,
+        raw: { codexThreadId, stderr: client.stderrTail(20) },
+      };
+    } finally {
+      client.close();
+    }
+  }
+
+  private async ensureCodexHome(userId: string) {
+    const dir = path.join(this.config.codexHomeRoot, sanitizePathSegment(userId));
+    await fs.mkdir(dir, { recursive: true });
+    await this.writeCodexConfig(dir);
+    return dir;
+  }
+
+  private async writeCodexConfig(codexHome: string) {
+    if (this.config.codexModelProvider !== 'openrouter') return;
+
+    const configPath = path.join(codexHome, 'config.toml');
+    const modelLine = this.config.codexModel ? `model = ${tomlString(this.config.codexModel)}\n` : '';
+    const content = [
+      modelLine.trimEnd(),
+      'model_provider = "openrouter"',
+      `web_search = ${tomlString(this.config.codexWebSearchMode)}`,
+      '',
+      '[model_providers.openrouter]',
+      'name = "OpenRouter"',
+      `base_url = ${tomlString(this.config.openRouterBaseUrl)}`,
+      'wire_api = "responses"',
+      `env_key = ${tomlString(this.config.openRouterApiKeyEnv)}`,
+      '',
+      '[model_providers.openrouter.http_headers]',
+      '"X-OpenRouter-Title" = ' + tomlString(this.config.openRouterAppTitle),
+    ].filter(Boolean).join('\n') + '\n';
+    await fs.writeFile(configPath, content, 'utf8');
+  }
+
+  private async ensureWorkspace(userId: string, threadId: string) {
+    const dir = path.join(this.config.workspaceRoot, sanitizePathSegment(userId), sanitizePathSegment(threadId));
+    await fs.mkdir(dir, { recursive: true });
+    return dir;
+  }
+
+  private async handleServerRequest(
+    client: CodexJsonRpcClient,
+    request: Record<string, unknown>,
+    emit: (event: AgentEvent) => Promise<void>
+  ): Promise<'web_search' | 'handled'> {
+    const method = String(request.method || '');
+    const requestId = request.id;
+    void emit({ type: `codex.server_request.${method}`, timestamp: nowIso(), payload: safeJson({ request }) });
+    if (method === 'item/tool/call') {
+      const params = isRecord(request.params) ? request.params : {};
+      const namespace = typeof params.namespace === 'string' ? params.namespace : '';
+      const tool = typeof params.tool === 'string' ? params.tool : '';
+      if ((!namespace && tool === 'altselfs_web_search') || (namespace === 'altselfs' && tool === 'web_search')) {
+        const resultText = await this.runWebSearchTool(params.arguments);
+        client.respond(requestId, {
+          contentItems: [{ type: 'inputText', text: resultText }],
+          success: true,
+        });
+        return 'web_search';
+      }
+      client.respond(requestId, {
+        contentItems: [{ type: 'inputText', text: `Unsupported dynamic tool: ${namespace}.${tool}` }],
+        success: false,
+      });
+      return 'handled';
+    }
+    if (method === 'item/permissions/requestApproval') {
+      client.respond(requestId, { decision: 'decline' });
+      return 'handled';
+    }
+    if (method === 'item/commandExecution/requestApproval' || method === 'item/fileChange/requestApproval') {
+      client.respond(requestId, { decision: 'decline' });
+      return 'handled';
+    }
+    client.respondError(requestId, -32601, `Unsupported server request: ${method}`);
+    return 'handled';
+  }
+
+  private buildDeveloperInstructions(profileId?: string) {
+    const currentTime = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      dateStyle: 'full',
+      timeStyle: 'long',
+    }).format(new Date());
+
+    const shared = [
+      `Current time: ${currentTime} (Asia/Shanghai).`,
+      `Codex web_search mode requested by host: ${this.config.codexWebSearchMode}.`,
+      'Answer in the user language unless the user asks otherwise.',
+    ];
+
+    if (!this.isGeneralProfile(profileId)) return shared.join('\n');
+
+    return [
+      ...shared,
+      '',
+      'Altselfs codex-general policy:',
+      '- You are a general personal agent for discussion, research, planning, and synthesis.',
+      '- Do not inspect, read, write, patch, or modify local files or repositories.',
+      '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
+      '- Use only conversation, reasoning, hosted web search, altselfs_web_search, or non-local platform/MCP tools if available.',
+      '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.',
+      '- For current, latest, today, news, industry, market, external, or web research requests, call altselfs_web_search before summarizing. Do not claim you searched unless a web search tool was called.',
+      '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
+    ].join('\n');
+  }
+
+  private async runWebSearchTool(argumentsValue: unknown) {
+    const args = isRecord(argumentsValue) ? argumentsValue : {};
+    const query = typeof args.query === 'string' ? args.query.trim() : '';
+    const recency = typeof args.recency === 'string' ? args.recency.trim() : undefined;
+    if (!query) return JSON.stringify({ error: 'query is required' });
+
+    const provider = this.resolveWebSearchProvider();
+    if (!provider) {
+      return JSON.stringify({
+        query,
+        recency,
+        error:
+          'No web search provider is configured. Set SERPAPI_API_KEY, SERPER_API_KEY, GOOGLE_CSE_API_KEY plus GOOGLE_CSE_ID, or BING_SEARCH_API_KEY.',
+      });
+    }
+
+    try {
+      const results = await runProviderSearch(provider, query, recency, this.config);
+      return JSON.stringify({ query, recency, source: provider, results }, null, 2);
+    } catch (error) {
+      return JSON.stringify({
+        query,
+        recency,
+        source: provider,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private resolveWebSearchProvider(): WebSearchProvider | null {
+    const configured = this.config.webSearchProvider;
+    if (configured !== 'auto') {
+      if (configured === 'serpapi' && !process.env[this.config.serpApiKeyEnv]?.trim()) return null;
+      if (configured === 'serper' && !process.env[this.config.serperApiKeyEnv]?.trim()) return null;
+      if (
+        configured === 'google_cse' &&
+        (!process.env[this.config.googleCseApiKeyEnv]?.trim() || !process.env[this.config.googleCseIdEnv]?.trim())
+      ) {
+        return null;
+      }
+      if (configured === 'bing' && !process.env[this.config.bingSearchApiKeyEnv]?.trim()) return null;
+      return configured;
+    }
+    if (process.env[this.config.serpApiKeyEnv]?.trim()) return 'serpapi';
+    if (process.env[this.config.serperApiKeyEnv]?.trim()) return 'serper';
+    if (process.env[this.config.googleCseApiKeyEnv]?.trim() && process.env[this.config.googleCseIdEnv]?.trim()) {
+      return 'google_cse';
+    }
+    if (process.env[this.config.bingSearchApiKeyEnv]?.trim()) return 'bing';
+    return 'duckduckgo';
+  }
+
+  private isGeneralProfile(profileId?: string) {
+    return !profileId || profileId === 'codex-general';
+  }
+
+  private requiresCurrentExternalInfo(message: string) {
+    return /联网|搜索|搜集|今日|今天|最新|新闻|资讯|行业|市场|动态|current|latest|today|news|web/i.test(message);
+  }
+
+  private isProhibitedLocalToolNotification(notification: Record<string, unknown>) {
+    const method = String(notification.method || '').toLowerCase();
+    if (
+      method.includes('commandexecution') ||
+      method.includes('filechange') ||
+      method.includes('applypatch')
+    ) {
+      return true;
+    }
+
+    const params = isRecord(notification.params) ? notification.params : {};
+    const item = isRecord(params.item) ? params.item : {};
+    const itemType = String(item.type || '').toLowerCase();
+    return (
+      itemType.includes('command') ||
+      itemType.includes('file') ||
+      itemType.includes('patch') ||
+      itemType.includes('view_image')
+    );
+  }
+
+  private waitForTurnCompletion(client: CodexJsonRpcClient, emit: (event: AgentEvent) => Promise<void>) {
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('codex turn timed out after 10 minutes'));
+      }, 600_000);
+
+      const onNotification = (notification: Record<string, unknown>) => {
+        if (notification.method === 'turn/completed') {
+          const params = isRecord(notification.params) ? notification.params : {};
+          const turn = isRecord(params.turn) ? params.turn : {};
+          if (String(turn.status || '') === 'failed') {
+            clearTimeout(timeout);
+            client.off('notification', onNotification);
+            reject(new Error(extractTurnErrorMessage(turn)));
+            return;
+          }
+          clearTimeout(timeout);
+          client.off('notification', onNotification);
+          void emit({ type: 'codex.turn.completed', timestamp: nowIso(), payload: safeJson({ notification }) });
+          resolve();
+        }
+      };
+      const onExit = (payload: unknown) => {
+        clearTimeout(timeout);
+        client.off('notification', onNotification);
+        reject(new Error(`codex app-server exited during turn: ${JSON.stringify(payload)}`));
+      };
+
+      client.on('notification', onNotification);
+      client.once('exit', onExit);
+    });
+  }
+}
+
+function extractTurnErrorMessage(turn: Record<string, unknown>) {
+  const error = isRecord(turn.error) ? turn.error : {};
+  if (typeof error.message === 'string' && error.message.trim()) return error.message;
+  return `codex turn failed: ${JSON.stringify(turn).slice(0, 500)}`;
+}
+
+function extractThreadId(result: Record<string, unknown>) {
+  const thread = result.thread;
+  if (thread && typeof thread === 'object' && 'id' in thread && typeof thread.id === 'string') return thread.id;
+  if (typeof result.threadId === 'string') return result.threadId;
+  if (typeof result.sessionId === 'string') return result.sessionId;
+  throw new Error(`thread/start returned no thread id: ${JSON.stringify(result).slice(0, 500)}`);
+}
+
+function sanitizePathSegment(value: string) {
+  return value.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 120);
+}
+
+function tomlString(value: string) {
+  return JSON.stringify(value);
+}
+
+function createWebSearchDynamicTool() {
+  return {
+    namespace: null,
+    name: 'altselfs_web_search',
+    description:
+      'Search the public web for current external information. Use this before answering questions about today, latest news, industry updates, market information, or web research. Returns compact search results with title, URL, and snippet.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query.' },
+        recency: { type: 'string', description: 'Optional recency hint such as today, 24h, week, month.' },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+    deferLoading: false,
+  };
+}
+
+type WebSearchProvider = 'serpapi' | 'serper' | 'google_cse' | 'bing' | 'duckduckgo';
+
+type WebSearchResult = {
+  title: string;
+  url: string;
+  snippet: string;
+  publishedDate?: string;
+};
+
+async function runProviderSearch(
+  provider: WebSearchProvider,
+  query: string,
+  recency: string | undefined,
+  config: ServerConfig
+): Promise<WebSearchResult[]> {
+  if (provider === 'serpapi') return serpApiSearch(query, recency, process.env[config.serpApiKeyEnv] || '');
+  if (provider === 'serper') return serperSearch(query, recency, process.env[config.serperApiKeyEnv] || '');
+  if (provider === 'google_cse') {
+    return googleCseSearch(
+      query,
+      process.env[config.googleCseApiKeyEnv] || '',
+      process.env[config.googleCseIdEnv] || ''
+    );
+  }
+  if (provider === 'bing') return bingSearch(query, recency, config);
+  return duckDuckGoHtmlSearch(query);
+}
+
+async function serpApiSearch(query: string, recency: string | undefined, apiKey: string) {
+  const url = new URL('https://serpapi.com/search.json');
+  url.searchParams.set('engine', 'google');
+  url.searchParams.set('q', query);
+  url.searchParams.set('api_key', apiKey);
+  url.searchParams.set('num', '8');
+  url.searchParams.set('hl', 'zh-cn');
+  url.searchParams.set('gl', 'cn');
+  const timeRange = googleTimeRange(recency);
+  if (timeRange) url.searchParams.set('tbs', timeRange);
+  const response = await fetchJsonWithTimeout(url.toString(), { method: 'GET' });
+  const organic = Array.isArray(response.organic_results) ? response.organic_results : [];
+  return organic.slice(0, 8).map((item) => ({
+    title: String(item.title || ''),
+    url: String(item.link || ''),
+    snippet: String(item.snippet || ''),
+    publishedDate: typeof item.date === 'string' ? item.date : undefined,
+  }));
+}
+
+async function serperSearch(query: string, recency: string | undefined, apiKey: string) {
+  const response = await fetchJsonWithTimeout('https://google.serper.dev/search', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      q: query,
+      num: 8,
+      ...(googleTimeRange(recency) ? { tbs: googleTimeRange(recency) } : {}),
+    }),
+  });
+  const organic = Array.isArray(response.organic) ? response.organic : [];
+  return organic.slice(0, 8).map((item) => ({
+    title: String(item.title || ''),
+    url: String(item.link || ''),
+    snippet: String(item.snippet || ''),
+    publishedDate: typeof item.date === 'string' ? item.date : undefined,
+  }));
+}
+
+function googleTimeRange(recency: string | undefined) {
+  const value = recency?.toLowerCase() || '';
+  if (value.includes('today') || value.includes('24h') || value.includes('day')) return 'qdr:d';
+  if (value.includes('week') || value.includes('7d')) return 'qdr:w';
+  if (value.includes('month') || value.includes('30d')) return 'qdr:m';
+  return '';
+}
+
+async function googleCseSearch(query: string, apiKey: string, cx: string) {
+  const url = new URL('https://www.googleapis.com/customsearch/v1');
+  url.searchParams.set('key', apiKey);
+  url.searchParams.set('cx', cx);
+  url.searchParams.set('q', query);
+  url.searchParams.set('num', '8');
+  const response = await fetchJsonWithTimeout(url.toString(), { method: 'GET' });
+  const items = Array.isArray(response.items) ? response.items : [];
+  return items.slice(0, 8).map((item) => ({
+    title: String(item.title || ''),
+    url: String(item.link || ''),
+    snippet: String(item.snippet || ''),
+  }));
+}
+
+async function bingSearch(query: string, recency: string | undefined, config: ServerConfig) {
+  const endpoint = new URL(config.bingSearchEndpoint);
+  endpoint.searchParams.set('q', query);
+  endpoint.searchParams.set('count', '8');
+  endpoint.searchParams.set('mkt', 'zh-CN');
+  const freshness = bingFreshness(recency);
+  if (freshness) endpoint.searchParams.set('freshness', freshness);
+  const response = await fetchJsonWithTimeout(endpoint.toString(), {
+    method: 'GET',
+    headers: {
+      'Ocp-Apim-Subscription-Key': process.env[config.bingSearchApiKeyEnv] || '',
+    },
+  });
+  const values = isRecord(response.webPages) && Array.isArray(response.webPages.value) ? response.webPages.value : [];
+  return values.slice(0, 8).map((item) => ({
+    title: String(item.name || ''),
+    url: String(item.url || ''),
+    snippet: String(item.snippet || ''),
+    publishedDate: typeof item.dateLastCrawled === 'string' ? item.dateLastCrawled : undefined,
+  }));
+}
+
+function bingFreshness(recency: string | undefined) {
+  const value = recency?.toLowerCase() || '';
+  if (value.includes('today') || value.includes('24h') || value.includes('day')) return 'Day';
+  if (value.includes('week') || value.includes('7d')) return 'Week';
+  if (value.includes('month') || value.includes('30d')) return 'Month';
+  return '';
+}
+
+async function fetchJsonWithTimeout(url: string, init: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`search request failed with HTTP ${response.status}${body ? `: ${body.slice(0, 300)}` : ''}`);
+    }
+    return await response.json() as Record<string, unknown>;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function duckDuckGoHtmlSearch(query: string): Promise<WebSearchResult[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'user-agent': 'AltselfsPersonalAgent/0.1',
+      },
+    });
+    if (!response.ok) throw new Error(`search request failed with HTTP ${response.status}`);
+    const html = await response.text();
+    return parseDuckDuckGoResults(html).slice(0, 8);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function parseDuckDuckGoResults(html: string) {
+  const results: Array<{ title: string; url: string; snippet: string }> = [];
+  const blocks = html.split(/<div class="result results_links/).slice(1);
+  for (const block of blocks) {
+    const linkMatch = block.match(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+    if (!linkMatch) continue;
+    const snippetMatch = block.match(/<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>|<div[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/div>/);
+    const rawUrl = decodeHtml(linkMatch[1]);
+    results.push({
+      title: cleanHtml(linkMatch[2]),
+      url: extractDuckDuckGoTarget(rawUrl),
+      snippet: cleanHtml(snippetMatch?.[1] || snippetMatch?.[2] || ''),
+    });
+  }
+  return results;
+}
+
+function extractDuckDuckGoTarget(rawUrl: string) {
+  try {
+    const parsed = new URL(rawUrl, 'https://duckduckgo.com');
+    const target = parsed.searchParams.get('uddg');
+    return target ? decodeURIComponent(target) : parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+function cleanHtml(value: string) {
+  return decodeHtml(value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function decodeHtml(value: string) {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&#39;/g, "'");
+}

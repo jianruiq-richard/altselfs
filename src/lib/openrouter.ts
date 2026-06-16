@@ -18,6 +18,35 @@ export interface ChatMessage {
   content: string;
 }
 
+export type ToolChatMessage =
+  | { role: 'system' | 'user'; content: string }
+  | {
+      role: 'assistant';
+      content?: string | null;
+      tool_calls?: Array<{
+        id: string;
+        type: 'function';
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }>;
+    }
+  | {
+      role: 'tool';
+      tool_call_id: string;
+      content: string;
+    };
+
+export type OpenRouterFunctionTool = {
+  type: 'function';
+  function: {
+    name: string;
+    description?: string;
+    parameters: Record<string, unknown>;
+  };
+};
+
 type JsonSchemaResponseFormat = {
   name: string;
   strict?: boolean;
@@ -78,6 +107,12 @@ export type ChatCompletionMetadata = {
   content: string;
   model: string;
   tools: OpenRouterServerTool[];
+  rawMessage: ChatCompletionResult['choices'][number]['message'] | null;
+  rawCompletion: ChatCompletionResult;
+};
+
+export type ToolChatCompletionMetadata = {
+  model: string;
   rawMessage: ChatCompletionResult['choices'][number]['message'] | null;
   rawCompletion: ChatCompletionResult;
 };
@@ -259,6 +294,30 @@ async function requestCompletion(
   };
 }
 
+async function requestToolCompletion(
+  messages: ToolChatMessage[],
+  tools: OpenRouterFunctionTool[],
+  model: string,
+  options?: { maxTokens?: number; toolChoice?: 'auto' | 'none'; parallelToolCalls?: boolean }
+) {
+  const completion = (await openai.chat.completions.create({
+    model,
+    messages,
+    temperature: 0.3,
+    max_tokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_AGENT_MAX_TOKENS', 12000),
+    tools,
+    tool_choice: options?.toolChoice || 'auto',
+    parallel_tool_calls: options?.parallelToolCalls ?? true,
+    stream: false,
+  } as Parameters<typeof openai.chat.completions.create>[0], {
+    timeout: OPENROUTER_REQUEST_TIMEOUT_MS,
+  })) as unknown as ChatCompletionResult;
+
+  return {
+    completion,
+  };
+}
+
 async function requestJsonCompletion(
   messages: ChatMessage[],
   model: string,
@@ -411,6 +470,73 @@ export async function createChatCompletionWithMetadata(
 
   const detail = getErrorMessage(lastError);
   throw new Error(`OpenRouter failed after trying models [${tried.join(', ')}]: ${detail}`);
+}
+
+export async function createToolChatCompletionWithMetadata(
+  messages: ToolChatMessage[],
+  tools: OpenRouterFunctionTool[],
+  model?: string,
+  options?: { maxTokens?: number; toolChoice?: 'auto' | 'none'; parallelToolCalls?: boolean }
+): Promise<ToolChatCompletionMetadata> {
+  const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]).slice(0, OPENROUTER_MAX_MODEL_ATTEMPTS);
+
+  let lastError: unknown;
+  const tried: string[] = [];
+
+  for (const currentModel of candidates) {
+    tried.push(currentModel);
+    const startedAt = Date.now();
+    console.log('[openrouter] tool-chat start', {
+      model: currentModel,
+      timeoutMs: OPENROUTER_REQUEST_TIMEOUT_MS,
+      toolCount: tools.length,
+    });
+    try {
+      const result = await requestToolCompletion(messages, tools, currentModel, options);
+      const rawMessage = result.completion.choices[0]?.message || null;
+      await appendOpenRouterTrace({
+        type: 'tool_chat',
+        status: 'success',
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        maxTokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_AGENT_MAX_TOKENS', 12000),
+        toolChoice: options?.toolChoice || 'auto',
+        tools,
+        messages,
+        rawMessage,
+        rawCompletion: result.completion,
+      });
+      console.log('[openrouter] tool-chat success', {
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        hasToolCalls: Boolean(rawMessage && 'tool_calls' in rawMessage),
+      });
+      return {
+        model: currentModel,
+        rawMessage,
+        rawCompletion: result.completion,
+      };
+    } catch (error) {
+      lastError = error;
+      await appendOpenRouterTrace({
+        type: 'tool_chat',
+        status: 'error',
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        messages,
+        tools,
+        error: getErrorMessage(error),
+      });
+      console.error('[openrouter] tool-chat failed', {
+        model: currentModel,
+        durationMs: Date.now() - startedAt,
+        error: getErrorMessage(error),
+      });
+    }
+  }
+
+  const detail = getErrorMessage(lastError);
+  throw new Error(`OpenRouter tool chat failed after trying models [${tried.join(', ')}]: ${detail}`);
 }
 
 export async function createJsonChatCompletion(

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 
-export type AgentType = 'GMAIL' | 'FEISHU' | 'WECHAT' | 'XIAOHONGSHU' | 'EXECUTIVE';
+export type AgentType = 'GMAIL' | 'FEISHU' | 'WECHAT' | 'XIAOHONGSHU' | 'EXECUTIVE' | 'PERSONAL';
 export type AgentMessageRole = 'USER' | 'ASSISTANT' | 'TOOL';
 
 export async function getLatestThreadWithMessages(investorId: string, agentType: AgentType) {

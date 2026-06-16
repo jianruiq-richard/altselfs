@@ -81,11 +81,11 @@ type ExecutiveRunPollResult = {
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 
 const suggestedQuestions = [
-  '汇报一下各部门工作情况',
-  '今天有哪些重点事项需要处理？',
-  '外界有什么重要信息变化？',
-  '晨报的完整内容是什么？',
-  '更新今天的晨报，并重点汇总 AI agent 和 vibe coding 的外界信息。',
+  '请帮我搜集一下今日关于 OPC 相关的行业或者技术信息。',
+  '帮我分析一下这个产品想法是否值得做。',
+  '今天 AI agent 领域有什么值得关注的变化？',
+  '帮我把一个复杂问题拆成行动计划。',
+  '记住：我喜欢看结论、依据和下一步建议。',
 ];
 
 const plannerStatusLabel: Record<PlannerStepStatus, string> = {
@@ -247,7 +247,8 @@ export default function InvestorAgentChatPage() {
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
 
-  const title = useMemo(() => (isExecutive ? '总裁秘书Momo' : 'AI 助手'), [isExecutive]);
+  const title = useMemo(() => (isExecutive ? '个人 Hermes Agent' : 'AI 助手'), [isExecutive]);
+  const showExecutiveControls = false;
   const latestPlannerStatuses = useMemo(() => getLatestPlannerStatuses(plannerTrace), [plannerTrace]);
   const hasPlannerErrors = plannerTrace.some((item) => item.status === 'ERROR');
   const plannerButtonText = sending
@@ -367,7 +368,10 @@ export default function InvestorAgentChatPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/investor/executive-assistant');
+      const res = await fetch('/api/investor/personal-agent', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || '加载失败');
@@ -376,25 +380,19 @@ export default function InvestorAgentChatPage() {
       setThreadId(data.threadId || null);
       const loadedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
       setMessages(loadedMessages);
-      setBriefing(data.briefing || null);
-      setPersistedBriefing(isRecord(data.persistedBriefing) ? (data.persistedBriefing as PersistedBriefing) : null);
-      setPlannerSteps(normalizePlannerSteps(data.planner));
-      const activeRun = isRecord(data.activeRun) ? (data.activeRun as ExecutiveRunPollResult) : null;
-      const resumeRunId = activeRun?.runId || getStoredActiveRunId();
-      if (activeRun) {
-        setPlannerSteps(normalizePlannerSteps(activeRun.planner));
-        setPlannerTrace(normalizePlannerTrace(activeRun.plannerTrace));
-      }
-      applyAgentConfig(data.agentConfig);
-      if (resumeRunId) {
-        void resumeExecutiveRun(resumeRunId, loadedMessages, { closePlannerOnSuccess: false });
+      setBriefing(null);
+      setPersistedBriefing(null);
+      setPlannerSteps([]);
+      setPlannerTrace([]);
+      if (showExecutiveControls && getStoredActiveRunId()) {
+        void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
       }
     } catch {
       setError('网络错误，请稍后重试');
     } finally {
       setLoading(false);
     }
-  }, [applyAgentConfig, isExecutive, resumeExecutiveRun]);
+  }, [isExecutive, resumeExecutiveRun, showExecutiveControls]);
 
   useEffect(() => {
     void loadData();
@@ -415,10 +413,10 @@ export default function InvestorAgentChatPage() {
     setSending(true);
     setError(null);
     setPlannerTrace([]);
-    setPlannerPanelOpen(true);
+    setPlannerPanelOpen(false);
 
     try {
-      const res = await fetch('/api/investor/executive-assistant?async=1', {
+      const res = await fetch('/api/investor/personal-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -427,24 +425,23 @@ export default function InvestorAgentChatPage() {
         }),
       });
 
-      const startData = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
-      if (!res.ok || typeof startData.runId !== 'string') {
-        setError(typeof startData.error === 'string' ? startData.error : '发送失败');
+      const data = (await res.json().catch(() => ({}))) as {
+        threadId?: string;
+        messages?: ChatMessage[];
+        reply?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(typeof data.error === 'string' ? data.error : '发送失败');
         setMessages(messages);
         return;
       }
-      storeActiveRunId(startData.runId);
-      setPlannerSteps(normalizePlannerSteps(startData.planner));
-      setPlannerTrace(normalizePlannerTrace(startData.plannerTrace));
-
-      activeRunIdRef.current = startData.runId;
-      setActiveRunId(startData.runId);
-      const run = await waitForExecutiveRun(startData.runId, (nextRun) => {
-        setPlannerSteps(normalizePlannerSteps(nextRun.planner));
-        setPlannerTrace(normalizePlannerTrace(nextRun.plannerTrace));
-      });
-      applyTerminalRun(run, nextMessages, { closePlannerOnSuccess: true });
-      clearStoredActiveRunId(startData.runId);
+      setThreadId(typeof data.threadId === 'string' ? data.threadId : threadId);
+      if (Array.isArray(data.messages)) {
+        setMessages(data.messages);
+      } else if (typeof data.reply === 'string') {
+        setMessages([...nextMessages, { role: 'assistant', content: data.reply }]);
+      }
     } catch (err) {
       setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
       setMessages(messages);
@@ -521,23 +518,25 @@ export default function InvestorAgentChatPage() {
     <FigmaShell
       homeHref="/dashboard"
       title={title}
-      subtitle="全局信息整合与战略支持"
+      subtitle="长期记忆、联网研究和多 Agent 调度入口"
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={openPromptEditor}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            {promptEditorOpen ? '收起 system prompt' : '编辑 system prompt'}
-          </button>
+          {showExecutiveControls ? (
+            <button
+              type="button"
+              onClick={openPromptEditor}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              {promptEditorOpen ? '收起 system prompt' : '编辑 system prompt'}
+            </button>
+          ) : null}
           <Link href="/dashboard" className="px-2 text-sm text-blue-700 hover:underline">
             返回工作台
           </Link>
         </div>
       }
     >
-      {promptEditorOpen ? (
+      {showExecutiveControls && promptEditorOpen ? (
         <div ref={promptEditorRef} className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -609,6 +608,7 @@ export default function InvestorAgentChatPage() {
         </div>
       ) : null}
 
+      {showExecutiveControls ? (
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -711,8 +711,9 @@ export default function InvestorAgentChatPage() {
           </div>
         ) : null}
       </div>
+      ) : null}
 
-      {briefing ? (
+      {showExecutiveControls && briefing ? (
         <ExecutiveDailyBriefingBrowser
           briefing={briefing}
           persistedBriefing={persistedBriefing}
@@ -739,7 +740,7 @@ export default function InvestorAgentChatPage() {
                   </div>
                 </div>
               ))}
-              {messages.length === 0 ? <div className="py-8 text-center text-slate-500">开始和总裁秘书Momo对话吧。</div> : null}
+              {messages.length === 0 ? <div className="py-8 text-center text-slate-500">开始和你的个人 Hermes Agent 对话吧。</div> : null}
             </div>
           )}
         </div>

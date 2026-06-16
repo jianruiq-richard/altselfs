@@ -2,7 +2,8 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getInvestorOrNull } from '@/lib/investor-auth';
-import { createChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
+import { getOpenRouterModel } from '@/lib/openrouter';
+import { runCodexAgentLoop, type CodexAgentLoopEvent, type CodexAgentTool } from '@/lib/codex-agent-runtime';
 import {
   appendToolCall,
   appendThreadMessage,
@@ -135,16 +136,32 @@ async function loadRecentExecutionRecords(threadId: string) {
 }
 
 async function generateExecutiveReply(
-  messages: ClientMessage[],
-  briefing: ExecutiveDailyBriefing,
-  systemPrompt: string,
-  executionSnapshot?: ExecutiveExecutionSnapshot | null
+  params: {
+    investorId: string;
+    threadId: string;
+    messages: ClientMessage[];
+    briefing: ExecutiveDailyBriefing;
+    getBriefing: () => ExecutiveDailyBriefing;
+    systemPrompt: string;
+    getPersistedBriefing: () => Promise<Awaited<ReturnType<typeof getTodayExecutiveBriefing>> | null>;
+    setBriefing: (briefing: ExecutiveDailyBriefing) => void;
+    setExecutionSnapshot: (snapshot: ExecutiveExecutionSnapshot) => void;
+    getExecutionSnapshot: () => ExecutiveExecutionSnapshot | null;
+    onPlannerEvent?: (event: ExecutivePlannerEvent) => void | Promise<void>;
+  }
 ) {
+  const latest = params.messages[params.messages.length - 1];
   const contextPrompt = [
-    '下面是当前可用的业务上下文。只在用户明确需要时才引用，不要机械反复提及。',
-    buildBriefingContext(briefing),
+    '下面是当前可用的业务上下文。只在用户明确需要时才引用，不要机械反复提及；如果用户要更新、查询实时状态或复盘调用链，应优先通过工具取得真实结果。',
+    buildBriefingContext(params.briefing),
     '下面是本轮和最近几轮真实执行记录。它是你回答“刚才调用了什么、执行了什么、哪里报错、拿到了什么结果”的唯一依据。',
-    buildExecutionContext(executionSnapshot),
+    buildExecutionContext(params.getExecutionSnapshot()),
+    'Codex agent loop 对齐约束：',
+    '1) 你不是一次性问答模型；你可以在本轮中选择工具、读取工具输出、再继续决定下一步。',
+    '2) 不要声称调用了没有真实调用的工具；工具输出才是系统事实。',
+    '3) 当用户要求更新信息、更新晨报、重新汇总今天信息时，调用 update_today_briefing；不要只凭已有上下文编造更新结果。',
+    '4) 当用户只是追问机制、解释结果、查看当前状态时，优先调用 get_current_briefing、get_recent_execution_trace 或 list_connected_information_channels。',
+    '5) 当问题依赖“今天、昨天、最近24小时”等时间判断时，先调用 get_current_time。',
     '输出约束补充：',
     '1) 回复使用中文口语化表达。',
     '2) 不要使用 markdown 格式符号。',
@@ -153,14 +170,188 @@ async function generateExecutiveReply(
     '5) 如果用户要求复盘执行过程，必须区分：计划了什么、实际执行了什么、跳过了什么、哪里报错、拿到哪些中间结果；不要编造未发生的调用。',
   ].join('\n\n');
 
-  const chatMessages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'system', content: contextPrompt },
-    ...messages.map((item) => ({ role: item.role, content: item.content })),
+  const tools: CodexAgentTool[] = [
+    {
+      name: 'get_current_time',
+      description: 'Return the server current date and time for resolving relative date phrases.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+      execute: async () => {
+        const date = new Date();
+        return {
+          iso: date.toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          locale: date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+          dateKeyShanghai: date.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+        };
+      },
+    },
+    {
+      name: 'get_current_briefing',
+      description: 'Read the current in-memory briefing and the latest persisted briefing for this executive assistant.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+      execute: async () => ({
+        currentBriefing: params.getBriefing(),
+        persistedBriefing: await params.getPersistedBriefing(),
+      }),
+    },
+    {
+      name: 'list_connected_information_channels',
+      description: 'List currently connected information channels and available source counts.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+      execute: async () => {
+        const [integrations, wechatSourceCount, agentThreads] = await Promise.all([
+          prisma.investorIntegration.findMany({
+            where: { investorId: params.investorId },
+            select: { provider: true, status: true, accountEmail: true, accountName: true, updatedAt: true },
+            orderBy: { updatedAt: 'desc' },
+          }),
+          prisma.investorWechatSource.count({ where: { investorId: params.investorId } }),
+          prisma.agentThread.findMany({
+            where: { investorId: params.investorId },
+            select: { agentType: true, updatedAt: true },
+            orderBy: { updatedAt: 'desc' },
+          }),
+        ]);
+        return {
+          integrations,
+          wechatSourceCount,
+          knownAgentThreads: agentThreads,
+        };
+      },
+    },
+    {
+      name: 'get_recent_execution_trace',
+      description: 'Read recent persisted tool execution records for explaining what actually ran.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+      execute: async () => ({
+        executionSnapshot: params.getExecutionSnapshot(),
+        recentToolCalls: await loadRecentExecutionRecords(params.threadId),
+      }),
+    },
+    {
+      name: 'update_today_briefing',
+      description: 'Run the executive briefing update workflow. Use this when the user asks to update information, update the morning briefing, or re-aggregate channel signals.',
+      parameters: {
+        type: 'object',
+        properties: {
+          userQuery: {
+            type: 'string',
+            description: 'The concrete user instruction to pass to the executive briefing workflow.',
+          },
+          reason: {
+            type: 'string',
+            description: 'Why this tool call is needed in the current turn.',
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: async (args) => {
+        const updateResult = await updateTodayExecutiveBriefing({
+          investorId: params.investorId,
+          userQuery: typeof args.userQuery === 'string' && args.userQuery.trim() ? args.userQuery : latest?.content || '',
+          executiveSystemPrompt: params.systemPrompt,
+          onPlannerEvent: params.onPlannerEvent,
+        });
+        if (!updateResult) {
+          return {
+            skipped: true,
+            reason: 'updateTodayExecutiveBriefing returned null, so no briefing update was performed.',
+            currentBriefing: params.getBriefing(),
+          };
+        }
+
+        params.setBriefing(updateResult.briefing);
+        const subagents = updateResult.subagentResults.map((item) => ({
+          agentType: item.agentType,
+          answer: item.answer,
+          briefingItemCount: item.briefingItems.length,
+          briefingItems: item.briefingItems,
+          debug: item.debug,
+        }));
+        const snapshot: ExecutiveExecutionSnapshot = {
+          planner: getExecutivePlannerDefinition(),
+          plannerTrace: [],
+          document: updateResult.document,
+          subagents,
+          toolCalls: updateResult.toolCalls,
+        };
+        params.setExecutionSnapshot(snapshot);
+
+        return {
+          briefing: updateResult.briefing,
+          persistedBriefing: await params.getPersistedBriefing(),
+          document: updateResult.document,
+          subagents,
+          toolCalls: updateResult.toolCalls,
+        };
+      },
+    },
   ];
 
-  const reply = await createChatCompletion(chatMessages, getOpenRouterModel('EXECUTIVE'));
-  return reply.trim();
+  const loopEvents: CodexAgentLoopEvent[] = [];
+  const result = await runCodexAgentLoop({
+    systemMessages: [params.systemPrompt, contextPrompt],
+    conversation: params.messages,
+    tools,
+    modelKey: 'EXECUTIVE',
+    maxTurns: 8,
+    onEvent: async (event) => {
+      loopEvents.push(event);
+      if (event.type === 'tool_call' && (event.status === 'SUCCESS' || event.status === 'ERROR')) {
+        await appendToolCall({
+          threadId: params.threadId,
+          toolName: event.toolName,
+          status: event.status,
+          toolArgs: event.arguments,
+          toolResult: event.result || (event.error ? { error: event.error } : undefined),
+        });
+      }
+      await params.onPlannerEvent?.({
+        type: 'step',
+        step: {
+          ...getExecutivePlannerStepDefinition('generate_reply'),
+          status: event.status === 'SKIPPED' ? 'SKIPPED' : event.status,
+          detail:
+            event.type === 'model_call'
+              ? `Codex式循环：第 ${event.turn} 轮模型调用 ${event.status}`
+              : event.type === 'tool_call'
+                ? `Codex式循环：${event.toolName} ${event.status}`
+                : `Codex式循环：上下文压缩 ${event.status}`,
+          timestamp: event.timestamp,
+          payload: {
+            codexAgentLoop: event,
+          },
+        },
+      });
+    },
+  });
+
+  params.setExecutionSnapshot({
+    ...(params.getExecutionSnapshot() || { planner: getExecutivePlannerDefinition(), plannerTrace: [] }),
+    recentToolCalls: await loadRecentExecutionRecords(params.threadId),
+  });
+
+  return {
+    reply: result.finalText.trim(),
+    loopEvents,
+    model: result.model || getOpenRouterModel('EXECUTIVE'),
+  };
 }
 
 function normalizeSystemPrompt(input: unknown) {
@@ -414,68 +605,6 @@ async function runExecutiveAssistantTurn(params: {
     plannerTrace,
   };
 
-  try {
-    const updateResult = await updateTodayExecutiveBriefing({
-      investorId: params.investorId,
-      userQuery: latest.content,
-      executiveSystemPrompt: promptConfig.systemPrompt,
-      onPlannerEvent: emitPlannerEvent,
-    });
-    if (updateResult) {
-      briefing = updateResult.briefing;
-      persistedBriefing = await getTodayExecutiveBriefing(params.investorId);
-      const subagents = updateResult.subagentResults.map((item) => ({
-        agentType: item.agentType,
-        answer: item.answer,
-        briefingItems: item.briefingItems,
-        debug: item.debug,
-      }));
-      executionSnapshot = {
-        planner: currentPlanner,
-        plannerTrace,
-        document: updateResult.document,
-        subagents,
-        toolCalls: updateResult.toolCalls,
-      };
-      await appendToolCall({
-        threadId: thread.id,
-        toolName: 'executive_dynamic_planner',
-        status: 'SUCCESS',
-        toolArgs: { userQuery: latest.content },
-        toolResult: {
-          document: updateResult.document,
-          plannerTrace,
-          subagents,
-          toolCalls: updateResult.toolCalls,
-        },
-      });
-    }
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : 'unknown error';
-    await appendToolCall({
-      threadId: thread.id,
-      toolName: 'executive_dynamic_planner',
-      status: 'ERROR',
-      toolArgs: { userQuery: latest.content },
-      toolResult: { error: detail, plannerTrace },
-    });
-    return {
-      status: 500,
-      body: {
-        error: `晨报更新失败：${detail}`,
-        threadId: thread.id,
-        briefing,
-        planner: currentPlanner,
-        plannerTrace,
-        agentConfig: {
-          systemPrompt: promptConfig.systemPrompt,
-          defaultSystemPrompt: promptConfig.defaultSystemPrompt,
-          hasCustomPrompt: Boolean(promptConfig.customPrompt),
-        },
-      },
-    };
-  }
-
   executionSnapshot = {
     ...executionSnapshot,
     planner: currentPlanner,
@@ -494,8 +623,37 @@ async function runExecutiveAssistantTurn(params: {
   });
 
   let reply = '';
+  let codexLoop: unknown = null;
   try {
-    reply = await generateExecutiveReply(params.messages, briefing, promptConfig.systemPrompt, executionSnapshot);
+    const replyResult = await generateExecutiveReply({
+      investorId: params.investorId,
+      threadId: thread.id,
+      messages: params.messages,
+      briefing,
+      getBriefing: () => briefing,
+      systemPrompt: promptConfig.systemPrompt,
+      getPersistedBriefing: async () => {
+        persistedBriefing = await getTodayExecutiveBriefing(params.investorId);
+        return persistedBriefing;
+      },
+      setBriefing: (nextBriefing) => {
+        briefing = nextBriefing;
+      },
+      getExecutionSnapshot: () => executionSnapshot,
+      setExecutionSnapshot: (snapshot) => {
+        executionSnapshot = {
+          ...snapshot,
+          planner: currentPlanner,
+          plannerTrace,
+        };
+      },
+      onPlannerEvent: emitPlannerEvent,
+    });
+    reply = replyResult.reply;
+    codexLoop = {
+      model: replyResult.model,
+      events: replyResult.loopEvents,
+    };
     await emitPlannerEvent({
       type: 'step',
       step: {
@@ -540,6 +698,7 @@ async function runExecutiveAssistantTurn(params: {
     content: reply,
     meta: {
       executionSnapshot: compactForModel(executionSnapshot),
+      codexLoop: compactForModel(codexLoop),
     },
   });
 
@@ -553,6 +712,7 @@ async function runExecutiveAssistantTurn(params: {
       persistedBriefing,
       planner: currentPlanner,
       plannerTrace,
+      codexLoop,
       agentConfig: {
         systemPrompt: promptConfig.systemPrompt,
         defaultSystemPrompt: promptConfig.defaultSystemPrompt,
