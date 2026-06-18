@@ -26,7 +26,7 @@ type PersonalAgentResponse = {
 };
 
 function getPersonalAgentServerUrl() {
-  return (process.env.PERSONAL_AGENT_SERVER_URL || 'http://127.0.0.1:8788').replace(/\/$/, '');
+  return (process.env.PERSONAL_AGENT_SERVER_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 }
 
 function normalizeMessages(value: unknown): ClientMessage[] {

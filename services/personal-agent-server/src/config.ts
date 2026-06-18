@@ -24,6 +24,16 @@ export type ServerConfig = {
   bingSearchApiKeyEnv: string;
   bingSearchEndpoint: string;
   disableLocalEnvironmentForGeneral: boolean;
+  hermesSourceRuntimeEnabled: boolean;
+  hermesSourceRoot: string;
+  uvBin: string;
+  hermesHomeRoot: string;
+  hermesWorkspaceRoot: string;
+  hermesMemoryNudgeInterval: number;
+  hermesMaxTurns: number;
+  hermesCodexResponsesProxyEnabled: boolean;
+  hermesBackgroundReviewInline: boolean;
+  profileStorePath: string;
 };
 
 function readIntEnv(key: string, fallback: number) {
@@ -130,5 +140,15 @@ export function loadConfig(): ServerConfig {
     bingSearchApiKeyEnv: readEnv('BING_SEARCH_API_KEY_ENV', 'BING_SEARCH_API_KEY'),
     bingSearchEndpoint: readEnv('BING_SEARCH_ENDPOINT', 'https://api.bing.microsoft.com/v7.0/search'),
     disableLocalEnvironmentForGeneral: readBoolEnv('CODEX_GENERAL_DISABLE_LOCAL_ENVIRONMENT', true),
+    hermesSourceRuntimeEnabled: readBoolEnv('HERMES_SOURCE_RUNTIME_ENABLED', false),
+    hermesSourceRoot: path.resolve(readEnv('HERMES_SOURCE_ROOT', '/Users/richardjian/work/agent-sources/hermes-agent')),
+    uvBin: readEnv('UV_BIN', 'uv'),
+    hermesHomeRoot: path.resolve(readEnv('HERMES_HOME_ROOT', '/tmp/altselfs-hermes-homes')),
+    hermesWorkspaceRoot: path.resolve(readEnv('HERMES_WORKSPACE_ROOT', '/tmp/altselfs-hermes-workspaces')),
+    hermesMemoryNudgeInterval: readIntEnv('HERMES_MEMORY_NUDGE_INTERVAL', 10),
+    hermesMaxTurns: readIntEnv('HERMES_MAX_TURNS', 8),
+    hermesCodexResponsesProxyEnabled: readBoolEnv('HERMES_CODEX_RESPONSES_PROXY_ENABLED', true),
+    hermesBackgroundReviewInline: readBoolEnv('HERMES_BACKGROUND_REVIEW_INLINE', true),
+    profileStorePath: path.resolve(readEnv('PROFILE_STORE_PATH', '/tmp/altselfs-personal-agent-profiles.json')),
   };
 }

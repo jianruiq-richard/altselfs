@@ -1,19 +1,31 @@
 import { AgentRegistry } from './agent-registry.js';
 import { buildMemoryContext, inferExplicitMemoryWrite, type MemoryStore } from './memory-store.js';
 import { id, nowIso } from './util.js';
-import type { AgentRoute, TurnStartRequest, TurnStartResponse, AgentEvent, ChildAgentRunInput, RouterDecision } from './types.js';
+import type { AgentRoute, TurnStartRequest, TurnStartResponse, AgentEvent, ChildAgentRunInput, RouterDecision, SourceAgentRuntime } from './types.js';
 import type { HermesRouter } from './hermes-router.js';
 
 export class PersonalMainAgent {
   constructor(
     private registry: AgentRegistry,
     private memoryStore: MemoryStore,
-    private router: HermesRouter
+    private router: HermesRouter,
+    private sourceRuntime?: SourceAgentRuntime
   ) {}
 
   async startTurn(request: TurnStartRequest): Promise<TurnStartResponse> {
     validateTurnRequest(request);
     const threadId = request.threadId || id('thr');
+
+    if (this.sourceRuntime) {
+      const result = await this.sourceRuntime.run({ ...request, threadId });
+      return {
+        threadId,
+        route: result.route,
+        reply: result.reply,
+        events: result.events,
+      };
+    }
+
     const memorySnapshot = await this.memoryStore.getSnapshot(request.userId);
     const events: AgentEvent[] = [];
     const emit = async (event: AgentEvent) => {

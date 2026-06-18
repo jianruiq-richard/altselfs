@@ -1,0 +1,205 @@
+import { buildMemoryContext } from './memory-store.js';
+import { isRecord, truncate } from './util.js';
+export class HermesRouter {
+    config;
+    constructor(config) {
+        this.config = config;
+    }
+    async decide(input) {
+        if (!this.config.hermesRouterEnabled)
+            return fallbackRouterDecision(input, 'router disabled');
+        const apiKey = process.env[this.config.hermesOpenRouterApiKeyEnv]?.trim();
+        if (!apiKey)
+            return fallbackRouterDecision(input, `${this.config.hermesOpenRouterApiKeyEnv} is missing`);
+        const routerPayload = buildRouterPayload(input);
+        const messages = [
+            {
+                role: 'system',
+                content: [
+                    'You are the Hermes main-agent router for Altselfs.',
+                    'Your job is only to choose whether the main agent should answer directly or delegate this turn to one registered agent profile.',
+                    'Use the agent profiles exactly as provided. Do not invent agent ids.',
+                    'Return only valid JSON with this shape:',
+                    '{"route":"main"|"agent","agentProfileId":string|null,"reason":string,"confidence":number,"needsClarification":boolean,"clarificationQuestion":string|null}',
+                    'confidence must be a number from 0 to 1. Never return a negative confidence.',
+                    'Hermes main is intentionally small. Choose main only for lightweight conversation continuity, explicit memory writes, user preference updates, user profile maintenance, or brief clarification.',
+                    'Delegate to codex-general for all research, web/current information, planning, analysis, recommendations, summarization, tool use, sub-agent orchestration, and non-trivial answers.',
+                    'Hermes main must not directly use search, channel agents, business tools, or execution tools. Those capabilities live under codex-general.',
+                    'When delegating, choose exactly one id from availableAgentProfiles.',
+                    'If a capability is not represented by an available profile, choose main and explain the limitation.',
+                ].join('\n'),
+            },
+            {
+                role: 'user',
+                content: JSON.stringify(routerPayload),
+            },
+        ];
+        const raw = await this.callOpenRouter(messages, apiKey);
+        const parsed = parseRouterJson(raw.content);
+        if (!parsed) {
+            return {
+                ...fallbackRouterDecision(input, 'router returned non-JSON or invalid schema'),
+                raw: {
+                    request: routerPayload,
+                    response: raw,
+                },
+            };
+        }
+        const normalized = normalizeRouterDecision(parsed, input.availableProfiles);
+        return {
+            ...normalized,
+            raw: {
+                request: routerPayload,
+                response: raw,
+            },
+        };
+    }
+    async callOpenRouter(messages, apiKey) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45_000);
+        try {
+            const response = await fetch(`${this.config.openRouterBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                    authorization: `Bearer ${apiKey}`,
+                    'content-type': 'application/json',
+                    'x-openrouter-title': this.config.openRouterAppTitle,
+                },
+                body: JSON.stringify({
+                    model: this.config.hermesModel,
+                    messages,
+                    temperature: 0,
+                    max_tokens: 800,
+                }),
+            });
+            const text = await response.text();
+            if (!response.ok)
+                throw new Error(`OpenRouter router failed ${response.status}: ${truncate(text, 2000)}`);
+            const rawCompletion = JSON.parse(text);
+            const content = extractContent(rawCompletion);
+            return { content, rawCompletion };
+        }
+        finally {
+            clearTimeout(timeout);
+        }
+    }
+}
+function buildRouterPayload(input) {
+    return {
+        userId: input.userId,
+        threadId: input.threadId,
+        userMessage: input.message,
+        memoryContext: buildMemoryContext(input.memorySnapshot),
+        availableAgentProfiles: input.availableProfiles.map((profile) => ({
+            id: profile.id,
+            runtimeId: profile.runtimeId,
+            name: profile.name,
+            description: profile.description,
+            capabilities: profile.capabilities,
+            whenToUse: profile.whenToUse,
+            whenNotToUse: profile.whenNotToUse,
+            tools: profile.tools,
+            riskLevel: profile.riskLevel,
+            requiresWorkspace: profile.requiresWorkspace,
+            requiresApprovalFor: profile.requiresApprovalFor,
+        })),
+    };
+}
+function normalizeRouterDecision(value, profiles) {
+    const profileIds = new Set(profiles.map((profile) => profile.id));
+    const route = value.route === 'agent' ? 'agent' : 'main';
+    const agentProfileId = typeof value.agentProfileId === 'string' ? value.agentProfileId : undefined;
+    if (route === 'agent' && agentProfileId && profileIds.has(agentProfileId)) {
+        const profile = profiles.find((item) => item.id === agentProfileId);
+        return {
+            route: 'agent',
+            agentProfileId,
+            runtimeId: profile?.runtimeId,
+            reason: readString(value.reason, 'Router selected a child agent.'),
+            confidence: readConfidence(value.confidence),
+            needsClarification: value.needsClarification === true,
+            clarificationQuestion: typeof value.clarificationQuestion === 'string' ? value.clarificationQuestion : undefined,
+        };
+    }
+    return {
+        route: 'main',
+        reason: readString(value.reason, 'Router selected main agent.'),
+        confidence: readConfidence(value.confidence),
+        needsClarification: value.needsClarification === true,
+        clarificationQuestion: typeof value.clarificationQuestion === 'string' ? value.clarificationQuestion : undefined,
+    };
+}
+function fallbackRouterDecision(input, reason) {
+    const message = input.message;
+    const engineering = /代码|修改|修复|部署|git|文件|脚本|终端|shell|build|lint|测试|canvas|API|数据库|Prisma|Next/i.test(message);
+    if (engineering && input.availableProfiles.some((profile) => profile.id === 'codex-engineering')) {
+        return {
+            route: 'agent',
+            agentProfileId: 'codex-engineering',
+            runtimeId: 'codex',
+            reason: `Fallback selected codex-engineering: ${reason}`,
+            confidence: 0.55,
+        };
+    }
+    const general = /搜索|联网|查一下|研究|分析|讨论|帮我想|总结|资料|外界|新闻|信息|趋势|计划|方案|建议|推荐|今天|今日|最新|为什么|怎么|如何/i.test(message);
+    if (general && input.availableProfiles.some((profile) => profile.id === 'codex-general')) {
+        return {
+            route: 'agent',
+            agentProfileId: 'codex-general',
+            runtimeId: 'codex',
+            reason: `Fallback selected codex-general: ${reason}`,
+            confidence: 0.5,
+        };
+    }
+    return {
+        route: 'main',
+        reason: `Fallback selected main: ${reason}`,
+        confidence: 0.45,
+    };
+}
+function parseRouterJson(content) {
+    const cleaned = content.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+    try {
+        const parsed = JSON.parse(cleaned);
+        return isRecord(parsed) ? parsed : null;
+    }
+    catch {
+        const start = cleaned.indexOf('{');
+        const end = cleaned.lastIndexOf('}');
+        if (start < 0 || end <= start)
+            return null;
+        try {
+            const parsed = JSON.parse(cleaned.slice(start, end + 1));
+            return isRecord(parsed) ? parsed : null;
+        }
+        catch {
+            return null;
+        }
+    }
+}
+function extractContent(rawCompletion) {
+    if (!isRecord(rawCompletion))
+        return '';
+    const choices = rawCompletion.choices;
+    if (!Array.isArray(choices))
+        return '';
+    const first = choices[0];
+    if (!isRecord(first))
+        return '';
+    const message = first.message;
+    if (!isRecord(message))
+        return '';
+    return typeof message.content === 'string' ? message.content : '';
+}
+function readString(value, fallback) {
+    return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+function readConfidence(value) {
+    let number = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(number))
+        return 0.5;
+    if (number < 0 && number >= -1)
+        number = Math.abs(number);
+    return Math.max(0, Math.min(1, number));
+}

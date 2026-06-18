@@ -76,6 +76,17 @@ export type ChildAgentRuntime = {
   run: (input: ChildAgentRunInput) => Promise<ChildAgentRunResult>;
 };
 
+export type SourceAgentRunResult = {
+  route: AgentRoute;
+  reply: string;
+  events: AgentEvent[];
+  raw?: unknown;
+};
+
+export type SourceAgentRuntime = {
+  run: (request: TurnStartRequest) => Promise<SourceAgentRunResult>;
+};
+
 export type AgentProfileRiskLevel = 'low' | 'medium' | 'high';
 
 export type AgentProfile = {

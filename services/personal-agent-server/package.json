@@ -7,7 +7,14 @@
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "sources:inspect": "node scripts/inspect-agent-sources.mjs",
+    "kernel:prepare": "node scripts/prepare-local-kernel.mjs",
+    "kernel:patch-hermes-openrouter": "node scripts/patch-hermes-openrouter-runtime.mjs",
+    "kernel:write-codex-wrapper": "node scripts/write-codex-wrapper.mjs",
+    "kernel:build-codex": "node scripts/build-codex-app-server.mjs",
+    "kernel:hermes-check": "node scripts/check-hermes-acp.mjs",
+    "kernel:hermes-auth": "node scripts/auth-hermes-codex.mjs"
   },
   "dependencies": {},
   "devDependencies": {
@@ -16,4 +23,3 @@
     "typescript": "^5.0.0"
   }
 }
-
