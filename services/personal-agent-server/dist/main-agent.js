@@ -27,6 +27,7 @@ export class PersonalMainAgent {
         const events = [];
         const emit = async (event) => {
             events.push(event);
+            await request.onEvent?.(event);
         };
         const currentUserMessage = readCurrentUserMessage(request);
         const explicitMemory = inferExplicitMemoryWrite(currentUserMessage);

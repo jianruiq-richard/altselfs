@@ -30,6 +30,7 @@ export class PersonalMainAgent {
     const events: AgentEvent[] = [];
     const emit = async (event: AgentEvent) => {
       events.push(event);
+      await request.onEvent?.(event);
     };
     const currentUserMessage = readCurrentUserMessage(request);
 

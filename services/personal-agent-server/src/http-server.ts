@@ -29,13 +29,18 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
       if (req.method === 'POST' && url.pathname === '/v1/turns/start') {
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
-        const result = await agent.startTurn({
+        const turnRequest = {
           userId: String(body.userId || ''),
           threadId: typeof body.threadId === 'string' ? body.threadId : undefined,
           message: String(body.message || ''),
           allowedAgents: Array.isArray(body.allowedAgents) ? body.allowedAgents.map(String) : undefined,
           metadata: isRecord(body.metadata) ? body.metadata : undefined,
-        });
+        };
+        if (url.searchParams.get('stream') === '1') {
+          return streamTurnStart(res, agent, turnRequest);
+        }
+
+        const result = await agent.startTurn(turnRequest);
         if (url.searchParams.get('format') === 'text') {
           return text(res, 200, result.reply);
         }
@@ -57,6 +62,63 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
       });
     }
   });
+}
+
+function streamTurnStart(
+  res: http.ServerResponse,
+  agent: PersonalMainAgent,
+  request: {
+    userId: string;
+    threadId?: string;
+    message: string;
+    allowedAgents?: string[];
+    metadata?: Record<string, unknown>;
+  }
+) {
+  let closed = false;
+  const write = (payload: unknown) => {
+    if (closed || res.destroyed) return;
+    res.write(`${JSON.stringify(payload)}\n`);
+  };
+
+  res.writeHead(200, {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-cache, no-transform',
+    connection: 'keep-alive',
+  });
+
+  const heartbeat = setInterval(() => {
+    write({ type: 'heartbeat', timestamp: new Date().toISOString() });
+  }, 15_000);
+
+  res.on('close', () => {
+    closed = true;
+    clearInterval(heartbeat);
+  });
+
+  void (async () => {
+    try {
+      write({ type: 'turn_started', timestamp: new Date().toISOString() });
+      const result = await agent.startTurn({
+        ...request,
+        onEvent: async (event) => {
+          write({ type: 'event', event });
+        },
+      });
+      write({ type: 'final', result: { ...result, events: [] } });
+    } catch (error) {
+      write({
+        type: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      clearInterval(heartbeat);
+      if (!closed) {
+        closed = true;
+        res.end();
+      }
+    }
+  })();
 }
 
 async function openRouterResponsesProxy(

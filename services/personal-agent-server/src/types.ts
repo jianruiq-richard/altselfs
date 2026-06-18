@@ -6,6 +6,7 @@ export type TurnStartRequest = {
   message: string;
   allowedAgents?: string[];
   metadata?: Record<string, unknown>;
+  onEvent?: (event: AgentEvent) => void | Promise<void>;
 };
 
 export type AgentEvent = {

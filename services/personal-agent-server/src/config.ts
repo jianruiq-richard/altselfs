@@ -127,19 +127,23 @@ function parseEnvValue(value: string) {
 
 export function loadConfig(): ServerConfig {
   loadLocalEnvFiles();
+  const hermesModel = readEnv('HERMES_MODEL', 'deepseek/deepseek-v3.2');
+  const openRouterApiKeyEnv = readEnv('OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY');
+  const hasOpenRouterKey = Boolean(process.env[openRouterApiKeyEnv]?.trim());
+  const codexModelProvider = process.env.CODEX_MODEL_PROVIDER?.trim() || (hasOpenRouterKey ? 'openrouter' : undefined);
   return {
     port: readIntEnv('PORT', 8787),
     env: readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development'),
     hermesRouterEnabled: readBoolEnv('HERMES_ROUTER_ENABLED', true),
-    hermesModel: readEnv('HERMES_MODEL', 'deepseek/deepseek-v3.2'),
+    hermesModel,
     hermesOpenRouterApiKeyEnv: readEnv('HERMES_OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY'),
     codexBin: readEnv('CODEX_BIN', 'codex'),
     codexHomeRoot: path.resolve(readEnv('CODEX_HOME_ROOT', '/tmp/altselfs-codex-homes')),
     workspaceRoot: path.resolve(readEnv('WORKSPACE_ROOT', '/tmp/altselfs-workspaces')),
-    codexModel: process.env.CODEX_MODEL?.trim() || undefined,
-    codexModelProvider: process.env.CODEX_MODEL_PROVIDER?.trim() || undefined,
+    codexModel: process.env.CODEX_MODEL?.trim() || (codexModelProvider === 'openrouter' ? hermesModel : undefined),
+    codexModelProvider,
     openRouterBaseUrl: readEnv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
-    openRouterApiKeyEnv: readEnv('OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY'),
+    openRouterApiKeyEnv,
     openRouterAppTitle: readEnv('OPENROUTER_APP_TITLE', 'Altselfs Personal Agent Server'),
     codexWebSearchMode: readWebSearchModeEnv('CODEX_WEB_SEARCH_MODE', 'live'),
     webSearchProvider: readWebSearchProviderEnv('WEB_SEARCH_PROVIDER', 'auto'),

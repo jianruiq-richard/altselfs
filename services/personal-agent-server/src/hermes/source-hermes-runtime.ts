@@ -21,8 +21,10 @@ export class HermesSourceRuntime {
 
   async run(request: TurnStartRequest): Promise<SourceAgentRunResult> {
     const events: AgentEvent[] = [];
-    const emit = (type: string, payload: Record<string, unknown>) => {
-      events.push({ type, timestamp: nowIso(), payload: safeJson(payload) });
+    const emit = async (type: string, payload: Record<string, unknown>) => {
+      const event = { type, timestamp: nowIso(), payload: safeJson(payload) };
+      events.push(event);
+      await request.onEvent?.(event);
     };
 
     const userSegment = sanitizePathSegment(request.userId);
@@ -38,7 +40,7 @@ export class HermesSourceRuntime {
       request.threadId
     );
     if (rememberedProfile) {
-      emit('hermes.profile.updated', {
+      await emit('hermes.profile.updated', {
         profileStorePath: this.config.profileStorePath,
         entry: rememberedProfile,
       });
@@ -50,7 +52,7 @@ export class HermesSourceRuntime {
       message: request.message,
       renderedProfile: combinedProfile,
     });
-    emit('hermes.profile.loaded', {
+    await emit('hermes.profile.loaded', {
       profileStorePath: this.config.profileStorePath,
       userId: request.userId,
       entryCount: profileSnapshot.entries.length,
@@ -61,7 +63,7 @@ export class HermesSourceRuntime {
     const sessionMap = await this.readSessionMap(hermesHome);
     const resumeSessionId = request.threadId ? sessionMap[request.threadId] : undefined;
 
-    emit('hermes.source_runtime.starting', {
+    await emit('hermes.source_runtime.starting', {
       hermesHome,
       codexHome,
       workspace,
@@ -99,7 +101,7 @@ export class HermesSourceRuntime {
 
     const codexReply = await extractLatestCodexReply(codexHome, startedAtMs);
     const reply = codexReply || extractReply(combinedOutput).trim();
-    emit('hermes.source_runtime.completed', {
+    await emit('hermes.source_runtime.completed', {
       sessionId: sessionId || null,
       codexReply: codexReply || null,
       stdout: truncate(result.stdout, 20000),
@@ -115,7 +117,7 @@ export class HermesSourceRuntime {
         hermesHome,
         workspace,
       });
-      emit('hermes.memory_review.enqueued', {
+      await emit('hermes.memory_review.enqueued', {
         jobId: job.id,
         jobStorePath: this.config.memoryReviewJobStorePath,
       });

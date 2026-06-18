@@ -79,6 +79,24 @@ type ExecutiveRunPollResult = {
   pollIntervalMs?: number;
 };
 
+type PersonalAgentFinalData = {
+  threadId?: string;
+  messages?: ChatMessage[];
+  reply?: string;
+  error?: string;
+};
+
+type AgentActivityStatus = 'running' | 'success' | 'error';
+
+type AgentActivityItem = {
+  id: string;
+  title: string;
+  detail: string;
+  status: AgentActivityStatus;
+  timestamp: string;
+  raw?: unknown;
+};
+
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 
 const suggestedQuestions = [
@@ -103,6 +121,18 @@ const plannerStatusClass: Record<PlannerStepStatus, string> = {
   SUCCESS: 'bg-emerald-100 text-emerald-700',
   ERROR: 'bg-red-100 text-red-700',
   SKIPPED: 'bg-amber-100 text-amber-700',
+};
+
+const activityStatusClass: Record<AgentActivityStatus, string> = {
+  running: 'bg-blue-100 text-blue-700',
+  success: 'bg-emerald-100 text-emerald-700',
+  error: 'bg-red-100 text-red-700',
+};
+
+const activityStatusLabel: Record<AgentActivityStatus, string> = {
+  running: '进行中',
+  success: '完成',
+  error: '错误',
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -163,6 +193,174 @@ function formatPlannerPayload(payload: unknown) {
   }
 }
 
+function parseNdjsonLine(line: string) {
+  if (!line.trim()) return null;
+  try {
+    return JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function getEventPayload(event: unknown) {
+  if (!isRecord(event)) return {};
+  return isRecord(event.payload) ? event.payload : {};
+}
+
+function formatActivityDetail(value: unknown, fallback = '') {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (!isRecord(value)) return fallback;
+  for (const key of ['reason', 'warning', 'error', 'detail', 'message']) {
+    const item = value[key];
+    if (typeof item === 'string' && item.trim()) return item.trim();
+  }
+  return fallback;
+}
+
+function summarizeCodexNotification(payload: Record<string, unknown>) {
+  const raw = typeof payload.notification === 'string' ? payload.notification : '';
+  if (!raw) return { title: 'Agent 执行中', detail: '正在处理本轮任务' };
+  try {
+    const notification = JSON.parse(raw) as Record<string, unknown>;
+    const method = String(notification.method || '');
+    if (method === 'item/agentMessage/delta') return { title: '生成回复', detail: '正在整理最终回答' };
+    if (method === 'turn/completed') return { title: '完成本轮任务', detail: '正在收尾并生成总结' };
+    if (method === 'item/started') {
+      const params = isRecord(notification.params) ? notification.params : {};
+      const item = isRecord(params.item) ? params.item : {};
+      const type = String(item.type || 'item');
+      return { title: '开始执行步骤', detail: `启动 ${type}` };
+    }
+    if (method === 'item/completed') {
+      const params = isRecord(notification.params) ? notification.params : {};
+      const item = isRecord(params.item) ? params.item : {};
+      const type = String(item.type || 'item');
+      return { title: '完成执行步骤', detail: `${type} 已完成` };
+    }
+    return { title: 'Agent 事件', detail: method || '收到执行事件' };
+  } catch {
+    return { title: 'Agent 执行中', detail: raw.slice(0, 140) };
+  }
+}
+
+function projectActivityItem(envelope: Record<string, unknown>, index: number): AgentActivityItem | null {
+  const envelopeType = String(envelope.type || '');
+  const now = new Date().toISOString();
+  if (envelopeType === 'turn_started') {
+    return {
+      id: `turn-started-${index}`,
+      title: '收到指令',
+      detail: '正在创建本轮任务并加载上下文',
+      status: 'running',
+      timestamp: typeof envelope.timestamp === 'string' ? envelope.timestamp : now,
+      raw: envelope,
+    };
+  }
+
+  if (envelopeType === 'error') {
+    return {
+      id: `stream-error-${index}`,
+      title: '执行失败',
+      detail: typeof envelope.error === 'string' ? envelope.error : '执行过程中发生错误',
+      status: 'error',
+      timestamp: now,
+      raw: envelope,
+    };
+  }
+
+  if (envelopeType !== 'event' || !isRecord(envelope.event)) return null;
+
+  const event = envelope.event;
+  const type = String(event.type || 'agent.event');
+  const timestamp = typeof event.timestamp === 'string' ? event.timestamp : now;
+  const payload = getEventPayload(event);
+  let title = 'Agent 执行中';
+  let detail = formatActivityDetail(payload, type);
+  let status: AgentActivityStatus = 'running';
+
+  if (type === 'memory.suggested') {
+    title = '更新记忆建议';
+    detail = '识别到一条可能需要保存的长期偏好';
+    status = 'success';
+  } else if (type === 'main.agent_profiles.loaded') {
+    title = '加载可用能力';
+    const profiles = Array.isArray(payload.profiles) ? payload.profiles.length : 0;
+    detail = profiles ? `已加载 ${profiles} 个可用 Agent 能力` : '已加载可用 Agent 能力';
+    status = 'success';
+  } else if (type === 'router.decision' || type.endsWith('router.decision')) {
+    title = '选择执行路径';
+    detail = formatActivityDetail(payload, '已完成任务路由判断');
+    status = 'success';
+  } else if (type === 'main.route.selected') {
+    title = '确定处理方式';
+    detail = typeof payload.route === 'string' ? `本轮交给 ${payload.route} 处理` : '已确定本轮处理方式';
+    status = 'success';
+  } else if (type === 'codex.session.starting') {
+    title = '启动通用 Agent';
+    detail = '正在准备本轮工具和上下文环境';
+  } else if (type === 'codex.thread.started') {
+    title = '创建执行线程';
+    detail = '执行线程已就绪';
+    status = 'success';
+  } else if (type === 'codex.turn.started') {
+    title = '开始执行';
+    detail = 'Agent 已开始处理你的指令';
+  } else if (type.startsWith('codex.server_request.')) {
+    title = '调用工具';
+    detail = type.replace('codex.server_request.', '') || '正在调用工具';
+  } else if (type === 'codex.web_search.not_used') {
+    title = '搜索提醒';
+    detail = formatActivityDetail(payload, '本轮可能需要联网信息，但未观察到搜索调用');
+    status = 'error';
+  } else if (type === 'codex.error') {
+    title = 'Agent 执行失败';
+    detail = formatActivityDetail(payload, 'Codex runtime 执行失败');
+    status = 'error';
+  } else if (type.startsWith('codex.')) {
+    const summary = summarizeCodexNotification(payload);
+    title = summary.title;
+    detail = summary.detail;
+    if (type.includes('completed')) status = 'success';
+  } else if (type === 'hermes.profile.updated') {
+    title = '更新用户画像';
+    detail = '识别到可沉淀的个人偏好或画像信息';
+    status = 'success';
+  } else if (type === 'hermes.profile.loaded') {
+    title = '加载个人上下文';
+    const count = typeof payload.entryCount === 'number' ? payload.entryCount : 0;
+    detail = count ? `已加载 ${count} 条个人上下文` : '已加载个人上下文';
+    status = 'success';
+  } else if (type === 'hermes.source_runtime.starting') {
+    title = '启动 Hermes Agent';
+    detail = '正在准备本轮推理和工具环境';
+  } else if (type === 'hermes.source_runtime.completed') {
+    title = 'Hermes 执行完成';
+    detail = '正在生成最终回复';
+    status = 'success';
+  } else if (type === 'hermes.memory_review.enqueued') {
+    title = '安排记忆复盘';
+    detail = '本轮结束后会异步检查是否需要沉淀长期记忆';
+    status = 'success';
+  }
+
+  return {
+    id: `${type}-${timestamp}-${index}`,
+    title,
+    detail,
+    status,
+    timestamp,
+    raw: event,
+  };
+}
+
+function extractAssistantDelta(envelope: Record<string, unknown>) {
+  if (String(envelope.type || '') !== 'event' || !isRecord(envelope.event)) return '';
+  const payload = getEventPayload(envelope.event);
+  const projected = isRecord(payload.projected) ? payload.projected : {};
+  const delta = projected.assistantDelta;
+  return typeof delta === 'string' ? delta : '';
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -219,6 +417,69 @@ async function waitForExecutiveRun(
   throw new Error('晨报执行仍未完成，请稍后刷新查看结果');
 }
 
+function AgentActivityPanel({
+  items,
+  assistantDraft,
+  active,
+}: {
+  items: AgentActivityItem[];
+  assistantDraft: string;
+  active: boolean;
+}) {
+  if (items.length === 0 && !active) return null;
+  const visibleItems = items.slice(-8);
+  const latest = visibleItems[visibleItems.length - 1];
+
+  return (
+    <div className="flex justify-start">
+      <div className="w-full max-w-[92%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 sm:max-w-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {active ? '正在执行' : '执行过程'}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {latest?.detail || '正在准备本轮任务'}
+            </p>
+          </div>
+          <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${active ? activityStatusClass.running : activityStatusClass.success}`}>
+            {active ? '进行中' : '已完成'}
+          </span>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {visibleItems.length > 0 ? (
+            visibleItems.map((item) => (
+              <div key={item.id} className="flex gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                <span className={`mt-0.5 h-fit shrink-0 rounded-full px-2 py-0.5 text-[11px] ${activityStatusClass[item.status]}`}>
+                  {activityStatusLabel[item.status]}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">{item.title}</p>
+                  <p className="mt-0.5 break-words text-xs leading-5 text-slate-600">{item.detail}</p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+              正在创建本轮任务并加载上下文
+            </div>
+          )}
+        </div>
+
+        {assistantDraft.trim() ? (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <p className="mb-1 text-xs font-medium text-slate-500">正在整理回复</p>
+            <div className="max-h-32 overflow-y-auto text-slate-800">
+              <MarkdownMessage content={assistantDraft} compact />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function InvestorAgentChatPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -243,11 +504,14 @@ export default function InvestorAgentChatPage() {
   const [plannerSteps, setPlannerSteps] = useState<PlannerStep[]>([]);
   const [plannerTrace, setPlannerTrace] = useState<PlannerTraceItem[]>([]);
   const [plannerPanelOpen, setPlannerPanelOpen] = useState(false);
+  const [activityItems, setActivityItems] = useState<AgentActivityItem[]>([]);
+  const [assistantDraft, setAssistantDraft] = useState('');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stoppingRun, setStoppingRun] = useState(false);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const activityEventIndexRef = useRef(0);
 
   const title = useMemo(() => (isExecutive ? '个人 Hermes Agent' : 'AI 助手'), [isExecutive]);
   const showExecutiveControls = false;
@@ -386,6 +650,8 @@ export default function InvestorAgentChatPage() {
       setPersistedBriefing(null);
       setPlannerSteps([]);
       setPlannerTrace([]);
+      setActivityItems([]);
+      setAssistantDraft('');
       if (showExecutiveControls && getStoredActiveRunId()) {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
       }
@@ -406,7 +672,7 @@ export default function InvestorAgentChatPage() {
       if (viewport) viewport.scrollTop = viewport.scrollHeight;
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [messages, loading, sending]);
+  }, [messages, loading, sending, activityItems, assistantDraft]);
 
   useEffect(() => {
     const prompt = searchParams.get('prompt')?.trim();
@@ -423,10 +689,13 @@ export default function InvestorAgentChatPage() {
     setSending(true);
     setError(null);
     setPlannerTrace([]);
+    setActivityItems([]);
+    setAssistantDraft('');
     setPlannerPanelOpen(false);
+    activityEventIndexRef.current = 0;
 
     try {
-      const res = await fetch('/api/investor/personal-agent', {
+      const res = await fetch('/api/investor/personal-agent?stream=1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -435,23 +704,97 @@ export default function InvestorAgentChatPage() {
         }),
       });
 
-      const data = (await res.json().catch(() => ({}))) as {
-        threadId?: string;
-        messages?: ChatMessage[];
-        reply?: string;
-        error?: string;
-      };
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
         setError(typeof data.error === 'string' ? data.error : '发送失败');
         setMessages(messages);
         return;
       }
-      setThreadId(typeof data.threadId === 'string' ? data.threadId : threadId);
-      if (Array.isArray(data.messages)) {
-        setMessages(data.messages);
-      } else if (typeof data.reply === 'string') {
-        setMessages([...nextMessages, { role: 'assistant', content: data.reply }]);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalData: PersonalAgentFinalData | null = null;
+      let finalStatus = 200;
+
+      const appendActivity = (item: AgentActivityItem | null) => {
+        if (!item) return;
+        setActivityItems((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.title === item.title && last.detail === item.detail && last.status === item.status) {
+            return [...prev.slice(0, -1), item];
+          }
+          return [...prev, item].slice(-18);
+        });
+      };
+
+      const handleEnvelope = (envelope: Record<string, unknown>) => {
+        if (envelope.type === 'heartbeat') return;
+        if (envelope.type === 'final') {
+          finalStatus = typeof envelope.status === 'number' ? envelope.status : 200;
+          finalData = isRecord(envelope.data) ? (envelope.data as PersonalAgentFinalData) : null;
+          return;
+        }
+        const index = activityEventIndexRef.current;
+        activityEventIndexRef.current += 1;
+        const delta = extractAssistantDelta(envelope);
+        if (delta) setAssistantDraft((prev) => `${prev}${delta}`);
+        appendActivity(projectActivityItem(envelope, index));
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          const parsed = parseNdjsonLine(line);
+          if (parsed) handleEnvelope(parsed);
+        }
       }
+
+      if (buffer.trim()) {
+        const parsed = parseNdjsonLine(buffer);
+        if (parsed) handleEnvelope(parsed);
+      }
+
+      if (!finalData || finalStatus >= 400) {
+        const finalError = (finalData as { error?: unknown } | null)?.error;
+        const finalErrorMessage = typeof finalError === 'string' ? finalError : '发送失败';
+        setError(finalErrorMessage);
+        setMessages(messages);
+        setActivityItems((prev) => [
+          ...prev,
+          {
+            id: `final-error-${Date.now()}`,
+            title: '执行失败',
+            detail: finalErrorMessage,
+            status: 'error',
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+        return;
+      }
+
+      const completedData = finalData as PersonalAgentFinalData;
+      setThreadId(typeof completedData.threadId === 'string' ? completedData.threadId : threadId);
+      if (Array.isArray(completedData.messages)) {
+        setMessages(completedData.messages);
+      } else if (typeof completedData.reply === 'string') {
+        setMessages([...nextMessages, { role: 'assistant', content: completedData.reply }]);
+      }
+      setAssistantDraft('');
+      setActivityItems((prev) => [
+        ...prev,
+        {
+          id: `final-success-${Date.now()}`,
+          title: '完成总结',
+          detail: '已生成最终回复',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
     } catch (err) {
       setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
       setMessages(messages);
@@ -750,6 +1093,7 @@ export default function InvestorAgentChatPage() {
                   </div>
                 </div>
               ))}
+              <AgentActivityPanel items={activityItems} assistantDraft={assistantDraft} active={sending} />
               {messages.length === 0 ? <div className="py-8 text-center text-slate-500">开始和你的个人 Hermes Agent 对话吧。</div> : null}
             </div>
           )}
