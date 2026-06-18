@@ -86,7 +86,9 @@ function renderProfile(entries: UserProfileEntry[]) {
 }
 
 function extractExplicitProfileContent(message: string) {
-  const match = message.match(/(?:记住|请记住|以后记得|帮我记住)(?:[：:\s]*)(?<content>[\s\S]+)/);
+  const match = message.match(
+    /(?:^|[。！？\n]\s*)(?:请你?|帮我)?(?:记住|请记住|以后记得|帮我记住)(?:[：:\s]+)(?<content>[\s\S]+)/u
+  );
   let content = match?.groups?.content?.trim();
   if (!content) return '';
   content = content.replace(/(?:请)?只回复[：:].*$/s, '').trim();

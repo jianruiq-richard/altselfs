@@ -5,9 +5,11 @@ import { LocalProfileStore } from '../profile-store.js';
 import { isRecord, nowIso, safeJson, truncate } from '../util.js';
 export class HermesSourceRuntime {
     config;
+    memoryReviewQueue;
     profileStore;
-    constructor(config) {
+    constructor(config, memoryReviewQueue) {
         this.config = config;
+        this.memoryReviewQueue = memoryReviewQueue;
         this.profileStore = new LocalProfileStore(config.profileStorePath);
     }
     async run(request) {
@@ -86,6 +88,20 @@ export class HermesSourceRuntime {
             stdout: truncate(result.stdout, 20000),
             stderrTail: truncate(tail(result.stderr, 120), 20000),
         });
+        if (this.config.memoryReviewMode === 'async' && this.memoryReviewQueue && reply) {
+            const job = await this.memoryReviewQueue.enqueue({
+                userId: request.userId,
+                threadId: request.threadId || 'default',
+                userMessage: request.message,
+                assistantReply: reply,
+                hermesHome,
+                workspace,
+            });
+            emit('hermes.memory_review.enqueued', {
+                jobId: job.id,
+                jobStorePath: this.config.memoryReviewJobStorePath,
+            });
+        }
         return {
             route: 'main',
             reply: reply || 'Hermes Agent 已完成本轮处理，但没有返回可展示的回复。',
@@ -118,7 +134,7 @@ export class HermesSourceRuntime {
             'memory:',
             '  memory_enabled: true',
             '  user_profile_enabled: true',
-            `  nudge_interval: ${this.config.hermesMemoryNudgeInterval}`,
+            `  nudge_interval: ${this.config.memoryReviewMode === 'inline' ? this.config.hermesMemoryNudgeInterval : 0}`,
             '',
         ].join('\n'), 'utf8');
         const openRouterBaseUrl = this.config.hermesCodexResponsesProxyEnabled
@@ -157,7 +173,7 @@ export class HermesSourceRuntime {
                     HERMES_HOME: paths.hermesHome,
                     CODEX_HOME: paths.codexHome,
                     PATH: [codexBinDir, process.env.PATH || ''].filter(Boolean).join(path.delimiter),
-                    HERMES_BACKGROUND_REVIEW_INLINE: this.config.hermesBackgroundReviewInline ? '1' : '0',
+                    HERMES_BACKGROUND_REVIEW_INLINE: this.config.memoryReviewMode === 'inline' && this.config.hermesBackgroundReviewInline ? '1' : '0',
                     NO_PROXY: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
                     no_proxy: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
                 },

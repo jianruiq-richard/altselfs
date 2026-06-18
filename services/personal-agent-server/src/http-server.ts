@@ -1,14 +1,29 @@
 import http from 'node:http';
 import type { ServerConfig } from './config.js';
+import type { FileMemoryReviewQueue } from './memory-review-queue.js';
+import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import type { PersonalMainAgent } from './main-agent.js';
 
-export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig) {
+export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig, memoryReviewQueue?: FileMemoryReviewQueue) {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       if (req.method === 'GET' && url.pathname === '/healthz') {
         return json(res, 200, { ok: true });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/productization') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        const jobs = memoryReviewQueue ? await memoryReviewQueue.listRecent(50) : [];
+        return html(res, 200, renderProductizationPage(config, jobs));
+      }
+
+      if (req.method === 'GET' && url.pathname === '/v1/memory-review/jobs') {
+        const limit = Number(url.searchParams.get('limit') || 50);
+        return json(res, 200, {
+          jobs: memoryReviewQueue ? await memoryReviewQueue.listRecent(Number.isFinite(limit) ? limit : 50) : [],
+        });
       }
 
       if (req.method === 'POST' && url.pathname === '/v1/turns/start') {
@@ -184,6 +199,14 @@ function json(res: http.ServerResponse, status: number, body: unknown) {
 function text(res: http.ServerResponse, status: number, body: string) {
   res.writeHead(status, {
     'content-type': 'text/plain; charset=utf-8',
+    'cache-control': 'no-store',
+  });
+  res.end(body);
+}
+
+function html(res: http.ServerResponse, status: number, body: string) {
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
     'cache-control': 'no-store',
   });
   res.end(body);

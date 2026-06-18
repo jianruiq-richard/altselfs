@@ -33,6 +33,10 @@ export type ServerConfig = {
   hermesMaxTurns: number;
   hermesCodexResponsesProxyEnabled: boolean;
   hermesBackgroundReviewInline: boolean;
+  memoryReviewMode: 'async' | 'inline' | 'disabled';
+  memoryReviewJobStorePath: string;
+  memoryReviewPollMs: number;
+  memoryReviewMaxTurns: number;
   profileStorePath: string;
 };
 
@@ -72,6 +76,12 @@ function readWebSearchProviderEnv(key: string, fallback: ServerConfig['webSearch
   ) {
     return raw;
   }
+  return fallback;
+}
+
+function readMemoryReviewModeEnv(key: string, fallback: ServerConfig['memoryReviewMode']) {
+  const raw = process.env[key]?.trim().toLowerCase();
+  if (raw === 'async' || raw === 'inline' || raw === 'disabled') return raw;
   return fallback;
 }
 
@@ -149,6 +159,10 @@ export function loadConfig(): ServerConfig {
     hermesMaxTurns: readIntEnv('HERMES_MAX_TURNS', 8),
     hermesCodexResponsesProxyEnabled: readBoolEnv('HERMES_CODEX_RESPONSES_PROXY_ENABLED', true),
     hermesBackgroundReviewInline: readBoolEnv('HERMES_BACKGROUND_REVIEW_INLINE', true),
+    memoryReviewMode: readMemoryReviewModeEnv('MEMORY_REVIEW_MODE', 'async'),
+    memoryReviewJobStorePath: path.resolve(readEnv('MEMORY_REVIEW_JOB_STORE_PATH', '/tmp/altselfs-memory-review-jobs.json')),
+    memoryReviewPollMs: readIntEnv('MEMORY_REVIEW_POLL_MS', 1000),
+    memoryReviewMaxTurns: readIntEnv('MEMORY_REVIEW_MAX_TURNS', 6),
     profileStorePath: path.resolve(readEnv('PROFILE_STORE_PATH', '/tmp/altselfs-personal-agent-profiles.json')),
   };
 }

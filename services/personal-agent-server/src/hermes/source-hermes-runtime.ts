@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ServerConfig } from '../config.js';
+import type { FileMemoryReviewQueue } from '../memory-review-queue.js';
 import { LocalProfileStore } from '../profile-store.js';
 import type { AgentEvent, SourceAgentRunResult, TurnStartRequest } from '../types.js';
 import { isRecord, nowIso, safeJson, truncate } from '../util.js';
@@ -11,7 +12,10 @@ type SessionMap = Record<string, string>;
 export class HermesSourceRuntime {
   private profileStore: LocalProfileStore;
 
-  constructor(private config: ServerConfig) {
+  constructor(
+    private config: ServerConfig,
+    private memoryReviewQueue?: FileMemoryReviewQueue
+  ) {
     this.profileStore = new LocalProfileStore(config.profileStorePath);
   }
 
@@ -102,6 +106,21 @@ export class HermesSourceRuntime {
       stderrTail: truncate(tail(result.stderr, 120), 20000),
     });
 
+    if (this.config.memoryReviewMode === 'async' && this.memoryReviewQueue && reply) {
+      const job = await this.memoryReviewQueue.enqueue({
+        userId: request.userId,
+        threadId: request.threadId || 'default',
+        userMessage: request.message,
+        assistantReply: reply,
+        hermesHome,
+        workspace,
+      });
+      emit('hermes.memory_review.enqueued', {
+        jobId: job.id,
+        jobStorePath: this.config.memoryReviewJobStorePath,
+      });
+    }
+
     return {
       route: 'main',
       reply: reply || 'Hermes Agent 已完成本轮处理，但没有返回可展示的回复。',
@@ -138,7 +157,7 @@ export class HermesSourceRuntime {
         'memory:',
         '  memory_enabled: true',
         '  user_profile_enabled: true',
-        `  nudge_interval: ${this.config.hermesMemoryNudgeInterval}`,
+        `  nudge_interval: ${this.config.memoryReviewMode === 'inline' ? this.config.hermesMemoryNudgeInterval : 0}`,
         '',
       ].join('\n'),
       'utf8'
@@ -186,7 +205,8 @@ export class HermesSourceRuntime {
           HERMES_HOME: paths.hermesHome,
           CODEX_HOME: paths.codexHome,
           PATH: [codexBinDir, process.env.PATH || ''].filter(Boolean).join(path.delimiter),
-          HERMES_BACKGROUND_REVIEW_INLINE: this.config.hermesBackgroundReviewInline ? '1' : '0',
+          HERMES_BACKGROUND_REVIEW_INLINE:
+            this.config.memoryReviewMode === 'inline' && this.config.hermesBackgroundReviewInline ? '1' : '0',
           NO_PROXY: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
           no_proxy: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
         },
