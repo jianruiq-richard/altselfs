@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DebugCollapsible } from '@/components/debug-collapsible';
 import { MarkdownMessage } from '@/components/markdown-message';
 
@@ -90,6 +90,7 @@ export default function InvestorIntegrationsPanel({
     feishu: '',
     xiaohongshu: '',
   });
+  const assistantViewportRefs = useRef<Partial<Record<ProviderKey, HTMLDivElement | null>>>({});
 
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
@@ -131,6 +132,16 @@ export default function InvestorIntegrationsPanel({
     };
     void loadThreads();
   }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      (['gmail', 'feishu', 'xiaohongshu'] as const).forEach((provider) => {
+        const viewport = assistantViewportRefs.current[provider];
+        if (viewport) viewport.scrollTop = viewport.scrollHeight;
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [assistantChats, assistantLoading]);
 
   const connect = async (provider: ProviderKey) => {
     if (provider === 'xiaohongshu') {
@@ -406,7 +417,12 @@ export default function InvestorIntegrationsPanel({
 
             <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
               <p className="text-xs text-slate-500 mb-2">AI员工对话</p>
-              <div className="max-h-44 overflow-y-auto space-y-2 pr-1">
+              <div
+                ref={(node) => {
+                  assistantViewportRefs.current[card.provider] = node;
+                }}
+                className="max-h-44 overflow-y-auto space-y-2 pr-1"
+              >
                 {assistantChats[card.provider].length === 0 ? (
                   <p className="text-sm text-slate-500">
                     你可以直接提问，例如“帮我按优先级整理最近邮件并给出今天要做的3件事”。

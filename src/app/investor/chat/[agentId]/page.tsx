@@ -247,6 +247,7 @@ export default function InvestorAgentChatPage() {
   const [stoppingRun, setStoppingRun] = useState(false);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
+  const messagesViewportRef = useRef<HTMLDivElement | null>(null);
 
   const title = useMemo(() => (isExecutive ? '个人 Hermes Agent' : 'AI 助手'), [isExecutive]);
   const showExecutiveControls = false;
@@ -398,6 +399,14 @@ export default function InvestorAgentChatPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = messagesViewportRef.current;
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, loading, sending]);
 
   useEffect(() => {
     const prompt = searchParams.get('prompt')?.trim();
@@ -725,7 +734,7 @@ export default function InvestorAgentChatPage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white">
-        <div className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5">
+        <div ref={messagesViewportRef} className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5">
           {loading ? (
             <div className="py-8 text-center text-slate-600">加载中...</div>
           ) : (

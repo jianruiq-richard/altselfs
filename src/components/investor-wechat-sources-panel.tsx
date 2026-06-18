@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DebugCollapsible } from '@/components/debug-collapsible';
 import { MarkdownMessage } from '@/components/markdown-message';
 
@@ -75,6 +75,7 @@ export default function InvestorWechatSourcesPanel({
   const [coachMessage, setCoachMessage] = useState('');
   const [addLogs, setAddLogs] = useState<AddSourceLog[]>([]);
   const [logsOpen, setLogsOpen] = useState(false);
+  const assistantViewportRef = useRef<HTMLDivElement | null>(null);
 
   const sortedSources = useMemo(
     () => [...sources].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)),
@@ -99,6 +100,14 @@ export default function InvestorWechatSourcesPanel({
     };
     void loadThreadAndPrompt();
   }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = assistantViewportRef.current;
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [assistantMessages, assistantLoading]);
 
   const addSource = async () => {
     const nextUrl = articleUrl.trim();
@@ -546,7 +555,7 @@ export default function InvestorWechatSourcesPanel({
             {clearingAssistant ? '清空中...' : '清空聊天记录'}
           </button>
         </div>
-        <div className="max-h-44 overflow-y-auto space-y-2 pr-1">
+        <div ref={assistantViewportRef} className="max-h-44 overflow-y-auto space-y-2 pr-1">
           {assistantMessages.length === 0 ? (
             <p className="text-sm text-slate-500">
               你可以提问：例如“基于我当前公众号库，帮我总结 AI 应用方向最近值得关注的3个信号”。

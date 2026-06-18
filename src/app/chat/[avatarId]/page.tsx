@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
@@ -41,6 +41,7 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const messagesViewportRef = useRef<HTMLDivElement | null>(null);
 
   const fetchAvatarAndChat = useCallback(async () => {
     setIsLoading(true);
@@ -71,6 +72,14 @@ export default function ChatPage() {
       void fetchAvatarAndChat();
     }
   }, [avatarId, user, fetchAvatarAndChat]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = messagesViewportRef.current;
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, isSending]);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,7 +158,7 @@ export default function ChatPage() {
       }
     >
       <div className="rounded-2xl border border-slate-200 bg-white">
-        <div className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5">
+        <div ref={messagesViewportRef} className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5">
           <div className="mx-auto max-w-3xl space-y-4">
             {messages.length === 0 && (
               <div className="py-8 text-center">
