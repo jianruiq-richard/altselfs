@@ -8,6 +8,7 @@ import {
   EXECUTIVE_UPDATE_BRIEFING_PROMPT,
   ExecutiveDailyBriefingBrowser,
 } from '@/components/executive-daily-briefing-browser';
+import { MarkdownMessage } from '@/components/markdown-message';
 
 type ChatMessage = {
   role: 'user' | 'assistant';
@@ -736,7 +737,7 @@ export default function InvestorAgentChatPage() {
                       message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+                    <MarkdownMessage content={message.content} inverted={message.role === 'user'} />
                   </div>
                 </div>
               ))}
@@ -772,6 +773,12 @@ export default function InvestorAgentChatPage() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="输入你的问题..."
               rows={3}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSend();
+                }
+              }}
               className="min-h-[7rem] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-0 sm:py-2"
             />
             <button

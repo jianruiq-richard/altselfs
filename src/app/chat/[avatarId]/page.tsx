@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import { FigmaShell } from '@/components/figma-shell';
+import { MarkdownMessage } from '@/components/markdown-message';
 
 interface Message {
   id: string;
@@ -171,7 +172,7 @@ export default function ChatPage() {
                     message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
                   }`}
                 >
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  <MarkdownMessage content={message.content} inverted={message.role === 'user'} />
                   <p className={`mt-1 text-xs ${message.role === 'user' ? 'text-blue-100' : 'text-slate-500'}`}>
                     {new Date(message.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                   </p>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { DebugCollapsible } from '@/components/debug-collapsible';
+import { MarkdownMessage } from '@/components/markdown-message';
 
 type ProviderKey = 'gmail' | 'feishu' | 'xiaohongshu';
 
@@ -414,11 +415,11 @@ export default function InvestorIntegrationsPanel({
                   assistantChats[card.provider].map((m, idx) => (
                     <div
                       key={`${card.provider}-${idx}`}
-                      className={`rounded-md px-3 py-2 text-sm whitespace-pre-wrap ${
+                      className={`rounded-md px-3 py-2 ${
                         m.role === 'user' ? 'bg-sky-50 text-sky-900' : 'bg-slate-100 text-slate-800'
                       }`}
                     >
-                      {m.content}
+                      <MarkdownMessage content={m.content} compact />
                     </div>
                   ))
                 )}

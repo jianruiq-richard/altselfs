@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { DebugCollapsible } from '@/components/debug-collapsible';
+import { MarkdownMessage } from '@/components/markdown-message';
 
 type WechatSource = {
   id: string;
@@ -554,11 +555,11 @@ export default function InvestorWechatSourcesPanel({
             assistantMessages.map((message, idx) => (
               <div
                 key={`wechat-assistant-${idx}`}
-                className={`rounded-md px-3 py-2 text-sm whitespace-pre-wrap ${
+                className={`rounded-md px-3 py-2 ${
                   message.role === 'user' ? 'bg-sky-50 text-sky-900' : 'bg-slate-100 text-slate-800'
                 }`}
               >
-                {message.content}
+                <MarkdownMessage content={message.content} compact />
               </div>
             ))
           )}

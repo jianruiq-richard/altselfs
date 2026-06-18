@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { displayEmail, isFallbackEmail } from '@/lib/user-identifier';
 import { FigmaShell } from '@/components/figma-shell';
+import { MarkdownMessage } from '@/components/markdown-message';
 
 export default async function AvatarChatDetailPage({
   params,
@@ -154,8 +155,8 @@ export default async function AvatarChatDetailPage({
                         {new Date(message.createdAt).toLocaleString('zh-CN')}
                       </span>
                     </div>
-                    <div className="bg-white rounded-lg p-4 shadow-sm">
-                      <p className="text-gray-900 whitespace-pre-wrap">{message.content}</p>
+                    <div className="bg-white rounded-lg p-4 text-gray-900 shadow-sm">
+                      <MarkdownMessage content={message.content} />
                     </div>
                   </div>
                 </div>
