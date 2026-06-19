@@ -20,7 +20,8 @@ export class CodexAgentRuntime {
             events.push(event);
             await input.onEvent?.(event);
         };
-        const codexHome = await this.ensureCodexHome(input.userId);
+        const selectedModel = this.resolveSelectedModel(input);
+        const codexHome = await this.ensureCodexHome(input.userId, selectedModel);
         const workspace = await this.ensureWorkspace(input.userId, input.threadId);
         const client = new CodexJsonRpcClient({
             codexBin: this.config.codexBin,
@@ -51,7 +52,7 @@ export class CodexAgentRuntime {
                 cwd: workspace,
                 ...(localEnvironmentDisabled ? { environments: [] } : {}),
                 ...(generalProfile ? { dynamicTools: [createWebSearchDynamicTool()] } : {}),
-                ...(this.config.codexModel ? { model: this.config.codexModel } : {}),
+                ...(selectedModel ? { model: selectedModel } : {}),
                 ...(this.config.codexModelProvider ? { modelProvider: this.config.codexModelProvider } : {}),
                 developerInstructions: this.buildDeveloperInstructions(input.profileId),
                 personality: 'pragmatic',
@@ -83,7 +84,11 @@ export class CodexAgentRuntime {
                 void emit({
                     type: `codex.${String(notification.method || 'notification')}`,
                     timestamp: nowIso(),
-                    payload: safeJson({ notification: truncate(JSON.stringify(notification), 20000), projected }),
+                    payload: safeJson({
+                        notification,
+                        notificationText: truncate(JSON.stringify(notification), 20000),
+                        projected,
+                    }),
                 });
             });
             const prompt = [
@@ -94,10 +99,11 @@ export class CodexAgentRuntime {
                 'User turn:',
                 input.message,
             ].join('\n');
+            const turnInput = this.buildTurnInput(prompt, input.metadata);
             const turn = await client.request('turn/start', {
                 threadId: codexThreadId,
                 ...(localEnvironmentDisabled ? { environments: [] } : {}),
-                input: [{ type: 'text', text: prompt }],
+                input: turnInput,
             }, 15_000);
             await emit({ type: 'codex.turn.started', timestamp: nowIso(), payload: { raw: turn } });
             await this.waitForTurnCompletion(client, emit);
@@ -137,21 +143,25 @@ export class CodexAgentRuntime {
             client.close();
         }
     }
-    async ensureCodexHome(userId) {
+    async ensureCodexHome(userId, selectedModel) {
         const dir = path.join(this.config.codexHomeRoot, sanitizePathSegment(userId));
         await fs.mkdir(dir, { recursive: true });
-        await this.writeCodexConfig(dir);
+        await this.writeCodexConfig(dir, selectedModel);
         return dir;
     }
-    async writeCodexConfig(codexHome) {
+    async writeCodexConfig(codexHome, selectedModel) {
         if (this.config.codexModelProvider !== 'openrouter')
             return;
         const configPath = path.join(codexHome, 'config.toml');
-        const modelLine = this.config.codexModel ? `model = ${tomlString(this.config.codexModel)}\n` : '';
+        const metadata = this.resolveModelMetadata(selectedModel);
+        const catalogPath = await this.writeCodexModelCatalog(codexHome, selectedModel);
+        const modelLine = selectedModel ? `model = ${tomlString(selectedModel)}\n` : '';
         const content = [
             modelLine.trimEnd(),
             'model_provider = "openrouter"',
             `web_search = ${tomlString(this.config.codexWebSearchMode)}`,
+            catalogPath ? `model_catalog_json = ${tomlString(catalogPath)}` : '',
+            ...codexModelMetadataLines(metadata),
             '',
             '[model_providers.openrouter]',
             'name = "OpenRouter"',
@@ -163,6 +173,48 @@ export class CodexAgentRuntime {
             '"X-OpenRouter-Title" = ' + tomlString(this.config.openRouterAppTitle),
         ].filter(Boolean).join('\n') + '\n';
         await fs.writeFile(configPath, content, 'utf8');
+    }
+    async writeCodexModelCatalog(codexHome, selectedModel) {
+        const models = new Set(Object.keys(this.config.codexModelCatalog.models));
+        if (selectedModel)
+            models.add(selectedModel);
+        if (models.size === 0)
+            return undefined;
+        const catalogPath = path.join(codexHome, 'model-catalog.json');
+        const catalog = {
+            models: [...models].sort().map((model) => codexModelCatalogEntry(model, this.resolveModelMetadata(model))),
+        };
+        await fs.writeFile(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`, 'utf8');
+        return catalogPath;
+    }
+    resolveSelectedModel(input) {
+        const requested = input.metadata?.codexModel;
+        return typeof requested === 'string' && requested.trim() ? requested.trim() : this.config.codexModel;
+    }
+    resolveModelMetadata(model) {
+        return {
+            ...this.config.codexModelCatalog.defaultMetadata,
+            ...(model ? this.config.codexModelCatalog.models[model] || {} : {}),
+        };
+    }
+    buildTurnInput(prompt, metadata) {
+        const attachments = readMultimodalAttachments(metadata);
+        const input = [{ type: 'text', text: prompt }];
+        for (const attachment of attachments) {
+            if (attachment.kind === 'image') {
+                input.push({
+                    type: 'image',
+                    image_url: attachment.dataUrl,
+                    detail: 'auto',
+                });
+                continue;
+            }
+            input.push({
+                type: 'text',
+                text: `[附件 ${attachment.name} 是 ${attachment.kind}/${attachment.type}，Codex app-server 不支持把这种文件作为 turn input 直接传入。]`,
+            });
+        }
+        return input;
     }
     async ensureWorkspace(userId, threadId) {
         const dir = path.join(this.config.workspaceRoot, sanitizePathSegment(userId), sanitizePathSegment(threadId));
@@ -352,8 +404,103 @@ function extractThreadId(result) {
 function sanitizePathSegment(value) {
     return value.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 120);
 }
+function readMultimodalAttachments(metadata) {
+    const value = metadata?.attachments;
+    if (!Array.isArray(value))
+        return [];
+    return value
+        .map((item) => {
+        if (!isRecord(item))
+            return null;
+        const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'attachment';
+        const type = typeof item.type === 'string' && item.type.trim() ? item.type.trim() : 'application/octet-stream';
+        const size = typeof item.size === 'number' && Number.isFinite(item.size) ? item.size : 0;
+        const dataUrl = typeof item.dataUrl === 'string' && item.dataUrl.startsWith('data:') ? item.dataUrl : '';
+        const kind = typeof item.kind === 'string' ? item.kind : 'file';
+        if (!dataUrl || !['image', 'video', 'pdf', 'document', 'file'].includes(kind))
+            return null;
+        return {
+            name,
+            type,
+            size,
+            kind: kind,
+            dataUrl,
+        };
+    })
+        .filter(Boolean);
+}
 function tomlString(value) {
     return JSON.stringify(value);
+}
+function codexModelMetadataLines(metadata) {
+    const lines = [];
+    if (metadata.contextWindow)
+        lines.push(`model_context_window = ${metadata.contextWindow}`);
+    if (metadata.autoCompactTokenLimit)
+        lines.push(`model_auto_compact_token_limit = ${metadata.autoCompactTokenLimit}`);
+    if (metadata.toolOutputTokenLimit)
+        lines.push(`tool_output_token_limit = ${metadata.toolOutputTokenLimit}`);
+    if (metadata.reasoningSummary)
+        lines.push(`model_reasoning_summary = ${tomlString(metadata.reasoningSummary)}`);
+    if (metadata.verbosity)
+        lines.push(`model_verbosity = ${tomlString(metadata.verbosity)}`);
+    if (metadata.supportsReasoningSummaries !== undefined) {
+        lines.push(`model_supports_reasoning_summaries = ${metadata.supportsReasoningSummaries ? 'true' : 'false'}`);
+    }
+    return lines;
+}
+function codexModelCatalogEntry(model, metadata) {
+    const contextWindow = metadata.contextWindow || 128000;
+    const entry = {
+        slug: model,
+        display_name: model,
+        description: `OpenRouter model ${model}`,
+        default_reasoning_level: 'medium',
+        supported_reasoning_levels: [
+            { effort: 'low', description: 'Fast responses with lighter reasoning' },
+            { effort: 'medium', description: 'Balanced reasoning for everyday tasks' },
+            { effort: 'high', description: 'Greater reasoning depth for complex tasks' },
+        ],
+        shell_type: 'shell_command',
+        visibility: 'list',
+        supported_in_api: true,
+        priority: 1000,
+        additional_speed_tiers: [],
+        service_tiers: [],
+        availability_nux: null,
+        upgrade: null,
+        base_instructions: 'You are Codex, a pragmatic AI agent. Follow the developer instructions, answer in the user language, and use tools only when they are available and appropriate.',
+        supports_reasoning_summaries: metadata.supportsReasoningSummaries ?? false,
+        support_verbosity: Boolean(metadata.verbosity),
+        default_verbosity: metadata.verbosity || 'medium',
+        truncation_policy: { mode: 'tokens', limit: 10000 },
+        supports_parallel_tool_calls: true,
+        supports_image_detail_original: true,
+        experimental_supported_tools: [],
+        input_modalities: codexSupportedInputModalities(metadata.inputModalities),
+        supports_search_tool: true,
+        use_responses_lite: false,
+        model_messages: {
+            instructions_template: 'You are Codex, a pragmatic AI agent. Follow the developer instructions, answer in the user language, and use tools only when they are available and appropriate.\n\n{{ personality }}',
+            instructions_variables: {
+                personality_default: '',
+            },
+            supports_reasoning_summaries: metadata.supportsReasoningSummaries ?? false,
+            support_verbosity: Boolean(metadata.verbosity),
+            default_verbosity: metadata.verbosity || 'medium',
+            context_window: contextWindow,
+        },
+        context_window: contextWindow,
+        max_context_window: contextWindow,
+        effective_context_window_percent: 95,
+    };
+    if (metadata.reasoningSummary)
+        entry.default_reasoning_summary = metadata.reasoningSummary;
+    return entry;
+}
+function codexSupportedInputModalities(inputModalities) {
+    const supported = (inputModalities || ['text']).filter((item) => item === 'text' || item === 'image');
+    return supported.length > 0 ? supported : ['text'];
 }
 function createWebSearchDynamicTool() {
     return {

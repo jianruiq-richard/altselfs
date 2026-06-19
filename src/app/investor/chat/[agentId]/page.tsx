@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { Paperclip, X } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -13,6 +14,17 @@ import { MarkdownMessage } from '@/components/markdown-message';
 type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
+};
+
+type PendingAttachmentKind = 'image' | 'video' | 'pdf' | 'document' | 'file';
+
+type PendingAttachment = {
+  id: string;
+  file: File;
+  name: string;
+  type: string;
+  size: number;
+  kind: PendingAttachmentKind;
 };
 
 type Briefing = {
@@ -86,15 +98,16 @@ type PersonalAgentFinalData = {
   error?: string;
 };
 
-type AgentActivityStatus = 'running' | 'success' | 'error';
+type CodexStreamItemStatus = 'running' | 'completed' | 'error';
 
-type AgentActivityItem = {
+type CodexStreamItem = {
   id: string;
   title: string;
   detail: string;
-  status: AgentActivityStatus;
+  status: CodexStreamItemStatus;
   timestamp: string;
-  raw?: unknown;
+  method?: string;
+  content?: string;
 };
 
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
@@ -123,17 +136,55 @@ const plannerStatusClass: Record<PlannerStepStatus, string> = {
   SKIPPED: 'bg-amber-100 text-amber-700',
 };
 
-const activityStatusClass: Record<AgentActivityStatus, string> = {
-  running: 'bg-blue-100 text-blue-700',
-  success: 'bg-emerald-100 text-emerald-700',
-  error: 'bg-red-100 text-red-700',
+const codexItemDotClass: Record<CodexStreamItemStatus, string> = {
+  running: 'bg-blue-500',
+  completed: 'bg-emerald-500',
+  error: 'bg-red-500',
 };
 
-const activityStatusLabel: Record<AgentActivityStatus, string> = {
-  running: '进行中',
-  success: '完成',
-  error: '错误',
-};
+const attachmentAccept =
+  'image/*,application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+function getPendingAttachmentKind(file: File): PendingAttachmentKind {
+  const name = file.name.toLowerCase();
+  const type = file.type.toLowerCase();
+  if (type.startsWith('image/')) return 'image';
+  if (type.startsWith('video/')) return 'video';
+  if (type === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+  if (
+    type === 'application/msword' ||
+    type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    name.endsWith('.doc') ||
+    name.endsWith('.docx')
+  ) {
+    return 'document';
+  }
+  return 'file';
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** exponent;
+  return `${value >= 10 || exponent === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[exponent]}`;
+}
+
+function createPendingAttachment(file: File): PendingAttachment {
+  return {
+    id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+    file,
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    kind: getPendingAttachmentKind(file),
+  };
+}
+
+function formatAttachmentList(attachments: PendingAttachment[]) {
+  if (attachments.length === 0) return '';
+  return attachments.map((attachment) => `- ${attachment.name}（${formatBytes(attachment.size)}）`).join('\n');
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -207,54 +258,74 @@ function getEventPayload(event: unknown) {
   return isRecord(event.payload) ? event.payload : {};
 }
 
-function formatActivityDetail(value: unknown, fallback = '') {
-  if (typeof value === 'string' && value.trim()) return value.trim();
-  if (!isRecord(value)) return fallback;
-  for (const key of ['reason', 'warning', 'error', 'detail', 'message']) {
-    const item = value[key];
-    if (typeof item === 'string' && item.trim()) return item.trim();
-  }
-  return fallback;
-}
-
-function summarizeCodexNotification(payload: Record<string, unknown>) {
-  const raw = typeof payload.notification === 'string' ? payload.notification : '';
-  if (!raw) return { title: 'Agent 执行中', detail: '正在处理本轮任务' };
+function parseJsonRecord(value: unknown) {
+  if (isRecord(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return null;
   try {
-    const notification = JSON.parse(raw) as Record<string, unknown>;
-    const method = String(notification.method || '');
-    if (method === 'item/agentMessage/delta') return { title: '生成回复', detail: '正在整理最终回答' };
-    if (method === 'turn/completed') return { title: '完成本轮任务', detail: '正在收尾并生成总结' };
-    if (method === 'item/started') {
-      const params = isRecord(notification.params) ? notification.params : {};
-      const item = isRecord(params.item) ? params.item : {};
-      const type = String(item.type || 'item');
-      return { title: '开始执行步骤', detail: `启动 ${type}` };
-    }
-    if (method === 'item/completed') {
-      const params = isRecord(notification.params) ? notification.params : {};
-      const item = isRecord(params.item) ? params.item : {};
-      const type = String(item.type || 'item');
-      return { title: '完成执行步骤', detail: `${type} 已完成` };
-    }
-    return { title: 'Agent 事件', detail: method || '收到执行事件' };
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : null;
   } catch {
-    return { title: 'Agent 执行中', detail: raw.slice(0, 140) };
+    return null;
   }
 }
 
-function projectActivityItem(envelope: Record<string, unknown>, index: number): AgentActivityItem | null {
+function getCodexNotification(envelope: Record<string, unknown>) {
+  if (String(envelope.type || '') !== 'event' || !isRecord(envelope.event)) return null;
+  const event = envelope.event;
+  if (!String(event.type || '').startsWith('codex.')) return null;
+  const payload = getEventPayload(event);
+  return parseJsonRecord(payload.notification) || parseJsonRecord(payload.notificationText);
+}
+
+function extractCodexText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (!isRecord(value)) return '';
+  for (const key of ['text', 'content', 'message', 'finalText']) {
+    const item = value[key];
+    if (typeof item === 'string') return item;
+  }
+  const content = value.content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (!isRecord(part)) return '';
+      if (typeof part.text === 'string') return part.text;
+      if (typeof part.content === 'string') return part.content;
+      return '';
+    })
+    .filter(Boolean)
+    .join('');
+}
+
+function describeCodexItem(item: Record<string, unknown>) {
+  const type = String(item.type || 'item');
+  const command = typeof item.command === 'string' ? item.command : '';
+  const tool = typeof item.tool === 'string' ? item.tool : '';
+  const namespace = typeof item.namespace === 'string' ? item.namespace : '';
+  const path = typeof item.path === 'string' ? item.path : typeof item.file === 'string' ? item.file : '';
+  const text = extractCodexText(item).trim();
+
+  if (type.toLowerCase().includes('command')) {
+    return { title: '运行命令', detail: command || '命令执行中', content: text };
+  }
+  if (type.toLowerCase().includes('tool') || tool) {
+    return { title: '调用工具', detail: [namespace, tool].filter(Boolean).join('.') || '工具调用中', content: text };
+  }
+  if (type.toLowerCase().includes('file') || type.toLowerCase().includes('patch')) {
+    return { title: '更新文件', detail: path || type, content: text };
+  }
+  if (type.toLowerCase().includes('agentmessage') || type === 'message') {
+    return { title: '生成回复', detail: '正在输出 assistant message', content: text };
+  }
+  return { title: '处理项目', detail: type, content: text };
+}
+
+function projectCodexStreamItem(envelope: Record<string, unknown>, index: number): CodexStreamItem | null {
   const envelopeType = String(envelope.type || '');
   const now = new Date().toISOString();
   if (envelopeType === 'turn_started') {
-    return {
-      id: `turn-started-${index}`,
-      title: '收到指令',
-      detail: '正在创建本轮任务并加载上下文',
-      status: 'running',
-      timestamp: typeof envelope.timestamp === 'string' ? envelope.timestamp : now,
-      raw: envelope,
-    };
+    return null;
   }
 
   if (envelopeType === 'error') {
@@ -264,7 +335,6 @@ function projectActivityItem(envelope: Record<string, unknown>, index: number): 
       detail: typeof envelope.error === 'string' ? envelope.error : '执行过程中发生错误',
       status: 'error',
       timestamp: now,
-      raw: envelope,
     };
   }
 
@@ -274,82 +344,128 @@ function projectActivityItem(envelope: Record<string, unknown>, index: number): 
   const type = String(event.type || 'agent.event');
   const timestamp = typeof event.timestamp === 'string' ? event.timestamp : now;
   const payload = getEventPayload(event);
-  let title = 'Agent 执行中';
-  let detail = formatActivityDetail(payload, type);
-  let status: AgentActivityStatus = 'running';
 
-  if (type === 'memory.suggested') {
-    title = '更新记忆建议';
-    detail = '识别到一条可能需要保存的长期偏好';
-    status = 'success';
-  } else if (type === 'main.agent_profiles.loaded') {
-    title = '加载可用能力';
-    const profiles = Array.isArray(payload.profiles) ? payload.profiles.length : 0;
-    detail = profiles ? `已加载 ${profiles} 个可用 Agent 能力` : '已加载可用 Agent 能力';
-    status = 'success';
-  } else if (type === 'router.decision' || type.endsWith('router.decision')) {
-    title = '选择执行路径';
-    detail = formatActivityDetail(payload, '已完成任务路由判断');
-    status = 'success';
-  } else if (type === 'main.route.selected') {
-    title = '确定处理方式';
-    detail = typeof payload.route === 'string' ? `本轮交给 ${payload.route} 处理` : '已确定本轮处理方式';
-    status = 'success';
-  } else if (type === 'codex.session.starting') {
-    title = '启动通用 Agent';
-    detail = '正在准备本轮工具和上下文环境';
-  } else if (type === 'codex.thread.started') {
-    title = '创建执行线程';
-    detail = '执行线程已就绪';
-    status = 'success';
-  } else if (type === 'codex.turn.started') {
-    title = '开始执行';
-    detail = 'Agent 已开始处理你的指令';
-  } else if (type.startsWith('codex.server_request.')) {
-    title = '调用工具';
-    detail = type.replace('codex.server_request.', '') || '正在调用工具';
-  } else if (type === 'codex.web_search.not_used') {
-    title = '搜索提醒';
-    detail = formatActivityDetail(payload, '本轮可能需要联网信息，但未观察到搜索调用');
-    status = 'error';
-  } else if (type === 'codex.error') {
-    title = 'Agent 执行失败';
-    detail = formatActivityDetail(payload, 'Codex runtime 执行失败');
-    status = 'error';
-  } else if (type.startsWith('codex.')) {
-    const summary = summarizeCodexNotification(payload);
-    title = summary.title;
-    detail = summary.detail;
-    if (type.includes('completed')) status = 'success';
-  } else if (type === 'hermes.profile.updated') {
-    title = '更新用户画像';
-    detail = '识别到可沉淀的个人偏好或画像信息';
-    status = 'success';
-  } else if (type === 'hermes.profile.loaded') {
-    title = '加载个人上下文';
-    const count = typeof payload.entryCount === 'number' ? payload.entryCount : 0;
-    detail = count ? `已加载 ${count} 条个人上下文` : '已加载个人上下文';
-    status = 'success';
-  } else if (type === 'hermes.source_runtime.starting') {
-    title = '启动 Hermes Agent';
-    detail = '正在准备本轮推理和工具环境';
-  } else if (type === 'hermes.source_runtime.completed') {
-    title = 'Hermes 执行完成';
-    detail = '正在生成最终回复';
-    status = 'success';
-  } else if (type === 'hermes.memory_review.enqueued') {
-    title = '安排记忆复盘';
-    detail = '本轮结束后会异步检查是否需要沉淀长期记忆';
-    status = 'success';
+  if (type === 'codex.server_request.item/tool/call') {
+    const request = isRecord(payload.request) ? payload.request : {};
+    const params = isRecord(request.params) ? request.params : {};
+    const namespace = typeof params.namespace === 'string' ? params.namespace : '';
+    const tool = typeof params.tool === 'string' ? params.tool : '';
+    return {
+      id: `codex-server-request-${timestamp}-${index}`,
+      title: '调用工具',
+      detail: [namespace, tool].filter(Boolean).join('.') || 'item/tool/call',
+      status: 'running',
+      timestamp,
+      method: 'item/tool/call',
+    };
   }
+
+  if (type === 'codex.error' || type === 'codex.web_search.not_used') {
+    const detail = typeof payload.error === 'string'
+      ? payload.error
+      : typeof payload.warning === 'string'
+        ? payload.warning
+        : 'Codex runtime 返回错误';
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: type === 'codex.web_search.not_used' ? '搜索未执行' : 'Codex 执行失败',
+      detail,
+      status: 'error',
+      timestamp,
+      method: type,
+    };
+  }
+
+  if (type === 'codex.session.starting' || type === 'codex.thread.started' || type === 'codex.turn.started') {
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: type === 'codex.session.starting' ? '启动 Codex' : type === 'codex.thread.started' ? '创建线程' : '开始回合',
+      detail: type.replace('codex.', ''),
+      status: type === 'codex.thread.started' ? 'completed' : 'running',
+      timestamp,
+      method: type,
+    };
+  }
+
+  const notification = getCodexNotification(envelope);
+  if (notification) {
+    const method = String(notification.method || '');
+    if (
+      [
+        'thread/status/changed',
+        'thread/tokenUsage/updated',
+        'account/rateLimits/updated',
+        'turn/started',
+      ].includes(method)
+    ) {
+      return null;
+    }
+    if (method === 'warning') {
+      const params = isRecord(notification.params) ? notification.params : {};
+      return {
+        id: `warning-${timestamp}-${index}`,
+        title: 'Codex 警告',
+        detail: typeof params.message === 'string' ? params.message : 'warning',
+        status: 'error',
+        timestamp,
+        method,
+      };
+    }
+    if (method === 'item/agentMessage/delta') return null;
+    if (method === 'turn/completed') {
+      return {
+        id: 'turn-completed',
+        title: '完成回合',
+        detail: 'turn/completed',
+        status: 'completed',
+        timestamp,
+        method,
+      };
+    }
+    const params = isRecord(notification.params) ? notification.params : {};
+    const item = isRecord(params.item) ? params.item : {};
+    const itemType = String(item.type || '');
+    const role = String(item.role || '');
+    if (
+      itemType === 'userMessage' ||
+      itemType === 'agentMessage' ||
+      itemType === 'assistantMessage' ||
+      (itemType === 'message' && (role === 'assistant' || role === 'user'))
+    ) {
+      return null;
+    }
+    const summary = describeCodexItem(item);
+    const itemId = typeof item.id === 'string' ? item.id : `${method}-${timestamp}-${index}`;
+    if (method === 'item/started' || method === 'item/completed') {
+      return {
+        id: itemId,
+        title: summary.title,
+        detail: summary.detail,
+        status: method === 'item/completed' ? 'completed' : 'running',
+        timestamp,
+        method,
+        content: method === 'item/completed' ? summary.content : undefined,
+      };
+    }
+    return {
+      id: `${method}-${timestamp}-${index}`,
+      title: 'Codex 事件',
+      detail: method || type,
+      status: method.includes('completed') ? 'completed' : 'running',
+      timestamp,
+      method,
+    };
+  }
+
+  if (!type.startsWith('codex.')) return null;
 
   return {
     id: `${type}-${timestamp}-${index}`,
-    title,
-    detail,
-    status,
+    title: 'Agent 事件',
+    detail: type,
+    status: type.includes('completed') ? 'completed' : 'running',
     timestamp,
-    raw: event,
+    method: type,
   };
 }
 
@@ -358,7 +474,11 @@ function extractAssistantDelta(envelope: Record<string, unknown>) {
   const payload = getEventPayload(envelope.event);
   const projected = isRecord(payload.projected) ? payload.projected : {};
   const delta = projected.assistantDelta;
-  return typeof delta === 'string' ? delta : '';
+  if (typeof delta === 'string') return delta;
+  const notification = getCodexNotification(envelope);
+  if (!notification || notification.method !== 'item/agentMessage/delta') return '';
+  const params = isRecord(notification.params) ? notification.params : {};
+  return typeof params.delta === 'string' ? params.delta : '';
 }
 
 function sleep(ms: number) {
@@ -417,64 +537,52 @@ async function waitForExecutiveRun(
   throw new Error('晨报执行仍未完成，请稍后刷新查看结果');
 }
 
-function AgentActivityPanel({
-  items,
-  assistantDraft,
-  active,
-}: {
-  items: AgentActivityItem[];
-  assistantDraft: string;
-  active: boolean;
-}) {
+function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active: boolean }) {
   if (items.length === 0 && !active) return null;
-  const visibleItems = items.slice(-8);
-  const latest = visibleItems[visibleItems.length - 1];
+  const visibleItems = items.length > 0
+    ? items.slice(-8)
+    : [
+        {
+          id: 'agent-stream-preparing',
+          title: '准备执行',
+          detail: '正在创建本轮任务并加载上下文',
+          status: 'running' as const,
+          timestamp: new Date().toISOString(),
+        },
+      ];
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-[92%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 sm:max-w-2xl">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">
-              {active ? '正在执行' : '执行过程'}
-            </p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              {latest?.detail || '正在准备本轮任务'}
-            </p>
-          </div>
-          <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${active ? activityStatusClass.running : activityStatusClass.success}`}>
-            {active ? '进行中' : '已完成'}
-          </span>
-        </div>
-
-        <div className="mt-3 space-y-2">
-          {visibleItems.length > 0 ? (
-            visibleItems.map((item) => (
-              <div key={item.id} className="flex gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                <span className={`mt-0.5 h-fit shrink-0 rounded-full px-2 py-0.5 text-[11px] ${activityStatusClass[item.status]}`}>
-                  {activityStatusLabel[item.status]}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                  <p className="mt-0.5 break-words text-xs leading-5 text-slate-600">{item.detail}</p>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-              正在创建本轮任务并加载上下文
+      <div className="w-full max-w-2xl py-1 pl-1 text-sm text-slate-500">
+        <div className="space-y-1.5 border-l border-slate-200 pl-4">
+          {visibleItems.map((item) => (
+            <div key={item.id} className="relative min-w-0 leading-6">
+              <span
+                className={`absolute -left-[1.18rem] top-2 h-2 w-2 rounded-full ${codexItemDotClass[item.status]} ${
+                  active && item.status === 'running' ? 'animate-pulse' : ''
+                }`}
+              />
+              <span className="font-medium text-slate-700">{item.title}</span>
+              {item.detail ? <span className="break-words text-slate-500">：{item.detail}</span> : null}
+              {item.content ? (
+                <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
+                  {item.content}
+                </pre>
+              ) : null}
             </div>
-          )}
+          ))}
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {assistantDraft.trim() ? (
-          <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-            <p className="mb-1 text-xs font-medium text-slate-500">正在整理回复</p>
-            <div className="max-h-32 overflow-y-auto text-slate-800">
-              <MarkdownMessage content={assistantDraft} compact />
-            </div>
-          </div>
-        ) : null}
+function StreamingAssistantMessage({ content }: { content: string }) {
+  if (!content.trim()) return null;
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-slate-900 sm:max-w-2xl">
+        <MarkdownMessage content={content} />
       </div>
     </div>
   );
@@ -491,6 +599,7 @@ export default function InvestorAgentChatPage() {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [persistedBriefing, setPersistedBriefing] = useState<PersistedBriefing | null>(null);
   const [input, setInput] = useState('');
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -504,14 +613,15 @@ export default function InvestorAgentChatPage() {
   const [plannerSteps, setPlannerSteps] = useState<PlannerStep[]>([]);
   const [plannerTrace, setPlannerTrace] = useState<PlannerTraceItem[]>([]);
   const [plannerPanelOpen, setPlannerPanelOpen] = useState(false);
-  const [activityItems, setActivityItems] = useState<AgentActivityItem[]>([]);
+  const [codexStreamItems, setCodexStreamItems] = useState<CodexStreamItem[]>([]);
   const [assistantDraft, setAssistantDraft] = useState('');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stoppingRun, setStoppingRun] = useState(false);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
-  const activityEventIndexRef = useRef(0);
+  const codexEventIndexRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const title = useMemo(() => (isExecutive ? '个人 Hermes Agent' : 'AI 助手'), [isExecutive]);
   const showExecutiveControls = false;
@@ -650,7 +760,7 @@ export default function InvestorAgentChatPage() {
       setPersistedBriefing(null);
       setPlannerSteps([]);
       setPlannerTrace([]);
-      setActivityItems([]);
+      setCodexStreamItems([]);
       setAssistantDraft('');
       if (showExecutiveControls && getStoredActiveRunId()) {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
@@ -672,42 +782,76 @@ export default function InvestorAgentChatPage() {
       if (viewport) viewport.scrollTop = viewport.scrollHeight;
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [messages, loading, sending, activityItems, assistantDraft]);
+  }, [messages, loading, sending, codexStreamItems, assistantDraft]);
 
   useEffect(() => {
     const prompt = searchParams.get('prompt')?.trim();
     if (prompt) setInput(prompt);
   }, [searchParams]);
 
+  const handleFilesSelected = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setAttachments((prev) => [...prev, ...Array.from(files).map(createPendingAttachment)].slice(0, 6));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
+  };
+
   const handleSend = async (textFromSuggestion?: string) => {
     const content = (textFromSuggestion || input).trim();
-    if (!content || sending || !isExecutive) return;
+    const requestAttachments = attachments;
+    const hasAttachments = requestAttachments.length > 0;
+    if ((!content && !hasAttachments) || sending || !isExecutive) return;
 
-    const nextMessages = [...messages, { role: 'user' as const, content }];
+    const attachmentList = formatAttachmentList(requestAttachments);
+    const displayContent = [
+      content || '请分析我上传的附件。',
+      attachmentList ? `附件：\n${attachmentList}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    const nextMessages = [...messages, { role: 'user' as const, content: displayContent }];
     setMessages(nextMessages);
     setInput('');
+    setAttachments([]);
     setSending(true);
     setError(null);
     setPlannerTrace([]);
-    setActivityItems([]);
+    setCodexStreamItems([]);
     setAssistantDraft('');
     setPlannerPanelOpen(false);
-    activityEventIndexRef.current = 0;
+    codexEventIndexRef.current = 0;
 
     try {
+      const requestBody = hasAttachments
+        ? (() => {
+            const formData = new FormData();
+            if (threadId) formData.append('threadId', threadId);
+            formData.append('message', content);
+            formData.append('messages', JSON.stringify(nextMessages));
+            requestAttachments.forEach((attachment) => {
+              formData.append('attachments', attachment.file, attachment.name);
+            });
+            return formData;
+          })()
+        : JSON.stringify({
+            threadId,
+            messages: nextMessages,
+          });
+
       const res = await fetch('/api/investor/personal-agent?stream=1', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          threadId,
-          messages: nextMessages,
-        }),
+        ...(hasAttachments ? {} : { headers: { 'Content-Type': 'application/json' } }),
+        body: requestBody,
       });
 
       if (!res.ok || !res.body) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         setError(typeof data.error === 'string' ? data.error : '发送失败');
         setMessages(messages);
+        setAttachments(requestAttachments);
         return;
       }
 
@@ -717,12 +861,14 @@ export default function InvestorAgentChatPage() {
       let finalData: PersonalAgentFinalData | null = null;
       let finalStatus = 200;
 
-      const appendActivity = (item: AgentActivityItem | null) => {
+      const appendCodexItem = (item: CodexStreamItem | null) => {
         if (!item) return;
-        setActivityItems((prev) => {
-          const last = prev[prev.length - 1];
-          if (last && last.title === item.title && last.detail === item.detail && last.status === item.status) {
-            return [...prev.slice(0, -1), item];
+        setCodexStreamItems((prev) => {
+          const existingIndex = prev.findIndex((entry) => entry.id === item.id);
+          if (existingIndex >= 0) {
+            const next = [...prev];
+            next[existingIndex] = { ...next[existingIndex], ...item };
+            return next.slice(-18);
           }
           return [...prev, item].slice(-18);
         });
@@ -735,11 +881,11 @@ export default function InvestorAgentChatPage() {
           finalData = isRecord(envelope.data) ? (envelope.data as PersonalAgentFinalData) : null;
           return;
         }
-        const index = activityEventIndexRef.current;
-        activityEventIndexRef.current += 1;
+        const index = codexEventIndexRef.current;
+        codexEventIndexRef.current += 1;
         const delta = extractAssistantDelta(envelope);
         if (delta) setAssistantDraft((prev) => `${prev}${delta}`);
-        appendActivity(projectActivityItem(envelope, index));
+        appendCodexItem(projectCodexStreamItem(envelope, index));
       };
 
       while (true) {
@@ -764,7 +910,9 @@ export default function InvestorAgentChatPage() {
         const finalErrorMessage = typeof finalError === 'string' ? finalError : '发送失败';
         setError(finalErrorMessage);
         setMessages(messages);
-        setActivityItems((prev) => [
+        setAttachments(requestAttachments);
+        setAssistantDraft('');
+        setCodexStreamItems((prev) => [
           ...prev,
           {
             id: `final-error-${Date.now()}`,
@@ -785,19 +933,12 @@ export default function InvestorAgentChatPage() {
         setMessages([...nextMessages, { role: 'assistant', content: completedData.reply }]);
       }
       setAssistantDraft('');
-      setActivityItems((prev) => [
-        ...prev,
-        {
-          id: `final-success-${Date.now()}`,
-          title: '完成总结',
-          detail: '已生成最终回复',
-          status: 'success',
-          timestamp: new Date().toISOString(),
-        },
-      ]);
+      setCodexStreamItems([]);
     } catch (err) {
       setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
       setMessages(messages);
+      setAttachments(requestAttachments);
+      setAssistantDraft('');
     } finally {
       activeRunIdRef.current = null;
       setActiveRunId(null);
@@ -1093,7 +1234,8 @@ export default function InvestorAgentChatPage() {
                   </div>
                 </div>
               ))}
-              <AgentActivityPanel items={activityItems} assistantDraft={assistantDraft} active={sending} />
+              <CodexStreamOutput items={codexStreamItems} active={sending} />
+              <StreamingAssistantMessage content={assistantDraft} />
               {messages.length === 0 ? <div className="py-8 text-center text-slate-500">开始和你的个人 Hermes Agent 对话吧。</div> : null}
             </div>
           )}
@@ -1119,28 +1261,71 @@ export default function InvestorAgentChatPage() {
               e.preventDefault();
               void handleSend();
             }}
-            className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row"
+            className="mx-auto flex max-w-3xl flex-col gap-3"
           >
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="输入你的问题..."
-              rows={3}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              className="min-h-[7rem] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-0 sm:py-2"
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || sending}
-              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:self-end sm:py-2"
-            >
-              {sending ? '发送中...' : '发送'}
-            </button>
+            {attachments.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex max-w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700"
+                  >
+                    <span className="min-w-0 truncate">{attachment.name}</span>
+                    <span className="shrink-0 text-slate-400">{formatBytes(attachment.size)}</span>
+                    <button
+                      type="button"
+                      title="移除附件"
+                      onClick={() => removeAttachment(attachment.id)}
+                      className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="输入你的问题..."
+                rows={3}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleSend();
+                  }
+                }}
+                className="min-h-[7rem] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-0 sm:py-2"
+              />
+              <div className="flex gap-2 sm:self-end">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={attachmentAccept}
+                  className="hidden"
+                  onChange={(e) => handleFilesSelected(e.target.files)}
+                />
+                <button
+                  type="button"
+                  title="添加附件"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={sending}
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50 sm:h-9 sm:w-9"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
+                <button
+                  type="submit"
+                  disabled={(!input.trim() && attachments.length === 0) || sending}
+                  className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:py-2"
+                >
+                  {sending ? '发送中...' : '发送'}
+                </button>
+              </div>
+            </div>
           </form>
 
           {error ? <p className="mx-auto mt-3 max-w-3xl text-sm text-red-600">{error}</p> : null}

@@ -138,9 +138,65 @@ set +a
 PORT=8787 \
 CODEX_MODEL_PROVIDER=openrouter \
 CODEX_MODEL=deepseek/deepseek-v3.2 \
+CODEX_MODEL_CONTEXT_WINDOW=128000 \
+CODEX_MODEL_AUTO_COMPACT_TOKEN_LIMIT=64000 \
+CODEX_TOOL_OUTPUT_TOKEN_LIMIT=12000 \
 CODEX_WEB_SEARCH_MODE=live \
 CODEX_GENERAL_DISABLE_LOCAL_ENVIRONMENT=true \
 npx tsx services/personal-agent-server/src/index.ts
+```
+
+Codex model metadata can be supplied per model so OpenRouter model slugs still
+have explicit context and compaction limits even when Codex does not know the
+model internally. The server writes these values into both `config.toml` and a
+generated `model-catalog.json` under each user's `CODEX_HOME`.
+
+The server accepts either an inline JSON catalog:
+
+```bash
+CODEX_MODEL_METADATA_JSON='{
+  "defaults": {
+    "toolOutputTokenLimit": 12000
+  },
+  "models": {
+    "deepseek/deepseek-v3.2": {
+      "contextWindow": 128000,
+      "autoCompactTokenLimit": 64000,
+      "toolOutputTokenLimit": 12000
+    },
+    "anthropic/claude-sonnet-4.5": {
+      "contextWindow": 200000,
+      "autoCompactTokenLimit": 100000,
+      "toolOutputTokenLimit": 12000
+    }
+  }
+}'
+```
+
+or a file path:
+
+```bash
+CODEX_MODEL_METADATA_PATH=/absolute/path/to/codex-models.json
+```
+
+Metadata keys can be camelCase or Codex TOML-style snake_case. Supported fields:
+
+- `contextWindow` / `model_context_window`
+- `autoCompactTokenLimit` / `model_auto_compact_token_limit`
+- `toolOutputTokenLimit` / `tool_output_token_limit`
+- `reasoningSummary` / `model_reasoning_summary`
+- `verbosity` / `model_verbosity`
+- `supportsReasoningSummaries` / `model_supports_reasoning_summaries`
+
+For the active model only, simple env overrides are also supported:
+
+```bash
+CODEX_MODEL_CONTEXT_WINDOW=128000
+CODEX_MODEL_AUTO_COMPACT_TOKEN_LIMIT=64000
+CODEX_TOOL_OUTPUT_TOKEN_LIMIT=12000
+CODEX_MODEL_REASONING_SUMMARY=none
+CODEX_MODEL_VERBOSITY=low
+CODEX_MODEL_SUPPORTS_REASONING_SUMMARIES=false
 ```
 
 Health check:

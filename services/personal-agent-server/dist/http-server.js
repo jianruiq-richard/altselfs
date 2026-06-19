@@ -112,8 +112,11 @@ async function openRouterResponsesProxy(res, config, body) {
         : config.codexModel || config.hermesModel;
     const messages = responsesBodyToChatMessages(body);
     console.log(`[openrouter-responses-proxy] request model=${model} messages=${messages.length} inputChars=${messages
-        .map((message) => message.content.length)
+        .map((message) => chatContentLength(message.content))
         .reduce((sum, length) => sum + length, 0)}`);
+    if (body.stream === true) {
+        return streamOpenRouterResponsesProxy(res, config, { model, messages, body });
+    }
     const response = await fetch(`${config.openRouterBaseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -125,6 +128,7 @@ async function openRouterResponsesProxy(res, config, body) {
             model,
             messages,
             temperature: typeof body.temperature === 'number' ? body.temperature : undefined,
+            ...openRouterFileParserOptions(messages),
             stream: false,
         }),
     });
@@ -180,6 +184,209 @@ async function openRouterResponsesProxy(res, config, body) {
     }
     res.end();
 }
+async function streamOpenRouterResponsesProxy(res, config, params) {
+    const apiKey = process.env[config.openRouterApiKeyEnv]?.trim();
+    if (!apiKey)
+        return json(res, 500, { error: `${config.openRouterApiKeyEnv} is missing` });
+    const responseId = `resp_${Date.now().toString(36)}`;
+    const messageId = `msg_${Date.now().toString(36)}`;
+    const createdAt = Math.floor(Date.now() / 1000);
+    let sequence = 0;
+    let text = '';
+    const outputItem = {
+        id: messageId,
+        type: 'message',
+        role: 'assistant',
+        status: 'in_progress',
+        content: [],
+    };
+    const responseSnapshot = (status) => ({
+        id: responseId,
+        object: 'response',
+        created_at: createdAt,
+        model: params.model,
+        status,
+        output: status === 'completed'
+            ? [
+                {
+                    ...outputItem,
+                    status: 'completed',
+                    content: [{ type: 'output_text', text, annotations: [] }],
+                },
+            ]
+            : [],
+    });
+    const writeSse = (event) => {
+        res.write(`event: ${String(event.type || 'message')}\n`);
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+    const nextSequence = () => {
+        sequence += 1;
+        return sequence;
+    };
+    res.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache',
+        connection: 'keep-alive',
+    });
+    writeSse({
+        type: 'response.created',
+        sequence_number: nextSequence(),
+        response: responseSnapshot('in_progress'),
+    });
+    writeSse({
+        type: 'response.output_item.added',
+        sequence_number: nextSequence(),
+        output_index: 0,
+        item: outputItem,
+    });
+    writeSse({
+        type: 'response.content_part.added',
+        sequence_number: nextSequence(),
+        output_index: 0,
+        content_index: 0,
+        item_id: messageId,
+        part: { type: 'output_text', text: '', annotations: [] },
+    });
+    try {
+        const upstream = await fetch(`${config.openRouterBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                authorization: `Bearer ${apiKey}`,
+                'x-title': config.openRouterAppTitle,
+            },
+            body: JSON.stringify({
+                model: params.model,
+                messages: params.messages,
+                temperature: typeof params.body.temperature === 'number' ? params.body.temperature : undefined,
+                ...openRouterFileParserOptions(params.messages),
+                stream: true,
+            }),
+        });
+        if (!upstream.ok || !upstream.body) {
+            const raw = await upstream.text().catch(() => '');
+            console.warn(`[openrouter-responses-proxy] streaming upstream failed status=${upstream.status} body=${raw.slice(0, 500)}`);
+            writeSse({
+                type: 'response.failed',
+                sequence_number: nextSequence(),
+                response: {
+                    ...responseSnapshot('failed'),
+                    error: {
+                        code: `openrouter_http_${upstream.status}`,
+                        message: raw || `OpenRouter HTTP ${upstream.status}`,
+                    },
+                },
+            });
+            return;
+        }
+        const reader = upstream.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let doneSeen = false;
+        const handleSseBlock = (block) => {
+            const data = block
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter((line) => line.startsWith('data:'))
+                .map((line) => line.replace(/^data:\s?/, ''))
+                .join('\n')
+                .trim();
+            if (!data)
+                return;
+            if (data === '[DONE]') {
+                doneSeen = true;
+                return;
+            }
+            let parsed;
+            try {
+                parsed = JSON.parse(data);
+            }
+            catch {
+                return;
+            }
+            const delta = extractOpenRouterDeltaText(parsed);
+            if (!delta)
+                return;
+            text += delta;
+            writeSse({
+                type: 'response.output_text.delta',
+                sequence_number: nextSequence(),
+                output_index: 0,
+                content_index: 0,
+                item_id: messageId,
+                delta,
+                logprobs: [],
+            });
+        };
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done)
+                break;
+            buffer += decoder.decode(value, { stream: true });
+            const blocks = buffer.split(/\r?\n\r?\n/);
+            buffer = blocks.pop() || '';
+            for (const block of blocks)
+                handleSseBlock(block);
+        }
+        if (buffer.trim())
+            handleSseBlock(buffer);
+        if (!doneSeen) {
+            console.warn('[openrouter-responses-proxy] streaming upstream ended without [DONE]');
+        }
+        const completedText = { type: 'output_text', text, annotations: [] };
+        const completedItem = {
+            ...outputItem,
+            status: 'completed',
+            content: [completedText],
+        };
+        writeSse({
+            type: 'response.output_text.done',
+            sequence_number: nextSequence(),
+            output_index: 0,
+            content_index: 0,
+            item_id: messageId,
+            text,
+            logprobs: [],
+        });
+        writeSse({
+            type: 'response.content_part.done',
+            sequence_number: nextSequence(),
+            output_index: 0,
+            content_index: 0,
+            item_id: messageId,
+            part: completedText,
+        });
+        writeSse({
+            type: 'response.output_item.done',
+            sequence_number: nextSequence(),
+            output_index: 0,
+            item: completedItem,
+        });
+        writeSse({
+            type: 'response.completed',
+            sequence_number: nextSequence(),
+            response: responseSnapshot('completed'),
+        });
+        console.log(`[openrouter-responses-proxy] streaming upstream ok outputChars=${text.length} output=${JSON.stringify(text.slice(0, 200))}`);
+    }
+    catch (error) {
+        writeSse({
+            type: 'response.failed',
+            sequence_number: nextSequence(),
+            response: {
+                ...responseSnapshot('failed'),
+                error: {
+                    code: 'openrouter_stream_error',
+                    message: error instanceof Error ? error.message : String(error),
+                },
+            },
+        });
+    }
+    finally {
+        res.end();
+    }
+}
 function extractOpenRouterMessageText(content) {
     if (typeof content === 'string')
         return content;
@@ -202,6 +409,14 @@ function extractOpenRouterMessageText(content) {
         .filter(Boolean)
         .join('\n');
 }
+function extractOpenRouterDeltaText(value) {
+    if (!isRecord(value))
+        return '';
+    const choices = Array.isArray(value.choices) ? value.choices : [];
+    const first = isRecord(choices[0]) ? choices[0] : {};
+    const delta = isRecord(first.delta) ? first.delta : {};
+    return extractOpenRouterMessageText(delta.content);
+}
 function responsesBodyToChatMessages(body) {
     const messages = [];
     if (typeof body.instructions === 'string' && body.instructions.trim()) {
@@ -213,27 +428,107 @@ function responsesBodyToChatMessages(body) {
             continue;
         const role = item.role === 'assistant' ? 'assistant' : 'user';
         const content = Array.isArray(item.content)
-            ? item.content
-                .map((part) => {
-                if (!isRecord(part))
-                    return '';
-                if (typeof part.text === 'string')
-                    return part.text;
-                if (typeof part.input_text === 'string')
-                    return part.input_text;
-                return '';
-            })
-                .filter(Boolean)
-                .join('\n')
+            ? normalizeOpenRouterContentParts(item.content)
             : typeof item.content === 'string'
                 ? item.content
                 : '';
-        if (content.trim())
+        if (typeof content === 'string' ? content.trim() : content.length > 0)
             messages.push({ role, content });
     }
     if (messages.length === 0)
         messages.push({ role: 'user', content: 'Continue.' });
     return messages;
+}
+function normalizeOpenRouterContentParts(parts) {
+    const normalized = parts
+        .map((part) => normalizeOpenRouterContentPart(part))
+        .filter(Boolean);
+    if (normalized.length === 0)
+        return '';
+    if (normalized.every((part) => part.type === 'text')) {
+        return normalized
+            .map((part) => (typeof part.text === 'string' ? part.text : ''))
+            .filter(Boolean)
+            .join('\n');
+    }
+    return normalized;
+}
+function normalizeOpenRouterContentPart(part) {
+    if (typeof part === 'string')
+        return { type: 'text', text: part };
+    if (!isRecord(part))
+        return null;
+    if (typeof part.text === 'string')
+        return { type: 'text', text: part.text };
+    if (typeof part.input_text === 'string')
+        return { type: 'text', text: part.input_text };
+    if (part.type === 'input_text' && typeof part.text === 'string')
+        return { type: 'text', text: part.text };
+    const imageUrl = typeof part.image_url === 'string'
+        ? part.image_url
+        : isRecord(part.image_url) && typeof part.image_url.url === 'string'
+            ? part.image_url.url
+            : '';
+    if ((part.type === 'input_image' || part.type === 'image' || part.type === 'image_url') && imageUrl) {
+        return {
+            type: 'image_url',
+            image_url: { url: imageUrl },
+        };
+    }
+    if (part.type === 'file' && isRecord(part.file)) {
+        const fileData = typeof part.file.file_data === 'string'
+            ? part.file.file_data
+            : typeof part.file.fileData === 'string'
+                ? part.file.fileData
+                : '';
+        if (!fileData)
+            return null;
+        return {
+            type: 'file',
+            file: {
+                filename: typeof part.file.filename === 'string' ? part.file.filename : 'attachment',
+                file_data: fileData,
+            },
+        };
+    }
+    const videoUrl = part.type === 'video_url'
+        ? isRecord(part.videoUrl) && typeof part.videoUrl.url === 'string'
+            ? part.videoUrl.url
+            : typeof part.video_url === 'string'
+                ? part.video_url
+                : ''
+        : '';
+    if (videoUrl) {
+        return {
+            type: 'video_url',
+            videoUrl: { url: videoUrl },
+        };
+    }
+    return null;
+}
+function chatContentLength(content) {
+    if (typeof content === 'string')
+        return content.length;
+    return content.reduce((sum, part) => sum + JSON.stringify(part).length, 0);
+}
+function openRouterFileParserOptions(messages) {
+    const hasFile = messages.some((message) => {
+        if (!Array.isArray(message.content))
+            return false;
+        return message.content.some((part) => part.type === 'file');
+    });
+    if (!hasFile)
+        return {};
+    return {
+        plugins: [
+            {
+                id: 'file-parser',
+                pdf: {
+                    engine: process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'cloudflare-ai',
+                },
+            },
+        ],
+    };
 }
 function json(res, status, body) {
     res.writeHead(status, {
@@ -259,10 +554,11 @@ function html(res, status, body) {
 function readJsonBody(req) {
     return new Promise((resolve, reject) => {
         let raw = '';
+        const maxBodyBytes = readMaxBodyBytes();
         req.setEncoding('utf8');
         req.on('data', (chunk) => {
             raw += chunk;
-            if (raw.length > 2_000_000) {
+            if (Buffer.byteLength(raw, 'utf8') > maxBodyBytes) {
                 reject(new Error('request body too large'));
                 req.destroy();
             }
@@ -279,4 +575,8 @@ function readJsonBody(req) {
         });
         req.on('error', reject);
     });
+}
+function readMaxBodyBytes() {
+    const value = Number(process.env.PERSONAL_AGENT_SERVER_MAX_BODY_BYTES || '');
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 80 * 1024 * 1024;
 }
