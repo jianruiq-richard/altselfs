@@ -7,10 +7,10 @@ export class HermesSourceRuntime {
     config;
     memoryReviewQueue;
     profileStore;
-    constructor(config, memoryReviewQueue) {
+    constructor(config, memoryReviewQueue, profileStore) {
         this.config = config;
         this.memoryReviewQueue = memoryReviewQueue;
-        this.profileStore = new LocalProfileStore(config.profileStorePath);
+        this.profileStore = profileStore || new LocalProfileStore(config.profileStorePath);
     }
     async run(request) {
         const events = [];

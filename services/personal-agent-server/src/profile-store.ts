@@ -18,11 +18,16 @@ export type UserProfileSnapshot = {
   rendered: string;
 };
 
+export interface UserProfileStore {
+  getSnapshot(userId: string): Promise<UserProfileSnapshot>;
+  rememberExplicitUserProfile(userId: string, message: string, threadId?: string): Promise<UserProfileEntry | null>;
+}
+
 type ProfileDatabase = {
   users: Record<string, UserProfileEntry[]>;
 };
 
-export class LocalProfileStore {
+export class LocalProfileStore implements UserProfileStore {
   constructor(private filePath: string) {}
 
   async getSnapshot(userId: string): Promise<UserProfileSnapshot> {

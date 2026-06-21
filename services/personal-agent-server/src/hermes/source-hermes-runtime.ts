@@ -2,21 +2,22 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ServerConfig } from '../config.js';
-import type { FileMemoryReviewQueue } from '../memory-review-queue.js';
-import { LocalProfileStore } from '../profile-store.js';
+import type { MemoryReviewJobStore } from '../memory-review-queue.js';
+import { LocalProfileStore, type UserProfileStore } from '../profile-store.js';
 import type { AgentEvent, SourceAgentRunResult, TurnStartRequest } from '../types.js';
 import { isRecord, nowIso, safeJson, truncate } from '../util.js';
 
 type SessionMap = Record<string, string>;
 
 export class HermesSourceRuntime {
-  private profileStore: LocalProfileStore;
+  private profileStore: UserProfileStore;
 
   constructor(
     private config: ServerConfig,
-    private memoryReviewQueue?: FileMemoryReviewQueue
+    private memoryReviewQueue?: MemoryReviewJobStore,
+    profileStore?: UserProfileStore
   ) {
-    this.profileStore = new LocalProfileStore(config.profileStorePath);
+    this.profileStore = profileStore || new LocalProfileStore(config.profileStorePath);
   }
 
   async run(request: TurnStartRequest): Promise<SourceAgentRunResult> {

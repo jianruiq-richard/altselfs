@@ -122,6 +122,8 @@ export function renderProductizationPage(config: ServerConfig, jobs: MemoryRevie
       <div class="grid">
         <div class="panel">
           <h3>Runtime</h3>
+          <p><code>AGENT_PROCESS_ROLE</code>: ${escapeHtml(config.processRole)}</p>
+          <p><code>STORAGE_BACKEND</code>: ${escapeHtml(config.storageBackend)}</p>
           <p><code>HERMES_SOURCE_RUNTIME_ENABLED</code>: ${String(config.hermesSourceRuntimeEnabled)}</p>
           <p><code>HERMES_MODEL</code>: ${escapeHtml(config.hermesModel)}</p>
           <p><code>CODEX_MODEL</code>: ${escapeHtml(config.codexModel || config.hermesModel)}</p>
@@ -188,10 +190,11 @@ export function renderProductizationPage(config: ServerConfig, jobs: MemoryRevie
         <div class="panel">
           <h3>阶段 3：数据库化</h3>
           <ul>
-            <li><span class="pill pending">待做</span> 把 <code>memory-review-jobs.json</code> 迁移到 <code>agent_memory_review_jobs</code> 表。</li>
-            <li><span class="pill pending">待做</span> 把本地 <code>profiles.json</code> 迁移到用户画像表。</li>
+            <li><span class="pill success">完成</span> 新增 <code>STORAGE_BACKEND=file|postgres</code> 选择。</li>
+            <li><span class="pill success">完成</span> 新增 Postgres 版 profile 和 memory review job adapter。</li>
+            <li><span class="pill success">完成</span> Worker claim 使用 <code>FOR UPDATE SKIP LOCKED</code>。</li>
             <li><span class="pill pending">待做</span> 消息、线程、run event、job event 全部落库。</li>
-            <li><span class="pill pending">待做</span> 支持 job 重试、幂等、失败原因、管理后台查询。</li>
+            <li><span class="pill pending">待做</span> 联调本地 Postgres / 阿里云 RDS。</li>
           </ul>
         </div>
         <div class="panel">
@@ -237,6 +240,33 @@ export function renderProductizationPage(config: ServerConfig, jobs: MemoryRevie
     </section>
 
     <section>
+      <h2>服务拆分</h2>
+      <div class="grid two">
+        <div class="panel">
+          <h3>Agent API 容器</h3>
+          <p>启动方式：<code>AGENT_PROCESS_ROLE=api npm run start</code></p>
+          <ul>
+            <li>接收前端 <code>/v1/turns/start</code>。</li>
+            <li>执行 Hermes/Codex 主回答。</li>
+            <li>把 memory review 写入 job store。</li>
+            <li>不消费后台 job。</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Agent Worker 容器</h3>
+          <p>启动方式：<code>AGENT_PROCESS_ROLE=worker npm run start</code></p>
+          <ul>
+            <li>轮询 memory review job store。</li>
+            <li>启动 Hermes review turn。</li>
+            <li>调用 Hermes memory 工具写入用户画像。</li>
+            <li>后续也会承载晨报、渠道同步等后台任务。</li>
+          </ul>
+        </div>
+      </div>
+      <p class="muted">本地默认 <code>AGENT_PROCESS_ROLE=all</code>，API 和 Worker 同进程，便于调试；线上应拆成两个容器。</p>
+    </section>
+
+    <section>
       <h2>异步 B 方案</h2>
       <p>同步部分只覆盖用户正在等待的主回答：前端 -> personal-agent-server -> Hermes -> Codex app-server -> OpenRouter -> 前端。</p>
       <p>异步部分独立消费 job：主回答完成后写入 <code>memory-review-jobs.json</code>，worker 再启动 Hermes 的 <code>chat_completions</code> 工具循环，让 Hermes 原生 <code>memory</code> 工具写入同一个用户的 <code>memories/USER.md</code>。</p>
@@ -246,7 +276,7 @@ export function renderProductizationPage(config: ServerConfig, jobs: MemoryRevie
     <section>
       <h2>临时改动和待清理点</h2>
       <ul>
-        <li><span class="warn">临时</span> 本地 job store 仍是 JSON 文件，生产要换成数据库表，例如 <code>agent_memory_review_jobs</code>。</li>
+        <li><span class="warn">临时</span> 默认仍使用本地 JSON；生产需要设置 <code>STORAGE_BACKEND=postgres</code> 和 <code>DATABASE_URL</code>。</li>
         <li><span class="warn">临时</span> worker 和 API server 在同一个 Node 进程里，生产应拆成独立 worker 容器。</li>
         <li><span class="warn">临时</span> 本地 Hermes/Codex 源码在 <code>/Users/richardjian/work/agent-sources</code>，生产要固化为镜像构建步骤。</li>
         <li><span class="warn">临时</span> 对 Hermes 源码有 OpenRouter 和本地运行补丁，后续要整理为可重复 patch 或 fork。</li>
@@ -254,6 +284,7 @@ export function renderProductizationPage(config: ServerConfig, jobs: MemoryRevie
         <li><span class="warn">临时</span> 多用户目录隔离已存在，但还没有云端持久卷、备份和迁移策略。</li>
         <li><span class="warn">临时</span> 异步 review worker 现在和 API 同进程，线上要拆成独立进程，避免 API 重启影响 job。</li>
         <li><span class="warn">临时</span> review prompt 是产品侧精简版，后续要进一步对齐 Hermes 原生 <code>_MEMORY_REVIEW_PROMPT</code> 或直接调用原生 review runner。</li>
+        <li><span class="warn">临时</span> 云端 ECS 的 <code>8787</code> 端口当前只用于手动测试，应只对白名单公网 IP 开放；接入 Vercel 后要改为 API Gateway / SLB / HTTPS + 服务层鉴权，不能长期裸露测试端口。</li>
       </ul>
     </section>
 

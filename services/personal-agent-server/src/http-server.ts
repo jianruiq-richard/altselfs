@@ -1,6 +1,6 @@
 import http from 'node:http';
 import type { ServerConfig } from './config.js';
-import type { FileMemoryReviewQueue } from './memory-review-queue.js';
+import type { MemoryReviewJobStore } from './memory-review-queue.js';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import type { PersonalMainAgent } from './main-agent.js';
@@ -11,7 +11,7 @@ type OpenRouterChatMessage = {
   content: string | OpenRouterChatContentPart[];
 };
 
-export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig, memoryReviewQueue?: FileMemoryReviewQueue) {
+export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig, memoryReviewQueue?: MemoryReviewJobStore) {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);

@@ -73,6 +73,18 @@ function readMemoryReviewModeEnv(key, fallback) {
         return raw;
     return fallback;
 }
+function readProcessRoleEnv(key, fallback) {
+    const raw = process.env[key]?.trim().toLowerCase();
+    if (raw === 'api' || raw === 'worker' || raw === 'all')
+        return raw;
+    return fallback;
+}
+function readStorageBackendEnv(key, fallback) {
+    const raw = process.env[key]?.trim().toLowerCase();
+    if (raw === 'file' || raw === 'postgres')
+        return raw;
+    return fallback;
+}
 function loadLocalEnvFiles() {
     const merged = {};
     for (const file of findLocalEnvFiles()) {
@@ -250,6 +262,9 @@ export function loadConfig() {
     return {
         port: readIntEnv('PORT', 8787),
         env: readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development'),
+        processRole: readProcessRoleEnv('AGENT_PROCESS_ROLE', 'all'),
+        storageBackend: readStorageBackendEnv('STORAGE_BACKEND', 'file'),
+        databaseUrl: process.env.DATABASE_URL?.trim() || undefined,
         hermesRouterEnabled: readBoolEnv('HERMES_ROUTER_ENABLED', true),
         hermesModel,
         hermesOpenRouterApiKeyEnv: readEnv('HERMES_OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY'),

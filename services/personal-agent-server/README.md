@@ -79,6 +79,59 @@ npm run typecheck
 npm run dev
 ```
 
+Local development defaults to `AGENT_PROCESS_ROLE=all`, which runs the API and
+the background worker in one Node process. Product deployment should split them:
+
+```bash
+# API container: handles foreground turns and enqueues background jobs.
+AGENT_PROCESS_ROLE=api npm run start
+
+# Worker container: consumes background jobs such as memory review.
+AGENT_PROCESS_ROLE=worker npm run start
+```
+
+The current local persistence adapters are file-backed. They intentionally sit
+behind interfaces so the production adapters can move to PostgreSQL/RDS without
+changing the Hermes/Codex orchestration path:
+
+- `PROFILE_STORE_PATH` stores explicit product-side user profile entries.
+- `MEMORY_REVIEW_JOB_STORE_PATH` stores queued/running/completed memory review jobs.
+- Hermes native `USER.md` still lives under each user's `HERMES_HOME/memories`.
+
+PostgreSQL/RDS mode is selected with:
+
+```bash
+STORAGE_BACKEND=postgres
+DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/DBNAME
+```
+
+Before using Postgres mode, apply the schema:
+
+```bash
+psql "$DATABASE_URL" -f services/personal-agent-server/docs/schema.sql
+```
+
+The Postgres adapter currently covers:
+
+- `agent_memory_entries` for product-side user profile entries.
+- `agent_memory_events` for explicit profile write audit events.
+- `agent_memory_review_jobs` for API/Worker shared background memory review jobs.
+
+The worker claims jobs with `FOR UPDATE SKIP LOCKED`, so multiple worker
+containers can run without processing the same job at the same time.
+
+Productization status page:
+
+```bash
+open http://127.0.0.1:8787/productization
+```
+
+Memory review job API:
+
+```bash
+curl --noproxy '*' 'http://127.0.0.1:8787/v1/memory-review/jobs?limit=20'
+```
+
 Environment:
 
 ```bash

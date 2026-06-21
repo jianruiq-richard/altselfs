@@ -4,6 +4,9 @@ import path from 'node:path';
 export type ServerConfig = {
   port: number;
   env: string;
+  processRole: 'api' | 'worker' | 'all';
+  storageBackend: 'file' | 'postgres';
+  databaseUrl?: string;
   hermesRouterEnabled: boolean;
   hermesModel: string;
   hermesOpenRouterApiKeyEnv: string;
@@ -131,6 +134,18 @@ function readWebSearchProviderEnv(key: string, fallback: ServerConfig['webSearch
 function readMemoryReviewModeEnv(key: string, fallback: ServerConfig['memoryReviewMode']) {
   const raw = process.env[key]?.trim().toLowerCase();
   if (raw === 'async' || raw === 'inline' || raw === 'disabled') return raw;
+  return fallback;
+}
+
+function readProcessRoleEnv(key: string, fallback: ServerConfig['processRole']) {
+  const raw = process.env[key]?.trim().toLowerCase();
+  if (raw === 'api' || raw === 'worker' || raw === 'all') return raw;
+  return fallback;
+}
+
+function readStorageBackendEnv(key: string, fallback: ServerConfig['storageBackend']) {
+  const raw = process.env[key]?.trim().toLowerCase();
+  if (raw === 'file' || raw === 'postgres') return raw;
   return fallback;
 }
 
@@ -302,6 +317,9 @@ export function loadConfig(): ServerConfig {
   return {
     port: readIntEnv('PORT', 8787),
     env: readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development'),
+    processRole: readProcessRoleEnv('AGENT_PROCESS_ROLE', 'all'),
+    storageBackend: readStorageBackendEnv('STORAGE_BACKEND', 'file'),
+    databaseUrl: process.env.DATABASE_URL?.trim() || undefined,
     hermesRouterEnabled: readBoolEnv('HERMES_ROUTER_ENABLED', true),
     hermesModel,
     hermesOpenRouterApiKeyEnv: readEnv('HERMES_OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY'),

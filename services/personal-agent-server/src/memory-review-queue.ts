@@ -29,12 +29,25 @@ type JobDatabase = {
   jobs: MemoryReviewJob[];
 };
 
-export class FileMemoryReviewQueue {
+export type EnqueueMemoryReviewJobInput = Omit<
+  MemoryReviewJob,
+  'id' | 'status' | 'attempts' | 'createdAt' | 'updatedAt'
+>;
+
+export interface MemoryReviewJobStore {
+  enqueue(input: EnqueueMemoryReviewJobInput): Promise<MemoryReviewJob>;
+  claimNext(): Promise<MemoryReviewJob | null>;
+  complete(jobId: string, output: { stdout: string; stderr: string }): Promise<MemoryReviewJob | null>;
+  fail(jobId: string, error: unknown, output?: { stdout?: string; stderr?: string }): Promise<MemoryReviewJob | null>;
+  listRecent(limit?: number): Promise<MemoryReviewJob[]>;
+}
+
+export class FileMemoryReviewQueue implements MemoryReviewJobStore {
   private lock = Promise.resolve();
 
   constructor(private config: ServerConfig) {}
 
-  async enqueue(input: Omit<MemoryReviewJob, 'id' | 'status' | 'attempts' | 'createdAt' | 'updatedAt'>) {
+  async enqueue(input: EnqueueMemoryReviewJobInput) {
     return this.withLock(async () => {
       const timestamp = nowIso();
       const database = await this.readDatabase();
@@ -137,7 +150,7 @@ export class MemoryReviewWorker {
 
   constructor(
     private config: ServerConfig,
-    private queue: FileMemoryReviewQueue
+    private queue: MemoryReviewJobStore
   ) {}
 
   start() {

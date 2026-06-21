@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "dev:api": "AGENT_PROCESS_ROLE=api tsx src/index.ts",
+    "dev:worker": "AGENT_PROCESS_ROLE=worker tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "start:api": "AGENT_PROCESS_ROLE=api node dist/index.js",
+    "start:worker": "AGENT_PROCESS_ROLE=worker node dist/index.js",
     "sources:inspect": "node scripts/inspect-agent-sources.mjs",
     "kernel:prepare": "node scripts/prepare-local-kernel.mjs",
     "kernel:patch-hermes-openrouter": "node scripts/patch-hermes-openrouter-runtime.mjs",
@@ -16,7 +20,9 @@
     "kernel:hermes-check": "node scripts/check-hermes-acp.mjs",
     "kernel:hermes-auth": "node scripts/auth-hermes-codex.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "pg": "^8.16.3"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "tsx": "^4.21.0",
