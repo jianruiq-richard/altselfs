@@ -41,6 +41,15 @@ export class PostgresUserProfileStore {
         const content = extractExplicitProfileContent(message);
         if (!content)
             return null;
+        return this.saveProfileEntry(userId, content, threadId, '用户明确要求长期记住这条偏好或画像信息', 0.98);
+    }
+    async saveReviewedUserProfile(userId, content, threadId, reason) {
+        const normalized = content.trim();
+        if (!normalized)
+            return null;
+        return this.saveProfileEntry(userId, normalized, threadId, reason || 'Hermes memory review 识别出的长期用户画像或偏好', 0.8);
+    }
+    async saveProfileEntry(userId, content, threadId, reason, confidence) {
         const pool = await getPostgresPool(this.config);
         const existing = await pool.query([
             'select id, user_id, content, source_thread_id, confidence, created_at, updated_at',
@@ -62,14 +71,14 @@ export class PostgresUserProfileStore {
         const inserted = await pool.query([
             'insert into agent_memory_entries',
             '(id, user_id, scope, content, status, source_thread_id, confidence, created_at, updated_at)',
-            "values ($1, $2, 'user', $3, 'active', $4, 0.98, now(), now())",
+            "values ($1, $2, 'user', $3, 'active', $4, $5, now(), now())",
             'returning id, user_id, content, source_thread_id, confidence, created_at, updated_at',
-        ].join(' '), [entryId, userId, content, threadId || null]);
+        ].join(' '), [entryId, userId, content, threadId || null, confidence]);
         await pool.query([
             'insert into agent_memory_events',
             '(id, memory_id, user_id, action, after_content, reason, created_at)',
             "values ($1, $2, $3, 'add', $4, $5, now())",
-        ].join(' '), [id('memevt'), entryId, userId, content, '用户明确要求长期记住这条偏好或画像信息']);
+        ].join(' '), [id('memevt'), entryId, userId, content, reason]);
         return rowToProfileEntry(inserted.rows[0]);
     }
 }

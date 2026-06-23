@@ -65,6 +65,28 @@ export class PostgresUserProfileStore implements UserProfileStore {
   async rememberExplicitUserProfile(userId: string, message: string, threadId?: string) {
     const content = extractExplicitProfileContent(message);
     if (!content) return null;
+    return this.saveProfileEntry(
+      userId,
+      content,
+      threadId,
+      '用户明确要求长期记住这条偏好或画像信息',
+      0.98
+    );
+  }
+
+  async saveReviewedUserProfile(userId: string, content: string, threadId?: string, reason?: string) {
+    const normalized = content.trim();
+    if (!normalized) return null;
+    return this.saveProfileEntry(
+      userId,
+      normalized,
+      threadId,
+      reason || 'Hermes memory review 识别出的长期用户画像或偏好',
+      0.8
+    );
+  }
+
+  private async saveProfileEntry(userId: string, content: string, threadId: string | undefined, reason: string, confidence: number) {
     const pool = await getPostgresPool(this.config);
     const existing = await pool.query(
       [
@@ -94,10 +116,10 @@ export class PostgresUserProfileStore implements UserProfileStore {
       [
         'insert into agent_memory_entries',
         '(id, user_id, scope, content, status, source_thread_id, confidence, created_at, updated_at)',
-        "values ($1, $2, 'user', $3, 'active', $4, 0.98, now(), now())",
+        "values ($1, $2, 'user', $3, 'active', $4, $5, now(), now())",
         'returning id, user_id, content, source_thread_id, confidence, created_at, updated_at',
       ].join(' '),
-      [entryId, userId, content, threadId || null]
+      [entryId, userId, content, threadId || null, confidence]
     );
     await pool.query(
       [
@@ -105,7 +127,7 @@ export class PostgresUserProfileStore implements UserProfileStore {
         '(id, memory_id, user_id, action, after_content, reason, created_at)',
         "values ($1, $2, $3, 'add', $4, $5, now())",
       ].join(' '),
-      [id('memevt'), entryId, userId, content, '用户明确要求长期记住这条偏好或画像信息']
+      [id('memevt'), entryId, userId, content, reason]
     );
     return rowToProfileEntry(inserted.rows[0]);
   }

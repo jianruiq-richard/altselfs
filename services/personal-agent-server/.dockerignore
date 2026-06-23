@@ -1,0 +1,11 @@
+node_modules
+dist
+._*
+.env
+.env.*
+npm-debug.log
+Dockerfile
+docker-compose*.yml
+LOCAL_CONTROLLED_KERNEL.md
+docs
+scripts

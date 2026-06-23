@@ -12,8 +12,10 @@ import {
 import { MarkdownMessage } from '@/components/markdown-message';
 
 type ChatMessage = {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
+  createdAt?: string;
 };
 
 type PendingAttachmentKind = 'image' | 'video' | 'pdf' | 'document' | 'file';
@@ -596,6 +598,8 @@ export default function InvestorAgentChatPage() {
 
   const [threadId, setThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [persistedBriefing, setPersistedBriefing] = useState<PersistedBriefing | null>(null);
   const [input, setInput] = useState('');
@@ -620,6 +624,8 @@ export default function InvestorAgentChatPage() {
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const loadingOlderMessagesRef = useRef(false);
+  const suppressNextAutoScrollRef = useRef(false);
   const codexEventIndexRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -756,6 +762,7 @@ export default function InvestorAgentChatPage() {
       setThreadId(data.threadId || null);
       const loadedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
       setMessages(loadedMessages);
+      setHasMoreMessages(Boolean(data.hasMore));
       setBriefing(null);
       setPersistedBriefing(null);
       setPlannerSteps([]);
@@ -778,11 +785,74 @@ export default function InvestorAgentChatPage() {
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
+      if (suppressNextAutoScrollRef.current) {
+        suppressNextAutoScrollRef.current = false;
+        return;
+      }
       const viewport = messagesViewportRef.current;
       if (viewport) viewport.scrollTop = viewport.scrollHeight;
     });
     return () => window.cancelAnimationFrame(frame);
   }, [messages, loading, sending, codexStreamItems, assistantDraft]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!threadId || !hasMoreMessages || loadingOlderMessagesRef.current) return;
+    const firstMessageWithId = messages.find((message) => message.id);
+    if (!firstMessageWithId?.id) return;
+
+    const viewport = messagesViewportRef.current;
+    const previousScrollHeight = viewport?.scrollHeight || 0;
+    const previousScrollTop = viewport?.scrollTop || 0;
+    loadingOlderMessagesRef.current = true;
+    setLoadingOlderMessages(true);
+    setError(null);
+
+    try {
+      const query = new URLSearchParams({
+        threadId,
+        before: firstMessageWithId.id,
+        limit: '60',
+      });
+      const res = await fetch(`/api/investor/personal-agent?${query.toString()}`, {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || '加载更早消息失败');
+        return;
+      }
+
+      const olderMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+      setHasMoreMessages(Boolean(data.hasMore));
+      if (olderMessages.length === 0) return;
+
+      suppressNextAutoScrollRef.current = true;
+      setMessages((currentMessages) => {
+        const existingIds = new Set(currentMessages.map((message) => message.id).filter(Boolean));
+        const dedupedOlderMessages = olderMessages.filter((message) => !message.id || !existingIds.has(message.id));
+        return [...dedupedOlderMessages, ...currentMessages];
+      });
+
+      window.requestAnimationFrame(() => {
+        const nextViewport = messagesViewportRef.current;
+        if (!nextViewport) return;
+        nextViewport.scrollTop = nextViewport.scrollHeight - previousScrollHeight + previousScrollTop;
+      });
+    } catch {
+      setError('加载更早消息失败，请稍后重试');
+    } finally {
+      loadingOlderMessagesRef.current = false;
+      setLoadingOlderMessages(false);
+    }
+  }, [hasMoreMessages, messages, threadId]);
+
+  const handleMessagesScroll = useCallback(() => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport || viewport.scrollTop > 80) return;
+    if (!hasMoreMessages || loadingOlderMessagesRef.current || loading) return;
+    void loadOlderMessages();
+  }, [hasMoreMessages, loadOlderMessages, loading]);
 
   useEffect(() => {
     const prompt = searchParams.get('prompt')?.trim();
@@ -1218,13 +1288,33 @@ export default function InvestorAgentChatPage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white">
-        <div ref={messagesViewportRef} className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5">
+        <div
+          ref={messagesViewportRef}
+          onScroll={handleMessagesScroll}
+          className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5"
+        >
           {loading ? (
             <div className="py-8 text-center text-slate-600">加载中...</div>
           ) : (
             <div className="mx-auto max-w-3xl space-y-4">
+              {messages.length > 0 ? (
+                <div className="flex justify-center">
+                  {hasMoreMessages ? (
+                    <button
+                      type="button"
+                      onClick={() => void loadOlderMessages()}
+                      disabled={loadingOlderMessages}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {loadingOlderMessages ? '加载中...' : '加载更早消息'}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400">已到最早消息</span>
+                  )}
+                </div>
+              ) : null}
               {messages.map((message, index) => (
-                <div key={`${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={message.id || `${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-3 sm:max-w-xs lg:max-w-md ${
                       message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'

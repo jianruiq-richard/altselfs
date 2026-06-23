@@ -4,6 +4,7 @@ import type { MemoryReviewJobStore } from './memory-review-queue.js';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import type { PersonalMainAgent } from './main-agent.js';
+import { runWebSearchTool } from './tools/web-search.js';
 
 type OpenRouterChatContentPart = Record<string, unknown>;
 type OpenRouterChatMessage = {
@@ -29,6 +30,18 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const limit = Number(url.searchParams.get('limit') || 50);
         return json(res, 200, {
           jobs: memoryReviewQueue ? await memoryReviewQueue.listRecent(Number.isFinite(limit) ? limit : 50) : [],
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/tools/web-search') {
+        if (!config) return json(res, 500, { error: 'tool bridge config missing' });
+        if (!isLoopbackRequest(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        const resultText = await runWebSearchTool(body, config);
+        return json(res, 200, {
+          contentItems: [{ type: 'inputText', text: resultText }],
+          success: !resultText.includes('"error"'),
         });
       }
 
@@ -584,6 +597,11 @@ function html(res: http.ServerResponse, status: number, body: string) {
     'cache-control': 'no-store',
   });
   res.end(body);
+}
+
+function isLoopbackRequest(req: http.IncomingMessage) {
+  const address = req.socket.remoteAddress || '';
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
 }
 
 function readJsonBody(req: http.IncomingMessage) {

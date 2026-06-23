@@ -42,6 +42,10 @@ export type ServerConfig = {
   memoryReviewPollMs: number;
   memoryReviewMaxTurns: number;
   profileStorePath: string;
+  runtimeStateSyncEnabled: boolean;
+  runtimeStateMode: 'ephemeral' | 'snapshot';
+  runtimeStateCacheTtlMs: number;
+  runtimeStateMaxArchiveBytes: number;
 };
 
 export type CodexModelMetadata = {
@@ -146,6 +150,12 @@ function readProcessRoleEnv(key: string, fallback: ServerConfig['processRole']) 
 function readStorageBackendEnv(key: string, fallback: ServerConfig['storageBackend']) {
   const raw = process.env[key]?.trim().toLowerCase();
   if (raw === 'file' || raw === 'postgres') return raw;
+  return fallback;
+}
+
+function readRuntimeStateModeEnv(key: string, fallback: ServerConfig['runtimeStateMode']) {
+  const raw = process.env[key]?.trim().toLowerCase();
+  if (raw === 'ephemeral' || raw === 'snapshot') return raw;
   return fallback;
 }
 
@@ -309,6 +319,7 @@ function readOptionalBoolEnv(key: string) {
 
 export function loadConfig(): ServerConfig {
   loadLocalEnvFiles();
+  const storageBackend = readStorageBackendEnv('STORAGE_BACKEND', 'file');
   const hermesModel = readEnv('HERMES_MODEL', 'deepseek/deepseek-v3.2');
   const openRouterApiKeyEnv = readEnv('OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY');
   const hasOpenRouterKey = Boolean(process.env[openRouterApiKeyEnv]?.trim());
@@ -318,7 +329,7 @@ export function loadConfig(): ServerConfig {
     port: readIntEnv('PORT', 8787),
     env: readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development'),
     processRole: readProcessRoleEnv('AGENT_PROCESS_ROLE', 'all'),
-    storageBackend: readStorageBackendEnv('STORAGE_BACKEND', 'file'),
+    storageBackend,
     databaseUrl: process.env.DATABASE_URL?.trim() || undefined,
     hermesRouterEnabled: readBoolEnv('HERMES_ROUTER_ENABLED', true),
     hermesModel,
@@ -355,5 +366,9 @@ export function loadConfig(): ServerConfig {
     memoryReviewPollMs: readIntEnv('MEMORY_REVIEW_POLL_MS', 1000),
     memoryReviewMaxTurns: readIntEnv('MEMORY_REVIEW_MAX_TURNS', 6),
     profileStorePath: path.resolve(readEnv('PROFILE_STORE_PATH', '/tmp/altselfs-personal-agent-profiles.json')),
+    runtimeStateSyncEnabled: readBoolEnv('RUNTIME_STATE_SYNC_ENABLED', storageBackend === 'postgres'),
+    runtimeStateMode: readRuntimeStateModeEnv('RUNTIME_STATE_MODE', 'ephemeral'),
+    runtimeStateCacheTtlMs: readIntEnv('RUNTIME_STATE_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    runtimeStateMaxArchiveBytes: readIntEnv('RUNTIME_STATE_MAX_ARCHIVE_BYTES', 16 * 1024 * 1024),
   };
 }

@@ -85,6 +85,12 @@ function readStorageBackendEnv(key, fallback) {
         return raw;
     return fallback;
 }
+function readRuntimeStateModeEnv(key, fallback) {
+    const raw = process.env[key]?.trim().toLowerCase();
+    if (raw === 'ephemeral' || raw === 'snapshot')
+        return raw;
+    return fallback;
+}
 function loadLocalEnvFiles() {
     const merged = {};
     for (const file of findLocalEnvFiles()) {
@@ -254,6 +260,7 @@ function readOptionalBoolEnv(key) {
 }
 export function loadConfig() {
     loadLocalEnvFiles();
+    const storageBackend = readStorageBackendEnv('STORAGE_BACKEND', 'file');
     const hermesModel = readEnv('HERMES_MODEL', 'deepseek/deepseek-v3.2');
     const openRouterApiKeyEnv = readEnv('OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY');
     const hasOpenRouterKey = Boolean(process.env[openRouterApiKeyEnv]?.trim());
@@ -263,7 +270,7 @@ export function loadConfig() {
         port: readIntEnv('PORT', 8787),
         env: readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development'),
         processRole: readProcessRoleEnv('AGENT_PROCESS_ROLE', 'all'),
-        storageBackend: readStorageBackendEnv('STORAGE_BACKEND', 'file'),
+        storageBackend,
         databaseUrl: process.env.DATABASE_URL?.trim() || undefined,
         hermesRouterEnabled: readBoolEnv('HERMES_ROUTER_ENABLED', true),
         hermesModel,
@@ -300,5 +307,9 @@ export function loadConfig() {
         memoryReviewPollMs: readIntEnv('MEMORY_REVIEW_POLL_MS', 1000),
         memoryReviewMaxTurns: readIntEnv('MEMORY_REVIEW_MAX_TURNS', 6),
         profileStorePath: path.resolve(readEnv('PROFILE_STORE_PATH', '/tmp/altselfs-personal-agent-profiles.json')),
+        runtimeStateSyncEnabled: readBoolEnv('RUNTIME_STATE_SYNC_ENABLED', storageBackend === 'postgres'),
+        runtimeStateMode: readRuntimeStateModeEnv('RUNTIME_STATE_MODE', 'ephemeral'),
+        runtimeStateCacheTtlMs: readIntEnv('RUNTIME_STATE_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+        runtimeStateMaxArchiveBytes: readIntEnv('RUNTIME_STATE_MAX_ARCHIVE_BYTES', 16 * 1024 * 1024),
     };
 }

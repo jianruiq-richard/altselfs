@@ -19,6 +19,15 @@ export class LocalProfileStore {
         const content = extractExplicitProfileContent(message);
         if (!content)
             return null;
+        return this.saveProfileEntry(userId, content, threadId, '用户明确要求长期记住这条偏好或画像信息');
+    }
+    async saveReviewedUserProfile(userId, content, threadId, reason) {
+        const normalized = content.trim();
+        if (!normalized)
+            return null;
+        return this.saveProfileEntry(userId, normalized, threadId, reason || 'Hermes memory review 识别出的长期用户画像或偏好');
+    }
+    async saveProfileEntry(userId, content, threadId, reason) {
         const database = await this.readDatabase();
         const entries = database.users[userId] || [];
         const existing = entries.find((entry) => normalizeContent(entry.content) === normalizeContent(content));
@@ -34,7 +43,7 @@ export class LocalProfileStore {
             id: id('profile'),
             userId,
             content,
-            reason: '用户明确要求长期记住这条偏好或画像信息',
+            reason: reason || '用户画像存储',
             sourceThreadId: threadId,
             createdAt: timestamp,
             updatedAt: timestamp,

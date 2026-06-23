@@ -8,14 +8,77 @@ export async function getLatestThreadWithMessages(investorId: string, agentType:
     where: { investorId, agentType },
     orderBy: { updatedAt: 'desc' },
     include: {
+      _count: {
+        select: { messages: true },
+      },
       messages: {
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 60,
       },
     },
   });
 
+  if (thread) {
+    thread.messages = [...thread.messages].reverse();
+  }
+
   return thread;
+}
+
+export async function getThreadMessagesPage(params: {
+  investorId: string;
+  agentType: AgentType;
+  threadId: string;
+  beforeMessageId?: string | null;
+  limit?: number;
+}) {
+  const limit = Math.min(Math.max(params.limit || 60, 1), 100);
+  const thread = await prisma.agentThread.findFirst({
+    where: {
+      id: params.threadId,
+      investorId: params.investorId,
+      agentType: params.agentType,
+    },
+    select: { id: true },
+  });
+
+  if (!thread) return null;
+
+  const beforeMessage = params.beforeMessageId
+    ? await prisma.agentMessage.findFirst({
+        where: {
+          id: params.beforeMessageId,
+          threadId: params.threadId,
+        },
+        select: { id: true, createdAt: true },
+      })
+    : null;
+
+  const messages = await prisma.agentMessage.findMany({
+    where: {
+      threadId: params.threadId,
+      role: { in: ['USER', 'ASSISTANT'] },
+      ...(beforeMessage
+        ? {
+            OR: [
+              { createdAt: { lt: beforeMessage.createdAt } },
+              { createdAt: beforeMessage.createdAt, id: { lt: beforeMessage.id } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+
+  const hasMore = messages.length > limit;
+  const pageMessages = messages.slice(0, limit).reverse();
+
+  return {
+    messages: pageMessages,
+    hasMore,
+    nextBeforeMessageId: pageMessages[0]?.id || null,
+  };
 }
 
 export async function ensureThread(params: {
@@ -93,14 +156,25 @@ export async function appendToolCall(params: {
 
 export function toClientMessages(
   messages: Array<{
+    id?: string;
     role: string;
     content: string;
+    createdAt?: Date | string;
   }>
 ) {
   return messages
     .filter((message) => message.role === 'USER' || message.role === 'ASSISTANT')
     .map((message) => ({
+      ...(message.id ? { id: message.id } : {}),
       role: message.role === 'USER' ? ('user' as const) : ('assistant' as const),
       content: message.content,
+      ...(message.createdAt
+        ? {
+            createdAt:
+              message.createdAt instanceof Date
+                ? message.createdAt.toISOString()
+                : message.createdAt,
+          }
+        : {}),
     }));
 }

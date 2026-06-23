@@ -6,6 +6,7 @@ import {
   appendToolCall,
   ensureThread,
   getLatestThreadWithMessages,
+  getThreadMessagesPage,
   toClientMessages,
 } from '@/lib/agent-session';
 
@@ -18,8 +19,10 @@ const DEFAULT_MULTIMODAL_MAX_FILE_BYTES = 20 * 1024 * 1024;
 const DEFAULT_FILE_PARSER_MAX_CHARS = 60000;
 
 type ClientMessage = {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
+  createdAt?: string;
 };
 
 type PersonalAgentResponse = {
@@ -103,7 +106,12 @@ function normalizeMessages(value: unknown): ClientMessage[] {
       const role = record.role === 'assistant' ? 'assistant' : record.role === 'user' ? 'user' : null;
       const content = typeof record.content === 'string' ? record.content.trim() : '';
       if (!role || !content) return null;
-      return { role, content };
+      return {
+        ...(typeof record.id === 'string' ? { id: record.id } : {}),
+        role,
+        content,
+        ...(typeof record.createdAt === 'string' ? { createdAt: record.createdAt } : {}),
+      };
     })
     .filter(Boolean) as ClientMessage[];
 }
@@ -393,17 +401,45 @@ function buildAgentTurnMessageWithParsedAttachments(messages: ClientMessage[], p
 }
 
 function displayMessages(messages: ClientMessage[]) {
-  return messages.map((message) => ({ role: message.role, content: message.content }));
+  return messages.map((message) => ({
+    ...(message.id ? { id: message.id } : {}),
+    role: message.role,
+    content: message.content,
+    ...(message.createdAt ? { createdAt: message.createdAt } : {}),
+  }));
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const requestedThreadId = req.nextUrl.searchParams.get('threadId')?.trim();
+  if (requestedThreadId) {
+    const beforeMessageId = req.nextUrl.searchParams.get('before')?.trim() || null;
+    const parsedLimit = Number(req.nextUrl.searchParams.get('limit') || '');
+    const page = await getThreadMessagesPage({
+      investorId: investor.id,
+      agentType: PERSONAL_AGENT_TYPE,
+      threadId: requestedThreadId,
+      beforeMessageId,
+      limit: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 60,
+    });
+
+    if (!page) return NextResponse.json({ error: 'Thread not found' }, { status: 404 });
+
+    return NextResponse.json({
+      threadId: requestedThreadId,
+      messages: toClientMessages(page.messages),
+      hasMore: page.hasMore,
+      nextBefore: page.nextBeforeMessageId,
+    });
+  }
 
   const thread = await getLatestThreadWithMessages(investor.id, PERSONAL_AGENT_TYPE);
   return NextResponse.json({
     threadId: thread?.id || null,
     messages: thread ? toClientMessages(thread.messages) : [],
+    hasMore: thread ? thread._count.messages > thread.messages.length : false,
   });
 }
 

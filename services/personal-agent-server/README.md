@@ -65,11 +65,12 @@ Response:
 
 ## Runtime Notes
 
-- Use one isolated `CODEX_HOME` per user.
-- Use one isolated workspace per user/thread.
+- Use one isolated temporary `CODEX_HOME`, `HERMES_HOME`, and workspace per
+  user/thread/run.
 - Treat Postgres as the authoritative store.
-- Treat local Codex state as runtime/cache state that can be rebuilt from
-  Postgres + object storage snapshots.
+- Treat local Codex/Hermes runtime files as disposable run artifacts by default.
+  The product hot path reconstructs context from stored messages/profile state,
+  then deletes the temporary runtime directories after the turn.
 
 ## Local Dev
 
@@ -96,7 +97,14 @@ changing the Hermes/Codex orchestration path:
 
 - `PROFILE_STORE_PATH` stores explicit product-side user profile entries.
 - `MEMORY_REVIEW_JOB_STORE_PATH` stores queued/running/completed memory review jobs.
-- Hermes native `USER.md` still lives under each user's `HERMES_HOME/memories`.
+- Hermes/Codex native runtime files live under run-scoped local
+  `HERMES_HOME` / `CODEX_HOME` / workspace paths while a turn is running.
+  `RUNTIME_STATE_MODE=ephemeral` is the default product mode: the runtime
+  directories are deleted after the foreground turn and memory review reads the
+  clean product-side turn/profile data instead of local `USER.md` files.
+- `RUNTIME_STATE_MODE=snapshot` is retained as a debugging/compatibility mode.
+  In that mode, `RUNTIME_STATE_SYNC_ENABLED=true` hydrates runtime directories
+  from RDS before the turn and flushes compressed snapshots back after the turn.
 
 PostgreSQL/RDS mode is selected with:
 
@@ -116,6 +124,9 @@ The Postgres adapter currently covers:
 - `agent_memory_entries` for product-side user profile entries.
 - `agent_memory_events` for explicit profile write audit events.
 - `agent_memory_review_jobs` for API/Worker shared background memory review jobs.
+- `agent_runtime_state_snapshots` for optional compressed Hermes/Codex runtime
+  state snapshots when `RUNTIME_STATE_MODE=snapshot` is explicitly enabled.
+  This is not the default product hot path.
 
 The worker claims jobs with `FOR UPDATE SKIP LOCKED`, so multiple worker
 containers can run without processing the same job at the same time.
@@ -149,6 +160,9 @@ Known MVP limitations:
   workspace is explicitly bound.
 - Approval requests are currently declined by default, so write operations are
   not enabled yet.
+- `RUNTIME_STATE_MODE=snapshot` currently stores `tar.gz` snapshots in RDS
+  `bytea`. Keep `RUNTIME_STATE_MAX_ARCHIVE_BYTES` conservative and move large
+  artifacts to OSS before enabling heavy workspace/file capabilities.
 
 ### Web Search Providers
 
@@ -257,6 +271,111 @@ Health check:
 ```bash
 curl --noproxy '*' http://127.0.0.1:8787/healthz
 ```
+
+## Production Container Deployment
+
+The first production-shaped deployment target is a single ECS instance running
+Docker Compose. This replaces the temporary bare Node + systemd service while
+keeping the same RDS database and `/data/altselfs-agent` runtime data directory.
+
+One-time setup on the server:
+
+```bash
+mkdir -p /data/altselfs-agent
+cp env.production.example .env.production
+```
+
+Fill `.env.production` with the real RDS URL and API keys. Do not commit that
+file.
+
+Local or server-side build:
+
+```bash
+docker compose -f docker-compose.production.yml build
+docker compose -f docker-compose.production.yml up -d
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8787/healthz
+curl http://127.0.0.1:8787/productization
+```
+
+Future image-registry flow:
+
+```bash
+docker build -t registry.example.com/altselfs/personal-agent-server:TAG .
+docker push registry.example.com/altselfs/personal-agent-server:TAG
+
+PERSONAL_AGENT_IMAGE=registry.example.com/altselfs/personal-agent-server:TAG \
+docker compose -f docker-compose.production.yml pull
+
+PERSONAL_AGENT_IMAGE=registry.example.com/altselfs/personal-agent-server:TAG \
+docker compose -f docker-compose.production.yml up -d
+```
+
+For the current cloud validation path, keep:
+
+```bash
+HERMES_SOURCE_RUNTIME_ENABLED=false
+```
+
+This routes requests through the product-side `codex-general` runtime, where web
+search and local-environment restrictions are currently enforced. The original
+Hermes source runtime should be re-enabled only after it delegates to
+`codex-general` instead of bypassing the product tool registry.
+
+### Source Runtime Container
+
+Use this mode when the deployment must match the local controlled kernel:
+
+```text
+personal-agent-server
+-> agent-sources/hermes-agent source runtime
+-> source-built Codex app-server
+-> OpenRouter model provider
+```
+
+Prepare a Docker build context from the external source checkouts:
+
+```bash
+npm run docker:source-runtime-context
+```
+
+By default this reads:
+
+```text
+/Users/richardjian/work/agent-sources/hermes-agent
+/Users/richardjian/work/agent-sources/codex
+```
+
+and writes:
+
+```text
+/tmp/altselfs-personal-agent-source-runtime-context
+```
+
+Build and run with:
+
+```bash
+SOURCE_RUNTIME_BUILD_CONTEXT=/tmp/altselfs-personal-agent-source-runtime-context \
+docker compose -f docker-compose.source-runtime.yml build
+
+SOURCE_RUNTIME_BUILD_CONTEXT=/tmp/altselfs-personal-agent-source-runtime-context \
+docker compose -f docker-compose.source-runtime.yml up -d
+```
+
+This compose file overrides the env file and forces:
+
+```text
+HERMES_SOURCE_RUNTIME_ENABLED=true
+HERMES_SOURCE_ROOT=/opt/altselfs/hermes-agent
+CODEX_BIN=/opt/altselfs/codex-bin/codex
+UV_BIN=/usr/local/bin/altselfs-hermes-run
+```
+
+Use `docker-compose.production.yml` only as the temporary product-side fallback.
 
 Main-agent memory path:
 

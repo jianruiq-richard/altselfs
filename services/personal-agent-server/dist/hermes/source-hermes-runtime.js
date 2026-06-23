@@ -2,14 +2,16 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { LocalProfileStore } from '../profile-store.js';
-import { isRecord, nowIso, safeJson, truncate } from '../util.js';
+import { id, isRecord, nowIso, safeJson, truncate } from '../util.js';
 export class HermesSourceRuntime {
     config;
     memoryReviewQueue;
+    runtimeStateStore;
     profileStore;
-    constructor(config, memoryReviewQueue, profileStore) {
+    constructor(config, memoryReviewQueue, profileStore, runtimeStateStore) {
         this.config = config;
         this.memoryReviewQueue = memoryReviewQueue;
+        this.runtimeStateStore = runtimeStateStore;
         this.profileStore = profileStore || new LocalProfileStore(config.profileStorePath);
     }
     async run(request) {
@@ -21,9 +23,25 @@ export class HermesSourceRuntime {
         };
         const userSegment = sanitizePathSegment(request.userId);
         const threadSegment = sanitizePathSegment(request.threadId || 'default');
-        const hermesHome = path.join(this.config.hermesHomeRoot, userSegment);
-        const codexHome = path.join(this.config.codexHomeRoot, userSegment);
-        const workspace = path.join(this.config.hermesWorkspaceRoot, userSegment, threadSegment);
+        const runId = id('run');
+        const runSegment = sanitizePathSegment(runId);
+        const hermesHome = path.join(this.config.hermesHomeRoot, userSegment, threadSegment, runSegment, 'hermes-home');
+        const codexHome = path.join(this.config.codexHomeRoot, userSegment, threadSegment, runSegment, 'codex-home');
+        const workspace = path.join(this.config.hermesWorkspaceRoot, userSegment, threadSegment, runSegment, 'workspace');
+        const runtimeStatePaths = { hermesHome, codexHome, workspace };
+        if (this.runtimeStateStore && this.config.runtimeStateMode === 'snapshot') {
+            const hydrated = await this.runtimeStateStore.hydrate({
+                userId: request.userId,
+                threadId: request.threadId || 'default',
+                paths: runtimeStatePaths,
+            });
+            if (hydrated.enabled) {
+                await emit('runtime_state.hydrated', {
+                    restored: hydrated.restored,
+                    warnings: hydrated.warnings,
+                });
+            }
+        }
         await this.prepareHomes({ hermesHome, codexHome, workspace });
         const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(request.userId, request.message, request.threadId);
         if (rememberedProfile) {
@@ -47,13 +65,13 @@ export class HermesSourceRuntime {
             injected: Boolean(combinedProfile),
             renderedProfile: truncate(combinedProfile, 4000),
         });
-        const sessionMap = await this.readSessionMap(hermesHome);
-        const resumeSessionId = request.threadId ? sessionMap[request.threadId] : undefined;
         await emit('hermes.source_runtime.starting', {
+            runId,
             hermesHome,
             codexHome,
             workspace,
-            resumeSessionId: resumeSessionId || null,
+            sessionMode: this.config.runtimeStateMode,
+            resumeSessionId: null,
             model: this.config.hermesModel,
             provider: 'openrouter',
         });
@@ -71,17 +89,12 @@ export class HermesSourceRuntime {
             'tool',
             '--max-turns',
             String(this.config.hermesMaxTurns),
-            ...(resumeSessionId ? ['--resume', resumeSessionId] : []),
             '-q',
             runtimeMessage,
         ];
         const result = await this.spawnHermes(args, { hermesHome, codexHome, workspace });
         const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join('\n');
         const sessionId = extractSessionId(combinedOutput);
-        if (request.threadId && sessionId) {
-            sessionMap[request.threadId] = sessionId;
-            await this.writeSessionMap(hermesHome, sessionMap);
-        }
         const codexReply = await extractLatestCodexReply(codexHome, startedAtMs);
         const reply = codexReply || extractReply(combinedOutput).trim();
         await emit('hermes.source_runtime.completed', {
@@ -91,10 +104,13 @@ export class HermesSourceRuntime {
             stderrTail: truncate(tail(result.stderr, 120), 20000),
         });
         if (this.config.memoryReviewMode === 'async' && this.memoryReviewQueue && reply) {
+            const reviewUserMessage = typeof request.metadata?.currentUserMessage === 'string' && request.metadata.currentUserMessage.trim()
+                ? request.metadata.currentUserMessage.trim()
+                : request.message;
             const job = await this.memoryReviewQueue.enqueue({
                 userId: request.userId,
                 threadId: request.threadId || 'default',
-                userMessage: request.message,
+                userMessage: reviewUserMessage,
                 assistantReply: reply,
                 hermesHome,
                 workspace,
@@ -104,11 +120,28 @@ export class HermesSourceRuntime {
                 jobStorePath: this.config.memoryReviewJobStorePath,
             });
         }
+        if (this.runtimeStateStore && this.config.runtimeStateMode === 'snapshot') {
+            const flushed = await this.runtimeStateStore.flush({
+                userId: request.userId,
+                threadId: request.threadId || 'default',
+                paths: runtimeStatePaths,
+            });
+            if (flushed.enabled) {
+                await emit('runtime_state.flushed', {
+                    flushed: flushed.flushed,
+                    warnings: flushed.warnings,
+                });
+            }
+        }
+        if (this.config.runtimeStateMode === 'ephemeral') {
+            await this.removeRunDirectories([hermesHome, codexHome, workspace], emit);
+        }
         return {
             route: 'main',
             reply: reply || 'Hermes Agent 已完成本轮处理，但没有返回可展示的回复。',
             events,
             raw: {
+                runId,
                 hermesSessionId: sessionId,
                 hermesHome,
                 codexHome,
@@ -137,6 +170,9 @@ export class HermesSourceRuntime {
             '  memory_enabled: true',
             '  user_profile_enabled: true',
             `  nudge_interval: ${this.config.memoryReviewMode === 'inline' ? this.config.hermesMemoryNudgeInterval : 0}`,
+            '',
+            'security:',
+            '  allow_lazy_installs: false',
             '',
         ].join('\n'), 'utf8');
         const openRouterBaseUrl = this.config.hermesCodexResponsesProxyEnabled
@@ -176,6 +212,12 @@ export class HermesSourceRuntime {
                     CODEX_HOME: paths.codexHome,
                     PATH: [codexBinDir, process.env.PATH || ''].filter(Boolean).join(path.delimiter),
                     HERMES_BACKGROUND_REVIEW_INLINE: this.config.memoryReviewMode === 'inline' && this.config.hermesBackgroundReviewInline ? '1' : '0',
+                    HERMES_DISABLE_LAZY_INSTALLS: '1',
+                    ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: '1',
+                    ALTSELFS_CODEX_PERSONALITY: 'pragmatic',
+                    ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS: buildCodexGeneralDeveloperInstructions({
+                        webSearchMode: this.config.codexWebSearchMode,
+                    }),
                     NO_PROXY: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
                     no_proxy: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
                 },
@@ -209,20 +251,19 @@ export class HermesSourceRuntime {
             });
         });
     }
-    async readSessionMap(hermesHome) {
-        try {
-            const raw = await fs.readFile(path.join(hermesHome, 'altselfs-session-map.json'), 'utf8');
-            const parsed = JSON.parse(raw);
-            if (!isRecord(parsed))
-                return {};
-            return Object.fromEntries(Object.entries(parsed).filter((entry) => typeof entry[1] === 'string'));
+    async removeRunDirectories(paths, emit) {
+        const removed = [];
+        const warnings = [];
+        for (const dir of paths) {
+            try {
+                await fs.rm(dir, { recursive: true, force: true });
+                removed.push(dir);
+            }
+            catch (error) {
+                warnings.push(`${dir}: ${error instanceof Error ? error.message : String(error)}`);
+            }
         }
-        catch {
-            return {};
-        }
-    }
-    async writeSessionMap(hermesHome, map) {
-        await fs.writeFile(path.join(hermesHome, 'altselfs-session-map.json'), `${JSON.stringify(map, null, 2)}\n`, 'utf8');
+        await emit('runtime_state.ephemeral_cleaned', { removed, warnings });
     }
 }
 function extractSessionId(stdout) {
@@ -274,6 +315,29 @@ function buildRuntimeMessage(input) {
         '',
         '本轮用户消息：',
         input.message,
+    ].join('\n');
+}
+function buildCodexGeneralDeveloperInstructions(input) {
+    const currentTime = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        dateStyle: 'full',
+        timeStyle: 'long',
+    }).format(new Date());
+    return [
+        `Current time: ${currentTime} (Asia/Shanghai).`,
+        `Codex web_search mode requested by host: ${input.webSearchMode}.`,
+        'Answer in the user language unless the user asks otherwise.',
+        '',
+        'Altselfs codex-general policy:',
+        '- You are a general personal agent for discussion, research, planning, and synthesis.',
+        '- Do not inspect, read, write, patch, or modify local files or repositories.',
+        '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
+        '- Use conversation and reasoning for tasks that do not need external data.',
+        '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',
+        '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.',
+        '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.',
+        '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.',
+        '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
     ].join('\n');
 }
 async function readHermesUserProfile(hermesHome) {

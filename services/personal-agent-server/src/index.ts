@@ -15,7 +15,7 @@ const memoryStore = new InMemoryMemoryStore();
 const router = new HermesRouter(config);
 const stores = createStores(config);
 const sourceRuntime = config.hermesSourceRuntimeEnabled
-  ? new HermesSourceRuntime(config, stores.memoryReviewJobStore, stores.userProfileStore)
+  ? new HermesSourceRuntime(config, stores.memoryReviewJobStore, stores.userProfileStore, stores.runtimeStateStore)
   : undefined;
 
 registry.register(new CodexAgentRuntime(config));
@@ -31,11 +31,14 @@ if (config.processRole === 'api' || config.processRole === 'all') {
     console.log(`[personal-agent-server] hermesModel=${config.hermesModel} router=${config.hermesRouterEnabled ? 'enabled' : 'disabled'}`);
     console.log(`[personal-agent-server] hermesSourceRuntime=${config.hermesSourceRuntimeEnabled ? 'enabled' : 'disabled'}`);
     console.log(`[personal-agent-server] storage=${config.storageBackend} memoryReviewMode=${config.memoryReviewMode} jobStore=${config.memoryReviewJobStorePath}`);
+    console.log(
+      `[personal-agent-server] runtimeStateSync=${config.runtimeStateSyncEnabled ? 'enabled' : 'disabled'} mode=${config.runtimeStateMode} cacheTtlMs=${config.runtimeStateCacheTtlMs}`
+    );
   });
 }
 
 if (config.processRole === 'worker' || config.processRole === 'all') {
-  const memoryReviewWorker = new MemoryReviewWorker(config, stores.memoryReviewJobStore);
+  const memoryReviewWorker = new MemoryReviewWorker(config, stores.memoryReviewJobStore, stores.userProfileStore);
   memoryReviewWorker.start();
   console.log(
     `[personal-agent-worker] role=${config.processRole} storage=${config.storageBackend} memoryReviewMode=${config.memoryReviewMode} jobStore=${config.memoryReviewJobStorePath}`

@@ -1,0 +1,90 @@
+FROM rust:1.95-bookworm AS codex-build
+
+WORKDIR /opt/altselfs/codex
+COPY agent-sources/codex ./
+COPY cargo-vendor /opt/altselfs/cargo-vendor
+COPY cargo-vendor-config.toml /tmp/cargo-vendor-config.toml
+COPY rusty-v8/librusty_v8_release_x86_64-unknown-linux-gnu.a /opt/altselfs/rusty-v8/librusty_v8_release_x86_64-unknown-linux-gnu.a
+
+WORKDIR /opt/altselfs/codex/codex-rs
+ENV CARGO_PROFILE_DEV_DEBUG=0
+ENV CARGO_BUILD_JOBS=1
+ENV RUSTY_V8_ARCHIVE=/opt/altselfs/rusty-v8/librusty_v8_release_x86_64-unknown-linux-gnu.a
+RUN rm -f rust-toolchain.toml \
+  && rustc --version \
+  && cargo --version
+RUN mkdir -p /usr/local/cargo \
+  && sed 's#directory = ".*"#directory = "/opt/altselfs/cargo-vendor"#' /tmp/cargo-vendor-config.toml > /usr/local/cargo/config.toml \
+  && printf '%s\n' '' '[net]' 'git-fetch-with-cli = true' 'offline = true' >> /usr/local/cargo/config.toml
+RUN cargo build --offline -p codex-app-server --bin codex-app-server
+
+RUN mkdir -p /opt/altselfs/codex-bin \
+  && cp /opt/altselfs/codex/codex-rs/target/debug/codex-app-server /opt/altselfs/codex-bin/codex-app-server \
+  && printf '%s\n' \
+    '#!/bin/sh' \
+    'set -eu' \
+    'if [ "${1:-}" = "app-server" ]; then' \
+    '  shift' \
+    '  exec /opt/altselfs/codex-bin/codex-app-server "$@"' \
+    'fi' \
+    'echo "This Altselfs Codex source wrapper only supports: codex app-server" >&2' \
+    'exit 64' \
+    > /opt/altselfs/codex-bin/codex \
+  && chmod +x /opt/altselfs/codex-bin/codex /opt/altselfs/codex-bin/codex-app-server
+
+FROM node:22-bookworm-slim AS server-build
+
+WORKDIR /app
+COPY personal-agent-server/package.json personal-agent-server/tsconfig.json ./
+RUN npm install
+
+COPY personal-agent-server/src ./src
+RUN npm run build
+
+FROM node:22-bookworm-slim AS runtime
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates python3 python3-venv python3-pip \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY personal-agent-server/package.json ./
+RUN npm install --omit=dev
+
+COPY --from=server-build /app/dist ./dist
+COPY --from=codex-build /opt/altselfs/codex-bin /opt/altselfs/codex-bin
+COPY agent-sources/hermes-agent /opt/altselfs/hermes-agent
+
+RUN python3 -m venv /opt/altselfs/hermes-agent/.venv \
+  && /opt/altselfs/hermes-agent/.venv/bin/pip install --no-cache-dir -U pip \
+  && /opt/altselfs/hermes-agent/.venv/bin/pip install --no-cache-dir -e '/opt/altselfs/hermes-agent[acp]' \
+  && printf '%s\n' \
+    '#!/bin/sh' \
+    'set -eu' \
+    'if [ "${1:-}" = "run" ]; then shift; fi' \
+    'while [ "$#" -gt 0 ]; do' \
+    '  case "$1" in' \
+    '    --extra) shift 2 ;;' \
+    '    python) shift; exec /opt/altselfs/hermes-agent/.venv/bin/python "$@" ;;' \
+    '    *) shift ;;' \
+    '  esac' \
+    'done' \
+    'exec /opt/altselfs/hermes-agent/.venv/bin/python "$@"' \
+    > /usr/local/bin/altselfs-hermes-run \
+  && chmod +x /usr/local/bin/altselfs-hermes-run
+
+ENV NODE_ENV=production
+ENV ALTSELFS_AGENT_ENV=production
+ENV PORT=8787
+ENV HERMES_SOURCE_RUNTIME_ENABLED=true
+ENV HERMES_SOURCE_ROOT=/opt/altselfs/hermes-agent
+ENV UV_BIN=/usr/local/bin/altselfs-hermes-run
+ENV CODEX_BIN=/opt/altselfs/codex-bin/codex
+
+EXPOSE 8787
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "dist/index.js"]

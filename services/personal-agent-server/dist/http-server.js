@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
+import { runWebSearchTool } from './tools/web-search.js';
 export function createHttpServer(agent, config, memoryReviewQueue) {
     return http.createServer(async (req, res) => {
         try {
@@ -18,6 +19,20 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 const limit = Number(url.searchParams.get('limit') || 50);
                 return json(res, 200, {
                     jobs: memoryReviewQueue ? await memoryReviewQueue.listRecent(Number.isFinite(limit) ? limit : 50) : [],
+                });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/tools/web-search') {
+                if (!config)
+                    return json(res, 500, { error: 'tool bridge config missing' });
+                if (!isLoopbackRequest(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const resultText = await runWebSearchTool(body, config);
+                return json(res, 200, {
+                    contentItems: [{ type: 'inputText', text: resultText }],
+                    success: !resultText.includes('"error"'),
                 });
             }
             if (req.method === 'POST' && url.pathname === '/v1/turns/start') {
@@ -550,6 +565,10 @@ function html(res, status, body) {
         'cache-control': 'no-store',
     });
     res.end(body);
+}
+function isLoopbackRequest(req) {
+    const address = req.socket.remoteAddress || '';
+    return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
 }
 function readJsonBody(req) {
     return new Promise((resolve, reject) => {

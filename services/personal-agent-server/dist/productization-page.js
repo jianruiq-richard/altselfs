@@ -119,6 +119,7 @@ export function renderProductizationPage(config, jobs) {
           <p><code>AGENT_PROCESS_ROLE</code>: ${escapeHtml(config.processRole)}</p>
           <p><code>STORAGE_BACKEND</code>: ${escapeHtml(config.storageBackend)}</p>
           <p><code>HERMES_SOURCE_RUNTIME_ENABLED</code>: ${String(config.hermesSourceRuntimeEnabled)}</p>
+          <p><code>RUNTIME_STATE_MODE</code>: ${escapeHtml(config.runtimeStateMode)}</p>
           <p><code>HERMES_MODEL</code>: ${escapeHtml(config.hermesModel)}</p>
           <p><code>CODEX_MODEL</code>: ${escapeHtml(config.codexModel || config.hermesModel)}</p>
         </div>
@@ -141,10 +142,10 @@ export function renderProductizationPage(config, jobs) {
       <h2>目标链路</h2>
       <div class="flow">
         <div class="step"><strong>1. 前端</strong>AI 助手入口发送用户消息。</div>
-        <div class="step"><strong>2. Hermes 外层</strong>加载用户画像，准备用户隔离目录。</div>
+        <div class="step"><strong>2. Hermes 外层</strong>从数据库加载用户画像，准备本轮临时目录。</div>
         <div class="step"><strong>3. Codex General</strong>处理对话、搜索、工具调用和能力统筹。</div>
         <div class="step"><strong>4. 返回用户</strong>主回答同步返回，不等待长期记忆整理。</div>
-        <div class="step"><strong>5. Memory Job</strong>后台 review turn，必要时写入 <code>USER.md</code>。</div>
+        <div class="step"><strong>5. Memory Job</strong>后台 review turn，必要时写入产品侧用户画像表。</div>
       </div>
     </section>
 
@@ -153,9 +154,13 @@ export function renderProductizationPage(config, jobs) {
       <ul>
         <li><span class="pill success">完成</span> 本地 Hermes 源码 runtime 可由 product server 调起。</li>
         <li><span class="pill success">完成</span> Codex app-server 使用 OpenRouter DeepSeek，不依赖 OpenAI/Codex OAuth。</li>
-        <li><span class="pill success">完成</span> 每个 <code>userId</code> 独立 <code>HERMES_HOME</code>、<code>CODEX_HOME</code> 和 workspace。</li>
-        <li><span class="pill success">完成</span> Hermes <code>USER.md</code> 和产品侧 profile JSON 会注入到 Codex 当前轮。</li>
+        <li><span class="pill success">完成</span> 每个 turn 使用独立临时 <code>HERMES_HOME</code>、<code>CODEX_HOME</code> 和 workspace。</li>
+        <li><span class="pill success">完成</span> 产品侧 profile 会从数据库/文件存储加载并注入当前轮。</li>
         <li><span class="pill success">完成</span> Memory review 已改为异步 job，不阻塞用户看到主回答。</li>
+        <li><span class="pill success">完成</span> 默认 <code>RUNTIME_STATE_MODE=ephemeral</code>：主回答后删除本轮临时 runtime 目录。</li>
+        <li><span class="pill success">完成</span> 保留 <code>RUNTIME_STATE_MODE=snapshot</code> 作为调试/兼容模式，可恢复旧的 runtime state 快照同步。</li>
+        <li><span class="pill success">完成</span> 阿里云 ECS 正式 <code>8787</code> 已运行 source-runtime 镜像；当前产品路径使用产品侧 Hermes router + source-built Codex app-server。</li>
+        <li><span class="pill queued">进行中</span> source Hermes 直通模式的 Codex 动态工具桥接已在本地源码补丁中实现，待重建镜像并云端验证后可重新开启。</li>
         <li><span class="pill queued">进行中</span> 本地文件队列后续要替换成数据库 job 表和独立 worker 服务。</li>
       </ul>
     </section>
@@ -168,8 +173,8 @@ export function renderProductizationPage(config, jobs) {
           <ul>
             <li><span class="pill success">完成</span> 本地 Hermes 源码 + Codex app-server 跑通。</li>
             <li><span class="pill success">完成</span> OpenRouter DeepSeek 接入，解耦 OpenAI/Codex OAuth。</li>
-            <li><span class="pill success">完成</span> 用户级 <code>HERMES_HOME</code> / <code>CODEX_HOME</code> 隔离。</li>
-            <li><span class="pill success">完成</span> Hermes <code>USER.md</code> 注入 Codex 当前轮。</li>
+            <li><span class="pill success">完成</span> 每轮运行级 <code>HERMES_HOME</code> / <code>CODEX_HOME</code> / workspace 隔离。</li>
+            <li><span class="pill success">完成</span> 产品侧用户画像注入 Codex 当前轮。</li>
           </ul>
         </div>
         <div class="panel">
@@ -186,25 +191,32 @@ export function renderProductizationPage(config, jobs) {
           <ul>
             <li><span class="pill success">完成</span> 新增 <code>STORAGE_BACKEND=file|postgres</code> 选择。</li>
             <li><span class="pill success">完成</span> 新增 Postgres 版 profile 和 memory review job adapter。</li>
+            <li><span class="pill success">完成</span> 新增 runtime state snapshot adapter；当前默认不走热路径，仅作为调试/兼容模式。</li>
             <li><span class="pill success">完成</span> Worker claim 使用 <code>FOR UPDATE SKIP LOCKED</code>。</li>
-            <li><span class="pill pending">待做</span> 消息、线程、run event、job event 全部落库。</li>
-            <li><span class="pill pending">待做</span> 联调本地 Postgres / 阿里云 RDS。</li>
+            <li><span class="pill success">完成</span> 阿里云 RDS PostgreSQL 联调，云端已使用 <code>STORAGE_BACKEND=postgres</code>。</li>
+            <li><span class="pill pending">待做</span> 消息、线程、run event、job event 的完整审计视图。</li>
           </ul>
         </div>
         <div class="panel">
           <h3>阶段 4：容器云部署</h3>
           <ul>
-            <li><span class="pill pending">待做</span> 构建包含 Hermes/Codex/patched runtime 的 Docker 镜像。</li>
+            <li><span class="pill success">完成</span> 构建 personal-agent-server Docker 镜像。</li>
+            <li><span class="pill success">完成</span> 当前 ECS 已由 Docker Compose 容器接管 <code>8787</code>。</li>
+            <li><span class="pill success">完成</span> 当前 ECS 已部署 source-runtime 镜像，容器内包含 Hermes 源码和 Codex app-server 源码。</li>
+            <li><span class="pill success">完成</span> 云端 smoke test 已验证 <code>/healthz</code>、<code>/v1/turns/start</code>、<code>altselfs_web_search</code> 和异步 memory review job。</li>
+            <li><span class="pill queued">进行中</span> source Hermes 直通模式的 <code>altselfs_web_search</code> 动态工具桥接已实现，待重建 source-runtime 镜像和云端 smoke test。</li>
             <li><span class="pill pending">待做</span> 拆分 API 容器和 worker 容器。</li>
-            <li><span class="pill pending">待做</span> 使用阿里云 ACS/ACK/ECS 容器服务部署。</li>
-            <li><span class="pill pending">待做</span> 配置日志、健康检查、弹性伸缩和滚动发布。</li>
+            <li><span class="pill pending">待做</span> 推送到阿里云 ACR，并把 ECS 从本地 build 改为拉取镜像 tag。</li>
+            <li><span class="pill pending">待做</span> 配置日志归集、弹性伸缩和滚动发布。</li>
           </ul>
         </div>
         <div class="panel">
           <h3>阶段 5：持久化与多用户</h3>
           <ul>
-            <li><span class="pill pending">待做</span> 用户目录从本地 <code>/tmp</code> 迁移到持久卷或对象存储策略。</li>
-            <li><span class="pill pending">待做</span> 明确 <code>USER.md</code>、Codex sessions、workspace 文件的归属和保留周期。</li>
+            <li><span class="pill success">完成</span> 默认把 Codex/Hermes 本地 runtime 目录视为每轮临时产物，完成后清理。</li>
+            <li><span class="pill success">完成</span> 长期用户画像由产品侧 profile store / RDS 承载，不依赖 <code>USER.md</code> 本地文件。</li>
+            <li><span class="pill queued">进行中</span> 对话消息、压缩摘要、工具调用审计需要进一步落到产品数据库，而不是复用 Codex 原始 JSONL 作为长期热状态。</li>
+            <li><span class="pill pending">待做</span> 未来真实文件产物迁移到阿里云 OSS，RDS 只保留 metadata、checksum 和 object key。</li>
             <li><span class="pill pending">待做</span> 每用户资源配额、并发限制、超时和强制停止。</li>
             <li><span class="pill pending">待做</span> 备份、恢复、数据导出和删除。</li>
           </ul>
@@ -227,8 +239,8 @@ export function renderProductizationPage(config, jobs) {
         <div class="step"><strong>Vercel / Web</strong>Altselfs 前端和产品 API。</div>
         <div class="step"><strong>Agent API</strong>容器化 personal-agent-server，接收 turn。</div>
         <div class="step"><strong>Worker</strong>异步 memory review、晨报等后台任务。</div>
-        <div class="step"><strong>Database</strong>RDS PostgreSQL 保存线程、消息、job、画像索引。</div>
-        <div class="step"><strong>Storage</strong>持久卷/对象存储保存 Hermes/Codex 用户目录。</div>
+        <div class="step"><strong>Database</strong>RDS PostgreSQL 保存线程、消息、job、画像和审计索引。</div>
+        <div class="step"><strong>Storage</strong>对象存储保存未来文件产物；Hermes/Codex runtime 目录默认不长期保存。</div>
       </div>
       <p class="muted">短期可以继续保留前端在 Vercel；Agent API 和 Worker 更适合放在阿里云容器服务，数据库优先用 RDS PostgreSQL。</p>
     </section>
@@ -251,8 +263,8 @@ export function renderProductizationPage(config, jobs) {
           <p>启动方式：<code>AGENT_PROCESS_ROLE=worker npm run start</code></p>
           <ul>
             <li>轮询 memory review job store。</li>
-            <li>启动 Hermes review turn。</li>
-            <li>调用 Hermes memory 工具写入用户画像。</li>
+            <li>调用轻量 LLM review 当前 turn。</li>
+            <li>将长期偏好/画像写入产品侧 profile store / RDS。</li>
             <li>后续也会承载晨报、渠道同步等后台任务。</li>
           </ul>
         </div>
@@ -263,22 +275,26 @@ export function renderProductizationPage(config, jobs) {
     <section>
       <h2>异步 B 方案</h2>
       <p>同步部分只覆盖用户正在等待的主回答：前端 -> personal-agent-server -> Hermes -> Codex app-server -> OpenRouter -> 前端。</p>
-      <p>异步部分独立消费 job：主回答完成后写入 <code>memory-review-jobs.json</code>，worker 再启动 Hermes 的 <code>chat_completions</code> 工具循环，让 Hermes 原生 <code>memory</code> 工具写入同一个用户的 <code>memories/USER.md</code>。</p>
+      <p>异步部分独立消费 job：主回答完成后写入 memory review job store，worker 使用轻量 LLM 判断本轮是否产生长期偏好/画像，再写入产品侧 profile store / RDS。</p>
       <p class="muted">这意味着下一轮对话读取的是“已经完成”的画像；如果 review job 尚未完成，刚刚产生的新偏好可能要再下一轮才生效。</p>
     </section>
 
     <section>
       <h2>临时改动和待清理点</h2>
       <ul>
-        <li><span class="warn">临时</span> 默认仍使用本地 JSON；生产需要设置 <code>STORAGE_BACKEND=postgres</code> 和 <code>DATABASE_URL</code>。</li>
-        <li><span class="warn">临时</span> worker 和 API server 在同一个 Node 进程里，生产应拆成独立 worker 容器。</li>
+        <li><span class="warn">临时</span> 当前 ECS 已使用 Docker Compose，但镜像仍在服务器本地构建；下一步要推送到阿里云 ACR 或其他镜像仓库。</li>
+        <li><span class="warn">临时</span> source-runtime 构建上下文目前由本地打包上传到 ECS；其中 Cargo vendor 和 <code>rusty_v8</code> 静态库是为绕过云端 GitHub 下载不稳定做的临时构建加速。</li>
+        <li><span class="warn">临时</span> source Hermes 直通模式此前会绕过产品侧 <code>CodexAgentRuntime</code> 的动态工具注册；目前已补上本机工具桥接，但云端仍需重建镜像验证后再把 <code>HERMES_SOURCE_RUNTIME_ENABLED</code> 切回 <code>true</code>。</li>
+        <li><span class="warn">临时</span> worker 和 API server 在同一个容器进程里，生产应拆成独立 worker 容器。</li>
         <li><span class="warn">临时</span> 本地 Hermes/Codex 源码在 <code>/Users/richardjian/work/agent-sources</code>，生产要固化为镜像构建步骤。</li>
         <li><span class="warn">临时</span> 对 Hermes 源码有 OpenRouter 和本地运行补丁，后续要整理为可重复 patch 或 fork。</li>
         <li><span class="warn">临时</span> Codex General 的工具权限仍是本地验证配置，生产要禁用本地文件/命令类能力，只保留产品允许的工具。</li>
-        <li><span class="warn">临时</span> 多用户目录隔离已存在，但还没有云端持久卷、备份和迁移策略。</li>
+        <li><span class="warn">临时</span> <code>RUNTIME_STATE_MODE=snapshot</code> 仍保留旧的 RDS runtime 快照方案，但默认产品路径已改为 <code>ephemeral</code>。</li>
         <li><span class="warn">临时</span> 异步 review worker 现在和 API 同进程，线上要拆成独立进程，避免 API 重启影响 job。</li>
-        <li><span class="warn">临时</span> review prompt 是产品侧精简版，后续要进一步对齐 Hermes 原生 <code>_MEMORY_REVIEW_PROMPT</code> 或直接调用原生 review runner。</li>
+        <li><span class="warn">临时</span> review prompt 是产品侧精简版，后续要继续对齐 Hermes 原生 review 标准，但持久化目标保持产品侧 RDS。</li>
         <li><span class="warn">临时</span> 云端 ECS 的 <code>8787</code> 端口当前只用于手动测试，应只对白名单公网 IP 开放；接入 Vercel 后要改为 API Gateway / SLB / HTTPS + 服务层鉴权，不能长期裸露测试端口。</li>
+        <li><span class="warn">临时</span> 当前测试安全组曾放行本机公网 IP；正式接入 Vercel 后，访问来源会变成 Vercel 出口或服务网关，不应继续依赖本机 IP 白名单。</li>
+        <li><span class="warn">临时</span> ECS 系统盘构建后剩余空间约 6.5GB，需要清理旧构建上下文、Docker builder cache，或把系统盘扩容到 80GB+。</li>
       </ul>
     </section>
 

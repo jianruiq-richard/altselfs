@@ -18,7 +18,8 @@
     "kernel:write-codex-wrapper": "node scripts/write-codex-wrapper.mjs",
     "kernel:build-codex": "node scripts/build-codex-app-server.mjs",
     "kernel:hermes-check": "node scripts/check-hermes-acp.mjs",
-    "kernel:hermes-auth": "node scripts/auth-hermes-codex.mjs"
+    "kernel:hermes-auth": "node scripts/auth-hermes-codex.mjs",
+    "docker:source-runtime-context": "node scripts/prepare-source-runtime-docker-context.mjs"
   },
   "dependencies": {
     "pg": "^8.16.3"

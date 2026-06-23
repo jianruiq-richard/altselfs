@@ -1,8 +1,8 @@
-import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ServerConfig } from './config.js';
-import { id, nowIso, truncate } from './util.js';
+import { LocalProfileStore, type UserProfileStore } from './profile-store.js';
+import { id, isRecord, nowIso, truncate } from './util.js';
 
 export type MemoryReviewJobStatus = 'queued' | 'running' | 'success' | 'error';
 
@@ -150,7 +150,8 @@ export class MemoryReviewWorker {
 
   constructor(
     private config: ServerConfig,
-    private queue: MemoryReviewJobStore
+    private queue: MemoryReviewJobStore,
+    private profileStore: UserProfileStore = new LocalProfileStore(config.profileStorePath)
   ) {}
 
   start() {
@@ -187,158 +188,174 @@ export class MemoryReviewWorker {
   }
 
   private async runReview(job: MemoryReviewJob) {
-    const reviewHome = await this.prepareReviewHome(job);
-    const reviewCodexHome = path.join(this.config.codexHomeRoot, '_memory-review', sanitizePathSegment(job.userId));
-    await fs.mkdir(reviewCodexHome, { recursive: true });
-    const args = [
-      'run',
-      '--extra',
-      'acp',
-      'python',
-      '-m',
-      'hermes_cli.main',
-      'chat',
-      '-Q',
-      '--source',
-      'tool',
-      '--max-turns',
-      String(this.config.memoryReviewMaxTurns),
-      '-q',
-      buildReviewPrompt(job),
-    ];
-    return this.spawnHermes(args, {
-      hermesHome: reviewHome,
-      codexHome: reviewCodexHome,
-      workspace: job.workspace,
-    });
-  }
-
-  private async prepareReviewHome(job: MemoryReviewJob) {
-    const reviewHome = path.join(this.config.hermesHomeRoot, '_memory-review', sanitizePathSegment(job.userId));
-    const sharedMemories = path.join(job.hermesHome, 'memories');
-    const linkedMemories = path.join(reviewHome, 'memories');
-    await fs.mkdir(reviewHome, { recursive: true });
-    await fs.mkdir(sharedMemories, { recursive: true });
-    await ensureSymlink(linkedMemories, sharedMemories);
-    await fs.writeFile(
-      path.join(reviewHome, 'config.yaml'),
-      [
-        'model:',
-        '  provider: openrouter',
-        `  default: ${yamlString(this.config.hermesModel)}`,
-        '  api_mode: chat_completions',
-        '',
-        'terminal:',
-        `  cwd: ${yamlString(job.workspace)}`,
-        '',
-        'display:',
-        '  tool_activity: compact',
-        '',
-        'memory:',
-        '  memory_enabled: true',
-        '  user_profile_enabled: true',
-        '  nudge_interval: 0',
-        '',
-      ].join('\n'),
-      'utf8'
-    );
-    return reviewHome;
-  }
-
-  private spawnHermes(args: string[], paths: { hermesHome: string; codexHome: string; workspace: string }) {
-    return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      const codexBinDir = path.dirname(this.config.codexBin);
-      const child = spawn(this.config.uvBin, args, {
-        cwd: this.config.hermesSourceRoot,
-        env: {
-          ...process.env,
-          HERMES_HOME: paths.hermesHome,
-          CODEX_HOME: paths.codexHome,
-          PATH: [codexBinDir, process.env.PATH || ''].filter(Boolean).join(path.delimiter),
-          HERMES_BACKGROUND_REVIEW_INLINE: '0',
-          NO_PROXY: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
-          no_proxy: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      let stdout = '';
-      let stderr = '';
-      const timeout = setTimeout(() => {
-        child.kill('SIGTERM');
-        reject(new Error('Hermes memory review timed out after 5 minutes'));
-      }, 300_000);
-
-      child.stdout.setEncoding('utf8');
-      child.stderr.setEncoding('utf8');
-      child.stdout.on('data', (chunk) => {
-        stdout += chunk;
-      });
-      child.stderr.on('data', (chunk) => {
-        stderr += chunk;
-      });
-      child.on('error', (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-      child.on('close', (code) => {
-        clearTimeout(timeout);
-        if (code === 0) {
-          resolve({ stdout, stderr });
-          return;
-        }
-        reject(new Error(`Hermes memory review exited with code ${code}: ${stderr || stdout}`));
-      });
-    });
-  }
-}
-
-function buildReviewPrompt(job: MemoryReviewJob) {
-  return [
-    'Review the completed turn below for durable user profile or preference information.',
-    'If the turn reveals a stable user preference, communication style, recurring requirement, or durable user fact, save it with the memory tool using target="user".',
-    'Do not save temporary task progress, one-off task details, stale facts, or anything that will not help future conversations.',
-    'Write compact declarative facts, not instructions.',
-    'If nothing durable should be saved, do not call the memory tool and briefly say no durable memory needed.',
-    '',
-    '<completed_turn>',
-    `User: ${job.userMessage}`,
-    `Assistant: ${job.assistantReply}`,
-    '</completed_turn>',
-  ].join('\n');
-}
-
-async function ensureSymlink(linkPath: string, targetPath: string) {
-  try {
-    const stat = await fs.lstat(linkPath);
-    if (stat.isSymbolicLink()) return;
-    if (stat.isDirectory()) {
-      throw new Error(`${linkPath} exists as a directory; expected symlink to ${targetPath}`);
+    const apiKey = process.env[this.config.hermesOpenRouterApiKeyEnv]?.trim();
+    const result = apiKey
+      ? await this.reviewWithOpenRouter(job, apiKey)
+      : fallbackReviewWithoutModel(job, `${this.config.hermesOpenRouterApiKeyEnv} is missing`);
+    let savedCount = 0;
+    for (const memory of result.memories) {
+      const saved = await this.profileStore.saveReviewedUserProfile(
+        job.userId,
+        memory.content,
+        job.threadId,
+        memory.reason || 'Post-turn memory review'
+      );
+      if (saved) savedCount += 1;
     }
-    throw new Error(`${linkPath} exists and is not a symlink`);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return {
+      stdout: JSON.stringify(
+        {
+          mode: apiKey ? 'llm' : 'fallback',
+          savedCount,
+          skipReason: result.skipReason,
+          memories: result.memories,
+        },
+        null,
+        2
+      ),
+      stderr: '',
+    };
   }
-  await fs.symlink(targetPath, linkPath, 'dir');
+
+  private async reviewWithOpenRouter(job: MemoryReviewJob, apiKey: string): Promise<MemoryReviewResult> {
+    const profile = await this.profileStore.getSnapshot(job.userId);
+    const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+      {
+        role: 'system',
+        content: [
+          'You are a post-turn memory reviewer for a personal AI agent.',
+          'Extract only durable user profile facts, stable preferences, recurring requirements, communication style, or long-lived constraints.',
+          'Do not save temporary tasks, current progress, news, one-off instructions, implementation details, tool results, or facts useful only for this turn.',
+          'Do not save facts about the assistant, source code, infrastructure, or cloud deployment unless they are explicitly a stable user preference.',
+          'Return only valid JSON with this shape:',
+          '{"memories":[{"content":"string","reason":"string","confidence":0.0}],"skipReason":string|null}',
+          'confidence must be from 0 to 1. Keep each memory compact and declarative. Use the same language as the user when possible.',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          existingUserProfile: profile.rendered,
+          completedTurn: {
+            user: truncate(job.userMessage, 8000),
+            assistant: truncate(job.assistantReply, 8000),
+          },
+        }),
+      },
+    ];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45_000);
+    try {
+      const response = await fetch(`${this.config.openRouterBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          'content-type': 'application/json',
+          'x-openrouter-title': this.config.openRouterAppTitle,
+        },
+        body: JSON.stringify({
+          model: this.config.hermesModel,
+          messages,
+          temperature: 0,
+          max_tokens: 1200,
+        }),
+      });
+      const text = await response.text();
+      if (!response.ok) throw new Error(`OpenRouter memory review failed ${response.status}: ${truncate(text, 2000)}`);
+      const completion = JSON.parse(text) as unknown;
+      const content = extractCompletionContent(completion);
+      return normalizeMemoryReviewResult(parseReviewJson(content));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 }
 
-function sanitizePathSegment(value: string) {
-  return value.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 120) || 'anonymous';
+type MemoryReviewResult = {
+  memories: Array<{
+    content: string;
+    reason: string;
+    confidence: number;
+  }>;
+  skipReason: string | null;
+};
+
+function normalizeMemoryReviewResult(value: unknown): MemoryReviewResult {
+  if (!isRecord(value)) return { memories: [], skipReason: 'Memory reviewer returned invalid JSON.' };
+  const memories = Array.isArray(value.memories)
+    ? value.memories
+        .map((item) => normalizeMemoryCandidate(item))
+        .filter((item): item is MemoryReviewResult['memories'][number] => Boolean(item))
+        .filter((item) => item.confidence >= 0.65)
+        .slice(0, 8)
+    : [];
+  return {
+    memories,
+    skipReason: typeof value.skipReason === 'string' && value.skipReason.trim() ? value.skipReason.trim() : null,
+  };
 }
 
-function yamlString(value: string) {
-  return JSON.stringify(value);
+function normalizeMemoryCandidate(value: unknown): MemoryReviewResult['memories'][number] | null {
+  if (!isRecord(value)) return null;
+  const content = typeof value.content === 'string' ? value.content.trim() : '';
+  if (!content) return null;
+  const reason = typeof value.reason === 'string' && value.reason.trim() ? value.reason.trim() : 'Post-turn memory review';
+  const confidenceRaw = typeof value.confidence === 'number' ? value.confidence : Number(value.confidence);
+  const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, Math.min(1, confidenceRaw)) : 0.75;
+  return { content, reason, confidence };
 }
 
-function mergeNoProxy(value: string) {
-  const entries = new Set(
-    value
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean)
+function parseReviewJson(content: string) {
+  const cleaned = content.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+  try {
+    return JSON.parse(cleaned) as unknown;
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    try {
+      return JSON.parse(cleaned.slice(start, end + 1)) as unknown;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function extractCompletionContent(rawCompletion: unknown) {
+  if (!isRecord(rawCompletion)) return '';
+  const choices = rawCompletion.choices;
+  if (!Array.isArray(choices)) return '';
+  const first = choices[0];
+  if (!isRecord(first)) return '';
+  const message = first.message;
+  if (!isRecord(message)) return '';
+  return typeof message.content === 'string' ? message.content : '';
+}
+
+function fallbackReviewWithoutModel(job: MemoryReviewJob, reason: string): MemoryReviewResult {
+  const explicit = extractExplicitMemoryRequest(job.userMessage);
+  if (!explicit) return { memories: [], skipReason: reason };
+  return {
+    memories: [
+      {
+        content: explicit,
+        reason: '用户明确要求长期记住这条偏好或画像信息',
+        confidence: 0.98,
+      },
+    ],
+    skipReason: null,
+  };
+}
+
+function extractExplicitMemoryRequest(message: string) {
+  const match = message.match(
+    /(?:^|[。！？\n]\s*)(?:请你?|帮我)?(?:记住|请记住|以后记得|帮我记住)(?:[：:\s]+)(?<content>[\s\S]+)/u
   );
-  entries.add('127.0.0.1');
-  entries.add('localhost');
-  entries.add('::1');
-  return Array.from(entries).join(',');
+  let content = match?.groups?.content?.trim();
+  if (!content) return '';
+  content = content.replace(/(?:请)?只回复[：:].*$/s, '').trim();
+  content = content.replace(/(?:请)?回复[：:].*$/s, '').trim();
+  content = content.replace(/^(这个偏好|这条偏好|这件事)[：:\s]*/u, '').trim();
+  return content;
 }
