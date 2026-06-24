@@ -12,10 +12,8 @@ import {
 export const maxDuration = 800;
 
 const PERSONAL_AGENT_TYPE = 'PERSONAL';
-const DEFAULT_MULTIMODAL_MODEL = 'qwen/qwen3.6-flash';
 const DEFAULT_MULTIMODAL_MAX_FILES = 6;
 const DEFAULT_MULTIMODAL_MAX_FILE_BYTES = 20 * 1024 * 1024;
-const DEFAULT_FILE_PARSER_MAX_CHARS = 60000;
 
 type ClientMessage = {
   id?: string;
@@ -59,10 +57,6 @@ function getPersonalAgentServerUrl() {
   return (process.env.PERSONAL_AGENT_SERVER_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 }
 
-function getOpenRouterMultimodalModel() {
-  return process.env.OPENROUTER_MULTIMODAL_MODEL || DEFAULT_MULTIMODAL_MODEL;
-}
-
 function getOpenRouterMultimodalMaxFiles() {
   const parsed = Number(process.env.OPENROUTER_MULTIMODAL_MAX_FILES || '');
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : DEFAULT_MULTIMODAL_MAX_FILES;
@@ -71,34 +65,6 @@ function getOpenRouterMultimodalMaxFiles() {
 function getOpenRouterMultimodalMaxFileBytes() {
   const parsed = Number(process.env.OPENROUTER_MULTIMODAL_MAX_FILE_BYTES || '');
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : DEFAULT_MULTIMODAL_MAX_FILE_BYTES;
-}
-
-function getOpenRouterFileParserModel() {
-  return process.env.OPENROUTER_FILE_PARSER_MODEL || process.env.OPENROUTER_MULTIMODAL_MODEL || DEFAULT_MULTIMODAL_MODEL;
-}
-
-function getOpenRouterFileParserMaxChars() {
-  const parsed = Number(process.env.OPENROUTER_FILE_PARSER_MAX_CHARS || '');
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : DEFAULT_FILE_PARSER_MAX_CHARS;
-}
-
-function getOpenRouterFileParserEngine() {
-  return process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'cloudflare-ai';
-}
-
-function getOpenRouterFileParserFallbackEngine() {
-  return process.env.OPENROUTER_FILE_PARSER_FALLBACK_PDF_ENGINE || 'mistral-ocr';
-}
-
-function getOpenRouterHeaders() {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw Object.assign(new Error('缺少 OPENROUTER_API_KEY，无法调用 OpenRouter 文件解析工具。'), { status: 500 });
-  return {
-    Authorization: `Bearer ${apiKey}`,
-    'Content-Type': 'application/json',
-    'HTTP-Referer': process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-    'X-Title': process.env.OPENROUTER_APP_NAME || 'Altselfs Personal Agent',
-  };
 }
 
 function normalizeMessages(value: unknown): ClientMessage[] {
@@ -271,189 +237,6 @@ function getAttachmentPayloads(attachments: UploadedAttachment[]) {
   }));
 }
 
-function getOpenRouterParserContentPart(attachment: UploadedAttachment) {
-  if (attachment.kind === 'video') {
-    return {
-      type: 'video_url',
-      videoUrl: {
-        url: attachment.dataUrl,
-      },
-    };
-  }
-
-  return {
-    type: 'file',
-    file: {
-      filename: attachment.name,
-      file_data: attachment.dataUrl,
-    },
-  };
-}
-
-function extractOpenRouterMessageText(payload: unknown) {
-  if (!isRecord(payload)) return '';
-  const choices = Array.isArray(payload.choices) ? payload.choices : [];
-  const firstChoice = choices.find(isRecord);
-  if (!firstChoice) return '';
-  const message = isRecord(firstChoice.message) ? firstChoice.message : {};
-  const content = message.content;
-  const directText = extractOpenRouterTextParts(content);
-  if (directText) return directText;
-
-  const annotations = Array.isArray(message.annotations) ? message.annotations : [];
-  return annotations
-    .map((annotation) => {
-      if (!isRecord(annotation)) return '';
-      const file = isRecord(annotation.file) ? annotation.file : {};
-      return extractOpenRouterTextParts(file.content);
-    })
-    .filter(Boolean)
-    .join('\n\n')
-    .trim();
-}
-
-function getOpenRouterFileParserSummary(payload: unknown) {
-  if (!isRecord(payload)) return { hasPayload: false };
-  const choices = Array.isArray(payload.choices) ? payload.choices : [];
-  const firstChoice = choices.find(isRecord);
-  const message = isRecord(firstChoice?.message) ? firstChoice.message : {};
-  const content = message.content;
-  const annotations = Array.isArray(message.annotations) ? message.annotations : [];
-  const annotationTextChars = annotations.reduce((total, annotation) => {
-    if (!isRecord(annotation)) return total;
-    const file = isRecord(annotation.file) ? annotation.file : {};
-    return total + extractOpenRouterTextParts(file.content).length;
-  }, 0);
-
-  return {
-    hasPayload: true,
-    choices: choices.length,
-    finishReason: typeof firstChoice?.finish_reason === 'string' ? firstChoice.finish_reason : null,
-    contentType: typeof content,
-    contentChars: extractOpenRouterTextParts(content).length,
-    annotations: annotations.length,
-    annotationTextChars,
-  };
-}
-
-function extractOpenRouterTextParts(value: unknown): string {
-  if (typeof value === 'string') return value.trim();
-  if (!Array.isArray(value)) return '';
-  return value
-    .map((part) => {
-      if (typeof part === 'string') return part;
-      if (!isRecord(part)) return '';
-      if (typeof part.text === 'string') return part.text;
-      if (part.type === 'text' && typeof part.content === 'string') return part.content;
-      return '';
-    })
-    .filter(Boolean)
-    .join('\n')
-    .trim();
-}
-
-function getOpenRouterErrorMessage(payload: unknown, fallback: string) {
-  if (!isRecord(payload)) return fallback;
-  if (typeof payload.error === 'string') return payload.error;
-  if (isRecord(payload.error)) {
-    if (typeof payload.error.message === 'string') return payload.error.message;
-    if (typeof payload.error.code === 'string') return `${fallback}：${payload.error.code}`;
-  }
-  if (typeof payload.message === 'string') return payload.message;
-  return fallback;
-}
-
-async function callOpenRouterFileParser(params: {
-  parseTargets: UploadedAttachment[];
-  userMessage: string;
-  pdfEngine: string;
-}) {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: getOpenRouterHeaders(),
-    body: JSON.stringify({
-      model: getOpenRouterFileParserModel(),
-      temperature: 0,
-      max_tokens: Number(process.env.OPENROUTER_FILE_PARSER_MAX_TOKENS || 12000),
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: [
-                '请作为文件解析工具处理附件。',
-                '目标：尽可能逐字提取附件中的可读文本，不要总结，不要补充解释。',
-                '如果附件包含表格、签署页、标题、编号或日期，请保留结构和换行。',
-                '如果某个附件无法解析，请在对应文件名下写明无法解析的原因。',
-                `用户本轮问题：${params.userMessage || '请分析附件内容。'}`,
-              ].join('\n'),
-            },
-            ...params.parseTargets.map(getOpenRouterParserContentPart),
-          ],
-        },
-      ],
-      plugins: [
-        {
-          id: 'file-parser',
-          pdf: {
-            engine: params.pdfEngine,
-          },
-        },
-      ],
-    }),
-    cache: 'no-store',
-  }).catch((error) => {
-    throw Object.assign(new Error(`OpenRouter 文件解析工具不可用：${error instanceof Error ? error.message : String(error)}`), {
-      status: 502,
-    });
-  });
-
-  const raw = (await response.json().catch(() => ({}))) as unknown;
-  if (!response.ok) {
-    throw Object.assign(new Error(getOpenRouterErrorMessage(raw, `OpenRouter 文件解析 HTTP ${response.status}`)), {
-      status: 502,
-      pdfEngine: params.pdfEngine,
-    });
-  }
-
-  const text = extractOpenRouterMessageText(raw);
-  console.info('[personal-agent] openrouter file-parser result', {
-    pdfEngine: params.pdfEngine,
-    files: params.parseTargets.map((target) => ({ name: target.name, kind: target.kind, size: target.size })),
-    summary: getOpenRouterFileParserSummary(raw),
-    extractedChars: text.length,
-  });
-  if (!text) {
-    throw Object.assign(new Error('OpenRouter 文件解析完成，但没有返回可用文本。'), {
-      status: 502,
-      pdfEngine: params.pdfEngine,
-    });
-  }
-  return text.slice(0, getOpenRouterFileParserMaxChars());
-}
-
-function shouldFallbackOpenRouterFileParser(error: unknown) {
-  if (!(error instanceof Error)) return false;
-  return /failed to parse|文件解析完成，但没有返回可用文本/i.test(error.message);
-}
-
-async function parseAttachmentsWithOpenRouter(attachments: UploadedAttachment[], userMessage: string) {
-  const parseTargets = attachments.filter((attachment) => attachment.kind !== 'image');
-  if (parseTargets.length === 0) return '';
-
-  const primaryEngine = getOpenRouterFileParserEngine();
-  const fallbackEngine = getOpenRouterFileParserFallbackEngine();
-
-  try {
-    return await callOpenRouterFileParser({ parseTargets, userMessage, pdfEngine: primaryEngine });
-  } catch (error) {
-    if (!fallbackEngine || fallbackEngine === primaryEngine || !shouldFallbackOpenRouterFileParser(error)) {
-      throw error;
-    }
-    return callOpenRouterFileParser({ parseTargets, userMessage, pdfEngine: fallbackEngine });
-  }
-}
 
 function buildCurrentTurnMessage(messages: ClientMessage[]) {
   return latestUserMessage(messages);
@@ -517,15 +300,6 @@ export async function POST(req: NextRequest) {
 
   const { messages, userMessage, displayUserMessage, attachments } = parsedBody;
   if (!userMessage && attachments.length === 0) return NextResponse.json({ error: '消息不能为空' }, { status: 400 });
-  let parsedAttachmentText = '';
-  try {
-    parsedAttachmentText = await parseAttachmentsWithOpenRouter(attachments, userMessage);
-  } catch (error) {
-    const status = isRecord(error) && typeof error.status === 'number' ? error.status : 502;
-    const detail = error instanceof Error ? error.message : '附件解析失败';
-    return NextResponse.json({ error: detail }, { status });
-  }
-  const codexInputAttachments = attachments.filter((attachment) => attachment.kind === 'image');
 
   const thread = await ensureThread({
     investorId: investor.id,
@@ -536,7 +310,7 @@ export async function POST(req: NextRequest) {
   const userMessageMeta = attachments.length > 0
     ? {
         attachments: getAttachmentMetadata(attachments),
-        parsedByOpenRouter: Boolean(parsedAttachmentText),
+        storedInAgentWorkspace: true,
       }
     : undefined;
 
@@ -560,28 +334,7 @@ export async function POST(req: NextRequest) {
       displayUserMessage: displayUserMessage || userMessage,
       currentMessageMetadata: userMessageMeta,
       attachments: getAttachmentMetadata(attachments),
-      ...(parsedAttachmentText.trim()
-        ? {
-            parsedAttachment: {
-              kind: 'parsed_attachment_text',
-              name: attachments.map((attachment) => attachment.name).join(', ') || 'parsed attachments',
-              mimeType: attachments.length === 1 ? attachments[0]?.type : 'text/plain',
-              sizeBytes: parsedAttachmentText.length,
-              contentText: parsedAttachmentText,
-              metadata: {
-                parser: 'openrouter_file_parser',
-                sourceFiles: getAttachmentMetadata(attachments),
-              },
-            },
-          }
-        : {}),
-      ...(codexInputAttachments.length > 0
-        ? {
-            codexModel: getOpenRouterMultimodalModel(),
-            multimodal: true,
-            multimodalAttachments: getAttachmentPayloads(codexInputAttachments),
-          }
-        : {}),
+      workspaceAttachments: getAttachmentPayloads(attachments),
     },
   };
 
@@ -618,7 +371,7 @@ export async function POST(req: NextRequest) {
     ? result.reply.trim()
     : '个人 Agent 已完成本轮处理，但没有返回可展示的回复。';
 
-  const assistantMessage = await appendThreadMessage({
+  await appendThreadMessage({
     threadId: thread.id,
     role: 'ASSISTANT',
     content: reply,
@@ -727,7 +480,7 @@ function streamPersonalAgentTurn(params: {
             ? finalResult.reply.trim()
             : '个人 Agent 已完成本轮处理，但没有返回可展示的回复。';
 
-          const assistantMessage = await appendThreadMessage({
+          await appendThreadMessage({
             threadId: params.threadId,
             role: 'ASSISTANT',
             content: reply,

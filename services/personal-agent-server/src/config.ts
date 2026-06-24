@@ -44,7 +44,8 @@ export type ServerConfig = {
   memoryReviewMaxTurns: number;
   profileStorePath: string;
   runtimeStateSyncEnabled: boolean;
-  runtimeStateMode: 'ephemeral' | 'snapshot';
+  runtimeStateMode: 'ephemeral' | 'snapshot' | 'sandbox';
+  sandboxStorageRoot: string;
   runtimeStateCacheTtlMs: number;
   runtimeStateMaxArchiveBytes: number;
 };
@@ -156,7 +157,7 @@ function readStorageBackendEnv(key: string, fallback: ServerConfig['storageBacke
 
 function readRuntimeStateModeEnv(key: string, fallback: ServerConfig['runtimeStateMode']) {
   const raw = process.env[key]?.trim().toLowerCase();
-  if (raw === 'ephemeral' || raw === 'snapshot') return raw;
+  if (raw === 'ephemeral' || raw === 'snapshot' || raw === 'sandbox') return raw;
   return fallback;
 }
 
@@ -370,6 +371,7 @@ export function loadConfig(): ServerConfig {
     profileStorePath: path.resolve(readEnv('PROFILE_STORE_PATH', '/tmp/altselfs-personal-agent-profiles.json')),
     runtimeStateSyncEnabled: readBoolEnv('RUNTIME_STATE_SYNC_ENABLED', storageBackend === 'postgres'),
     runtimeStateMode: readRuntimeStateModeEnv('RUNTIME_STATE_MODE', 'ephemeral'),
+    sandboxStorageRoot: path.resolve(readEnv('SANDBOX_STORAGE_ROOT', '/data/altselfs-agent')),
     runtimeStateCacheTtlMs: readIntEnv('RUNTIME_STATE_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
     runtimeStateMaxArchiveBytes: readIntEnv('RUNTIME_STATE_MAX_ARCHIVE_BYTES', 16 * 1024 * 1024),
   };

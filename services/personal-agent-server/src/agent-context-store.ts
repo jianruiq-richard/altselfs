@@ -26,6 +26,19 @@ export type PersistedAgentTurnInput = {
   warnings: string[];
 };
 
+export type AgentContextArtifactInput = {
+  id?: string;
+  investorId: string;
+  threadId: string;
+  runId?: string;
+  kind: string;
+  name: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  contentText?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
 export async function loadCleanTurnContext(config: ServerConfig, request: TurnStartRequest): Promise<CleanTurnContext> {
   const databaseUrl = config.contextDatabaseUrl;
   const threadId = request.threadId || '';
@@ -55,13 +68,12 @@ export async function loadCleanTurnContext(config: ServerConfig, request: TurnSt
     }),
     pool.query(
       [
-        'select id, kind, name, mime_type as "mimeType", content_text as "contentText", metadata, created_at as "createdAt"',
+        'select id, kind, name, mime_type as "mimeType", size_bytes as "sizeBytes", content_text as "contentText", metadata, created_at as "createdAt"',
         'from agent_context_artifacts',
         'where thread_id = $1',
         investorId ? 'and investor_id = $2' : '',
-        'and content_text is not null and length(content_text) > 0',
         'order by created_at desc, id desc',
-        'limit 6',
+        'limit 12',
       ].join(' '),
       investorId ? [threadId, investorId] : [threadId]
     ).catch((error) => {
@@ -174,6 +186,36 @@ export async function persistAgentTurnInput(
     currentUserMessage: message,
     warnings,
   };
+}
+
+export async function persistAgentArtifacts(config: ServerConfig, artifacts: AgentContextArtifactInput[]) {
+  if (artifacts.length === 0) return;
+  const pool = await getRequiredContextPool(config);
+  for (const artifact of artifacts) {
+    await pool.query(
+      [
+        'insert into agent_context_artifacts',
+        '(id, investor_id, thread_id, run_id, kind, name, mime_type, size_bytes, content_text, metadata)',
+        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)',
+        'on conflict (id) do update set',
+        'run_id = excluded.run_id, kind = excluded.kind, name = excluded.name,',
+        'mime_type = excluded.mime_type, size_bytes = excluded.size_bytes,',
+        'content_text = excluded.content_text, metadata = excluded.metadata, updated_at = now()',
+      ].join(' '),
+      [
+        artifact.id || id('art'),
+        artifact.investorId,
+        artifact.threadId,
+        artifact.runId || null,
+        artifact.kind,
+        artifact.name,
+        artifact.mimeType || null,
+        typeof artifact.sizeBytes === 'number' ? Math.floor(artifact.sizeBytes) : null,
+        artifact.contentText || null,
+        stringifyJson(artifact.metadata || {}),
+      ]
+    );
+  }
 }
 
 export async function persistAgentTurnSuccess(
@@ -478,6 +520,15 @@ function requestMetadataForStorage(metadata: Record<string, unknown> | undefined
       };
     });
   }
+  if (Array.isArray(copy.workspaceAttachments)) {
+    copy.workspaceAttachments = copy.workspaceAttachments.map((item) => {
+      if (!isRecord(item)) return item;
+      return {
+        ...item,
+        dataUrl: typeof item.dataUrl === 'string' ? `[omitted dataUrl: ${item.dataUrl.length} chars]` : item.dataUrl,
+      };
+    });
+  }
   return copy;
 }
 
@@ -531,7 +582,12 @@ function buildContextMessage(input: {
 
   const artifactText = input.artifacts.map(formatArtifactRow).filter(Boolean).join('\n\n');
   if (artifactText) {
-    sections.push('<artifacts>', artifactText, '</artifacts>');
+    sections.push(
+      '<artifacts>',
+      '下面是本 thread workspace 中可用的大文件/附件索引。大内容不直接内联在 prompt 中；如果本轮问题需要附件内容，必须先调用 altselfs_read_artifact 读取 parsed_text_path；没有 parsed_text_path 时再读取 workspace_path。读取失败时报告具体错误，不要在未尝试读取前说无法访问。',
+      artifactText,
+      '</artifacts>'
+    );
   }
 
   sections.push('本轮用户消息：', input.currentMessage);
@@ -550,12 +606,29 @@ function formatArtifactRow(row: Record<string, unknown>) {
   const kind = typeof row.kind === 'string' ? row.kind : 'artifact';
   const name = typeof row.name === 'string' ? row.name : 'untitled';
   const content = typeof row.contentText === 'string' ? row.contentText.trim() : '';
-  if (!content) return '';
   const metadata = isRecord(row.metadata) ? row.metadata : {};
-  const metadataText = Object.keys(metadata).length > 0 ? ` metadata=${JSON.stringify(metadata).slice(0, 1000)}` : '';
+  const metadataText = Object.keys(metadata).length > 0 ? ` metadata=${JSON.stringify(metadata).slice(0, 2000)}` : '';
+  const mimeType = typeof row.mimeType === 'string' ? row.mimeType : '';
+  const sizeBytes = typeof row.sizeBytes === 'number' ? row.sizeBytes : null;
+  const workspacePath = typeof metadata.workspacePath === 'string' ? metadata.workspacePath : '';
+  const relativePath = typeof metadata.relativePath === 'string' ? metadata.relativePath : '';
+  const parsedTextPath = typeof metadata.parsedTextPath === 'string' ? metadata.parsedTextPath : '';
+  const indexLines = [
+    workspacePath ? `workspace_path: ${workspacePath}` : '',
+    relativePath ? `relative_path: ${relativePath}` : '',
+    parsedTextPath ? `parsed_text_path: ${parsedTextPath}` : '',
+    mimeType ? `mime_type: ${mimeType}` : '',
+    sizeBytes ? `size_bytes: ${sizeBytes}` : '',
+    content && metadata.inlineInContext === true
+      ? `inline_content:\n${truncate(content, 6000)}`
+      : content
+        ? `legacy_content: stored in RDS (${content.length} chars), not inlined in this prompt`
+        : '',
+  ].filter(Boolean);
+  if (indexLines.length === 0) return '';
   return [
     `<artifact id="${escapeAttr(id)}" kind="${escapeAttr(kind)}" name="${escapeAttr(name)}"${metadataText}>`,
-    truncate(content, 30000),
+    indexLines.join('\n'),
     '</artifact>',
   ].join('\n');
 }

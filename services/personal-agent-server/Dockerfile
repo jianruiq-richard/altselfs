@@ -15,6 +15,11 @@ FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates python3 python3-pip \
+  && pip3 install --break-system-packages --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com pypdf pdfplumber python-docx openpyxl \
+  && rm -rf /var/lib/apt/lists/*
+
 # The product server spawns `codex app-server`. Pin this package after the
 # controlled-kernel version is locked.
 RUN npm install -g @openai/codex

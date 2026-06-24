@@ -2,7 +2,9 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadCleanTurnContext } from '../agent-context-store.js';
+import { ingestWorkspaceAttachments } from '../artifact-ingestion.js';
 import { LocalProfileStore } from '../profile-store.js';
+import { prepareRuntimeDirectories, readSandboxState, resolveRuntimePaths, writeSandboxState, } from '../sandbox-runtime.js';
 import { id, isRecord, nowIso, safeJson, truncate } from '../util.js';
 export class HermesSourceRuntime {
     config;
@@ -22,14 +24,17 @@ export class HermesSourceRuntime {
             events.push(event);
             await request.onEvent?.(event);
         };
-        const userSegment = sanitizePathSegment(request.userId);
-        const threadSegment = sanitizePathSegment(request.threadId || 'default');
-        const runId = id('run');
-        const runSegment = sanitizePathSegment(runId);
-        const hermesHome = path.join(this.config.hermesHomeRoot, userSegment, threadSegment, runSegment, 'hermes-home');
-        const codexHome = path.join(this.config.codexHomeRoot, userSegment, threadSegment, runSegment, 'codex-home');
-        const workspace = path.join(this.config.hermesWorkspaceRoot, userSegment, threadSegment, runSegment, 'workspace');
+        const runId = typeof request.metadata?.runId === 'string' && request.metadata.runId.trim()
+            ? request.metadata.runId.trim()
+            : id('run');
+        const runtimePaths = resolveRuntimePaths(this.config, request, runId);
+        const { hermesHome, codexHome, workspace } = runtimePaths;
         const runtimeStatePaths = { hermesHome, codexHome, workspace };
+        const codexLocalEnvironmentDisabled = this.config.runtimeStateMode === 'sandbox' ? false : this.config.disableLocalEnvironmentForGeneral;
+        const previousSandboxState = await readSandboxState(runtimePaths);
+        const resumeSessionId = this.config.runtimeStateMode === 'sandbox' && typeof previousSandboxState?.hermesSessionId === 'string'
+            ? previousSandboxState.hermesSessionId.trim()
+            : '';
         if (this.runtimeStateStore && this.config.runtimeStateMode === 'snapshot') {
             const hydrated = await this.runtimeStateStore.hydrate({
                 userId: request.userId,
@@ -43,7 +48,27 @@ export class HermesSourceRuntime {
                 });
             }
         }
-        await this.prepareHomes({ hermesHome, codexHome, workspace });
+        await this.prepareHomes(runtimePaths);
+        await writeSandboxState(runtimePaths, {
+            status: 'ACTIVE',
+            activeRunId: runId,
+            lastStartedAt: nowIso(),
+            previousHermesSessionId: resumeSessionId || null,
+        });
+        const ingestedArtifacts = await ingestWorkspaceAttachments(this.config, request, runtimePaths, runId);
+        if (ingestedArtifacts.artifacts.length > 0 || ingestedArtifacts.warnings.length > 0) {
+            await emit('workspace_artifacts.ingested', {
+                count: ingestedArtifacts.artifacts.length,
+                artifacts: ingestedArtifacts.artifacts.map((artifact) => ({
+                    name: artifact.name,
+                    kind: artifact.kind,
+                    mimeType: artifact.mimeType,
+                    sizeBytes: artifact.sizeBytes,
+                    metadata: artifact.metadata,
+                })),
+                warnings: ingestedArtifacts.warnings,
+            });
+        }
         const cleanContext = await loadCleanTurnContext(this.config, request);
         await emit('agent_context.loaded', {
             loaded: cleanContext.loaded,
@@ -82,8 +107,11 @@ export class HermesSourceRuntime {
             hermesHome,
             codexHome,
             workspace,
+            userProfileDir: runtimePaths.userProfileDir || null,
+            threadRoot: runtimePaths.threadRoot || null,
             sessionMode: this.config.runtimeStateMode,
-            resumeSessionId: null,
+            resumeSessionId: resumeSessionId || null,
+            codexLocalEnvironmentDisabled,
             model: this.config.hermesModel,
             provider: 'openrouter',
         });
@@ -96,6 +124,7 @@ export class HermesSourceRuntime {
             '-m',
             'hermes_cli.main',
             'chat',
+            ...(resumeSessionId ? ['--resume', resumeSessionId] : []),
             '-Q',
             '--source',
             'tool',
@@ -114,6 +143,12 @@ export class HermesSourceRuntime {
             codexReply: codexReply || null,
             stdout: truncate(result.stdout, 20000),
             stderrTail: truncate(tail(result.stderr, 120), 20000),
+        });
+        await writeSandboxState(runtimePaths, {
+            status: 'IDLE',
+            activeRunId: null,
+            lastCompletedAt: nowIso(),
+            hermesSessionId: sessionId || previousSandboxState?.hermesSessionId || null,
         });
         if (this.config.memoryReviewMode === 'async' && this.memoryReviewQueue && reply) {
             const reviewUserMessage = typeof request.metadata?.currentUserMessage === 'string' && request.metadata.currentUserMessage.trim()
@@ -163,9 +198,7 @@ export class HermesSourceRuntime {
         };
     }
     async prepareHomes(paths) {
-        await fs.mkdir(paths.hermesHome, { recursive: true });
-        await fs.mkdir(paths.codexHome, { recursive: true });
-        await fs.mkdir(paths.workspace, { recursive: true });
+        await prepareRuntimeDirectories(paths);
         await fs.writeFile(path.join(paths.hermesHome, 'config.yaml'), [
             'model:',
             '  provider: openrouter',
@@ -225,10 +258,13 @@ export class HermesSourceRuntime {
                     PATH: [codexBinDir, process.env.PATH || ''].filter(Boolean).join(path.delimiter),
                     HERMES_BACKGROUND_REVIEW_INLINE: this.config.memoryReviewMode === 'inline' && this.config.hermesBackgroundReviewInline ? '1' : '0',
                     HERMES_DISABLE_LAZY_INSTALLS: '1',
-                    ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: '1',
+                    ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: this.config.runtimeStateMode === 'sandbox'
+                        ? '0'
+                        : this.config.disableLocalEnvironmentForGeneral ? '1' : '0',
                     ALTSELFS_CODEX_PERSONALITY: 'pragmatic',
                     ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS: buildCodexGeneralDeveloperInstructions({
                         webSearchMode: this.config.codexWebSearchMode,
+                        runtimeStateMode: this.config.runtimeStateMode,
                     }),
                     NO_PROXY: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
                     no_proxy: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
@@ -295,9 +331,6 @@ function tail(value, maxLines) {
     const lines = value.split(/\r?\n/);
     return lines.slice(Math.max(0, lines.length - maxLines)).join('\n');
 }
-function sanitizePathSegment(value) {
-    return value.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 120) || 'anonymous';
-}
 function yamlString(value) {
     return JSON.stringify(value);
 }
@@ -335,6 +368,19 @@ function buildCodexGeneralDeveloperInstructions(input) {
         dateStyle: 'full',
         timeStyle: 'long',
     }).format(new Date());
+    const artifactAccessPolicy = input.runtimeStateMode === 'sandbox'
+        ? [
+            '- This run is inside an Altselfs sandbox workspace. You may use Codex native read-only file inspection commands to read files under the current workspace artifacts/external-memory directories when the user asks about uploaded files or indexed materials.',
+            '- Do not inspect arbitrary local repositories or unrelated filesystem paths. Restrict local file access to the current sandbox workspace and listed artifact paths.',
+            '- Prefer `altselfs_read_artifact` for listed artifact text. If that tool is unavailable, use read-only shell/file inspection on the listed workspace artifact path or parsed_text_path.',
+            '- Do not run builds, tests, package managers, network scanners, or scripts unless the user explicitly asks for an execution task.',
+        ]
+        : [
+            '- Do not inspect, read, write, patch, or modify local repositories or arbitrary local filesystem paths.',
+            '- User-provided artifacts listed in host context are available through the `altselfs_read_artifact` tool. If the user asks about an uploaded file, call `altselfs_read_artifact` with `parsed_text_path` first, then `workspace_path` if needed.',
+            '- Do not say you cannot access an uploaded file when an artifact path is listed. Try `altselfs_read_artifact` first; if the tool fails, report the concrete failure.',
+            '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
+        ];
     return [
         `Current time: ${currentTime} (Asia/Shanghai).`,
         `Codex web_search mode requested by host: ${input.webSearchMode}.`,
@@ -342,8 +388,7 @@ function buildCodexGeneralDeveloperInstructions(input) {
         '',
         'Altselfs codex-general policy:',
         '- You are a general personal agent for discussion, research, planning, and synthesis.',
-        '- Do not inspect, read, write, patch, or modify local files or repositories.',
-        '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
+        ...artifactAccessPolicy,
         '- Use conversation and reasoning for tasks that do not need external data.',
         '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',
         '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.',

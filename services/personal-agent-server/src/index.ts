@@ -32,7 +32,7 @@ if (config.processRole === 'api' || config.processRole === 'all') {
     console.log(`[personal-agent-server] hermesSourceRuntime=${config.hermesSourceRuntimeEnabled ? 'enabled' : 'disabled'}`);
     console.log(`[personal-agent-server] storage=${config.storageBackend} memoryReviewMode=${config.memoryReviewMode} jobStore=${config.memoryReviewJobStorePath}`);
     console.log(
-      `[personal-agent-server] runtimeStateSync=${config.runtimeStateSyncEnabled ? 'enabled' : 'disabled'} mode=${config.runtimeStateMode} cacheTtlMs=${config.runtimeStateCacheTtlMs}`
+      `[personal-agent-server] runtimeStateSync=${config.runtimeStateSyncEnabled ? 'enabled' : 'disabled'} mode=${config.runtimeStateMode} sandboxRoot=${config.sandboxStorageRoot} cacheTtlMs=${config.runtimeStateCacheTtlMs}`
     );
   });
 }

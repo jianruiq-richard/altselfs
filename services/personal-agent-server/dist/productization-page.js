@@ -120,6 +120,7 @@ export function renderProductizationPage(config, jobs) {
           <p><code>STORAGE_BACKEND</code>: ${escapeHtml(config.storageBackend)}</p>
           <p><code>HERMES_SOURCE_RUNTIME_ENABLED</code>: ${String(config.hermesSourceRuntimeEnabled)}</p>
           <p><code>RUNTIME_STATE_MODE</code>: ${escapeHtml(config.runtimeStateMode)}</p>
+          <p><code>SANDBOX_STORAGE_ROOT</code>: ${escapeHtml(config.sandboxStorageRoot)}</p>
           <p><code>HERMES_MODEL</code>: ${escapeHtml(config.hermesModel)}</p>
           <p><code>CODEX_MODEL</code>: ${escapeHtml(config.codexModel || config.hermesModel)}</p>
         </div>
@@ -131,6 +132,7 @@ export function renderProductizationPage(config, jobs) {
         </div>
         <div class="panel">
           <h3>User Isolation</h3>
+          <p>Sandbox 模式：Hermes 长期画像是 user 级，Codex session 和 workspace 是 thread 级。</p>
           <p><code>HERMES_HOME_ROOT</code>: ${escapeHtml(config.hermesHomeRoot)}</p>
           <p><code>CODEX_HOME_ROOT</code>: ${escapeHtml(config.codexHomeRoot)}</p>
           <p><code>PROFILE_STORE_PATH</code>: ${escapeHtml(config.profileStorePath)}</p>
@@ -142,11 +144,11 @@ export function renderProductizationPage(config, jobs) {
       <h2>目标链路</h2>
       <div class="flow">
         <div class="step"><strong>1. 前端 / Supabase</strong>AI 助手入口只保存和发送当前用户消息；Supabase 只服务聊天 UI 展示。</div>
-        <div class="step"><strong>2. Context RDS</strong>Next API 把当前纯消息、附件解析文本、run 和 trace 镜像写入阿里云 RDS context 表。</div>
-        <div class="step"><strong>3. Hermes 外层</strong>ECS 从 RDS 加载用户画像、线程摘要、最近纯对话和 artifacts，准备本轮临时目录。</div>
-        <div class="step"><strong>4. Codex General</strong>处理对话、搜索、工具调用和能力统筹。</div>
+        <div class="step"><strong>2. ECS Sandbox</strong>ECS 根据 user/thread 找到持久工作区；上传文件和长上下文落到云盘文件系统。</div>
+        <div class="step"><strong>3. Hermes 外层</strong>加载 user 级长期画像和偏好，保持该用户唯一 Hermes 分身状态。</div>
+        <div class="step"><strong>4. Codex General</strong>使用 thread 级 Codex session 和 workspace 处理对话、搜索、工具调用和能力统筹。</div>
         <div class="step"><strong>5. 返回用户</strong>主回答同步返回，不等待长期记忆整理。</div>
-        <div class="step"><strong>6. Memory Job</strong>后台 review turn，必要时写入产品侧用户画像表。</div>
+        <div class="step"><strong>6. RDS 控制面</strong>RDS 保存 run、消息、artifact metadata、tool trace 摘要、memory/profile 索引。</div>
       </div>
     </section>
 
@@ -155,13 +157,16 @@ export function renderProductizationPage(config, jobs) {
       <ul>
         <li><span class="pill success">完成</span> 本地 Hermes 源码 runtime 可由 product server 调起。</li>
         <li><span class="pill success">完成</span> Codex app-server 使用 OpenRouter DeepSeek，不依赖 OpenAI/Codex OAuth。</li>
-        <li><span class="pill success">完成</span> 每个 turn 使用独立临时 <code>HERMES_HOME</code>、<code>CODEX_HOME</code> 和 workspace。</li>
+        <li><span class="pill success">完成</span> 保留每个 turn 独立临时 <code>HERMES_HOME</code>、<code>CODEX_HOME</code> 和 workspace 的 ephemeral 模式，作为隔离运行备选。</li>
+        <li><span class="pill success">完成</span> 新分支 <code>codex-hermes-ecs-sandbox-style</code> 已切换到 <code>RUNTIME_STATE_MODE=sandbox</code>：user 级 Hermes + thread 级 Codex/workspace。</li>
+        <li><span class="pill success">完成</span> sandbox 模式已验证 Hermes 原生 <code>--resume</code>：同一 user/thread 第二轮会恢复上一轮 Hermes session。</li>
         <li><span class="pill success">完成</span> 产品侧 profile 会从数据库/文件存储加载并注入当前轮。</li>
         <li><span class="pill success">完成</span> Memory review 已改为异步 job，不阻塞用户看到主回答。</li>
         <li><span class="pill success">完成</span> 默认 <code>RUNTIME_STATE_MODE=ephemeral</code>：主回答后删除本轮临时 runtime 目录。</li>
         <li><span class="pill success">完成</span> 保留 <code>RUNTIME_STATE_MODE=snapshot</code> 作为调试/兼容模式，可恢复旧的 runtime state 快照同步。</li>
         <li><span class="pill success">完成</span> 阿里云 ECS 正式 <code>8787</code> 已运行 source-runtime 镜像；当前产品路径使用产品侧 Hermes router + source-built Codex app-server。</li>
         <li><span class="pill success">完成</span> Personal Agent 上下文已拆库：Supabase 只做 UI 对话展示，阿里云 RDS <code>agent_context_*</code> 表保存 run、artifact、summary、tool trace 和 ECS 可加载的纯消息镜像。</li>
+        <li><span class="pill success">完成</span> ECS 已挂载独立云盘作为 sandbox workspace 根目录：<code>/data/altselfs-agent</code>。</li>
         <li><span class="pill queued">进行中</span> source Hermes 直通模式的 Codex 动态工具桥接已在本地源码补丁中实现，待重建镜像并云端验证后可重新开启。</li>
         <li><span class="pill queued">进行中</span> 本地文件队列后续要替换成数据库 job 表和独立 worker 服务。</li>
       </ul>
@@ -175,7 +180,7 @@ export function renderProductizationPage(config, jobs) {
           <ul>
             <li><span class="pill success">完成</span> 本地 Hermes 源码 + Codex app-server 跑通。</li>
             <li><span class="pill success">完成</span> OpenRouter DeepSeek 接入，解耦 OpenAI/Codex OAuth。</li>
-            <li><span class="pill success">完成</span> 每轮运行级 <code>HERMES_HOME</code> / <code>CODEX_HOME</code> / workspace 隔离。</li>
+            <li><span class="pill success">完成</span> 支持运行级 ephemeral 隔离；当前产品化分支使用 ECS 云盘上的 sandbox-style 持久工作区。</li>
             <li><span class="pill success">完成</span> 产品侧用户画像注入 Codex 当前轮。</li>
           </ul>
         </div>
@@ -294,6 +299,7 @@ export function renderProductizationPage(config, jobs) {
         <li><span class="warn">临时</span> 对 Hermes 源码有 OpenRouter 和本地运行补丁，后续要整理为可重复 patch 或 fork。</li>
         <li><span class="warn">临时</span> Codex General 的工具权限仍是本地验证配置，生产要禁用本地文件/命令类能力，只保留产品允许的工具。</li>
         <li><span class="warn">临时</span> <code>RUNTIME_STATE_MODE=snapshot</code> 仍保留旧的 RDS runtime 快照方案，但默认产品路径已改为 <code>ephemeral</code>。</li>
+        <li><span class="warn">临时</span> sandbox 模式第一版使用 ECS + Docker + 云盘目录隔离，不是 Firecracker/KVM 级强沙盒；需要配额、权限和工具白名单约束。</li>
         <li><span class="warn">临时</span> 异步 review worker 现在和 API 同进程，线上要拆成独立进程，避免 API 重启影响 job。</li>
         <li><span class="warn">临时</span> review prompt 是产品侧精简版，后续要继续对齐 Hermes 原生 review 标准，但持久化目标保持产品侧 RDS。</li>
         <li><span class="warn">临时</span> 云端 ECS 的 <code>8787</code> 端口当前只用于手动测试，应只对白名单公网 IP 开放；接入 Vercel 后要改为 API Gateway / SLB / HTTPS + 服务层鉴权，不能长期裸露测试端口。</li>

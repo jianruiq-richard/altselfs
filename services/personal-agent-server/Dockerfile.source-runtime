@@ -47,6 +47,7 @@ WORKDIR /app
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates python3 python3-venv python3-pip \
+  && pip3 install --break-system-packages --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com pypdf pdfplumber python-docx openpyxl \
   && rm -rf /var/lib/apt/lists/*
 
 COPY personal-agent-server/package.json ./
@@ -55,6 +56,10 @@ RUN npm install --omit=dev
 COPY --from=server-build /app/dist ./dist
 COPY --from=codex-build /opt/altselfs/codex-bin /opt/altselfs/codex-bin
 COPY agent-sources/hermes-agent /opt/altselfs/hermes-agent
+COPY personal-agent-server/scripts/patch-hermes-openrouter-runtime.mjs /tmp/patch-hermes-openrouter-runtime.mjs
+
+RUN ALTSELFS_HERMES_SOURCE_ROOT=/opt/altselfs/hermes-agent node /tmp/patch-hermes-openrouter-runtime.mjs \
+  && rm -f /tmp/patch-hermes-openrouter-runtime.mjs
 
 RUN python3 -m venv /opt/altselfs/hermes-agent/.venv \
   && /opt/altselfs/hermes-agent/.venv/bin/pip install --no-cache-dir -U pip \

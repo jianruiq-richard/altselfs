@@ -1,4 +1,6 @@
 import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import { runWebSearchTool } from './tools/web-search.js';
@@ -8,7 +10,11 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
         try {
             const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
             if (req.method === 'GET' && url.pathname === '/healthz') {
-                return json(res, 200, { ok: true });
+                return json(res, 200, {
+                    ok: true,
+                    runtimeStateMode: config?.runtimeStateMode,
+                    sandboxStorageRoot: config?.sandboxStorageRoot,
+                });
             }
             if (req.method === 'GET' && url.pathname === '/productization') {
                 if (!config)
@@ -31,6 +37,20 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 if (!isRecord(body))
                     return json(res, 400, { error: 'JSON body must be an object' });
                 const resultText = await runWebSearchTool(body, config);
+                return json(res, 200, {
+                    contentItems: [{ type: 'inputText', text: resultText }],
+                    success: !resultText.includes('"error"'),
+                });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/tools/read-artifact') {
+                if (!config)
+                    return json(res, 500, { error: 'tool bridge config missing' });
+                if (!isLoopbackRequest(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const resultText = await runReadArtifactTool(body, config);
                 return json(res, 200, {
                     contentItems: [{ type: 'inputText', text: resultText }],
                     success: !resultText.includes('"error"'),
@@ -626,6 +646,46 @@ function html(res, status, body) {
 function isLoopbackRequest(req) {
     const address = req.socket.remoteAddress || '';
     return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+async function runReadArtifactTool(body, config) {
+    const requestedPath = typeof body.path === 'string' ? body.path.trim() : '';
+    const maxChars = typeof body.maxChars === 'number' && Number.isFinite(body.maxChars)
+        ? Math.max(1000, Math.min(Math.floor(body.maxChars), 60000))
+        : 20000;
+    if (!requestedPath) {
+        return JSON.stringify({ error: 'path is required' }, null, 2);
+    }
+    const resolved = path.resolve(requestedPath);
+    const sandboxRoot = path.resolve(config.sandboxStorageRoot);
+    const normalized = resolved.split(path.sep).join('/');
+    const allowed = normalized.startsWith(`${sandboxRoot.split(path.sep).join('/')}/users/`) &&
+        (normalized.includes('/workspace/artifacts/') || normalized.includes('/workspace/external-memory/'));
+    if (!allowed) {
+        return JSON.stringify({
+            error: 'path is outside allowed workspace artifact directories',
+            requestedPath,
+            allowedRoot: `${sandboxRoot}/users/*/threads/*/workspace/{artifacts,external-memory}`,
+        }, null, 2);
+    }
+    try {
+        const stat = await fs.stat(resolved);
+        if (!stat.isFile()) {
+            return JSON.stringify({ error: 'path is not a file', path: resolved }, null, 2);
+        }
+        const raw = await fs.readFile(resolved, 'utf8');
+        return JSON.stringify({
+            path: resolved,
+            sizeBytes: stat.size,
+            truncated: raw.length > maxChars,
+            content: raw.slice(0, maxChars),
+        }, null, 2);
+    }
+    catch (error) {
+        return JSON.stringify({
+            error: error instanceof Error ? error.message : String(error),
+            path: resolved,
+        }, null, 2);
+    }
 }
 function readJsonBody(req) {
     return new Promise((resolve, reject) => {

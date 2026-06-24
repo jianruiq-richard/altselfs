@@ -285,18 +285,74 @@ _ALTSELFS_WEB_SEARCH_TOOL = {
     "deferLoading": False,
 }
 
+_ALTSELFS_READ_ARTIFACT_TOOL = {
+    "namespace": None,
+    "name": "altselfs_read_artifact",
+    "description": (
+        "Read a user-uploaded artifact or parsed text file from the current "
+        "Altselfs workspace. Use this when the host context lists an artifact "
+        "path and the user asks about the uploaded file. Only listed "
+        "workspace artifacts or external-memory files are allowed."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Absolute artifact path from workspace_path or parsed_text_path."},
+            "maxChars": {
+                "type": "number",
+                "description": "Optional maximum characters to read, default 20000.",
+            },
+        },
+        "required": ["path"],
+        "additionalProperties": False,
+    },
+    "deferLoading": False,
+}
+
 
 def _altselfs_dynamic_tools() -> list[dict[str, Any]]:
-    enabled = os.environ.get("ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL", "true").lower()
-    if enabled in {"0", "false", "no", "off"}:
-        return []
-    return [_ALTSELFS_WEB_SEARCH_TOOL]
+    tools: list[dict[str, Any]] = []
+    web_enabled = os.environ.get("ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL", "true").lower()
+    if web_enabled not in {"0", "false", "no", "off"}:
+        tools.append(_ALTSELFS_WEB_SEARCH_TOOL)
+    artifact_enabled = os.environ.get("ALTSELFS_CODEX_READ_ARTIFACT_DYNAMIC_TOOL", "true").lower()
+    if artifact_enabled not in {"0", "false", "no", "off"}:
+        tools.append(_ALTSELFS_READ_ARTIFACT_TOOL)
+    return tools
 
 
 def _call_altselfs_tool_bridge(arguments: Any) -> dict[str, Any]:
     bridge_url = os.environ.get(
         "ALTSELFS_TOOL_BRIDGE_URL",
         "http://127.0.0.1:8787/internal/tools/web-search",
+    )
+    payload = arguments if isinstance(arguments, dict) else {}
+    request = urllib.request.Request(
+        bridge_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        raw = response.read().decode("utf-8")
+    parsed = json.loads(raw) if raw.strip() else {}
+    if isinstance(parsed, dict) and "contentItems" in parsed:
+        return parsed
+    return {
+        "contentItems": [
+            {
+                "type": "inputText",
+                "text": json.dumps(parsed, ensure_ascii=False),
+            }
+        ],
+        "success": True,
+    }
+
+
+def _call_altselfs_read_artifact_tool_bridge(arguments: Any) -> dict[str, Any]:
+    bridge_url = os.environ.get(
+        "ALTSELFS_READ_ARTIFACT_BRIDGE_URL",
+        "http://127.0.0.1:8787/internal/tools/read-artifact",
     )
     payload = arguments if isinstance(arguments, dict) else {}
     request = urllib.request.Request(
@@ -328,9 +384,22 @@ const helpersAnchor = `# How many tailing stderr lines from the codex subprocess
 # enough to surface a config/provider/auth diagnostic.
 _STDERR_TAIL_LINES = 12
 `;
+const helpersEndAnchor = `# Permission profile mapping mirrors the docstring in PR proposal:`;
 
-if (codexAppServerSession.includes(dynamicToolHelpersMarker)) {
+if (codexAppServerSession.includes(dynamicToolHelpersMarker) && codexAppServerSession.includes("_ALTSELFS_READ_ARTIFACT_TOOL")) {
   console.log("Hermes Codex dynamic tool helper patch already applied.");
+  console.log(codexAppServerSessionPath);
+} else if (codexAppServerSession.includes(dynamicToolHelpersMarker)) {
+  const helperStart = codexAppServerSession.indexOf("_ALTSELFS_WEB_SEARCH_TOOL = {");
+  const helperEnd = codexAppServerSession.indexOf(helpersEndAnchor);
+  if (helperStart < 0 || helperEnd < 0 || helperEnd <= helperStart) {
+    console.error("Could not find the Hermes Codex dynamic tool helper block to upgrade.");
+    console.error(codexAppServerSessionPath);
+    process.exit(1);
+  }
+  codexAppServerSession = `${codexAppServerSession.slice(0, helperStart)}${dynamicToolHelpers}${codexAppServerSession.slice(helperEnd)}`;
+  writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
+  console.log("Hermes Codex dynamic tool helper patch upgraded.");
   console.log(codexAppServerSessionPath);
 } else if (!codexAppServerSession.includes(helpersAnchor)) {
   console.error("Could not find the Hermes Codex app-server helper insertion point.");
@@ -459,7 +528,11 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
             (not namespace and tool == "altselfs_web_search")
             or (namespace == "altselfs" and tool == "web_search")
         )
-        if not is_web_search:
+        is_read_artifact = (
+            (not namespace and tool == "altselfs_read_artifact")
+            or (namespace == "altselfs" and tool == "read_artifact")
+        )
+        if not is_web_search and not is_read_artifact:
             self._client.respond(
                 rid,
                 {
@@ -474,17 +547,20 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
             )
             return
         try:
-            result = _call_altselfs_tool_bridge(params.get("arguments") or {})
+            if is_read_artifact:
+                result = _call_altselfs_read_artifact_tool_bridge(params.get("arguments") or {})
+            else:
+                result = _call_altselfs_tool_bridge(params.get("arguments") or {})
             self._client.respond(rid, result)
         except Exception as exc:
-            logger.exception("Altselfs web search dynamic tool failed")
+            logger.exception("Altselfs dynamic tool failed")
             self._client.respond(
                 rid,
                 {
                     "contentItems": [
                         {
                             "type": "inputText",
-                            "text": f"Altselfs web search failed: {exc}",
+                            "text": f"Altselfs dynamic tool failed: {exc}",
                         }
                     ],
                     "success": False,
@@ -496,8 +572,20 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
 const dynamicToolMethodAnchor = `    def _decide_exec_approval(self, params: dict) -> str:
 `;
 
-if (codexAppServerSession.includes(dynamicToolMethodMarker)) {
+if (codexAppServerSession.includes(dynamicToolMethodMarker) && codexAppServerSession.includes("is_read_artifact = (")) {
   console.log("Hermes Codex dynamic tool handler patch already applied.");
+  console.log(codexAppServerSessionPath);
+} else if (codexAppServerSession.includes(dynamicToolMethodMarker)) {
+  const methodStart = codexAppServerSession.indexOf(dynamicToolMethodMarker);
+  const methodEnd = codexAppServerSession.indexOf(dynamicToolMethodAnchor);
+  if (methodStart < 0 || methodEnd < 0 || methodEnd <= methodStart) {
+    console.error("Could not find the Hermes Codex dynamic tool handler block to upgrade.");
+    console.error(codexAppServerSessionPath);
+    process.exit(1);
+  }
+  codexAppServerSession = `${codexAppServerSession.slice(0, methodStart)}${dynamicToolMethod}${codexAppServerSession.slice(methodEnd)}`;
+  writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
+  console.log("Hermes Codex dynamic tool handler patch upgraded.");
   console.log(codexAppServerSessionPath);
 } else if (!codexAppServerSession.includes(dynamicToolMethodAnchor)) {
   console.error("Could not find the Hermes Codex dynamic tool handler insertion point.");
