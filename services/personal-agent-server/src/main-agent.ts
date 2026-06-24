@@ -23,6 +23,7 @@ export class PersonalMainAgent {
         route: result.route,
         reply: result.reply,
         events: result.events,
+        raw: result.raw,
       };
     }
 
@@ -112,6 +113,7 @@ export class PersonalMainAgent {
         route: result.route,
         reply: result.reply,
         events,
+        raw: result.raw,
         memoryWrites,
       };
     }

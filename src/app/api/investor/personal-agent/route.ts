@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import {
   appendThreadMessage,
-  appendToolCall,
   ensureThread,
   getLatestThreadWithMessages,
   getThreadMessagesPage,
@@ -30,6 +29,7 @@ type PersonalAgentResponse = {
   reply?: string;
   events?: unknown[];
   raw?: unknown;
+  runId?: string;
   error?: string;
 };
 
@@ -84,6 +84,10 @@ function getOpenRouterFileParserMaxChars() {
 
 function getOpenRouterFileParserEngine() {
   return process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'cloudflare-ai';
+}
+
+function getOpenRouterFileParserFallbackEngine() {
+  return process.env.OPENROUTER_FILE_PARSER_FALLBACK_PDF_ENGINE || 'mistral-ocr';
 }
 
 function getOpenRouterHeaders() {
@@ -183,22 +187,38 @@ async function fileToAttachment(file: File): Promise<UploadedAttachment> {
 async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
   const contentType = req.headers.get('content-type') || '';
   if (!contentType.includes('multipart/form-data')) {
-    const body = (await req.json().catch(() => ({}))) as { threadId?: string | null; messages?: unknown };
+    const body = (await req.json().catch(() => ({}))) as {
+      threadId?: string | null;
+      message?: unknown;
+      displayMessage?: unknown;
+      messages?: unknown;
+    };
     const messages = normalizeMessages(body.messages);
-    const userMessage = latestUserMessage(messages);
+    const explicitMessage = typeof body.message === 'string' ? body.message.trim() : '';
+    const displayMessage = typeof body.displayMessage === 'string' ? body.displayMessage.trim() : '';
+    const userMessage = explicitMessage || latestUserMessage(messages);
     return {
       threadId: body.threadId || null,
-      messages,
+      messages: userMessage ? [{ role: 'user', content: userMessage }] : messages,
       userMessage,
-      displayUserMessage: userMessage,
+      displayUserMessage: displayMessage || userMessage,
       attachments: [],
     };
   }
 
-  const form = await req.formData();
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    throw Object.assign(
+      new Error('附件上传请求解析失败：PDF 可能超过上传上限，或请求体被 Next 代理截断。请重启 npm run dev 后重试；单个附件请控制在 20MB 内。'),
+      { status: 413 }
+    );
+  }
+  const explicitMessage = getStringFormValue(form.get('message'));
+  const displayMessage = getStringFormValue(form.get('displayMessage'));
   const rawMessages = getStringFormValue(form.get('messages'));
   const messages = parseMessagesJson(rawMessages);
-  const explicitMessage = getStringFormValue(form.get('message'));
   const maxFiles = getOpenRouterMultimodalMaxFiles();
   const maxFileBytes = getOpenRouterMultimodalMaxFileBytes();
   const files = form
@@ -217,11 +237,11 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
   const attachments = await Promise.all(files.map(fileToAttachment));
   const fallbackMessage = attachments.length > 0 ? '请分析我上传的附件。' : '';
   const userMessage = explicitMessage || latestUserMessage(messages) || fallbackMessage;
-  const displayUserMessage = latestUserMessage(messages) || userMessage;
+  const displayUserMessage = displayMessage || latestUserMessage(messages) || userMessage;
 
   return {
     threadId: getStringFormValue(form.get('threadId')) || null,
-    messages: latestUserMessage(messages) ? messages : [...messages, { role: 'user', content: displayUserMessage }],
+    messages: [{ role: 'user', content: userMessage }],
     userMessage,
     displayUserMessage,
     attachments,
@@ -230,34 +250,6 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isTransientAgentFailureMessage(message: ClientMessage) {
-  return (
-    message.role === 'assistant' &&
-    /^(Codex app-server 执行失败|个人 Agent 服务不可用|个人 Agent 已完成本轮处理，但没有返回可展示的回复)/.test(
-      message.content.trim()
-    )
-  );
-}
-
-function getPersonalAgentToolStatus(reply: string, route?: string) {
-  if (/^(Codex app-server 执行失败|个人 Agent 服务不可用|个人 Agent 已完成本轮处理，但没有返回可展示的回复)/.test(reply.trim())) {
-    return 'ERROR';
-  }
-  return route ? 'SUCCESS' : 'UNKNOWN';
-}
-
-function buildAgentTurnMessage(messages: ClientMessage[]) {
-  const recent = messages.filter((message) => !isTransientAgentFailureMessage(message)).slice(-12);
-  const latest = latestUserMessage(messages);
-  const history = recent
-    .slice(0, -1)
-    .map((message) => `${message.role === 'user' ? '用户' : '助手'}：${message.content}`)
-    .join('\n\n');
-
-  if (!history) return latest;
-  return ['以下是本会话最近上下文，请作为上下文参考，不要逐字复述：', history, '', '用户本轮问题：', latest].join('\n');
 }
 
 function getAttachmentMetadata(attachments: UploadedAttachment[]) {
@@ -305,15 +297,58 @@ function extractOpenRouterMessageText(payload: unknown) {
   if (!firstChoice) return '';
   const message = isRecord(firstChoice.message) ? firstChoice.message : {};
   const content = message.content;
-  if (typeof content === 'string') return content.trim();
-  if (!Array.isArray(content)) return '';
-  return content
+  const directText = extractOpenRouterTextParts(content);
+  if (directText) return directText;
+
+  const annotations = Array.isArray(message.annotations) ? message.annotations : [];
+  return annotations
+    .map((annotation) => {
+      if (!isRecord(annotation)) return '';
+      const file = isRecord(annotation.file) ? annotation.file : {};
+      return extractOpenRouterTextParts(file.content);
+    })
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+}
+
+function getOpenRouterFileParserSummary(payload: unknown) {
+  if (!isRecord(payload)) return { hasPayload: false };
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  const firstChoice = choices.find(isRecord);
+  const message = isRecord(firstChoice?.message) ? firstChoice.message : {};
+  const content = message.content;
+  const annotations = Array.isArray(message.annotations) ? message.annotations : [];
+  const annotationTextChars = annotations.reduce((total, annotation) => {
+    if (!isRecord(annotation)) return total;
+    const file = isRecord(annotation.file) ? annotation.file : {};
+    return total + extractOpenRouterTextParts(file.content).length;
+  }, 0);
+
+  return {
+    hasPayload: true,
+    choices: choices.length,
+    finishReason: typeof firstChoice?.finish_reason === 'string' ? firstChoice.finish_reason : null,
+    contentType: typeof content,
+    contentChars: extractOpenRouterTextParts(content).length,
+    annotations: annotations.length,
+    annotationTextChars,
+  };
+}
+
+function extractOpenRouterTextParts(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (!Array.isArray(value)) return '';
+  return value
     .map((part) => {
       if (typeof part === 'string') return part;
       if (!isRecord(part)) return '';
-      return typeof part.text === 'string' ? part.text : '';
+      if (typeof part.text === 'string') return part.text;
+      if (part.type === 'text' && typeof part.content === 'string') return part.content;
+      return '';
     })
-    .join('')
+    .filter(Boolean)
+    .join('\n')
     .trim();
 }
 
@@ -328,10 +363,11 @@ function getOpenRouterErrorMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
-async function parseAttachmentsWithOpenRouter(attachments: UploadedAttachment[], userMessage: string) {
-  const parseTargets = attachments.filter((attachment) => attachment.kind !== 'image');
-  if (parseTargets.length === 0) return '';
-
+async function callOpenRouterFileParser(params: {
+  parseTargets: UploadedAttachment[];
+  userMessage: string;
+  pdfEngine: string;
+}) {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: getOpenRouterHeaders(),
@@ -350,10 +386,10 @@ async function parseAttachmentsWithOpenRouter(attachments: UploadedAttachment[],
                 '目标：尽可能逐字提取附件中的可读文本，不要总结，不要补充解释。',
                 '如果附件包含表格、签署页、标题、编号或日期，请保留结构和换行。',
                 '如果某个附件无法解析，请在对应文件名下写明无法解析的原因。',
-                `用户本轮问题：${userMessage || '请分析附件内容。'}`,
+                `用户本轮问题：${params.userMessage || '请分析附件内容。'}`,
               ].join('\n'),
             },
-            ...parseTargets.map(getOpenRouterParserContentPart),
+            ...params.parseTargets.map(getOpenRouterParserContentPart),
           ],
         },
       ],
@@ -361,7 +397,7 @@ async function parseAttachmentsWithOpenRouter(attachments: UploadedAttachment[],
         {
           id: 'file-parser',
           pdf: {
-            engine: getOpenRouterFileParserEngine(),
+            engine: params.pdfEngine,
           },
         },
       ],
@@ -377,27 +413,50 @@ async function parseAttachmentsWithOpenRouter(attachments: UploadedAttachment[],
   if (!response.ok) {
     throw Object.assign(new Error(getOpenRouterErrorMessage(raw, `OpenRouter 文件解析 HTTP ${response.status}`)), {
       status: 502,
+      pdfEngine: params.pdfEngine,
     });
   }
 
   const text = extractOpenRouterMessageText(raw);
+  console.info('[personal-agent] openrouter file-parser result', {
+    pdfEngine: params.pdfEngine,
+    files: params.parseTargets.map((target) => ({ name: target.name, kind: target.kind, size: target.size })),
+    summary: getOpenRouterFileParserSummary(raw),
+    extractedChars: text.length,
+  });
   if (!text) {
-    throw Object.assign(new Error('OpenRouter 文件解析完成，但没有返回可用文本。'), { status: 502 });
+    throw Object.assign(new Error('OpenRouter 文件解析完成，但没有返回可用文本。'), {
+      status: 502,
+      pdfEngine: params.pdfEngine,
+    });
   }
   return text.slice(0, getOpenRouterFileParserMaxChars());
 }
 
-function buildAgentTurnMessageWithParsedAttachments(messages: ClientMessage[], parsedAttachmentText: string) {
-  const base = buildAgentTurnMessage(messages);
-  if (!parsedAttachmentText.trim()) return base;
-  return [
-    base,
-    '',
-    '以下附件内容已由 OpenRouter 文件解析工具提取。请把它作为本轮用户输入的一部分使用；不要声称你无法读取附件。',
-    '<parsed_attachments>',
-    parsedAttachmentText.trim(),
-    '</parsed_attachments>',
-  ].join('\n');
+function shouldFallbackOpenRouterFileParser(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return /failed to parse|文件解析完成，但没有返回可用文本/i.test(error.message);
+}
+
+async function parseAttachmentsWithOpenRouter(attachments: UploadedAttachment[], userMessage: string) {
+  const parseTargets = attachments.filter((attachment) => attachment.kind !== 'image');
+  if (parseTargets.length === 0) return '';
+
+  const primaryEngine = getOpenRouterFileParserEngine();
+  const fallbackEngine = getOpenRouterFileParserFallbackEngine();
+
+  try {
+    return await callOpenRouterFileParser({ parseTargets, userMessage, pdfEngine: primaryEngine });
+  } catch (error) {
+    if (!fallbackEngine || fallbackEngine === primaryEngine || !shouldFallbackOpenRouterFileParser(error)) {
+      throw error;
+    }
+    return callOpenRouterFileParser({ parseTargets, userMessage, pdfEngine: fallbackEngine });
+  }
+}
+
+function buildCurrentTurnMessage(messages: ClientMessage[]) {
+  return latestUserMessage(messages);
 }
 
 function displayMessages(messages: ClientMessage[]) {
@@ -474,30 +533,53 @@ export async function POST(req: NextRequest) {
     threadId: parsedBody.threadId || null,
   });
 
-  await appendThreadMessage({
+  const userMessageMeta = attachments.length > 0
+    ? {
+        attachments: getAttachmentMetadata(attachments),
+        parsedByOpenRouter: Boolean(parsedAttachmentText),
+      }
+    : undefined;
+
+  const userThreadMessage = await appendThreadMessage({
     threadId: thread.id,
     role: 'USER',
     content: displayUserMessage || userMessage,
-    meta: attachments.length > 0
-      ? {
-          attachments: getAttachmentMetadata(attachments),
-          parsedByOpenRouter: Boolean(parsedAttachmentText),
-        }
-      : undefined,
+    meta: userMessageMeta,
   });
 
   const payload = {
     userId: investor.email || investor.id,
     threadId: thread.id,
-    message: buildAgentTurnMessageWithParsedAttachments(messages, parsedAttachmentText),
+    message: buildCurrentTurnMessage(messages),
     allowedAgents: ['codex-general'],
     metadata: {
+      currentMessageId: userThreadMessage.id,
+      investorId: investor.id,
+      contextMode: 'ecs_database_context',
       currentUserMessage: userMessage,
+      displayUserMessage: displayUserMessage || userMessage,
+      currentMessageMetadata: userMessageMeta,
+      attachments: getAttachmentMetadata(attachments),
+      ...(parsedAttachmentText.trim()
+        ? {
+            parsedAttachment: {
+              kind: 'parsed_attachment_text',
+              name: attachments.map((attachment) => attachment.name).join(', ') || 'parsed attachments',
+              mimeType: attachments.length === 1 ? attachments[0]?.type : 'text/plain',
+              sizeBytes: parsedAttachmentText.length,
+              contentText: parsedAttachmentText,
+              metadata: {
+                parser: 'openrouter_file_parser',
+                sourceFiles: getAttachmentMetadata(attachments),
+              },
+            },
+          }
+        : {}),
       ...(codexInputAttachments.length > 0
         ? {
             codexModel: getOpenRouterMultimodalModel(),
             multimodal: true,
-            attachments: getAttachmentPayloads(codexInputAttachments),
+            multimodalAttachments: getAttachmentPayloads(codexInputAttachments),
           }
         : {}),
     },
@@ -506,6 +588,7 @@ export async function POST(req: NextRequest) {
   if (req.nextUrl.searchParams.get('stream') === '1') {
     return streamPersonalAgentTurn({
       threadId: thread.id,
+      userMessage,
       payload,
       messages,
     });
@@ -516,7 +599,7 @@ export async function POST(req: NextRequest) {
     const response = await fetch(`${getPersonalAgentServerUrl()}/v1/turns/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, includeEvents: true }),
       cache: 'no-store',
     });
     result = (await response.json().catch(() => ({}))) as PersonalAgentResponse;
@@ -545,24 +628,9 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await appendToolCall({
-    threadId: thread.id,
-    messageId: assistantMessage.id,
-    toolName: 'personal_agent_server.turn',
-    status: getPersonalAgentToolStatus(reply, result.route),
-    toolArgs: {
-      allowedAgents: payload.allowedAgents,
-      messageLength: payload.message.length,
-    },
-    toolResult: {
-      route: result.route,
-      eventCount: Array.isArray(result.events) ? result.events.length : 0,
-      raw: result.raw,
-    },
-  });
-
   return NextResponse.json({
     threadId: thread.id,
+    runId: result.runId,
     reply,
     route: result.route,
     messages: displayMessages([...messages, { role: 'assistant', content: reply }]),
@@ -571,14 +639,13 @@ export async function POST(req: NextRequest) {
 
 function streamPersonalAgentTurn(params: {
   threadId: string;
+  userMessage: string;
   payload: {
     userId: string;
     threadId: string;
     message: string;
     allowedAgents: string[];
-    metadata: {
-      currentUserMessage: string;
-    };
+    metadata: Record<string, unknown>;
   };
   messages: ClientMessage[];
 }) {
@@ -670,27 +737,12 @@ function streamPersonalAgentTurn(params: {
             },
           });
 
-          await appendToolCall({
-            threadId: params.threadId,
-            messageId: assistantMessage.id,
-            toolName: 'personal_agent_server.turn',
-            status: getPersonalAgentToolStatus(reply, finalResult?.route),
-            toolArgs: {
-              allowedAgents: params.payload.allowedAgents,
-              messageLength: params.payload.message.length,
-            },
-            toolResult: {
-              route: finalResult?.route,
-              eventCount: Array.isArray(finalResult?.events) ? finalResult.events.length : 0,
-              raw: finalResult?.raw,
-            },
-          });
-
           write({
             type: 'final',
             status: 200,
             data: {
               threadId: params.threadId,
+              runId: finalResult?.runId,
               reply,
               route: finalResult?.route,
               messages: displayMessages([...params.messages, { role: 'assistant', content: reply }]),

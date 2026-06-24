@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { loadCleanTurnContext } from '../agent-context-store.js';
 import { LocalProfileStore } from '../profile-store.js';
 import { id, isRecord, nowIso, safeJson, truncate } from '../util.js';
 export class HermesSourceRuntime {
@@ -43,7 +44,18 @@ export class HermesSourceRuntime {
             }
         }
         await this.prepareHomes({ hermesHome, codexHome, workspace });
-        const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(request.userId, request.message, request.threadId);
+        const cleanContext = await loadCleanTurnContext(this.config, request);
+        await emit('agent_context.loaded', {
+            loaded: cleanContext.loaded,
+            summaryChars: cleanContext.summaryChars,
+            messageCount: cleanContext.messageCount,
+            artifactCount: cleanContext.artifactCount,
+            warnings: cleanContext.warnings,
+        });
+        const currentUserMessage = typeof request.metadata?.currentUserMessage === 'string' && request.metadata.currentUserMessage.trim()
+            ? request.metadata.currentUserMessage.trim()
+            : request.message;
+        const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(request.userId, currentUserMessage, request.threadId);
         if (rememberedProfile) {
             await emit('hermes.profile.updated', {
                 profileStorePath: this.config.profileStorePath,
@@ -54,7 +66,7 @@ export class HermesSourceRuntime {
         const hermesUserProfile = await readHermesUserProfile(hermesHome);
         const combinedProfile = combineProfileBlocks(profileSnapshot.rendered, hermesUserProfile);
         const runtimeMessage = buildRuntimeMessage({
-            message: request.message,
+            message: cleanContext.message,
             renderedProfile: combinedProfile,
         });
         await emit('hermes.profile.loaded', {

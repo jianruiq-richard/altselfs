@@ -141,11 +141,12 @@ export function renderProductizationPage(config, jobs) {
     <section>
       <h2>目标链路</h2>
       <div class="flow">
-        <div class="step"><strong>1. 前端</strong>AI 助手入口发送用户消息。</div>
-        <div class="step"><strong>2. Hermes 外层</strong>从数据库加载用户画像，准备本轮临时目录。</div>
-        <div class="step"><strong>3. Codex General</strong>处理对话、搜索、工具调用和能力统筹。</div>
-        <div class="step"><strong>4. 返回用户</strong>主回答同步返回，不等待长期记忆整理。</div>
-        <div class="step"><strong>5. Memory Job</strong>后台 review turn，必要时写入产品侧用户画像表。</div>
+        <div class="step"><strong>1. 前端 / Supabase</strong>AI 助手入口只保存和发送当前用户消息；Supabase 只服务聊天 UI 展示。</div>
+        <div class="step"><strong>2. Context RDS</strong>Next API 把当前纯消息、附件解析文本、run 和 trace 镜像写入阿里云 RDS context 表。</div>
+        <div class="step"><strong>3. Hermes 外层</strong>ECS 从 RDS 加载用户画像、线程摘要、最近纯对话和 artifacts，准备本轮临时目录。</div>
+        <div class="step"><strong>4. Codex General</strong>处理对话、搜索、工具调用和能力统筹。</div>
+        <div class="step"><strong>5. 返回用户</strong>主回答同步返回，不等待长期记忆整理。</div>
+        <div class="step"><strong>6. Memory Job</strong>后台 review turn，必要时写入产品侧用户画像表。</div>
       </div>
     </section>
 
@@ -160,6 +161,7 @@ export function renderProductizationPage(config, jobs) {
         <li><span class="pill success">完成</span> 默认 <code>RUNTIME_STATE_MODE=ephemeral</code>：主回答后删除本轮临时 runtime 目录。</li>
         <li><span class="pill success">完成</span> 保留 <code>RUNTIME_STATE_MODE=snapshot</code> 作为调试/兼容模式，可恢复旧的 runtime state 快照同步。</li>
         <li><span class="pill success">完成</span> 阿里云 ECS 正式 <code>8787</code> 已运行 source-runtime 镜像；当前产品路径使用产品侧 Hermes router + source-built Codex app-server。</li>
+        <li><span class="pill success">完成</span> Personal Agent 上下文已拆库：Supabase 只做 UI 对话展示，阿里云 RDS <code>agent_context_*</code> 表保存 run、artifact、summary、tool trace 和 ECS 可加载的纯消息镜像。</li>
         <li><span class="pill queued">进行中</span> source Hermes 直通模式的 Codex 动态工具桥接已在本地源码补丁中实现，待重建镜像并云端验证后可重新开启。</li>
         <li><span class="pill queued">进行中</span> 本地文件队列后续要替换成数据库 job 表和独立 worker 服务。</li>
       </ul>
@@ -194,7 +196,8 @@ export function renderProductizationPage(config, jobs) {
             <li><span class="pill success">完成</span> 新增 runtime state snapshot adapter；当前默认不走热路径，仅作为调试/兼容模式。</li>
             <li><span class="pill success">完成</span> Worker claim 使用 <code>FOR UPDATE SKIP LOCKED</code>。</li>
             <li><span class="pill success">完成</span> 阿里云 RDS PostgreSQL 联调，云端已使用 <code>STORAGE_BACKEND=postgres</code>。</li>
-            <li><span class="pill pending">待做</span> 消息、线程、run event、job event 的完整审计视图。</li>
+            <li><span class="pill success">完成</span> 新增 <code>AGENT_CONTEXT_DATABASE_URL</code> 专用连接，Personal Agent 的 artifact、run event、summary、tool trace 不再写 Supabase。</li>
+            <li><span class="pill queued">进行中</span> 消息、线程、run event、job event 的完整审计视图。</li>
           </ul>
         </div>
         <div class="panel">
@@ -215,7 +218,7 @@ export function renderProductizationPage(config, jobs) {
           <ul>
             <li><span class="pill success">完成</span> 默认把 Codex/Hermes 本地 runtime 目录视为每轮临时产物，完成后清理。</li>
             <li><span class="pill success">完成</span> 长期用户画像由产品侧 profile store / RDS 承载，不依赖 <code>USER.md</code> 本地文件。</li>
-            <li><span class="pill queued">进行中</span> 对话消息、压缩摘要、工具调用审计需要进一步落到产品数据库，而不是复用 Codex 原始 JSONL 作为长期热状态。</li>
+            <li><span class="pill success">完成</span> 每轮上下文从 RDS 的干净材料拼接：用户画像、thread summary、最近纯对话、当前用户消息和 artifacts；不保存历史完整 prompt 作为长期状态。</li>
             <li><span class="pill pending">待做</span> 未来真实文件产物迁移到阿里云 OSS，RDS 只保留 metadata、checksum 和 object key。</li>
             <li><span class="pill pending">待做</span> 每用户资源配额、并发限制、超时和强制停止。</li>
             <li><span class="pill pending">待做</span> 备份、恢复、数据导出和删除。</li>
@@ -239,7 +242,8 @@ export function renderProductizationPage(config, jobs) {
         <div class="step"><strong>Vercel / Web</strong>Altselfs 前端和产品 API。</div>
         <div class="step"><strong>Agent API</strong>容器化 personal-agent-server，接收 turn。</div>
         <div class="step"><strong>Worker</strong>异步 memory review、晨报等后台任务。</div>
-        <div class="step"><strong>Database</strong>RDS PostgreSQL 保存线程、消息、job、画像和审计索引。</div>
+        <div class="step"><strong>Supabase</strong>只保存前端聊天 UI 需要的纯用户/助手消息。</div>
+        <div class="step"><strong>Context Database</strong>阿里云 RDS PostgreSQL 保存 Agent 可加载的消息镜像、附件文本、summary、run、tool trace、job、画像和审计索引。</div>
         <div class="step"><strong>Storage</strong>对象存储保存未来文件产物；Hermes/Codex runtime 目录默认不长期保存。</div>
       </div>
       <p class="muted">短期可以继续保留前端在 Vercel；Agent API 和 Worker 更适合放在阿里云容器服务，数据库优先用 RDS PostgreSQL。</p>

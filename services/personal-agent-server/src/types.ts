@@ -20,6 +20,8 @@ export type TurnStartResponse = {
   route: AgentRoute;
   reply: string;
   events: AgentEvent[];
+  runId?: string;
+  raw?: unknown;
   memoryWrites?: MemoryWriteSuggestion[];
 };
 

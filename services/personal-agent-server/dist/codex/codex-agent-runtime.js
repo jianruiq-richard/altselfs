@@ -355,7 +355,7 @@ function sanitizePathSegment(value) {
     return value.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 120);
 }
 function readMultimodalAttachments(metadata) {
-    const value = metadata?.attachments;
+    const value = metadata?.multimodalAttachments ?? metadata?.attachments;
     if (!Array.isArray(value))
         return [];
     return value

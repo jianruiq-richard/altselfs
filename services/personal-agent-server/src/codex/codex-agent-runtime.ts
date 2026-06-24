@@ -400,7 +400,7 @@ type MultimodalAttachment = {
 };
 
 function readMultimodalAttachments(metadata?: Record<string, unknown>): MultimodalAttachment[] {
-  const value = metadata?.attachments;
+  const value = metadata?.multimodalAttachments ?? metadata?.attachments;
   if (!Array.isArray(value)) return [];
   return value
     .map((item) => {

@@ -146,6 +146,8 @@ const codexItemDotClass: Record<CodexStreamItemStatus, string> = {
 
 const attachmentAccept =
   'image/*,application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const MAX_ATTACHMENT_FILES = 6;
+const MAX_ATTACHMENT_FILE_BYTES = 20 * 1024 * 1024;
 
 function getPendingAttachmentKind(file: File): PendingAttachmentKind {
   const name = file.name.toLowerCase();
@@ -861,7 +863,14 @@ export default function InvestorAgentChatPage() {
 
   const handleFilesSelected = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setAttachments((prev) => [...prev, ...Array.from(files).map(createPendingAttachment)].slice(0, 6));
+    const selectedFiles = Array.from(files);
+    const oversized = selectedFiles.find((file) => file.size > MAX_ATTACHMENT_FILE_BYTES);
+    if (oversized) {
+      setError(`附件 ${oversized.name} 超过 ${formatBytes(MAX_ATTACHMENT_FILE_BYTES)}，请压缩后再上传。`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setAttachments((prev) => [...prev, ...selectedFiles.map(createPendingAttachment)].slice(0, MAX_ATTACHMENT_FILES));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -897,18 +906,19 @@ export default function InvestorAgentChatPage() {
     try {
       const requestBody = hasAttachments
         ? (() => {
-            const formData = new FormData();
-            if (threadId) formData.append('threadId', threadId);
-            formData.append('message', content);
-            formData.append('messages', JSON.stringify(nextMessages));
-            requestAttachments.forEach((attachment) => {
-              formData.append('attachments', attachment.file, attachment.name);
-            });
-            return formData;
-          })()
+          const formData = new FormData();
+          if (threadId) formData.append('threadId', threadId);
+          formData.append('message', content);
+          formData.append('displayMessage', displayContent);
+          requestAttachments.forEach((attachment) => {
+            formData.append('attachments', attachment.file, attachment.name);
+          });
+          return formData;
+        })()
         : JSON.stringify({
             threadId,
-            messages: nextMessages,
+            message: content,
+            displayMessage: displayContent,
           });
 
       const res = await fetch('/api/investor/personal-agent?stream=1', {
@@ -997,7 +1007,7 @@ export default function InvestorAgentChatPage() {
 
       const completedData = finalData as PersonalAgentFinalData;
       setThreadId(typeof completedData.threadId === 'string' ? completedData.threadId : threadId);
-      if (Array.isArray(completedData.messages)) {
+      if (Array.isArray(completedData.messages) && completedData.messages.length >= nextMessages.length) {
         setMessages(completedData.messages);
       } else if (typeof completedData.reply === 'string') {
         setMessages([...nextMessages, { role: 'assistant', content: completedData.reply }]);
@@ -1362,6 +1372,7 @@ export default function InvestorAgentChatPage() {
                   >
                     <span className="min-w-0 truncate">{attachment.name}</span>
                     <span className="shrink-0 text-slate-400">{formatBytes(attachment.size)}</span>
+                    <span className="hidden shrink-0 text-slate-400 sm:inline">发送时上传</span>
                     <button
                       type="button"
                       title="移除附件"

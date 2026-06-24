@@ -7,6 +7,7 @@ export type ServerConfig = {
   processRole: 'api' | 'worker' | 'all';
   storageBackend: 'file' | 'postgres';
   databaseUrl?: string;
+  contextDatabaseUrl?: string;
   hermesRouterEnabled: boolean;
   hermesModel: string;
   hermesOpenRouterApiKeyEnv: string;
@@ -331,6 +332,7 @@ export function loadConfig(): ServerConfig {
     processRole: readProcessRoleEnv('AGENT_PROCESS_ROLE', 'all'),
     storageBackend,
     databaseUrl: process.env.DATABASE_URL?.trim() || undefined,
+    contextDatabaseUrl: process.env.AGENT_CONTEXT_DATABASE_URL?.trim() || undefined,
     hermesRouterEnabled: readBoolEnv('HERMES_ROUTER_ENABLED', true),
     hermesModel,
     hermesOpenRouterApiKeyEnv: readEnv('HERMES_OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY'),

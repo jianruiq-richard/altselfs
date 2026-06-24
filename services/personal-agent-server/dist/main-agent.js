@@ -21,6 +21,7 @@ export class PersonalMainAgent {
                 route: result.route,
                 reply: result.reply,
                 events: result.events,
+                raw: result.raw,
             };
         }
         const memorySnapshot = await this.memoryStore.getSnapshot(request.userId);
@@ -104,6 +105,7 @@ export class PersonalMainAgent {
                 route: result.route,
                 reply: result.reply,
                 events,
+                raw: result.raw,
                 memoryWrites,
             };
         }

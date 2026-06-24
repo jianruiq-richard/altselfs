@@ -2,6 +2,7 @@ import http from 'node:http';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import { runWebSearchTool } from './tools/web-search.js';
+import { persistAgentTurnError, persistAgentTurnInput, persistAgentTurnSuccess, } from './agent-context-store.js';
 export function createHttpServer(agent, config, memoryReviewQueue) {
     return http.createServer(async (req, res) => {
         try {
@@ -47,14 +48,40 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     metadata: isRecord(body.metadata) ? body.metadata : undefined,
                 };
                 if (url.searchParams.get('stream') === '1') {
-                    return streamTurnStart(res, agent, turnRequest);
+                    return streamTurnStart(res, agent, turnRequest, config);
                 }
-                const result = await agent.startTurn(turnRequest);
-                if (url.searchParams.get('format') === 'text') {
-                    return text(res, 200, result.reply);
+                let persisted = null;
+                try {
+                    if (!config)
+                        throw new Error('config missing');
+                    persisted = await persistAgentTurnInput(config, turnRequest);
+                    const result = await agent.startTurn({
+                        ...turnRequest,
+                        metadata: { ...(turnRequest.metadata || {}), runId: persisted.runId },
+                    });
+                    await persistAgentTurnSuccess(config, persisted, {
+                        threadId: result.threadId,
+                        route: result.route,
+                        reply: result.reply,
+                        events: result.events,
+                        raw: 'raw' in result ? result.raw : undefined,
+                    });
+                    const responseResult = { ...result, runId: persisted.runId };
+                    if (url.searchParams.get('format') === 'text') {
+                        return text(res, 200, responseResult.reply);
+                    }
+                    const includeEvents = body.includeEvents === true || url.searchParams.get('debug') === '1';
+                    return json(res, 200, includeEvents ? responseResult : { ...responseResult, events: [] });
                 }
-                const includeEvents = body.includeEvents === true || url.searchParams.get('debug') === '1';
-                return json(res, 200, includeEvents ? result : { ...result, events: [] });
+                catch (error) {
+                    if (config) {
+                        await persistAgentTurnError(config, persisted, {
+                            threadId: turnRequest.threadId,
+                            error: error instanceof Error ? error.message : String(error),
+                        }).catch(() => null);
+                    }
+                    throw error;
+                }
             }
             if (req.method === 'POST' && url.pathname === '/openrouter-responses-proxy/v1/responses') {
                 if (!config)
@@ -73,7 +100,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
         }
     });
 }
-function streamTurnStart(res, agent, request) {
+function streamTurnStart(res, agent, request, config) {
     let closed = false;
     const write = (payload) => {
         if (closed || res.destroyed)
@@ -93,17 +120,47 @@ function streamTurnStart(res, agent, request) {
         clearInterval(heartbeat);
     });
     void (async () => {
+        let persisted = null;
         try {
             write({ type: 'turn_started', timestamp: new Date().toISOString() });
+            if (!config)
+                throw new Error('config missing');
+            persisted = await persistAgentTurnInput(config, request);
+            write({
+                type: 'event',
+                event: {
+                    type: 'agent_context.input_persisted',
+                    timestamp: new Date().toISOString(),
+                    payload: {
+                        runId: persisted.runId,
+                        userMessageId: persisted.userMessageId,
+                        warnings: persisted.warnings,
+                    },
+                },
+            });
             const result = await agent.startTurn({
                 ...request,
+                metadata: { ...(request.metadata || {}), runId: persisted.runId },
                 onEvent: async (event) => {
                     write({ type: 'event', event });
                 },
             });
-            write({ type: 'final', result: { ...result, events: [] } });
+            await persistAgentTurnSuccess(config, persisted, {
+                threadId: result.threadId,
+                route: result.route,
+                reply: result.reply,
+                events: result.events,
+                raw: 'raw' in result ? result.raw : undefined,
+            });
+            write({ type: 'final', result: { ...result, runId: persisted.runId, events: [] } });
         }
         catch (error) {
+            if (config) {
+                await persistAgentTurnError(config, persisted, {
+                    threadId: request.threadId,
+                    error: error instanceof Error ? error.message : String(error),
+                }).catch(() => null);
+            }
             write({
                 type: 'error',
                 error: error instanceof Error ? error.message : String(error),
