@@ -391,6 +391,104 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     };
   }
 
+  if (type === 'agent_context.input_persisted') {
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '创建任务',
+      detail: typeof payload.runId === 'string' ? `runId: ${payload.runId}` : '已记录本轮输入',
+      status: 'completed',
+      timestamp,
+      method: type,
+    };
+  }
+
+  if (type === 'workspace_artifacts.ingested') {
+    const count = typeof payload.count === 'number' ? payload.count : 0;
+    const artifacts = Array.isArray(payload.artifacts) ? payload.artifacts : [];
+    const content = artifacts
+      .map((artifact) => {
+        if (!isRecord(artifact)) return '';
+        const name = typeof artifact.name === 'string' ? artifact.name : 'attachment';
+        const metadata = isRecord(artifact.metadata) ? artifact.metadata : {};
+        const parser = typeof metadata.parser === 'string' ? metadata.parser : 'unparsed';
+        const parsedText = typeof metadata.parsedTextRelativePath === 'string' ? metadata.parsedTextRelativePath : '';
+        return [name, parser, parsedText].filter(Boolean).join(' | ');
+      })
+      .filter(Boolean)
+      .join('\n');
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '解析附件',
+      detail: count > 0 ? `已处理 ${count} 个附件` : '无附件或解析警告',
+      status: Array.isArray(payload.warnings) && payload.warnings.length > 0 ? 'error' : 'completed',
+      timestamp,
+      method: type,
+      content,
+    };
+  }
+
+  if (type === 'agent_context.loaded') {
+    const summaryChars = typeof payload.summaryChars === 'number' ? payload.summaryChars : 0;
+    const messageCount = typeof payload.messageCount === 'number' ? payload.messageCount : 0;
+    const artifactCount = typeof payload.artifactCount === 'number' ? payload.artifactCount : 0;
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '加载上下文',
+      detail: `摘要 ${summaryChars} 字符，历史消息 ${messageCount} 条，附件 ${artifactCount} 个`,
+      status: 'completed',
+      timestamp,
+      method: type,
+    };
+  }
+
+  if (type === 'hermes.profile.updated' || type === 'hermes.profile.loaded') {
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: type === 'hermes.profile.updated' ? '更新用户画像' : '加载用户画像',
+      detail: type === 'hermes.profile.loaded'
+        ? `画像条目 ${typeof payload.entryCount === 'number' ? payload.entryCount : 0} 条`
+        : '已记录新的长期偏好/画像线索',
+      status: 'completed',
+      timestamp,
+      method: type,
+    };
+  }
+
+  if (type === 'hermes.source_runtime.starting') {
+    const model = typeof payload.model === 'string' ? payload.model : '';
+    const sessionMode = typeof payload.sessionMode === 'string' ? payload.sessionMode : '';
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '启动 Hermes/Codex',
+      detail: [model, sessionMode].filter(Boolean).join(' · ') || '正在进入 agent loop',
+      status: 'running',
+      timestamp,
+      method: type,
+    };
+  }
+
+  if (type === 'hermes.source_runtime.completed') {
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '完成 Hermes/Codex',
+      detail: typeof payload.sessionId === 'string' ? `sessionId: ${payload.sessionId}` : 'agent loop 已完成',
+      status: 'completed',
+      timestamp,
+      method: type,
+    };
+  }
+
+  if (type.startsWith('runtime_state.')) {
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '同步运行状态',
+      detail: type.replace('runtime_state.', ''),
+      status: type.includes('cleaned') || type.includes('flushed') || type.includes('hydrated') ? 'completed' : 'running',
+      timestamp,
+      method: type,
+    };
+  }
+
   const notification = getCodexNotification(envelope);
   if (notification) {
     const method = String(notification.method || '');
