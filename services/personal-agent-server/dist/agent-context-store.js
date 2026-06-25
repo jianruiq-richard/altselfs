@@ -244,7 +244,7 @@ export async function getAgentThreadRuntimeStatus(config, input) {
             'limit 1',
         ].join(' '), threadValues),
         pool.query([
-            'select id, investor_id, thread_id, status, route, error, started_at, completed_at, created_at, updated_at',
+            'select id, investor_id, thread_id, status, route, result, error, started_at, completed_at, created_at, updated_at',
             'from agent_context_runs',
             'where thread_id = $1',
             input.investorId ? 'and investor_id = $2' : '',
@@ -335,6 +335,13 @@ export async function persistAgentTurnCancelled(config, input) {
         ]);
     }
 }
+export async function persistAgentRunEvent(config, input) {
+    if (!config.contextDatabaseUrl)
+        return;
+    const pool = await getContextPostgresPool(config.contextDatabaseUrl);
+    await ensureAgentContextSchema(pool);
+    await persistAgentRunEvents(pool, input.runId, [input.event], { startIndex: input.index });
+}
 export async function persistAgentTurnSuccess(config, input, params) {
     const pool = await getRequiredContextPool(config);
     const assistantMessageId = id('msg');
@@ -369,7 +376,7 @@ export async function persistAgentTurnSuccess(config, input, params) {
             raw: params.raw ?? null,
         }),
     ]);
-    await persistAgentRunEvents(pool, input.runId, params.events);
+    await persistAgentRunEvents(pool, input.runId, params.events, { startIndex: 0 });
     await upsertThreadSummary(pool, params.threadId, input.currentUserMessage, params.reply);
     await pool.query([
         'update agent_context_runs',
@@ -578,16 +585,25 @@ async function createAgentContextSchema(pool) {
     await pool.query('create index if not exists agent_context_tool_calls_thread_created_idx on agent_context_tool_calls(thread_id, created_at)');
     await pool.query('create index if not exists agent_context_tool_calls_run_created_idx on agent_context_tool_calls(run_id, created_at)');
 }
-async function persistAgentRunEvents(pool, runId, events) {
-    for (const event of events.slice(0, 200)) {
-        await pool.query('insert into agent_context_run_events (id, run_id, type, payload) values ($1, $2, $3, $4::jsonb)', [
-            id('evt'),
+async function persistAgentRunEvents(pool, runId, events, options = {}) {
+    const startIndex = typeof options.startIndex === 'number' && Number.isFinite(options.startIndex)
+        ? Math.max(0, Math.floor(options.startIndex))
+        : null;
+    for (const [offset, event] of events.slice(0, 200).entries()) {
+        const eventId = startIndex === null ? id('evt') : `${runId}:evt:${startIndex + offset}`;
+        await pool.query([
+            'insert into agent_context_run_events (id, run_id, type, payload, created_at)',
+            'values ($1, $2, $3, $4::jsonb, $5::timestamptz)',
+            'on conflict (id) do nothing',
+        ].join(' '), [
+            eventId,
             runId,
             event.type,
             stringifyJson({
                 timestamp: event.timestamp,
                 payload: event.payload,
             }),
+            event.timestamp || new Date().toISOString(),
         ]);
     }
 }

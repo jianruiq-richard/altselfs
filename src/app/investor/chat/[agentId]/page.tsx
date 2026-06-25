@@ -851,6 +851,7 @@ export default function InvestorAgentChatPage() {
   const [assistantDraft, setAssistantDraft] = useState('');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stoppingRun, setStoppingRun] = useState(false);
+  const [recoveringRunState, setRecoveringRunState] = useState(false);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const liveStreamRunIdRef = useRef<string | null>(null);
@@ -1000,7 +1001,7 @@ export default function InvestorAgentChatPage() {
           id: `personal-agent-stopped-${Date.now()}`,
           title: '已请求停止',
           detail: `runId: ${runId}`,
-          status: 'completed',
+          status: 'completed' as const,
           timestamp: new Date().toISOString(),
         },
       ].slice(-18));
@@ -1036,34 +1037,66 @@ export default function InvestorAgentChatPage() {
         : typeof activeRun.id === 'string'
           ? activeRun.id
           : '';
+      const recentEvents = Array.isArray(data.recentEvents) ? data.recentEvents : [];
+      const projected = recentEvents
+        .map((row, index) => {
+          if (!isRecord(row)) return null;
+          const storedPayload = isRecord(row.payload) ? row.payload : {};
+          const eventPayload = isRecord(storedPayload.payload) ? storedPayload.payload : {};
+          const envelope = {
+            type: 'event',
+            event: {
+              type: typeof row.type === 'string' ? row.type : 'agent_context.event',
+              timestamp: typeof storedPayload.timestamp === 'string'
+                ? storedPayload.timestamp
+                : typeof row.created_at === 'string'
+                  ? row.created_at
+                  : new Date().toISOString(),
+              payload: eventPayload,
+            },
+          };
+          return projectCodexStreamItem(envelope, index);
+        })
+        .filter(Boolean) as CodexStreamItem[];
 
       if (status === 'ACTIVE' && nextRunId) {
         activeRunIdRef.current = nextRunId;
         setActiveRunId(nextRunId);
         setSending(true);
         if (liveStreamRunIdRef.current === nextRunId) return;
-        const recentEvents = Array.isArray(data.recentEvents) ? data.recentEvents : [];
-        const projected = recentEvents
-          .map((row, index) => {
-            if (!isRecord(row)) return null;
-            const storedPayload = isRecord(row.payload) ? row.payload : {};
-            const eventPayload = isRecord(storedPayload.payload) ? storedPayload.payload : {};
-            const envelope = {
-              type: 'event',
-              event: {
-                type: typeof row.type === 'string' ? row.type : 'agent_context.event',
-                timestamp: typeof storedPayload.timestamp === 'string'
-                  ? storedPayload.timestamp
-                  : typeof row.created_at === 'string'
-                    ? row.created_at
-                    : new Date().toISOString(),
-                payload: eventPayload,
-              },
-            };
-            return projectCodexStreamItem(envelope, index);
-          })
-          .filter(Boolean) as CodexStreamItem[];
         if (projected.length > 0) setCodexStreamItems(projected.slice(-18));
+        return;
+      }
+
+      const recentRuns = Array.isArray(data.recentRuns) ? data.recentRuns.filter(isRecord) : [];
+      const latestTerminalRun = [activeRun, ...recentRuns].find((run) => {
+        const runStatus = typeof run.status === 'string' ? run.status : '';
+        return ['SUCCESS', 'ERROR', 'CANCELLED'].includes(runStatus);
+      });
+      const latestTerminalStatus = isRecord(latestTerminalRun) && typeof latestTerminalRun.status === 'string'
+        ? latestTerminalRun.status
+        : '';
+      if (latestTerminalRun && latestTerminalStatus === 'SUCCESS') {
+        activeRunIdRef.current = null;
+        liveStreamRunIdRef.current = null;
+        setActiveRunId(null);
+        setSending(false);
+        setAssistantDraft('');
+        if (projected.length > 0) setCodexStreamItems(projected.slice(-18));
+
+        const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+        if (recoveredMessages.length > 0) {
+          setMessages(recoveredMessages);
+        } else {
+          const result = isRecord(latestTerminalRun.result) ? latestTerminalRun.result : {};
+          const reply = typeof result.reply === 'string' ? result.reply.trim() : '';
+          if (reply) {
+            setMessages((prev) => {
+              if (prev.some((message) => message.role === 'assistant' && message.content === reply)) return prev;
+              return [...prev, { role: 'assistant', content: reply }];
+            });
+          }
+        }
         return;
       }
 
@@ -1081,6 +1114,7 @@ export default function InvestorAgentChatPage() {
   const loadData = useCallback(async () => {
     if (!isExecutive) return;
     setLoading(true);
+    setRecoveringRunState(true);
     setError(null);
     try {
       const res = await fetch('/api/investor/personal-agent', {
@@ -1102,7 +1136,9 @@ export default function InvestorAgentChatPage() {
       setPlannerTrace([]);
       setCodexStreamItems([]);
       setAssistantDraft('');
-      if (data.threadId) void refreshPersonalAgentStatus(String(data.threadId));
+      if (data.threadId) {
+        await refreshPersonalAgentStatus(String(data.threadId));
+      }
       if (showExecutiveControls && getStoredActiveRunId()) {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
       }
@@ -1110,6 +1146,7 @@ export default function InvestorAgentChatPage() {
       setError('网络错误，请稍后重试');
     } finally {
       setLoading(false);
+      setRecoveringRunState(false);
     }
   }, [isExecutive, refreshPersonalAgentStatus, resumeExecutiveRun, showExecutiveControls]);
 
@@ -1222,7 +1259,7 @@ export default function InvestorAgentChatPage() {
     const content = (textFromSuggestion || input).trim();
     const requestAttachments = attachments;
     const hasAttachments = requestAttachments.length > 0;
-    if ((!content && !hasAttachments) || sending || !isExecutive) return;
+    if ((!content && !hasAttachments) || sending || recoveringRunState || !isExecutive) return;
 
     const attachmentList = formatAttachmentList(requestAttachments);
     const displayContent = [
@@ -1345,8 +1382,10 @@ export default function InvestorAgentChatPage() {
         if (parsed) handleEnvelope(parsed);
       }
 
-      if (finalData?.cancelled) {
-        const finalErrorMessage = finalData.error || '已停止本次执行。';
+      const receivedFinalData = finalData as PersonalAgentFinalData | null;
+
+      if (receivedFinalData?.cancelled) {
+        const finalErrorMessage = receivedFinalData.error || '已停止本次执行。';
         setError(finalErrorMessage);
         setMessages(nextMessages);
         setAssistantDraft('');
@@ -1356,15 +1395,15 @@ export default function InvestorAgentChatPage() {
             id: `final-cancelled-${Date.now()}`,
             title: '本轮已停止',
             detail: finalErrorMessage,
-            status: 'completed',
+            status: 'completed' as const,
             timestamp: new Date().toISOString(),
           },
         ].slice(-18));
         return;
       }
 
-      if (!finalData || finalStatus >= 400) {
-        const finalError = (finalData as { error?: unknown } | null)?.error;
+      if (!receivedFinalData || finalStatus >= 400) {
+        const finalError = (receivedFinalData as { error?: unknown } | null)?.error;
         const finalErrorMessage = typeof finalError === 'string' ? finalError : '发送失败';
         setError(finalErrorMessage);
         setMessages(messages);
@@ -1376,14 +1415,14 @@ export default function InvestorAgentChatPage() {
             id: `final-error-${Date.now()}`,
             title: '执行失败',
             detail: finalErrorMessage,
-            status: 'error',
+            status: 'error' as const,
             timestamp: new Date().toISOString(),
           },
         ]);
         return;
       }
 
-      const completedData = finalData as PersonalAgentFinalData;
+      const completedData = receivedFinalData;
       liveStreamRunIdRef.current = null;
       setThreadId(typeof completedData.threadId === 'string' ? completedData.threadId : threadId);
       if (Array.isArray(completedData.messages) && completedData.messages.length >= nextMessages.length) {
@@ -1793,21 +1832,30 @@ export default function InvestorAgentChatPage() {
                   type="button"
                   title="添加附件"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={sending}
+                  disabled={sending || recoveringRunState}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50 sm:h-9 sm:w-9"
                 >
                   <Paperclip className="h-4 w-4" />
                 </button>
-                {sending ? (
+                {sending || recoveringRunState ? (
                   <button
                     type="button"
                     onClick={() => void stopPersonalAgentRun()}
-                    disabled={stoppingRun || !activeRunId}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 sm:py-2"
-                    title={activeRunId ? '停止本轮任务' : '正在创建本轮任务'}
+                    disabled={recoveringRunState || stoppingRun || !activeRunId}
+                    className={[
+                      'inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:py-2',
+                      recoveringRunState ? 'bg-slate-500' : 'bg-red-600 hover:bg-red-700',
+                    ].join(' ')}
+                    title={
+                      recoveringRunState
+                        ? '正在恢复任务状态'
+                        : activeRunId
+                          ? '停止本轮任务'
+                          : '正在创建本轮任务'
+                    }
                   >
-                    <Square className="h-3.5 w-3.5 fill-current" />
-                    {stoppingRun ? '停止中...' : activeRunId ? '停止' : '准备中...'}
+                    {recoveringRunState ? null : <Square className="h-3.5 w-3.5 fill-current" />}
+                    {recoveringRunState ? '恢复中...' : stoppingRun ? '停止中...' : activeRunId ? '停止' : '准备中...'}
                   </button>
                 ) : (
                   <button

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import { runWebSearchTool } from './tools/web-search.js';
-import { getAgentThreadRuntimeStatus, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
+import { getAgentThreadRuntimeStatus, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 export function createHttpServer(agent, config, memoryReviewQueue) {
     return http.createServer(async (req, res) => {
@@ -116,9 +116,15 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     if (!config)
                         throw new Error('config missing');
                     persisted = await persistAgentTurnInput(config, turnRequest);
+                    let eventIndex = 0;
                     const result = await agent.startTurn({
                         ...turnRequest,
                         metadata: { ...(turnRequest.metadata || {}), runId: persisted.runId },
+                        onEvent: async (event) => {
+                            const index = eventIndex;
+                            eventIndex += 1;
+                            await persistAgentRunEvent(config, { runId: persisted.runId, event, index }).catch(() => null);
+                        },
                     });
                     await persistAgentTurnSuccess(config, persisted, {
                         threadId: result.threadId,
@@ -201,6 +207,7 @@ function streamTurnStart(res, agent, request, config) {
     void (async () => {
         let persisted = null;
         let runHeartbeat = null;
+        let eventIndex = 0;
         try {
             write({ type: 'turn_started', timestamp: new Date().toISOString() });
             if (!config)
@@ -234,7 +241,10 @@ function streamTurnStart(res, agent, request, config) {
                 ...request,
                 metadata: { ...(request.metadata || {}), runId: persisted.runId },
                 onEvent: async (event) => {
+                    const index = eventIndex;
+                    eventIndex += 1;
                     write({ type: 'event', event });
+                    await persistAgentRunEvent(config, { runId: persisted.runId, event, index }).catch(() => null);
                 },
             });
             clearInterval(runHeartbeat);

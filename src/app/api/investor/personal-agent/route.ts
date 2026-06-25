@@ -265,10 +265,18 @@ export async function GET(req: NextRequest) {
           investorId: investor.id,
           agentType: PERSONAL_AGENT_TYPE,
           threadId: requestedThreadId,
-          limit: 1,
+          limit: 60,
         })
       : await getLatestThreadWithMessages(investor.id, PERSONAL_AGENT_TYPE);
     const threadId = requestedThreadId || (thread && 'id' in thread ? thread.id : null);
+    const statusMessages = thread && Array.isArray(thread.messages) ? toClientMessages(thread.messages) : [];
+    const statusHasMore = thread
+      ? 'hasMore' in thread
+        ? Boolean(thread.hasMore)
+        : '_count' in thread
+          ? thread._count.messages > thread.messages.length
+          : false
+      : false;
     if (!threadId || !thread) {
       return NextResponse.json({
         threadId: threadId || null,
@@ -277,6 +285,8 @@ export async function GET(req: NextRequest) {
         activeSessionId: null,
         diskBytes: null,
         recentEvents: [],
+        messages: [],
+        hasMore: false,
       });
     }
 
@@ -297,7 +307,12 @@ export async function GET(req: NextRequest) {
           { status: 502 }
         );
       }
-      return NextResponse.json({ threadId, ...statusPayload });
+      return NextResponse.json({
+        threadId,
+        ...statusPayload,
+        messages: statusMessages,
+        hasMore: statusHasMore,
+      });
     } catch (error) {
       return NextResponse.json(
         { error: `个人 Agent 状态服务不可用：${error instanceof Error ? error.message : String(error)}` },

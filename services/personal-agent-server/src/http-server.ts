@@ -9,6 +9,7 @@ import type { PersonalMainAgent } from './main-agent.js';
 import { runWebSearchTool } from './tools/web-search.js';
 import {
   getAgentThreadRuntimeStatus,
+  persistAgentRunEvent,
   persistAgentTurnError,
   persistAgentTurnCancelled,
   persistAgentTurnInput,
@@ -128,9 +129,15 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         try {
           if (!config) throw new Error('config missing');
           persisted = await persistAgentTurnInput(config, turnRequest);
+          let eventIndex = 0;
           const result = await agent.startTurn({
             ...turnRequest,
             metadata: { ...(turnRequest.metadata || {}), runId: persisted.runId },
+            onEvent: async (event) => {
+              const index = eventIndex;
+              eventIndex += 1;
+              await persistAgentRunEvent(config, { runId: persisted!.runId, event, index }).catch(() => null);
+            },
           });
           await persistAgentTurnSuccess(config, persisted, {
             threadId: result.threadId,
@@ -225,6 +232,7 @@ function streamTurnStart(
   void (async () => {
     let persisted: PersistedAgentTurnInput | null = null;
     let runHeartbeat: ReturnType<typeof setInterval> | null = null;
+    let eventIndex = 0;
     try {
       write({ type: 'turn_started', timestamp: new Date().toISOString() });
       if (!config) throw new Error('config missing');
@@ -257,7 +265,10 @@ function streamTurnStart(
         ...request,
         metadata: { ...(request.metadata || {}), runId: persisted.runId },
         onEvent: async (event) => {
+          const index = eventIndex;
+          eventIndex += 1;
           write({ type: 'event', event });
+          await persistAgentRunEvent(config, { runId: persisted!.runId, event, index }).catch(() => null);
         },
       });
       clearInterval(runHeartbeat);
