@@ -33,6 +33,8 @@ type PersonalAgentResponse = {
 
 type PersonalAgentStreamResult = PersonalAgentResponse & {
   threadId?: string;
+  cancelled?: boolean;
+  error?: string;
 };
 
 type AttachmentKind = 'image' | 'video' | 'pdf' | 'document' | 'file';
@@ -256,6 +258,54 @@ export async function GET(req: NextRequest) {
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const requestedThreadId = req.nextUrl.searchParams.get('threadId')?.trim();
+  const statusRequested = req.nextUrl.searchParams.get('status') === '1';
+  if (statusRequested) {
+    const thread = requestedThreadId
+      ? await getThreadMessagesPage({
+          investorId: investor.id,
+          agentType: PERSONAL_AGENT_TYPE,
+          threadId: requestedThreadId,
+          limit: 1,
+        })
+      : await getLatestThreadWithMessages(investor.id, PERSONAL_AGENT_TYPE);
+    const threadId = requestedThreadId || (thread && 'id' in thread ? thread.id : null);
+    if (!threadId || !thread) {
+      return NextResponse.json({
+        threadId: threadId || null,
+        status: 'IDLE',
+        activeRunId: null,
+        activeSessionId: null,
+        diskBytes: null,
+        recentEvents: [],
+      });
+    }
+
+    try {
+      const query = new URLSearchParams({
+        threadId,
+        investorId: investor.id,
+        userId: investor.email || investor.id,
+        recentEventLimit: '30',
+      });
+      const response = await fetch(`${getPersonalAgentServerUrl()}/v1/threads/status?${query.toString()}`, {
+        cache: 'no-store',
+      });
+      const statusPayload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!response.ok) {
+        return NextResponse.json(
+          { error: typeof statusPayload.error === 'string' ? statusPayload.error : `personal-agent-server HTTP ${response.status}` },
+          { status: 502 }
+        );
+      }
+      return NextResponse.json({ threadId, ...statusPayload });
+    } catch (error) {
+      return NextResponse.json(
+        { error: `个人 Agent 状态服务不可用：${error instanceof Error ? error.message : String(error)}` },
+        { status: 502 }
+      );
+    }
+  }
+
   if (requestedThreadId) {
     const beforeMessageId = req.nextUrl.searchParams.get('before')?.trim() || null;
     const parsedLimit = Number(req.nextUrl.searchParams.get('limit') || '');
@@ -390,6 +440,52 @@ export async function POST(req: NextRequest) {
   });
 }
 
+export async function DELETE(req: NextRequest) {
+  const investor = await getInvestorOrNull();
+  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = (await req.json().catch(() => ({}))) as { runId?: unknown; threadId?: unknown };
+  const runId = typeof body.runId === 'string' ? body.runId.trim() : '';
+  const threadId = typeof body.threadId === 'string' ? body.threadId.trim() : '';
+  if (!runId) return NextResponse.json({ error: 'runId is required' }, { status: 400 });
+  if (threadId) {
+    const thread = await getThreadMessagesPage({
+      investorId: investor.id,
+      agentType: PERSONAL_AGENT_TYPE,
+      threadId,
+      limit: 1,
+    });
+    if (!thread) return NextResponse.json({ error: 'Thread not found' }, { status: 404 });
+  }
+
+  try {
+    const response = await fetch(`${getPersonalAgentServerUrl()}/v1/runs/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        runId,
+        threadId: threadId || undefined,
+        investorId: investor.id,
+        userId: investor.email || investor.id,
+      }),
+      cache: 'no-store',
+    });
+    const result = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: typeof result.error === 'string' ? result.error : `personal-agent-server HTTP ${response.status}` },
+        { status: 502 }
+      );
+    }
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      { error: `停止个人 Agent 失败：${error instanceof Error ? error.message : String(error)}` },
+      { status: 502 }
+    );
+  }
+}
+
 function streamPersonalAgentTurn(params: {
   threadId: string;
   userMessage: string;
@@ -479,6 +575,21 @@ function streamPersonalAgentTurn(params: {
           const reply = typeof finalResult?.reply === 'string' && finalResult.reply.trim()
             ? finalResult.reply.trim()
             : '个人 Agent 已完成本轮处理，但没有返回可展示的回复。';
+
+          if (finalResult?.cancelled || finalResult?.error) {
+            write({
+              type: 'final',
+              status: finalResult.cancelled ? 499 : 500,
+              data: {
+                threadId: params.threadId,
+                runId: finalResult.runId,
+                cancelled: Boolean(finalResult.cancelled),
+                error: finalResult.error || '发送失败',
+                messages: displayMessages(params.messages),
+              },
+            });
+            return;
+          }
 
           await appendThreadMessage({
             threadId: params.threadId,

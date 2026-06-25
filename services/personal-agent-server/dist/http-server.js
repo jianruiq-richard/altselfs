@@ -4,7 +4,8 @@ import path from 'node:path';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import { runWebSearchTool } from './tools/web-search.js';
-import { persistAgentTurnError, persistAgentTurnInput, persistAgentTurnSuccess, } from './agent-context-store.js';
+import { getAgentThreadRuntimeStatus, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
+import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 export function createHttpServer(agent, config, memoryReviewQueue) {
     return http.createServer(async (req, res) => {
         try {
@@ -26,6 +27,46 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 const limit = Number(url.searchParams.get('limit') || 50);
                 return json(res, 200, {
                     jobs: memoryReviewQueue ? await memoryReviewQueue.listRecent(Number.isFinite(limit) ? limit : 50) : [],
+                });
+            }
+            if (req.method === 'GET' && url.pathname === '/v1/threads/status') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                const threadId = url.searchParams.get('threadId')?.trim() || '';
+                if (!threadId)
+                    return json(res, 400, { error: 'threadId is required' });
+                const status = await getAgentThreadRuntimeStatus(config, {
+                    threadId,
+                    investorId: url.searchParams.get('investorId')?.trim() || undefined,
+                    userId: url.searchParams.get('userId')?.trim() || undefined,
+                    recentEventLimit: Number(url.searchParams.get('recentEventLimit') || 20),
+                });
+                return json(res, 200, {
+                    ...status,
+                    activeRuns: listActiveRuns().filter((run) => run.threadId === threadId),
+                });
+            }
+            if (req.method === 'POST' && url.pathname === '/v1/runs/stop') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const runId = typeof body.runId === 'string' ? body.runId.trim() : '';
+                if (!runId)
+                    return json(res, 400, { error: 'runId is required' });
+                const threadId = typeof body.threadId === 'string' ? body.threadId.trim() : undefined;
+                const cancelled = cancelActiveRun(runId);
+                await persistAgentTurnCancelled(config, {
+                    runId,
+                    threadId: threadId || (typeof cancelled.threadId === 'string' ? cancelled.threadId : undefined),
+                    investorId: typeof body.investorId === 'string' ? body.investorId : undefined,
+                    userId: typeof body.userId === 'string' ? body.userId : undefined,
+                    reason: 'cancelled by user',
+                }).catch(() => null);
+                return json(res, 200, {
+                    ok: true,
+                    ...cancelled,
                 });
             }
             if (req.method === 'POST' && url.pathname === '/internal/tools/web-search') {
@@ -95,10 +136,28 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 }
                 catch (error) {
                     if (config) {
-                        await persistAgentTurnError(config, persisted, {
-                            threadId: turnRequest.threadId,
-                            error: error instanceof Error ? error.message : String(error),
-                        }).catch(() => null);
+                        if (isAgentRunCancelledError(error) && persisted) {
+                            await persistAgentTurnCancelled(config, {
+                                runId: persisted.runId,
+                                threadId: turnRequest.threadId,
+                                investorId: persisted.investorId,
+                                userId: turnRequest.userId,
+                                reason: 'cancelled by user',
+                            }).catch(() => null);
+                        }
+                        else {
+                            await persistAgentTurnError(config, persisted, {
+                                threadId: turnRequest.threadId,
+                                error: error instanceof Error ? error.message : String(error),
+                            }).catch(() => null);
+                        }
+                    }
+                    if (isAgentRunCancelledError(error)) {
+                        return json(res, 499, {
+                            error: '已停止本次执行。',
+                            cancelled: true,
+                            runId: persisted?.runId,
+                        });
                     }
                     throw error;
                 }
@@ -141,6 +200,7 @@ function streamTurnStart(res, agent, request, config) {
     });
     void (async () => {
         let persisted = null;
+        let runHeartbeat = null;
         try {
             write({ type: 'turn_started', timestamp: new Date().toISOString() });
             if (!config)
@@ -158,6 +218,18 @@ function streamTurnStart(res, agent, request, config) {
                     },
                 },
             });
+            write({
+                type: 'run',
+                runId: persisted.runId,
+                threadId: request.threadId || null,
+                timestamp: new Date().toISOString(),
+            });
+            runHeartbeat = setInterval(() => {
+                void touchAgentRunHeartbeat(config, {
+                    threadId: request.threadId || '',
+                    runId: persisted?.runId || null,
+                }).catch(() => null);
+            }, 15_000);
             const result = await agent.startTurn({
                 ...request,
                 metadata: { ...(request.metadata || {}), runId: persisted.runId },
@@ -165,6 +237,8 @@ function streamTurnStart(res, agent, request, config) {
                     write({ type: 'event', event });
                 },
             });
+            clearInterval(runHeartbeat);
+            runHeartbeat = null;
             await persistAgentTurnSuccess(config, persisted, {
                 threadId: result.threadId,
                 route: result.route,
@@ -176,17 +250,35 @@ function streamTurnStart(res, agent, request, config) {
         }
         catch (error) {
             if (config) {
-                await persistAgentTurnError(config, persisted, {
-                    threadId: request.threadId,
-                    error: error instanceof Error ? error.message : String(error),
-                }).catch(() => null);
+                if (isAgentRunCancelledError(error) && persisted) {
+                    await persistAgentTurnCancelled(config, {
+                        runId: persisted.runId,
+                        threadId: request.threadId,
+                        investorId: persisted.investorId,
+                        userId: request.userId,
+                        reason: 'cancelled by user',
+                    }).catch(() => null);
+                }
+                else {
+                    await persistAgentTurnError(config, persisted, {
+                        threadId: request.threadId,
+                        error: error instanceof Error ? error.message : String(error),
+                    }).catch(() => null);
+                }
             }
             write({
-                type: 'error',
-                error: error instanceof Error ? error.message : String(error),
+                type: 'final',
+                status: isAgentRunCancelledError(error) ? 499 : 500,
+                result: {
+                    runId: persisted?.runId,
+                    cancelled: isAgentRunCancelledError(error),
+                    error: isAgentRunCancelledError(error) ? '已停止本次执行。' : error instanceof Error ? error.message : String(error),
+                },
             });
         }
         finally {
+            if (runHeartbeat)
+                clearInterval(runHeartbeat);
             clearInterval(heartbeat);
             if (!closed) {
                 closed = true;

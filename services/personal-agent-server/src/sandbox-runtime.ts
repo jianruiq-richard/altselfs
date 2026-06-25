@@ -98,6 +98,33 @@ export async function writeSandboxState(paths: RuntimePaths, patch: Record<strin
   await fs.writeFile(paths.statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 }
 
+export async function calculateDirectoryBytes(root: string) {
+  try {
+    return await calculateDirectoryBytesInner(root);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+    throw error;
+  }
+}
+
+async function calculateDirectoryBytesInner(root: string): Promise<number> {
+  const entries = await fs.readdir(root, { withFileTypes: true });
+  let total = 0;
+  for (const entry of entries) {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) {
+      total += await calculateDirectoryBytesInner(fullPath);
+      continue;
+    }
+    if (entry.isFile()) {
+      const stat = await fs.stat(fullPath);
+      total += stat.size;
+    }
+  }
+  return total;
+}
+
 export function sanitizePathSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 120) || 'anonymous';
 }

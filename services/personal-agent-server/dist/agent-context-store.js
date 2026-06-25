@@ -150,6 +150,191 @@ export async function persistAgentArtifacts(config, artifacts) {
         ]);
     }
 }
+export async function upsertAgentSandboxControlPlane(config, input) {
+    if (!config.contextDatabaseUrl)
+        return;
+    const pool = await getContextPostgresPool(config.contextDatabaseUrl);
+    await ensureAgentContextSchema(pool);
+    const sandboxPath = input.paths.threadRoot || input.paths.workspace;
+    const activeRunId = input.status === 'ACTIVE' ? input.runId : null;
+    const metadata = stringifyJson({
+        ...(input.metadata || {}),
+        mode: input.paths.mode,
+        userSegment: input.paths.userSegment,
+        threadSegment: input.paths.threadSegment,
+        error: input.error || null,
+    });
+    await pool.query([
+        'insert into agent_context_threads',
+        '(thread_id, user_id, investor_id, status, sandbox_path, active_session_id, last_active_at, metadata)',
+        'values ($1, $2, $3, $4, $5, $6, now(), $7::jsonb)',
+        'on conflict (thread_id) do update set',
+        'user_id = excluded.user_id, investor_id = excluded.investor_id,',
+        'status = excluded.status, sandbox_path = excluded.sandbox_path,',
+        'active_session_id = excluded.active_session_id, last_active_at = now(),',
+        'metadata = excluded.metadata, updated_at = now()',
+    ].join(' '), [
+        input.threadId,
+        input.userId,
+        input.investorId,
+        input.status,
+        sandboxPath,
+        input.activeSessionId || null,
+        metadata,
+    ]);
+    await pool.query([
+        'insert into agent_context_sandbox_state',
+        '(',
+        'thread_id, user_id, investor_id, status, sandbox_path, user_root, thread_root,',
+        'hermes_home, codex_home, workspace, active_run_id, active_session_id,',
+        'last_heartbeat, disk_bytes, metadata',
+        ')',
+        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), $13, $14::jsonb)',
+        'on conflict (thread_id) do update set',
+        'user_id = excluded.user_id, investor_id = excluded.investor_id,',
+        'status = excluded.status, sandbox_path = excluded.sandbox_path,',
+        'user_root = excluded.user_root, thread_root = excluded.thread_root,',
+        'hermes_home = excluded.hermes_home, codex_home = excluded.codex_home, workspace = excluded.workspace,',
+        'active_run_id = excluded.active_run_id, active_session_id = excluded.active_session_id,',
+        'last_heartbeat = now(), disk_bytes = excluded.disk_bytes,',
+        'metadata = excluded.metadata, updated_at = now()',
+    ].join(' '), [
+        input.threadId,
+        input.userId,
+        input.investorId,
+        input.status,
+        sandboxPath,
+        input.paths.userRoot || null,
+        input.paths.threadRoot || null,
+        input.paths.hermesHome,
+        input.paths.codexHome,
+        input.paths.workspace,
+        activeRunId,
+        input.activeSessionId || null,
+        typeof input.diskBytes === 'number' ? Math.max(0, Math.floor(input.diskBytes)) : null,
+        metadata,
+    ]);
+}
+export async function getAgentThreadRuntimeStatus(config, input) {
+    const pool = await getRequiredContextPool(config);
+    const threadValues = [input.threadId];
+    const threadWhere = ['thread_id = $1'];
+    if (input.investorId) {
+        threadValues.push(input.investorId);
+        threadWhere.push(`investor_id = $${threadValues.length}`);
+    }
+    if (input.userId) {
+        threadValues.push(input.userId);
+        threadWhere.push(`user_id = $${threadValues.length}`);
+    }
+    const [threadResult, sandboxResult, runsResult] = await Promise.all([
+        pool.query([
+            'select thread_id, user_id, investor_id, status, sandbox_path, active_session_id,',
+            'last_active_at, metadata, created_at, updated_at',
+            'from agent_context_threads',
+            `where ${threadWhere.join(' and ')}`,
+            'limit 1',
+        ].join(' '), threadValues),
+        pool.query([
+            'select thread_id, user_id, investor_id, status, sandbox_path, user_root, thread_root,',
+            'hermes_home, codex_home, workspace, active_run_id, active_session_id,',
+            'last_heartbeat, disk_bytes, metadata, created_at, updated_at',
+            'from agent_context_sandbox_state',
+            `where ${threadWhere.join(' and ')}`,
+            'limit 1',
+        ].join(' '), threadValues),
+        pool.query([
+            'select id, investor_id, thread_id, status, route, error, started_at, completed_at, created_at, updated_at',
+            'from agent_context_runs',
+            'where thread_id = $1',
+            input.investorId ? 'and investor_id = $2' : '',
+            'order by created_at desc',
+            'limit 5',
+        ].join(' '), input.investorId ? [input.threadId, input.investorId] : [input.threadId]),
+    ]);
+    const sandbox = sandboxResult.rows[0] || null;
+    const activeRunId = typeof sandbox?.active_run_id === 'string' ? sandbox.active_run_id : '';
+    const activeRun = activeRunId
+        ? runsResult.rows.find((run) => run.id === activeRunId) || null
+        : runsResult.rows.find((run) => run.status === 'RUNNING') || null;
+    const runIds = activeRunId
+        ? [activeRunId]
+        : runsResult.rows
+            .map((run) => (typeof run.id === 'string' ? run.id : ''))
+            .filter(Boolean)
+            .slice(0, 3);
+    let recentEvents = [];
+    if (runIds.length > 0) {
+        const placeholders = runIds.map((_, index) => `$${index + 1}`).join(', ');
+        const eventLimit = Math.min(Math.max(input.recentEventLimit || 20, 1), 100);
+        const eventsResult = await pool.query([
+            'select id, run_id, type, payload, created_at',
+            'from agent_context_run_events',
+            `where run_id in (${placeholders})`,
+            'order by created_at desc',
+            `limit ${eventLimit}`,
+        ].join(' '), runIds);
+        recentEvents = eventsResult.rows.reverse();
+    }
+    return {
+        thread: threadResult.rows[0] || null,
+        sandbox,
+        activeRun,
+        recentRuns: runsResult.rows,
+        recentEvents,
+    };
+}
+export async function touchAgentRunHeartbeat(config, input) {
+    if (!config.contextDatabaseUrl)
+        return;
+    const pool = await getContextPostgresPool(config.contextDatabaseUrl);
+    await ensureAgentContextSchema(pool);
+    await pool.query([
+        'update agent_context_sandbox_state',
+        'set last_heartbeat = now(), updated_at = now()',
+        input.runId ? ', active_run_id = $2' : '',
+        'where thread_id = $1',
+    ].join(' '), input.runId ? [input.threadId, input.runId] : [input.threadId]);
+    await pool.query('update agent_context_threads set last_active_at = now(), updated_at = now() where thread_id = $1', [input.threadId]);
+}
+export async function persistAgentTurnCancelled(config, input) {
+    const pool = await getRequiredContextPool(config);
+    await pool.query([
+        'update agent_context_runs',
+        'set status = $2, error = $3, completed_at = now(), updated_at = now()',
+        'where id = $1',
+    ].join(' '), [input.runId, 'CANCELLED', input.reason || 'cancelled by user']);
+    if (input.threadId) {
+        await pool.query([
+            'update agent_context_sandbox_state',
+            'set status = $2, active_run_id = null, last_heartbeat = now(),',
+            "metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb, updated_at = now()",
+            'where thread_id = $1',
+        ].join(' '), [
+            input.threadId,
+            'IDLE',
+            stringifyJson({
+                phase: 'cancelled',
+                cancelledAt: new Date().toISOString(),
+                cancelledRunId: input.runId,
+                reason: input.reason || 'cancelled by user',
+            }),
+        ]);
+        await pool.query([
+            'update agent_context_threads',
+            'set status = $2, last_active_at = now(),',
+            "metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb, updated_at = now()",
+            'where thread_id = $1',
+        ].join(' '), [
+            input.threadId,
+            'IDLE',
+            stringifyJson({
+                cancelledRunId: input.runId,
+                cancelledAt: new Date().toISOString(),
+            }),
+        ]);
+    }
+}
 export async function persistAgentTurnSuccess(config, input, params) {
     const pool = await getRequiredContextPool(config);
     const assistantMessageId = id('msg');
@@ -267,6 +452,47 @@ async function ensureAgentContextSchema(pool) {
     return schemaReady;
 }
 async function createAgentContextSchema(pool) {
+    await pool.query(`
+    create table if not exists agent_context_threads (
+      thread_id text primary key,
+      user_id text not null,
+      investor_id text not null,
+      status text not null default 'IDLE',
+      sandbox_path text,
+      active_session_id text,
+      last_active_at timestamptz,
+      metadata jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+    await pool.query('create index if not exists agent_context_threads_user_active_idx on agent_context_threads(user_id, status, last_active_at desc)');
+    await pool.query('create index if not exists agent_context_threads_investor_active_idx on agent_context_threads(investor_id, status, last_active_at desc)');
+    await pool.query(`
+    create table if not exists agent_context_sandbox_state (
+      thread_id text primary key,
+      user_id text not null,
+      investor_id text not null,
+      status text not null default 'IDLE',
+      sandbox_path text,
+      user_root text,
+      thread_root text,
+      hermes_home text,
+      codex_home text,
+      workspace text,
+      active_run_id text,
+      active_session_id text,
+      pid integer,
+      container_id text,
+      last_heartbeat timestamptz,
+      disk_bytes bigint,
+      metadata jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+    await pool.query('create index if not exists agent_context_sandbox_state_user_status_idx on agent_context_sandbox_state(user_id, status, updated_at desc)');
+    await pool.query('create index if not exists agent_context_sandbox_state_disk_idx on agent_context_sandbox_state(disk_bytes desc)');
     await pool.query(`
     create table if not exists agent_context_messages (
       id text primary key,

@@ -1,13 +1,26 @@
 import { spawn } from 'node:child_process';
+import { Buffer } from 'node:buffer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { loadCleanTurnContext } from '../agent-context-store.js';
+import {
+  loadCleanTurnContext,
+  upsertAgentSandboxControlPlane,
+  type AgentSandboxControlPlaneInput,
+} from '../agent-context-store.js';
 import { ingestWorkspaceAttachments } from '../artifact-ingestion.js';
 import type { ServerConfig } from '../config.js';
 import type { MemoryReviewJobStore } from '../memory-review-queue.js';
 import { LocalProfileStore, type UserProfileStore } from '../profile-store.js';
+import {
+  createRunCancelledError,
+  isAgentRunCancelledError,
+  isRunCancelled,
+  registerActiveRun,
+  unregisterActiveRun,
+} from '../run-control.js';
 import type { RuntimeStateStore } from '../runtime-state-store.js';
 import {
+  calculateDirectoryBytes,
   prepareRuntimeDirectories,
   readSandboxState,
   resolveRuntimePaths,
@@ -46,9 +59,11 @@ export class HermesSourceRuntime {
     const codexLocalEnvironmentDisabled =
       this.config.runtimeStateMode === 'sandbox' ? false : this.config.disableLocalEnvironmentForGeneral;
     const previousSandboxState = await readSandboxState(runtimePaths);
+    const previousHermesSessionId =
+      typeof previousSandboxState?.hermesSessionId === 'string' ? previousSandboxState.hermesSessionId.trim() : '';
     const resumeSessionId =
-      this.config.runtimeStateMode === 'sandbox' && typeof previousSandboxState?.hermesSessionId === 'string'
-        ? previousSandboxState.hermesSessionId.trim()
+      this.config.runtimeStateMode === 'sandbox' && previousHermesSessionId
+        ? previousHermesSessionId
         : '';
 
     if (this.runtimeStateStore && this.config.runtimeStateMode === 'snapshot') {
@@ -72,6 +87,19 @@ export class HermesSourceRuntime {
       lastStartedAt: nowIso(),
       previousHermesSessionId: resumeSessionId || null,
     });
+    await this.syncSandboxControlPlane({
+      request,
+      runtimePaths,
+      runId,
+      status: 'ACTIVE',
+      activeSessionId: resumeSessionId || null,
+      emit,
+      metadata: {
+        phase: 'start',
+        previousHermesSessionId: resumeSessionId || null,
+      },
+    });
+
     const ingestedArtifacts = await ingestWorkspaceAttachments(this.config, request, runtimePaths, runId);
     if (ingestedArtifacts.artifacts.length > 0 || ingestedArtifacts.warnings.length > 0) {
       await emit('workspace_artifacts.ingested', {
@@ -159,14 +187,110 @@ export class HermesSourceRuntime {
       runtimeMessage,
     ];
 
-    const result = await this.spawnHermes(args, { hermesHome, codexHome, workspace });
+    let result: { stdout: string; stderr: string };
+    const rolloutBridge = startCodexRolloutEventBridge({
+      codexHome,
+      startedAtMs,
+      emit,
+    });
+    try {
+      result = await this.spawnHermes(args, {
+        runId,
+        userId: request.userId,
+        threadId: request.threadId || 'default',
+        hermesHome,
+        codexHome,
+        workspace,
+      });
+    } catch (error) {
+      await rolloutBridge.stop();
+      const message = error instanceof Error ? error.message : String(error);
+      const diskBytes = await this.calculateSandboxDiskBytes(runtimePaths);
+      if (isAgentRunCancelledError(error)) {
+        await writeSandboxState(runtimePaths, {
+          status: 'IDLE',
+          activeRunId: null,
+          lastCancelledAt: nowIso(),
+          hermesSessionId: previousHermesSessionId || null,
+        });
+        await this.syncSandboxControlPlane({
+          request,
+          runtimePaths,
+          runId,
+          status: 'IDLE',
+          activeSessionId: resumeSessionId || previousHermesSessionId || null,
+          diskBytes,
+          error: message,
+          emit,
+          metadata: { phase: 'cancelled', cancelled: true },
+        });
+        throw error;
+      }
+      await writeSandboxState(runtimePaths, {
+        status: 'ERROR',
+        activeRunId: null,
+        lastErrorAt: nowIso(),
+        error: message,
+      });
+      await this.syncSandboxControlPlane({
+        request,
+        runtimePaths,
+        runId,
+        status: 'ERROR',
+        activeSessionId: resumeSessionId || previousHermesSessionId || null,
+        diskBytes,
+        error: message,
+        emit,
+        metadata: { phase: 'error' },
+      });
+      throw error;
+    }
+    await rolloutBridge.stop();
     const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join('\n');
     const sessionId = extractSessionId(combinedOutput);
-    const codexReply = await extractLatestCodexReply(codexHome, startedAtMs);
-    const reply = codexReply || extractReply(combinedOutput).trim();
+    const codexOutcome = await extractLatestCodexOutcome(codexHome, startedAtMs);
+    if (codexOutcome.turnAborted && !codexOutcome.taskComplete) {
+      const message = [
+        'Codex turn aborted before producing a task_complete final answer',
+        codexOutcome.abortReason ? `reason=${codexOutcome.abortReason}` : '',
+      ].filter(Boolean).join('; ');
+      await emit('codex.turn_aborted.detected', {
+        reason: codexOutcome.abortReason || null,
+        file: codexOutcome.file || null,
+        lastAgentMessage: codexOutcome.reply ? truncate(codexOutcome.reply, 4000) : null,
+      });
+      const diskBytes = await this.calculateSandboxDiskBytes(runtimePaths);
+      await writeSandboxState(runtimePaths, {
+        status: 'ERROR',
+        activeRunId: null,
+        lastErrorAt: nowIso(),
+        error: message,
+        hermesSessionId: sessionId || previousHermesSessionId || null,
+      });
+      await this.syncSandboxControlPlane({
+        request,
+        runtimePaths,
+        runId,
+        status: 'ERROR',
+        activeSessionId: sessionId || previousHermesSessionId || null,
+        diskBytes,
+        error: message,
+        emit,
+        metadata: {
+          phase: 'codex_turn_aborted',
+          codexRolloutFile: codexOutcome.file || null,
+          codexAbortReason: codexOutcome.abortReason || null,
+        },
+      });
+      throw new Error(message);
+    }
+    const codexReply = codexOutcome.reply;
+    const reply = normalizeAssistantReply(codexReply || extractReply(combinedOutput).trim());
     await emit('hermes.source_runtime.completed', {
       sessionId: sessionId || null,
       codexReply: codexReply || null,
+      codexTaskComplete: codexOutcome.taskComplete,
+      codexTurnAborted: codexOutcome.turnAborted,
       stdout: truncate(result.stdout, 20000),
       stderrTail: truncate(tail(result.stderr, 120), 20000),
     });
@@ -174,7 +298,21 @@ export class HermesSourceRuntime {
       status: 'IDLE',
       activeRunId: null,
       lastCompletedAt: nowIso(),
-      hermesSessionId: sessionId || previousSandboxState?.hermesSessionId || null,
+      hermesSessionId: sessionId || previousHermesSessionId || null,
+    });
+    const diskBytes = await this.calculateSandboxDiskBytes(runtimePaths);
+    await this.syncSandboxControlPlane({
+      request,
+      runtimePaths,
+      runId,
+      status: 'IDLE',
+      activeSessionId: sessionId || previousHermesSessionId || null,
+      diskBytes,
+      emit,
+      metadata: {
+        phase: 'complete',
+        hermesSessionId: sessionId || null,
+      },
     });
 
     if (this.config.memoryReviewMode === 'async' && this.memoryReviewQueue && reply) {
@@ -290,7 +428,71 @@ export class HermesSourceRuntime {
     );
   }
 
-  private spawnHermes(args: string[], paths: { hermesHome: string; codexHome: string; workspace: string }) {
+  private async calculateSandboxDiskBytes(paths: RuntimePaths) {
+    try {
+      return await calculateDirectoryBytes(paths.threadRoot || paths.workspace);
+    } catch {
+      return null;
+    }
+  }
+
+  private async syncSandboxControlPlane(input: {
+    request: TurnStartRequest;
+    runtimePaths: RuntimePaths;
+    runId: string;
+    status: AgentSandboxControlPlaneInput['status'];
+    activeSessionId?: string | null;
+    diskBytes?: number | null;
+    error?: string | null;
+    metadata?: Record<string, unknown> | null;
+    emit: (type: string, payload: Record<string, unknown>) => Promise<void>;
+  }) {
+    const investorId =
+      typeof input.request.metadata?.investorId === 'string' && input.request.metadata.investorId.trim()
+        ? input.request.metadata.investorId.trim()
+        : input.request.userId;
+
+    try {
+      await upsertAgentSandboxControlPlane(this.config, {
+        userId: input.request.userId,
+        investorId,
+        threadId: input.request.threadId || 'default',
+        runId: input.runId,
+        status: input.status,
+        paths: input.runtimePaths,
+        activeSessionId: input.activeSessionId || null,
+        diskBytes: input.diskBytes ?? null,
+        error: input.error || null,
+        metadata: input.metadata || null,
+      });
+      await input.emit('agent_context.sandbox_state_updated', {
+        status: input.status,
+        sandboxPath: input.runtimePaths.threadRoot || input.runtimePaths.workspace,
+        userRoot: input.runtimePaths.userRoot || null,
+        threadRoot: input.runtimePaths.threadRoot || null,
+        workspace: input.runtimePaths.workspace,
+        activeSessionId: input.activeSessionId || null,
+        diskBytes: input.diskBytes ?? null,
+      });
+    } catch (error) {
+      await input.emit('agent_context.sandbox_state_failed', {
+        status: input.status,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private spawnHermes(
+    args: string[],
+    paths: {
+      runId: string;
+      userId: string;
+      threadId: string;
+      hermesHome: string;
+      codexHome: string;
+      workspace: string;
+    }
+  ) {
     return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       const codexBinDir = path.dirname(this.config.codexBin);
       const child = spawn(this.config.uvBin, args, {
@@ -316,6 +518,12 @@ export class HermesSourceRuntime {
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
+      registerActiveRun({
+        runId: paths.runId,
+        userId: paths.userId,
+        threadId: paths.threadId,
+        child,
+      });
 
       let stdout = '';
       let stderr = '';
@@ -333,11 +541,17 @@ export class HermesSourceRuntime {
         stderr += chunk;
       });
       child.on('error', (error) => {
+        unregisterActiveRun(paths.runId);
         clearTimeout(timeout);
-        reject(error);
+        reject(isRunCancelled(paths.runId) ? createRunCancelledError(paths.runId) : error);
       });
       child.on('close', (code) => {
+        unregisterActiveRun(paths.runId);
         clearTimeout(timeout);
+        if (isRunCancelled(paths.runId)) {
+          reject(createRunCancelledError(paths.runId));
+          return;
+        }
         if (code === 0) {
           resolve({ stdout, stderr });
           return;
@@ -453,6 +667,8 @@ function buildCodexGeneralDeveloperInstructions(input: { webSearchMode: string; 
     '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.',
     '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.',
     '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
+    '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.',
+    '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.',
   ].join('\n');
 }
 
@@ -486,7 +702,15 @@ function combineProfileBlocks(...blocks: string[]) {
   return entries.join('\n');
 }
 
-async function extractLatestCodexReply(codexHome: string, startedAtMs: number) {
+type CodexRolloutOutcome = {
+  reply: string;
+  taskComplete: boolean;
+  turnAborted: boolean;
+  abortReason: string;
+  file: string;
+};
+
+async function extractLatestCodexOutcome(codexHome: string, startedAtMs: number): Promise<CodexRolloutOutcome> {
   const sessionsDir = path.join(codexHome, 'sessions');
   const files = await listFiles(sessionsDir);
   const candidates = (
@@ -507,33 +731,330 @@ async function extractLatestCodexReply(codexHome: string, startedAtMs: number) {
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   for (const candidate of candidates.slice(0, 5)) {
-    const reply = await extractCodexReplyFromRollout(candidate.file);
-    if (reply) return reply;
+    const outcome = await extractCodexOutcomeFromRollout(candidate.file);
+    if (outcome.taskComplete || outcome.turnAborted || outcome.reply) return outcome;
   }
-  return '';
+  return {
+    reply: '',
+    taskComplete: false,
+    turnAborted: false,
+    abortReason: '',
+    file: '',
+  };
 }
 
-async function extractCodexReplyFromRollout(file: string) {
+async function extractCodexOutcomeFromRollout(file: string): Promise<CodexRolloutOutcome> {
+  const outcome: CodexRolloutOutcome = {
+    reply: '',
+    taskComplete: false,
+    turnAborted: false,
+    abortReason: '',
+    file,
+  };
+
   try {
     const raw = await fs.readFile(file, 'utf8');
-    let fallback = '';
     for (const line of raw.split(/\r?\n/)) {
       if (!line.trim()) continue;
       const parsed = JSON.parse(line) as unknown;
       if (!isRecord(parsed) || !isRecord(parsed.payload)) continue;
       if (parsed.type === 'event_msg' && parsed.payload.type === 'task_complete') {
         const message = parsed.payload.last_agent_message;
-        if (typeof message === 'string' && message.trim()) return message.trim();
+        if (typeof message === 'string' && message.trim()) outcome.reply = normalizeAssistantReply(message);
+        outcome.taskComplete = true;
       }
       if (parsed.type === 'event_msg' && parsed.payload.type === 'agent_message') {
         const message = parsed.payload.message;
-        if (typeof message === 'string' && message.trim()) fallback = message.trim();
+        if (typeof message === 'string' && message.trim()) outcome.reply = normalizeAssistantReply(message);
+      }
+      if (parsed.type === 'event_msg' && parsed.payload.type === 'turn_aborted') {
+        outcome.turnAborted = true;
+        const reason = parsed.payload.reason;
+        outcome.abortReason = typeof reason === 'string' ? reason : '';
       }
     }
-    return fallback;
+    if (outcome.turnAborted && !outcome.taskComplete) {
+      return {
+        ...outcome,
+        reply: '',
+      };
+    }
+    return outcome;
   } catch {
-    return '';
+    return outcome;
   }
+}
+
+function startCodexRolloutEventBridge(input: {
+  codexHome: string;
+  startedAtMs: number;
+  emit: (type: string, payload: Record<string, unknown>) => Promise<void>;
+}) {
+  const sessionsDir = path.join(input.codexHome, 'sessions');
+  const offsets = new Map<string, number>();
+  const pendingText = new Map<string, string>();
+  let stopped = false;
+  let scanning = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+
+  const scan = async () => {
+    if (stopped || scanning) return;
+    scanning = true;
+    try {
+      const files = await listFiles(sessionsDir);
+      const candidates = (
+        await Promise.all(
+          files
+            .filter((file) => file.endsWith('.jsonl'))
+            .map(async (file) => {
+              try {
+                const stat = await fs.stat(file);
+                return stat.mtimeMs >= input.startedAtMs - 10_000 ? { file, size: stat.size } : null;
+              } catch {
+                return null;
+              }
+            })
+        )
+      ).filter((file): file is { file: string; size: number } => Boolean(file));
+
+      for (const candidate of candidates) {
+        const offset = offsets.get(candidate.file) ?? 0;
+        if (candidate.size <= offset) continue;
+        const chunk = await readFileRange(candidate.file, offset, candidate.size);
+        offsets.set(candidate.file, candidate.size);
+        const buffered = `${pendingText.get(candidate.file) || ''}${chunk}`;
+        const lines = buffered.split(/\r?\n/);
+        pendingText.set(candidate.file, lines.pop() || '');
+        const rolloutFile = path.relative(input.codexHome, candidate.file);
+        for (const line of lines) {
+          const parsed = parseJsonLine(line);
+          if (!parsed) continue;
+          const events = projectCodexRolloutEvents(parsed, rolloutFile);
+          for (const event of events) {
+            await input.emit(event.type, event.payload);
+          }
+        }
+      }
+    } catch (error) {
+      await input.emit('codex.rollout.bridge_error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      scanning = false;
+    }
+  };
+
+  const flushPending = async () => {
+    for (const [file, line] of pendingText.entries()) {
+      const parsed = parseJsonLine(line);
+      if (!parsed) continue;
+      const rolloutFile = path.relative(input.codexHome, file);
+      const events = projectCodexRolloutEvents(parsed, rolloutFile);
+      for (const event of events) {
+        await input.emit(event.type, event.payload);
+      }
+    }
+    pendingText.clear();
+  };
+
+  timer = setInterval(() => {
+    void scan();
+  }, 500);
+  void scan();
+
+  return {
+    stop: async () => {
+      stopped = true;
+      if (timer) clearInterval(timer);
+      while (scanning) {
+        await sleep(50);
+      }
+      stopped = false;
+      await scan();
+      await flushPending();
+      stopped = true;
+    },
+  };
+}
+
+async function readFileRange(file: string, start: number, end: number) {
+  const length = Math.max(0, end - start);
+  if (length === 0) return '';
+  const handle = await fs.open(file, 'r');
+  try {
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, start);
+    return buffer.subarray(0, bytesRead).toString('utf8');
+  } finally {
+    await handle.close();
+  }
+}
+
+function projectCodexRolloutEvents(parsed: Record<string, unknown>, rolloutFile: string) {
+  const payload = isRecord(parsed.payload) ? parsed.payload : {};
+  const rolloutType = typeof parsed.type === 'string' ? parsed.type : '';
+  const payloadType = typeof payload.type === 'string' ? payload.type : '';
+  const timestamp = typeof parsed.timestamp === 'string' ? parsed.timestamp : null;
+  const base = {
+    rolloutFile,
+    rolloutType,
+    payloadType,
+    rolloutTimestamp: timestamp,
+  };
+
+  if (rolloutType === 'response_item' && payloadType === 'function_call') {
+    const name = typeof payload.name === 'string' ? payload.name : 'function_call';
+    const callId = typeof payload.call_id === 'string' ? payload.call_id : '';
+    const args = typeof payload.arguments === 'string' ? payload.arguments : '';
+    const parsedArgs = parseJsonValue(args);
+    if (name === 'update_plan') {
+      return [{
+        type: 'codex.plan.updated',
+        payload: {
+          ...base,
+          callId,
+          arguments: truncate(args, 12000),
+          parsedArguments: safeJson(parsedArgs),
+        },
+      }];
+    }
+    return [{
+      type: 'codex.tool.call',
+      payload: {
+        ...base,
+        name,
+        callId,
+        arguments: truncate(args, 12000),
+        parsedArguments: safeJson(parsedArgs),
+      },
+    }];
+  }
+
+  if (rolloutType === 'response_item' && payloadType === 'function_call_output') {
+    const callId = typeof payload.call_id === 'string' ? payload.call_id : '';
+    const output = typeof payload.output === 'string' ? payload.output : '';
+    return [{
+      type: 'codex.tool.output',
+      payload: {
+        ...base,
+        callId,
+        output: truncate(output, 16000),
+      },
+    }];
+  }
+
+  if (rolloutType === 'response_item' && payloadType === 'message') {
+    const role = typeof payload.role === 'string' ? payload.role : '';
+    const message = extractContentItemText(payload.content);
+    if (role === 'assistant' && message.trim()) {
+      return [{
+        type: 'codex.agent_message',
+        payload: {
+          ...base,
+          message: truncate(normalizeAssistantReply(message), 12000),
+        },
+      }];
+    }
+  }
+
+  if (rolloutType === 'event_msg' && payloadType === 'agent_message') {
+    const message = typeof payload.message === 'string' ? payload.message : '';
+    if (!message.trim()) return [];
+    return [{
+      type: 'codex.agent_message',
+      payload: {
+        ...base,
+        message: truncate(normalizeAssistantReply(message), 12000),
+      },
+    }];
+  }
+
+  if (rolloutType === 'event_msg' && payloadType === 'task_complete') {
+    const message = typeof payload.last_agent_message === 'string' ? payload.last_agent_message : '';
+    return [{
+      type: 'codex.task_complete',
+      payload: {
+        ...base,
+        lastAgentMessage: truncate(normalizeAssistantReply(message), 12000),
+      },
+    }];
+  }
+
+  if (rolloutType === 'event_msg' && payloadType === 'turn_aborted') {
+    return [{
+      type: 'codex.turn_aborted',
+      payload: {
+        ...base,
+        reason: typeof payload.reason === 'string' ? payload.reason : null,
+      },
+    }];
+  }
+
+  return [];
+}
+
+function parseJsonValue(value: string) {
+  if (!value.trim()) return null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonLine(line: string) {
+  if (!line.trim()) return null;
+  try {
+    const parsed = JSON.parse(line) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeAssistantReply(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    const text = extractContentItemText(parsed);
+    if (text) return text.trim();
+  } catch {
+    // DeepSeek sometimes emits Python-style content item strings with single quotes.
+  }
+
+  const pythonStyleText = extractPythonStyleContentItemText(trimmed);
+  return pythonStyleText || trimmed;
+}
+
+function extractContentItemText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      if (!isRecord(item)) return '';
+      if (typeof item.text === 'string') return item.text;
+      if (typeof item.content === 'string') return item.content;
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function extractPythonStyleContentItemText(value: string) {
+  const match = value.match(/^\s*\[\s*\{\s*['"]type['"]\s*:\s*['"]text['"]\s*,\s*['"]text['"]\s*:\s*(['"])([\s\S]*)\1\s*\}\s*\]\s*$/);
+  if (!match?.[2]) return '';
+  return match[2]
+    .replace(/\\n/g, '\n')
+    .replace(/\\'/g, "'")
+    .replace(/\\"/g, '"')
+    .trim();
 }
 
 async function listFiles(dir: string): Promise<string[]> {

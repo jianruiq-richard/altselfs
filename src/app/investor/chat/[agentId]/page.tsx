@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Paperclip, X } from 'lucide-react';
+import { Paperclip, Square, X } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -98,6 +98,8 @@ type PersonalAgentFinalData = {
   messages?: ChatMessage[];
   reply?: string;
   error?: string;
+  runId?: string;
+  cancelled?: boolean;
 };
 
 type CodexStreamItemStatus = 'running' | 'completed' | 'error';
@@ -302,6 +304,19 @@ function extractCodexText(value: unknown): string {
     .join('');
 }
 
+function formatStreamPayload(value: unknown, maxLength = 6000) {
+  if (typeof value === 'string') {
+    return value.length > maxLength ? `${value.slice(0, maxLength)}\n...` : value;
+  }
+  if (value === null || value === undefined) return '';
+  try {
+    const text = JSON.stringify(value, null, 2);
+    return text.length > maxLength ? `${text.slice(0, maxLength)}\n...` : text;
+  } catch {
+    return String(value);
+  }
+}
+
 function describeCodexItem(item: Record<string, unknown>) {
   const type = String(item.type || 'item');
   const command = typeof item.command === 'string' ? item.command : '';
@@ -380,6 +395,104 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     };
   }
 
+  if (type === 'codex.plan.updated') {
+    const parsedArguments = payload.parsedArguments;
+    const content = isRecord(parsedArguments)
+      ? formatStreamPayload(parsedArguments)
+      : typeof payload.arguments === 'string'
+        ? payload.arguments
+        : '';
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '更新计划',
+      detail: typeof payload.callId === 'string' && payload.callId ? `callId: ${payload.callId}` : 'update_plan',
+      status: 'completed',
+      timestamp,
+      method: type,
+      content,
+    };
+  }
+
+  if (type === 'codex.tool.call') {
+    const name = typeof payload.name === 'string' ? payload.name : '工具';
+    const content = isRecord(payload.parsedArguments)
+      ? formatStreamPayload(payload.parsedArguments)
+      : typeof payload.arguments === 'string'
+        ? payload.arguments
+        : '';
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '调用工具',
+      detail: name,
+      status: 'running',
+      timestamp,
+      method: type,
+      content,
+    };
+  }
+
+  if (type === 'codex.tool.output') {
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '工具返回',
+      detail: typeof payload.callId === 'string' && payload.callId ? `callId: ${payload.callId}` : 'function_call_output',
+      status: 'completed',
+      timestamp,
+      method: type,
+      content: typeof payload.output === 'string' ? payload.output : formatStreamPayload(payload.output),
+    };
+  }
+
+  if (type === 'codex.agent_message') {
+    const message = typeof payload.message === 'string' ? payload.message : '';
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: '生成中间回复',
+      detail: 'Codex assistant message',
+      status: 'running',
+      timestamp,
+      method: type,
+      content: message,
+    };
+  }
+
+  if (type === 'codex.task_complete') {
+    const message = typeof payload.lastAgentMessage === 'string' ? payload.lastAgentMessage : '';
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: 'Codex 完成任务',
+      detail: 'task_complete',
+      status: 'completed',
+      timestamp,
+      method: type,
+      content: message,
+    };
+  }
+
+  if (type === 'codex.turn_aborted' || type === 'codex.turn_aborted.detected') {
+    const reason = typeof payload.reason === 'string' ? payload.reason : 'turn aborted before task_complete';
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: 'Codex 回合中断',
+      detail: reason,
+      status: 'error',
+      timestamp,
+      method: type,
+      content: typeof payload.lastAgentMessage === 'string' ? payload.lastAgentMessage : undefined,
+    };
+  }
+
+  if (type === 'codex.rollout.bridge_error') {
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: 'Codex 事件桥接失败',
+      detail: typeof payload.error === 'string' ? payload.error : 'rollout bridge error',
+      status: 'error',
+      timestamp,
+      method: type,
+    };
+  }
+
   if (type === 'codex.session.starting' || type === 'codex.thread.started' || type === 'codex.turn.started') {
     return {
       id: `${type}-${timestamp}-${index}`,
@@ -436,6 +549,23 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
       title: '加载上下文',
       detail: `摘要 ${summaryChars} 字符，历史消息 ${messageCount} 条，附件 ${artifactCount} 个`,
       status: 'completed',
+      timestamp,
+      method: type,
+    };
+  }
+
+  if (type === 'agent_context.sandbox_state_updated' || type === 'agent_context.sandbox_state_failed') {
+    const status = typeof payload.status === 'string' ? payload.status : '';
+    const diskBytes = typeof payload.diskBytes === 'number' ? payload.diskBytes : null;
+    const detailParts = [
+      status,
+      diskBytes === null ? '' : `磁盘 ${formatBytes(diskBytes)}`,
+    ].filter(Boolean);
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: type === 'agent_context.sandbox_state_failed' ? '记录沙盒状态失败' : '记录沙盒状态',
+      detail: detailParts.join(' · ') || type.replace('agent_context.', ''),
+      status: type === 'agent_context.sandbox_state_failed' || status === 'ERROR' ? 'error' : 'completed',
       timestamp,
       method: type,
     };
@@ -723,6 +853,8 @@ export default function InvestorAgentChatPage() {
   const [stoppingRun, setStoppingRun] = useState(false);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
+  const liveStreamRunIdRef = useRef<string | null>(null);
+  const requestedStopRunIdRef = useRef<string | null>(null);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const loadingOlderMessagesRef = useRef(false);
   const suppressNextAutoScrollRef = useRef(false);
@@ -845,6 +977,107 @@ export default function InvestorAgentChatPage() {
     }
   }, [activeRunId, stoppingRun]);
 
+  const stopPersonalAgentRun = useCallback(async () => {
+    const runId = activeRunIdRef.current || activeRunId;
+    if (!runId || stoppingRun) return;
+    requestedStopRunIdRef.current = runId;
+    setStoppingRun(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/investor/personal-agent', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId, threadId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(typeof data.error === 'string' ? data.error : '停止任务失败');
+        return;
+      }
+      setCodexStreamItems((prev) => [
+        ...prev,
+        {
+          id: `personal-agent-stopped-${Date.now()}`,
+          title: '已请求停止',
+          detail: `runId: ${runId}`,
+          status: 'completed',
+          timestamp: new Date().toISOString(),
+        },
+      ].slice(-18));
+    } catch (err) {
+      setError(err instanceof Error ? `停止任务失败：${err.message}` : '停止任务失败，请稍后重试');
+    } finally {
+      setStoppingRun(false);
+    }
+  }, [activeRunId, stoppingRun, threadId]);
+
+  const refreshPersonalAgentStatus = useCallback(async (targetThreadId: string) => {
+    if (!targetThreadId) return;
+    try {
+      const query = new URLSearchParams({
+        status: '1',
+        threadId: targetThreadId,
+      });
+      const res = await fetch(`/api/investor/personal-agent?${query.toString()}`, {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) return;
+      const sandbox = isRecord(data.sandbox) ? data.sandbox : {};
+      const activeRun = isRecord(data.activeRun) ? data.activeRun : {};
+      const status = typeof sandbox.status === 'string'
+        ? sandbox.status
+        : isRecord(data.thread) && typeof data.thread.status === 'string'
+          ? data.thread.status
+          : '';
+      const nextRunId = typeof sandbox.active_run_id === 'string'
+        ? sandbox.active_run_id
+        : typeof activeRun.id === 'string'
+          ? activeRun.id
+          : '';
+
+      if (status === 'ACTIVE' && nextRunId) {
+        activeRunIdRef.current = nextRunId;
+        setActiveRunId(nextRunId);
+        setSending(true);
+        if (liveStreamRunIdRef.current === nextRunId) return;
+        const recentEvents = Array.isArray(data.recentEvents) ? data.recentEvents : [];
+        const projected = recentEvents
+          .map((row, index) => {
+            if (!isRecord(row)) return null;
+            const storedPayload = isRecord(row.payload) ? row.payload : {};
+            const eventPayload = isRecord(storedPayload.payload) ? storedPayload.payload : {};
+            const envelope = {
+              type: 'event',
+              event: {
+                type: typeof row.type === 'string' ? row.type : 'agent_context.event',
+                timestamp: typeof storedPayload.timestamp === 'string'
+                  ? storedPayload.timestamp
+                  : typeof row.created_at === 'string'
+                    ? row.created_at
+                    : new Date().toISOString(),
+                payload: eventPayload,
+              },
+            };
+            return projectCodexStreamItem(envelope, index);
+          })
+          .filter(Boolean) as CodexStreamItem[];
+        if (projected.length > 0) setCodexStreamItems(projected.slice(-18));
+        return;
+      }
+
+      if (activeRunIdRef.current === nextRunId || !nextRunId) {
+        activeRunIdRef.current = null;
+        liveStreamRunIdRef.current = null;
+        setActiveRunId(null);
+        setSending(false);
+      }
+    } catch {
+      // Status recovery is best-effort; the normal send flow still reports errors.
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
     if (!isExecutive) return;
     setLoading(true);
@@ -869,6 +1102,7 @@ export default function InvestorAgentChatPage() {
       setPlannerTrace([]);
       setCodexStreamItems([]);
       setAssistantDraft('');
+      if (data.threadId) void refreshPersonalAgentStatus(String(data.threadId));
       if (showExecutiveControls && getStoredActiveRunId()) {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
       }
@@ -877,7 +1111,15 @@ export default function InvestorAgentChatPage() {
     } finally {
       setLoading(false);
     }
-  }, [isExecutive, resumeExecutiveRun, showExecutiveControls]);
+  }, [isExecutive, refreshPersonalAgentStatus, resumeExecutiveRun, showExecutiveControls]);
+
+  useEffect(() => {
+    if (!threadId || !activeRunId) return;
+    const timer = window.setInterval(() => {
+      void refreshPersonalAgentStatus(threadId);
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [activeRunId, refreshPersonalAgentStatus, threadId]);
 
   useEffect(() => {
     void loadData();
@@ -1000,6 +1242,10 @@ export default function InvestorAgentChatPage() {
     setAssistantDraft('');
     setPlannerPanelOpen(false);
     codexEventIndexRef.current = 0;
+    activeRunIdRef.current = null;
+    liveStreamRunIdRef.current = null;
+    setActiveRunId(null);
+    requestedStopRunIdRef.current = null;
 
     try {
       const requestBody = hasAttachments
@@ -1054,6 +1300,15 @@ export default function InvestorAgentChatPage() {
 
       const handleEnvelope = (envelope: Record<string, unknown>) => {
         if (envelope.type === 'heartbeat') return;
+        if (envelope.type === 'run') {
+          const runId = typeof envelope.runId === 'string' ? envelope.runId : '';
+          if (runId) {
+            activeRunIdRef.current = runId;
+            liveStreamRunIdRef.current = runId;
+            setActiveRunId(runId);
+          }
+          return;
+        }
         if (envelope.type === 'final') {
           finalStatus = typeof envelope.status === 'number' ? envelope.status : 200;
           finalData = isRecord(envelope.data) ? (envelope.data as PersonalAgentFinalData) : null;
@@ -1063,6 +1318,13 @@ export default function InvestorAgentChatPage() {
         codexEventIndexRef.current += 1;
         const delta = extractAssistantDelta(envelope);
         if (delta) setAssistantDraft((prev) => `${prev}${delta}`);
+        const event = isRecord(envelope.event) ? envelope.event : null;
+        const eventPayload = isRecord(event?.payload) ? event.payload : null;
+        const eventRunId = typeof eventPayload?.runId === 'string' ? eventPayload.runId : '';
+        if (eventRunId && event?.type === 'agent_context.input_persisted') {
+          activeRunIdRef.current = eventRunId;
+          setActiveRunId(eventRunId);
+        }
         appendCodexItem(projectCodexStreamItem(envelope, index));
       };
 
@@ -1081,6 +1343,24 @@ export default function InvestorAgentChatPage() {
       if (buffer.trim()) {
         const parsed = parseNdjsonLine(buffer);
         if (parsed) handleEnvelope(parsed);
+      }
+
+      if (finalData?.cancelled) {
+        const finalErrorMessage = finalData.error || '已停止本次执行。';
+        setError(finalErrorMessage);
+        setMessages(nextMessages);
+        setAssistantDraft('');
+        setCodexStreamItems((prev) => [
+          ...prev,
+          {
+            id: `final-cancelled-${Date.now()}`,
+            title: '本轮已停止',
+            detail: finalErrorMessage,
+            status: 'completed',
+            timestamp: new Date().toISOString(),
+          },
+        ].slice(-18));
+        return;
       }
 
       if (!finalData || finalStatus >= 400) {
@@ -1104,6 +1384,7 @@ export default function InvestorAgentChatPage() {
       }
 
       const completedData = finalData as PersonalAgentFinalData;
+      liveStreamRunIdRef.current = null;
       setThreadId(typeof completedData.threadId === 'string' ? completedData.threadId : threadId);
       if (Array.isArray(completedData.messages) && completedData.messages.length >= nextMessages.length) {
         setMessages(completedData.messages);
@@ -1119,6 +1400,7 @@ export default function InvestorAgentChatPage() {
       setAssistantDraft('');
     } finally {
       activeRunIdRef.current = null;
+      liveStreamRunIdRef.current = null;
       setActiveRunId(null);
       setSending(false);
       setStoppingRun(false);
@@ -1516,13 +1798,26 @@ export default function InvestorAgentChatPage() {
                 >
                   <Paperclip className="h-4 w-4" />
                 </button>
-                <button
-                  type="submit"
-                  disabled={(!input.trim() && attachments.length === 0) || sending}
-                  className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:py-2"
-                >
-                  {sending ? '发送中...' : '发送'}
-                </button>
+                {sending ? (
+                  <button
+                    type="button"
+                    onClick={() => void stopPersonalAgentRun()}
+                    disabled={stoppingRun || !activeRunId}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 sm:py-2"
+                    title={activeRunId ? '停止本轮任务' : '正在创建本轮任务'}
+                  >
+                    <Square className="h-3.5 w-3.5 fill-current" />
+                    {stoppingRun ? '停止中...' : activeRunId ? '停止' : '准备中...'}
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!input.trim() && attachments.length === 0}
+                    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:py-2"
+                  >
+                    发送
+                  </button>
+                )}
               </div>
             </div>
           </form>

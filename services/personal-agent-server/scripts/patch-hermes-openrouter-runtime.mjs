@@ -597,3 +597,25 @@ if (codexAppServerSession.includes(dynamicToolMethodMarker) && codexAppServerSes
   console.log("Hermes Codex dynamic tool handler patch applied.");
   console.log(codexAppServerSessionPath);
 }
+
+codexAppServerSession = readFileSync(codexAppServerSessionPath, "utf8");
+
+const postToolQuietTimeoutBefore = `        post_tool_quiet_timeout: float = 90.0,
+`;
+
+const postToolQuietTimeoutAfter = `        post_tool_quiet_timeout: float = 300.0,
+`;
+
+if (codexAppServerSession.includes(postToolQuietTimeoutAfter)) {
+  console.log("Hermes Codex post-tool quiet timeout patch already applied.");
+  console.log(codexAppServerSessionPath);
+} else if (!codexAppServerSession.includes(postToolQuietTimeoutBefore)) {
+  console.error("Could not find the Hermes Codex post-tool quiet timeout default to patch.");
+  console.error(codexAppServerSessionPath);
+  process.exit(1);
+} else {
+  codexAppServerSession = codexAppServerSession.replace(postToolQuietTimeoutBefore, postToolQuietTimeoutAfter);
+  writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
+  console.log("Hermes Codex post-tool quiet timeout patch applied.");
+  console.log(codexAppServerSessionPath);
+}
