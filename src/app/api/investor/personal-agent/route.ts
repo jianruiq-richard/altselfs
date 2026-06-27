@@ -300,7 +300,7 @@ export async function GET(req: NextRequest) {
         threadId,
         investorId: investor.id,
         userId: investor.email || investor.id,
-        recentEventLimit: '30',
+        recentEventLimit: '100',
       });
       const response = await fetch(`${getPersonalAgentServerUrl()}/v1/threads/status?${query.toString()}`, {
         cache: 'no-store',

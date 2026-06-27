@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { MessageSquare, Paperclip, Plus, Square, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, LoaderCircle, MessageSquare, Paperclip, Plus, Square, X } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -124,6 +124,13 @@ type CodexStreamItem = {
   content?: string;
 };
 
+type CompletedCodexActivity = {
+  id: string;
+  durationMs: number;
+  items: CodexStreamItem[];
+  completedAt: string;
+};
+
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 
 const suggestedQuestions = [
@@ -148,12 +155,6 @@ const plannerStatusClass: Record<PlannerStepStatus, string> = {
   SUCCESS: 'bg-emerald-100 text-emerald-700',
   ERROR: 'bg-red-100 text-red-700',
   SKIPPED: 'bg-amber-100 text-amber-700',
-};
-
-const codexItemDotClass: Record<CodexStreamItemStatus, string> = {
-  running: 'bg-blue-500',
-  completed: 'bg-emerald-500',
-  error: 'bg-red-500',
 };
 
 const attachmentAccept =
@@ -741,6 +742,203 @@ function getRunPollErrorMessage(data: ExecutiveRunPollResult, status: number) {
   return `查询任务状态失败（HTTP ${status}）：${detail}`;
 }
 
+function formatDuration(ms: number) {
+  if (!Number.isFinite(ms) || ms < 1000) return '<1s';
+  const totalSeconds = Math.round(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
+  if (minutes > 0) return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+  return `${seconds}s`;
+}
+
+function timestampMs(value: string) {
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function stepDuration(items: CodexStreamItem[], index: number, fallbackEndMs: number) {
+  const start = timestampMs(items[index]?.timestamp || '');
+  if (!start) return 0;
+  const next = timestampMs(items[index + 1]?.timestamp || '') || fallbackEndMs;
+  return Math.max(0, next - start);
+}
+
+function extractLinks(...values: Array<string | undefined>) {
+  const text = values.filter(Boolean).join('\n');
+  const matches = text.match(/https?:\/\/[^\s)"'<>]+/g) || [];
+  return Array.from(new Set(matches)).slice(0, 4);
+}
+
+function buildCompletedActivityFromStatus(params: {
+  run: Record<string, unknown>;
+  events: CodexStreamItem[];
+}) {
+  const completedAt = typeof params.run.completed_at === 'string'
+    ? params.run.completed_at
+    : typeof params.run.updated_at === 'string'
+      ? params.run.updated_at
+      : params.events[params.events.length - 1]?.timestamp || '';
+  const startedAt = typeof params.run.started_at === 'string'
+    ? params.run.started_at
+    : typeof params.run.created_at === 'string'
+      ? params.run.created_at
+      : params.events[0]?.timestamp || completedAt;
+  const completedMs = timestampMs(completedAt);
+  const startedMs = timestampMs(startedAt);
+  const durationMs = completedMs && startedMs ? Math.max(0, completedMs - startedMs) : 0;
+  const runId = typeof params.run.id === 'string' ? params.run.id : `activity-${completedAt || startedAt}`;
+  return {
+    id: runId,
+    durationMs,
+    items: params.events,
+    completedAt: completedAt || new Date(0).toISOString(),
+  };
+}
+
+function codexActionLabel(item: CodexStreamItem) {
+  const method = item.method || '';
+  if (item.status === 'error') return item.title || '执行失败';
+  if (method.includes('tool') || item.title.includes('工具')) {
+    return item.status === 'completed' ? '已调用工具' : '正在调用工具';
+  }
+  if (method.includes('plan') || item.title.includes('计划')) return '正在规划';
+  if (method.includes('thread') || method.includes('session')) return '准备会话';
+  if (method.includes('agent_context') || method.includes('runtime_state')) return '读取上下文';
+  if (method.includes('workspace_artifacts')) return '处理附件';
+  if (method.includes('profile')) return '读取记忆';
+  if (method.includes('task_complete') || method.includes('completed')) return '完成处理';
+  return item.status === 'running' ? '正在思考' : item.title;
+}
+
+function codexCompletedActionLabel(item: CodexStreamItem) {
+  const method = item.method || '';
+  if (item.status === 'error') return item.title || '执行失败';
+  if (method.includes('tool') || item.title.includes('工具')) return '调用工具';
+  if (method.includes('plan') || item.title.includes('计划')) return '规划';
+  if (method.includes('thread') || method.includes('session')) return '准备会话';
+  if (method.includes('agent_context') || method.includes('runtime_state')) return '读取上下文';
+  if (method.includes('workspace_artifacts')) return '处理附件';
+  if (method.includes('profile')) return '读取记忆';
+  if (method.includes('hermes.source_runtime')) return '运行 Hermes/Codex';
+  if (method.includes('codex.agent_message')) return '生成回复';
+  if (method.includes('task_complete') || method.includes('completed')) return '完成处理';
+  return item.title.replace(/^正在/, '');
+}
+
+function codexCompactDetail(item: CodexStreamItem) {
+  const detail = item.detail.trim();
+  if (!detail) return item.title;
+  if (detail === item.title) return detail;
+  return detail.length > 120 ? `${detail.slice(0, 120)}...` : detail;
+}
+
+function formatCodexContent(content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) return '';
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (isRecord(parsed) && Array.isArray(parsed.plan)) {
+      return parsed.plan
+        .map((step) => {
+          if (!isRecord(step)) return '';
+          const status = typeof step.status === 'string' ? step.status : '';
+          const text = typeof step.step === 'string' ? step.step : '';
+          return [status ? `[${status}]` : '', text].filter(Boolean).join(' ');
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return trimmed;
+  }
+}
+
+function CodexActivityIcon({ item }: { item: CodexStreamItem }) {
+  if (item.status === 'error') return <AlertCircle className="h-4 w-4 text-red-500" />;
+  if (item.status === 'completed') return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+  return <LoaderCircle className="h-4 w-4 animate-spin text-blue-600" />;
+}
+
+function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexActivity }) {
+  const items = activity.items.slice(-18);
+  const completedAtMs =
+    timestampMs(activity.completedAt) ||
+    timestampMs(items[items.length - 1]?.timestamp || '') ||
+    0;
+
+  return (
+    <div className="flex justify-start">
+      <div className="w-full max-w-2xl border-b border-slate-200 pb-3 text-sm text-slate-600">
+        <details className="group">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md px-0 py-1 text-sm font-medium text-slate-500 hover:text-slate-900">
+            <span>已处理 {formatDuration(activity.durationMs)}</span>
+            <ChevronDown className="h-4 w-4 transition group-open:rotate-180" />
+          </summary>
+
+          <div className="mt-3 space-y-2">
+            {items.map((item, index) => {
+              const settledItem: CodexStreamItem = {
+                ...item,
+                status: item.status === 'error' ? 'error' : 'completed',
+              };
+              const content = item.content ? formatCodexContent(item.content) : '';
+              const links = extractLinks(item.detail, content);
+              return (
+                <div key={`${item.id}-${index}`} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <div className="mt-0.5 shrink-0">
+                      <CodexActivityIcon item={settledItem} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="font-medium text-slate-900">{codexCompletedActionLabel(settledItem)}</span>
+                        <span className="min-w-0 break-words text-slate-500">{codexCompactDetail(item)}</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
+                        {item.method ? <span>来源 {item.method}</span> : null}
+                        <span>耗时 {formatDuration(stepDuration(items, index, completedAtMs))}</span>
+                      </div>
+                      {links.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {links.map((link) => (
+                            <a
+                              key={link}
+                              href={link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="max-w-full truncate rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-blue-700 hover:border-blue-200 hover:bg-blue-50"
+                            >
+                              {link}
+                            </a>
+                          ))}
+                        </div>
+                      ) : null}
+                      {content ? (
+                        <details className="group/output mt-2">
+                          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
+                            <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
+                            输出
+                          </summary>
+                          <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
+                            {content}
+                          </pre>
+                        </details>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
+
 function getStoredActiveRunId() {
   if (typeof window === 'undefined') return '';
   return window.sessionStorage.getItem(EXECUTIVE_ACTIVE_RUN_STORAGE_KEY) || '';
@@ -791,37 +989,82 @@ async function waitForExecutiveRun(
 function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active: boolean }) {
   if (items.length === 0 && !active) return null;
   const visibleItems = items.length > 0
-    ? items.slice(-8)
+    ? items.slice(-5)
     : [
         {
           id: 'agent-stream-preparing',
-          title: '准备执行',
-          detail: '正在创建本轮任务并加载上下文',
+          title: '正在思考',
+          detail: '正在创建任务并读取上下文',
           status: 'running' as const,
           timestamp: new Date().toISOString(),
         },
       ];
+  const latestItem = [...visibleItems].reverse().find((item) => item.status === 'running') || visibleItems[visibleItems.length - 1];
+  const activeTitle = latestItem ? codexActionLabel(latestItem) : '正在思考';
+  const activeDetail = latestItem ? codexCompactDetail(latestItem) : '正在创建任务并读取上下文';
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-2xl py-1 pl-1 text-sm text-slate-500">
-        <div className="space-y-1.5 border-l border-slate-200 pl-4">
-          {visibleItems.map((item) => (
-            <div key={item.id} className="relative min-w-0 leading-6">
-              <span
-                className={`absolute -left-[1.18rem] top-2 h-2 w-2 rounded-full ${codexItemDotClass[item.status]} ${
-                  active && item.status === 'running' ? 'animate-pulse' : ''
-                }`}
-              />
-              <span className="font-medium text-slate-700">{item.title}</span>
-              {item.detail ? <span className="break-words text-slate-500">：{item.detail}</span> : null}
-              {item.content ? (
-                <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
-                  {item.content}
-                </pre>
-              ) : null}
+      <div className="w-full max-w-2xl py-1">
+        <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-900 shadow-sm ring-1 ring-slate-200/70">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white shadow-sm ring-1 ring-slate-200">
+              {active ? (
+                <LoaderCircle className="h-4 w-4 animate-spin text-blue-600" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              )}
             </div>
-          ))}
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 font-medium text-slate-950">{active ? activeTitle : '处理完成'}</span>
+                {active ? <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" /> : null}
+                <span className="min-w-0 truncate text-slate-500">{active ? activeDetail : '已生成回复'}</span>
+              </div>
+              <details className="group mt-2">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900">
+                  <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
+                  查看过程
+                </summary>
+
+                <div className="mt-3 space-y-2 border-l border-slate-200 pl-3">
+                  {visibleItems.map((item) => {
+                    const settledItem: CodexStreamItem = {
+                      ...item,
+                      status: item.status === 'error' ? 'error' : 'completed',
+                    };
+                    const content = item.content ? formatCodexContent(item.content) : '';
+                    return (
+                      <div key={item.id} className="min-w-0 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-200/70">
+                        <div className="flex min-w-0 items-start gap-2">
+                          <div className="mt-0.5 shrink-0">
+                            <CodexActivityIcon item={settledItem} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                              <span className="font-medium text-slate-900">{codexCompletedActionLabel(item)}</span>
+                              <span className="min-w-0 break-words text-slate-500">{codexCompactDetail(item)}</span>
+                            </div>
+                            {content ? (
+                              <details className="group/output mt-2">
+                                <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
+                                  <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
+                                  输出
+                                </summary>
+                                <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
+                                  {content}
+                                </pre>
+                              </details>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -869,6 +1112,7 @@ export default function InvestorAgentChatPage() {
   const [plannerTrace, setPlannerTrace] = useState<PlannerTraceItem[]>([]);
   const [plannerPanelOpen, setPlannerPanelOpen] = useState(false);
   const [codexStreamItems, setCodexStreamItems] = useState<CodexStreamItem[]>([]);
+  const [completedCodexActivity, setCompletedCodexActivity] = useState<CompletedCodexActivity | null>(null);
   const [assistantDraft, setAssistantDraft] = useState('');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stoppingRun, setStoppingRun] = useState(false);
@@ -1104,6 +1348,12 @@ export default function InvestorAgentChatPage() {
         setSending(false);
         setAssistantDraft('');
         setCodexStreamItems([]);
+        if (projected.length > 0) {
+          setCompletedCodexActivity(buildCompletedActivityFromStatus({
+            run: latestTerminalRun,
+            events: projected,
+          }));
+        }
 
         const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
         if (recoveredMessages.length > 0) {
@@ -1141,6 +1391,7 @@ export default function InvestorAgentChatPage() {
     setStoppingRun(false);
     setPlannerTrace([]);
     setCodexStreamItems([]);
+    setCompletedCodexActivity(null);
     setAssistantDraft('');
   }, []);
 
@@ -1351,6 +1602,7 @@ export default function InvestorAgentChatPage() {
     setError(null);
     setPlannerTrace([]);
     setCodexStreamItems([]);
+    setCompletedCodexActivity(null);
     setAssistantDraft('');
     setPlannerPanelOpen(false);
     codexEventIndexRef.current = 0;
@@ -1396,9 +1648,21 @@ export default function InvestorAgentChatPage() {
       let buffer = '';
       let finalData: PersonalAgentFinalData | null = null;
       let finalStatus = 200;
+      const activityStartedAt = Date.now();
+      let collectedCodexItems: CodexStreamItem[] = [];
 
       const appendCodexItem = (item: CodexStreamItem | null) => {
         if (!item) return;
+        const existingIndex = collectedCodexItems.findIndex((entry) => entry.id === item.id);
+        if (existingIndex >= 0) {
+          collectedCodexItems = [
+            ...collectedCodexItems.slice(0, existingIndex),
+            { ...collectedCodexItems[existingIndex], ...item },
+            ...collectedCodexItems.slice(existingIndex + 1),
+          ].slice(-18);
+        } else {
+          collectedCodexItems = [...collectedCodexItems, item].slice(-18);
+        }
         setCodexStreamItems((prev) => {
           const existingIndex = prev.findIndex((entry) => entry.id === item.id);
           if (existingIndex >= 0) {
@@ -1508,6 +1772,12 @@ export default function InvestorAgentChatPage() {
       } else if (typeof completedData.reply === 'string') {
         setMessages([...nextMessages, { role: 'assistant', content: completedData.reply }]);
       }
+      setCompletedCodexActivity({
+        id: completedData.runId || `activity-${Date.now()}`,
+        durationMs: Math.max(0, Date.now() - activityStartedAt),
+        items: collectedCodexItems,
+        completedAt: new Date().toISOString(),
+      });
       setAssistantDraft('');
       setCodexStreamItems([]);
     } catch (err) {
@@ -1876,17 +2146,28 @@ export default function InvestorAgentChatPage() {
                   )}
                 </div>
               ) : null}
-              {messages.map((message, index) => (
-                <div key={message.id || `${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 sm:max-w-xs lg:max-w-md ${
-                      message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
-                    }`}
-                  >
-                    <MarkdownMessage content={message.content} inverted={message.role === 'user'} />
+              {messages.map((message, index) => {
+                const showCompletedActivity =
+                  completedCodexActivity &&
+                  message.role === 'assistant' &&
+                  index === messages.length - 1 &&
+                  !sending &&
+                  !assistantDraft;
+                return (
+                  <div key={message.id || `${message.role}-${index}`} className="space-y-3">
+                    {showCompletedActivity ? <CompletedCodexActivitySummary activity={completedCodexActivity} /> : null}
+                    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-4 py-3 sm:max-w-xs lg:max-w-md ${
+                          message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
+                        }`}
+                      >
+                        <MarkdownMessage content={message.content} inverted={message.role === 'user'} />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <CodexStreamOutput items={codexStreamItems} active={sending} />
               <StreamingAssistantMessage content={assistantDraft} />
               {messages.length === 0 ? <div className="py-8 text-center text-slate-500">开始和你的个人 Hermes Agent 对话吧。</div> : null}
