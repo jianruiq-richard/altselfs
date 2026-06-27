@@ -1103,7 +1103,7 @@ export default function InvestorAgentChatPage() {
         setActiveRunId(null);
         setSending(false);
         setAssistantDraft('');
-        if (projected.length > 0) setCodexStreamItems(projected.slice(-18));
+        setCodexStreamItems([]);
 
         const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
         if (recoveredMessages.length > 0) {
