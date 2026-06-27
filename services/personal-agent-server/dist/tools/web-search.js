@@ -31,8 +31,13 @@ export async function runWebSearchTool(argumentsValue, config) {
         });
     }
     try {
-        const results = await runProviderSearch(provider, query, recency, config);
-        return JSON.stringify({ query, recency, source: provider, results }, null, 2);
+        let results = await runProviderSearch(provider, query, recency, config);
+        let relaxedRecency = false;
+        if (results.length === 0 && recency) {
+            results = await runProviderSearch(provider, query, undefined, config);
+            relaxedRecency = true;
+        }
+        return JSON.stringify({ query, recency, source: provider, relaxedRecency, results }, null, 2);
     }
     catch (error) {
         return JSON.stringify({
@@ -71,17 +76,17 @@ export function resolveWebSearchProvider(config) {
 }
 async function runProviderSearch(provider, query, recency, config) {
     if (provider === 'serpapi')
-        return serpApiSearch(query, recency, process.env[config.serpApiKeyEnv] || '');
+        return serpApiSearch(query, recency, process.env[config.serpApiKeyEnv] || '', config);
     if (provider === 'serper')
-        return serperSearch(query, recency, process.env[config.serperApiKeyEnv] || '');
+        return serperSearch(query, recency, process.env[config.serperApiKeyEnv] || '', config);
     if (provider === 'google_cse') {
-        return googleCseSearch(query, process.env[config.googleCseApiKeyEnv] || '', process.env[config.googleCseIdEnv] || '');
+        return googleCseSearch(query, process.env[config.googleCseApiKeyEnv] || '', process.env[config.googleCseIdEnv] || '', config);
     }
     if (provider === 'bing')
         return bingSearch(query, recency, config);
     return duckDuckGoHtmlSearch(query);
 }
-async function serpApiSearch(query, recency, apiKey) {
+async function serpApiSearch(query, recency, apiKey, config) {
     const url = new URL('https://serpapi.com/search.json');
     url.searchParams.set('engine', 'google');
     url.searchParams.set('q', query);
@@ -92,7 +97,7 @@ async function serpApiSearch(query, recency, apiKey) {
     const timeRange = googleTimeRange(recency);
     if (timeRange)
         url.searchParams.set('tbs', timeRange);
-    const response = await fetchJsonWithTimeout(url.toString(), { method: 'GET' });
+    const response = await fetchJsonWithTimeout(url.toString(), { method: 'GET' }, config.webSearchTimeoutMs);
     const organic = Array.isArray(response.organic_results) ? response.organic_results : [];
     return organic.slice(0, 8).map((item) => ({
         title: String(item.title || ''),
@@ -101,7 +106,7 @@ async function serpApiSearch(query, recency, apiKey) {
         publishedDate: typeof item.date === 'string' ? item.date : undefined,
     }));
 }
-async function serperSearch(query, recency, apiKey) {
+async function serperSearch(query, recency, apiKey, config) {
     const response = await fetchJsonWithTimeout('https://google.serper.dev/search', {
         method: 'POST',
         headers: {
@@ -113,7 +118,7 @@ async function serperSearch(query, recency, apiKey) {
             num: 8,
             ...(googleTimeRange(recency) ? { tbs: googleTimeRange(recency) } : {}),
         }),
-    });
+    }, config.webSearchTimeoutMs);
     const organic = Array.isArray(response.organic) ? response.organic : [];
     return organic.slice(0, 8).map((item) => ({
         title: String(item.title || ''),
@@ -132,13 +137,13 @@ function googleTimeRange(recency) {
         return 'qdr:m';
     return '';
 }
-async function googleCseSearch(query, apiKey, cx) {
+async function googleCseSearch(query, apiKey, cx, config) {
     const url = new URL('https://www.googleapis.com/customsearch/v1');
     url.searchParams.set('key', apiKey);
     url.searchParams.set('cx', cx);
     url.searchParams.set('q', query);
     url.searchParams.set('num', '8');
-    const response = await fetchJsonWithTimeout(url.toString(), { method: 'GET' });
+    const response = await fetchJsonWithTimeout(url.toString(), { method: 'GET' }, config.webSearchTimeoutMs);
     const items = Array.isArray(response.items) ? response.items : [];
     return items.slice(0, 8).map((item) => ({
         title: String(item.title || ''),
@@ -159,7 +164,7 @@ async function bingSearch(query, recency, config) {
         headers: {
             'Ocp-Apim-Subscription-Key': process.env[config.bingSearchApiKeyEnv] || '',
         },
-    });
+    }, config.webSearchTimeoutMs);
     const values = isRecord(response.webPages) && Array.isArray(response.webPages.value) ? response.webPages.value : [];
     return values.slice(0, 8).map((item) => ({
         title: String(item.name || ''),
@@ -178,9 +183,9 @@ function bingFreshness(recency) {
         return 'Month';
     return '';
 }
-async function fetchJsonWithTimeout(url, init) {
+async function fetchJsonWithTimeout(url, init, timeoutMs) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
         const response = await fetch(url, { ...init, signal: controller.signal });
         if (!response.ok) {
@@ -188,6 +193,12 @@ async function fetchJsonWithTimeout(url, init) {
             throw new Error(`search request failed with HTTP ${response.status}${body ? `: ${body.slice(0, 300)}` : ''}`);
         }
         return await response.json();
+    }
+    catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+            throw new Error(`search request timed out after ${timeoutMs}ms`);
+        }
+        throw error;
     }
     finally {
         clearTimeout(timeout);

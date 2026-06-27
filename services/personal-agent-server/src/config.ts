@@ -28,6 +28,7 @@ export type ServerConfig = {
   googleCseIdEnv: string;
   bingSearchApiKeyEnv: string;
   bingSearchEndpoint: string;
+  webSearchTimeoutMs: number;
   disableLocalEnvironmentForGeneral: boolean;
   hermesSourceRuntimeEnabled: boolean;
   hermesSourceRoot: string;
@@ -354,6 +355,7 @@ export function loadConfig(): ServerConfig {
     googleCseIdEnv: readEnv('GOOGLE_CSE_ID_ENV', 'GOOGLE_CSE_ID'),
     bingSearchApiKeyEnv: readEnv('BING_SEARCH_API_KEY_ENV', 'BING_SEARCH_API_KEY'),
     bingSearchEndpoint: readEnv('BING_SEARCH_ENDPOINT', 'https://api.bing.microsoft.com/v7.0/search'),
+    webSearchTimeoutMs: readIntEnv('WEB_SEARCH_TIMEOUT_MS', 30_000),
     disableLocalEnvironmentForGeneral: readBoolEnv('CODEX_GENERAL_DISABLE_LOCAL_ENVIRONMENT', true),
     hermesSourceRuntimeEnabled: readBoolEnv('HERMES_SOURCE_RUNTIME_ENABLED', false),
     hermesSourceRoot: path.resolve(readEnv('HERMES_SOURCE_ROOT', '/Users/richardjian/work/agent-sources/hermes-agent')),

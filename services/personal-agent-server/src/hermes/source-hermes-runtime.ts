@@ -56,8 +56,7 @@ export class HermesSourceRuntime {
     const runtimePaths = resolveRuntimePaths(this.config, request, runId);
     const { hermesHome, codexHome, workspace } = runtimePaths;
     const runtimeStatePaths = { hermesHome, codexHome, workspace };
-    const codexLocalEnvironmentDisabled =
-      this.config.runtimeStateMode === 'sandbox' ? false : this.config.disableLocalEnvironmentForGeneral;
+    const codexLocalEnvironmentDisabled = this.config.disableLocalEnvironmentForGeneral;
     const previousSandboxState = await readSandboxState(runtimePaths);
     const previousHermesSessionId =
       typeof previousSandboxState?.hermesSessionId === 'string' ? previousSandboxState.hermesSessionId.trim() : '';
@@ -505,9 +504,7 @@ export class HermesSourceRuntime {
           HERMES_BACKGROUND_REVIEW_INLINE:
             this.config.memoryReviewMode === 'inline' && this.config.hermesBackgroundReviewInline ? '1' : '0',
           HERMES_DISABLE_LAZY_INSTALLS: '1',
-          ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: this.config.runtimeStateMode === 'sandbox'
-            ? '0'
-            : this.config.disableLocalEnvironmentForGeneral ? '1' : '0',
+          ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: this.config.disableLocalEnvironmentForGeneral ? '1' : '0',
           ALTSELFS_CODEX_PERSONALITY: 'pragmatic',
           ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS: buildCodexGeneralDeveloperInstructions({
             webSearchMode: this.config.codexWebSearchMode,
@@ -641,10 +638,10 @@ function buildCodexGeneralDeveloperInstructions(input: { webSearchMode: string; 
 
   const artifactAccessPolicy = input.runtimeStateMode === 'sandbox'
     ? [
-        '- This run is inside an Altselfs sandbox workspace. You may use Codex native read-only file inspection commands to read files under the current workspace artifacts/external-memory directories when the user asks about uploaded files or indexed materials.',
-        '- Do not inspect arbitrary local repositories or unrelated filesystem paths. Restrict local file access to the current sandbox workspace and listed artifact paths.',
-        '- Prefer `altselfs_read_artifact` for listed artifact text. If that tool is unavailable, use read-only shell/file inspection on the listed workspace artifact path or parsed_text_path.',
-        '- Do not run builds, tests, package managers, network scanners, or scripts unless the user explicitly asks for an execution task.',
+        '- This run is inside an Altselfs sandbox workspace. User-provided artifacts listed in host context are available through the `altselfs_read_artifact` tool.',
+        '- If the user asks about an uploaded file or indexed material, call `altselfs_read_artifact` with `parsed_text_path` first, then `workspace_path` if needed.',
+        '- Do not inspect arbitrary local repositories, source trees, system directories, or unrelated filesystem paths.',
+        '- Do not run shell commands, tests, builds, package managers, scripts, network scanners, or local code.',
       ]
     : [
         '- Do not inspect, read, write, patch, or modify local repositories or arbitrary local filesystem paths.',
