@@ -3,6 +3,12 @@ import { prisma } from '@/lib/prisma';
 export type AgentType = 'GMAIL' | 'FEISHU' | 'WECHAT' | 'XIAOHONGSHU' | 'EXECUTIVE' | 'PERSONAL';
 export type AgentMessageRole = 'USER' | 'ASSISTANT' | 'TOOL';
 
+function summarizeThreadTitle(content: string) {
+  const normalized = content.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '新会话';
+  return normalized.length > 28 ? `${normalized.slice(0, 28)}...` : normalized;
+}
+
 export async function getLatestThreadWithMessages(investorId: string, agentType: AgentType) {
   const thread = await prisma.agentThread.findFirst({
     where: { investorId, agentType },
@@ -23,6 +29,47 @@ export async function getLatestThreadWithMessages(investorId: string, agentType:
   }
 
   return thread;
+}
+
+export async function listAgentThreads(investorId: string, agentType: AgentType, limit = 30) {
+  const threads = await prisma.agentThread.findMany({
+    where: { investorId, agentType },
+    orderBy: { updatedAt: 'desc' },
+    take: Math.min(Math.max(limit, 1), 100),
+    include: {
+      _count: {
+        select: { messages: true },
+      },
+      messages: {
+        where: { role: { in: ['USER', 'ASSISTANT'] } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: 1,
+      },
+    },
+  });
+
+  return threads.map((thread) => ({
+    id: thread.id,
+    title: thread.title || summarizeThreadTitle(thread.messages[0]?.content || ''),
+    createdAt: thread.createdAt.toISOString(),
+    updatedAt: thread.updatedAt.toISOString(),
+    messageCount: thread._count.messages,
+    preview: thread.messages[0]?.content || '',
+  }));
+}
+
+export async function createThread(params: {
+  investorId: string;
+  agentType: AgentType;
+  title?: string | null;
+}) {
+  return prisma.agentThread.create({
+    data: {
+      investorId: params.investorId,
+      agentType: params.agentType,
+      title: params.title?.trim() || '新会话',
+    },
+  });
 }
 
 export async function getThreadMessagesPage(params: {
@@ -103,12 +150,7 @@ export async function ensureThread(params: {
 
   if (latest) return latest;
 
-  return prisma.agentThread.create({
-    data: {
-      investorId: params.investorId,
-      agentType: params.agentType,
-    },
-  });
+  return createThread(params);
 }
 
 export async function appendThreadMessage(params: {
@@ -130,6 +172,16 @@ export async function appendThreadMessage(params: {
     where: { id: params.threadId },
     data: { updatedAt: new Date() },
   });
+
+  if (params.role === 'USER') {
+    await prisma.agentThread.updateMany({
+      where: {
+        id: params.threadId,
+        OR: [{ title: null }, { title: '新会话' }],
+      },
+      data: { title: summarizeThreadTitle(params.content) },
+    });
+  }
 
   return message;
 }

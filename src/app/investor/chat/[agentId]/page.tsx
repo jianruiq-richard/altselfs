@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Paperclip, Square, X } from 'lucide-react';
+import { MessageSquare, Paperclip, Plus, Square, X } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -16,6 +16,15 @@ type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
   createdAt?: string;
+};
+
+type AgentSessionSummary = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  preview?: string;
 };
 
 type PendingAttachmentKind = 'image' | 'video' | 'pdf' | 'document' | 'file';
@@ -96,6 +105,7 @@ type ExecutiveRunPollResult = {
 type PersonalAgentFinalData = {
   threadId?: string;
   messages?: ChatMessage[];
+  sessions?: AgentSessionSummary[];
   reply?: string;
   error?: string;
   runId?: string;
@@ -174,6 +184,15 @@ function formatBytes(bytes: number) {
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / 1024 ** exponent;
   return `${value >= 10 || exponent === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[exponent]}`;
+}
+
+function formatSessionTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+  });
 }
 
 function createPendingAttachment(file: File): PendingAttachment {
@@ -827,6 +846,8 @@ export default function InvestorAgentChatPage() {
   const isExecutive = agentId === '100';
 
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<AgentSessionSummary[]>([]);
+  const [creatingSession, setCreatingSession] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
@@ -1111,13 +1132,27 @@ export default function InvestorAgentChatPage() {
     }
   }, []);
 
-  const loadData = useCallback(async () => {
+  const resetPersonalAgentRunState = useCallback(() => {
+    activeRunIdRef.current = null;
+    liveStreamRunIdRef.current = null;
+    requestedStopRunIdRef.current = null;
+    setActiveRunId(null);
+    setSending(false);
+    setStoppingRun(false);
+    setPlannerTrace([]);
+    setCodexStreamItems([]);
+    setAssistantDraft('');
+  }, []);
+
+  const loadData = useCallback(async (targetThreadId?: string | null) => {
     if (!isExecutive) return;
     setLoading(true);
     setRecoveringRunState(true);
     setError(null);
     try {
-      const res = await fetch('/api/investor/personal-agent', {
+      const query = new URLSearchParams({ sessions: '1' });
+      if (targetThreadId) query.set('threadId', targetThreadId);
+      const res = await fetch(`/api/investor/personal-agent?${query.toString()}`, {
         cache: 'no-store',
         credentials: 'same-origin',
       });
@@ -1126,16 +1161,15 @@ export default function InvestorAgentChatPage() {
         setError(data.error || '加载失败');
         return;
       }
+      resetPersonalAgentRunState();
       setThreadId(data.threadId || null);
+      setSessions(Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : []);
       const loadedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
       setMessages(loadedMessages);
       setHasMoreMessages(Boolean(data.hasMore));
       setBriefing(null);
       setPersistedBriefing(null);
       setPlannerSteps([]);
-      setPlannerTrace([]);
-      setCodexStreamItems([]);
-      setAssistantDraft('');
       if (data.threadId) {
         await refreshPersonalAgentStatus(String(data.threadId));
       }
@@ -1148,7 +1182,7 @@ export default function InvestorAgentChatPage() {
       setLoading(false);
       setRecoveringRunState(false);
     }
-  }, [isExecutive, refreshPersonalAgentStatus, resumeExecutiveRun, showExecutiveControls]);
+  }, [isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, showExecutiveControls]);
 
   useEffect(() => {
     if (!threadId || !activeRunId) return;
@@ -1161,6 +1195,47 @@ export default function InvestorAgentChatPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const createNewSession = useCallback(async () => {
+    if (creatingSession || sending || recoveringRunState) return;
+    setCreatingSession(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/investor/personal-agent', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+        credentials: 'same-origin',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || '创建新会话失败');
+        return;
+      }
+      resetPersonalAgentRunState();
+      setThreadId(typeof data.threadId === 'string' ? data.threadId : null);
+      setMessages([]);
+      setHasMoreMessages(false);
+      setSessions(Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : []);
+      setInput('');
+      setAttachments([]);
+      window.requestAnimationFrame(() => {
+        messagesViewportRef.current?.scrollTo({ top: 0 });
+      });
+    } catch {
+      setError('创建新会话失败，请稍后重试');
+    } finally {
+      setCreatingSession(false);
+      setRecoveringRunState(false);
+    }
+  }, [creatingSession, recoveringRunState, resetPersonalAgentRunState, sending]);
+
+  const switchSession = useCallback(async (targetThreadId: string) => {
+    if (!targetThreadId || targetThreadId === threadId || sending || recoveringRunState) return;
+    setInput('');
+    setAttachments([]);
+    await loadData(targetThreadId);
+  }, [loadData, recoveringRunState, sending, threadId]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1425,6 +1500,9 @@ export default function InvestorAgentChatPage() {
       const completedData = receivedFinalData;
       liveStreamRunIdRef.current = null;
       setThreadId(typeof completedData.threadId === 'string' ? completedData.threadId : threadId);
+      if (Array.isArray(completedData.sessions)) {
+        setSessions(completedData.sessions);
+      }
       if (Array.isArray(completedData.messages) && completedData.messages.length >= nextMessages.length) {
         setMessages(completedData.messages);
       } else if (typeof completedData.reply === 'string') {
@@ -1717,6 +1795,62 @@ export default function InvestorAgentChatPage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <MessageSquare className="h-4 w-4 text-slate-500" />
+                <span>会话</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                用户画像和长期偏好跨会话共享；对话上下文、附件和工作区按会话隔离。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void createNewSession()}
+              disabled={creatingSession || sending || recoveringRunState}
+              title="新建会话"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              {creatingSession ? '创建中...' : '新会话'}
+            </button>
+          </div>
+
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {sessions.length > 0 ? (
+              sessions.map((session) => {
+                const active = session.id === threadId;
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => void switchSession(session.id)}
+                    disabled={active || sending || recoveringRunState}
+                    title={session.title}
+                    className={[
+                      'min-w-[11rem] max-w-[14rem] rounded-lg border px-3 py-2 text-left transition disabled:cursor-default',
+                      active
+                        ? 'border-blue-300 bg-blue-50 text-blue-900'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60',
+                    ].join(' ')}
+                  >
+                    <span className="block truncate text-sm font-medium">{session.title || '新会话'}</span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      {session.messageCount} 条消息{formatSessionTime(session.updatedAt) ? ` · ${formatSessionTime(session.updatedAt)}` : ''}
+                    </span>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-500">
+                发送第一条消息后会自动创建会话。
+              </div>
+            )}
+          </div>
+        </div>
+
         <div
           ref={messagesViewportRef}
           onScroll={handleMessagesScroll}

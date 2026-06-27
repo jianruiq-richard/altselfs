@@ -3,9 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import {
   appendThreadMessage,
+  createThread,
   ensureThread,
   getLatestThreadWithMessages,
   getThreadMessagesPage,
+  listAgentThreads,
   toClientMessages,
 } from '@/lib/agent-session';
 
@@ -258,6 +260,8 @@ export async function GET(req: NextRequest) {
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const requestedThreadId = req.nextUrl.searchParams.get('threadId')?.trim();
+  const includeSessions = req.nextUrl.searchParams.get('sessions') === '1';
+  const sessions = includeSessions ? await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE) : undefined;
   const statusRequested = req.nextUrl.searchParams.get('status') === '1';
   if (statusRequested) {
     const thread = requestedThreadId
@@ -287,6 +291,7 @@ export async function GET(req: NextRequest) {
         recentEvents: [],
         messages: [],
         hasMore: false,
+        ...(sessions ? { sessions } : {}),
       });
     }
 
@@ -312,6 +317,7 @@ export async function GET(req: NextRequest) {
         ...statusPayload,
         messages: statusMessages,
         hasMore: statusHasMore,
+        ...(sessions ? { sessions } : {}),
       });
     } catch (error) {
       return NextResponse.json(
@@ -339,6 +345,7 @@ export async function GET(req: NextRequest) {
       messages: toClientMessages(page.messages),
       hasMore: page.hasMore,
       nextBefore: page.nextBeforeMessageId,
+      ...(sessions ? { sessions } : {}),
     });
   }
 
@@ -347,6 +354,28 @@ export async function GET(req: NextRequest) {
     threadId: thread?.id || null,
     messages: thread ? toClientMessages(thread.messages) : [],
     hasMore: thread ? thread._count.messages > thread.messages.length : false,
+    ...(sessions ? { sessions } : {}),
+  });
+}
+
+export async function PUT(req: NextRequest) {
+  const investor = await getInvestorOrNull();
+  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = (await req.json().catch(() => ({}))) as { title?: unknown };
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+  const thread = await createThread({
+    investorId: investor.id,
+    agentType: PERSONAL_AGENT_TYPE,
+    title: title || '新会话',
+  });
+  const sessions = await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE);
+
+  return NextResponse.json({
+    threadId: thread.id,
+    messages: [],
+    hasMore: false,
+    sessions,
   });
 }
 
@@ -406,6 +435,7 @@ export async function POST(req: NextRequest) {
   if (req.nextUrl.searchParams.get('stream') === '1') {
     return streamPersonalAgentTurn({
       threadId: thread.id,
+      investorId: investor.id,
       userMessage,
       payload,
       messages,
@@ -445,6 +475,7 @@ export async function POST(req: NextRequest) {
       raw: result.raw,
     },
   });
+  const sessions = await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE);
 
   return NextResponse.json({
     threadId: thread.id,
@@ -452,6 +483,7 @@ export async function POST(req: NextRequest) {
     reply,
     route: result.route,
     messages: displayMessages([...messages, { role: 'assistant', content: reply }]),
+    sessions,
   });
 }
 
@@ -503,6 +535,7 @@ export async function DELETE(req: NextRequest) {
 
 function streamPersonalAgentTurn(params: {
   threadId: string;
+  investorId: string;
   userMessage: string;
   payload: {
     userId: string;
@@ -615,6 +648,7 @@ function streamPersonalAgentTurn(params: {
               raw: finalResult?.raw,
             },
           });
+          const sessions = await listAgentThreads(params.investorId, PERSONAL_AGENT_TYPE);
 
           write({
             type: 'final',
@@ -625,6 +659,7 @@ function streamPersonalAgentTurn(params: {
               reply,
               route: finalResult?.route,
               messages: displayMessages([...params.messages, { role: 'assistant', content: reply }]),
+              sessions,
             },
           });
         } catch (error) {
