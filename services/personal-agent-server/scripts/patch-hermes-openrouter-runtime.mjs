@@ -309,6 +309,114 @@ _ALTSELFS_READ_ARTIFACT_TOOL = {
     "deferLoading": False,
 }
 
+_ALTSELFS_COMPETITOR_TOOLS = [
+    {
+        "namespace": None,
+        "name": "altselfs_similarweb_api1",
+        "description": (
+            "Use RapidAPI similarweb-api1 visitsInfo for competitor traffic intelligence. "
+            "Best for total visits, visit trend, countries, devices, engagement, traffic "
+            "sources, keywords, AI traffic, and competitor/source discovery when covered."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Target domain, for example figurelabs.ai. Do not include protocol."},
+            },
+            "required": ["domain"],
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_semrush13",
+        "description": (
+            "Use RapidAPI semrush13 domain-data for competitor intelligence. Best for "
+            "covered domains with visits, growth history, search traffic, countries, "
+            "devices, traffic journey, backlinks summary, keywords, competitors, and AI traffic. "
+            "Does not provide backlink URL lists."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Target domain, for example magiclight.ai. Do not include protocol."},
+            },
+            "required": ["domain"],
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_semrush8",
+        "description": (
+            "Use RapidAPI semrush8 url_traffic for lightweight SEO summary when richer "
+            "sources do not cover the domain. Returns Semrush-like rank, keyword count, "
+            "traffic estimate, cost estimate, and link counts."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Target URL, for example https://figurelabs.ai/."},
+                "domain": {"type": "string", "description": "Target domain. Used to construct https://domain/ if url is omitted."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_domain_metrics_check",
+        "description": (
+            "Use RapidAPI Domain Metrics Check for SEO authority and backlink summary. "
+            "Returns Moz, Majestic, and Ahrefs-style metrics such as DA, PA, spam score, "
+            "Trust Flow, Citation Flow, DR, backlinks, referring domains, organic keywords, "
+            "and traffic proxy."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Target domain, for example figurelabs.ai. Do not include protocol."},
+            },
+            "required": ["domain"],
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+]
+
+
+_ALTSELFS_COMPETITOR_TOOL_ALIASES = {
+    "similarweb_api1": "altselfs_similarweb_api1",
+    "similarweb-api1": "altselfs_similarweb_api1",
+    "altselfs_similarweb_api1": "altselfs_similarweb_api1",
+    "semrush13": "altselfs_semrush13",
+    "altselfs_semrush13": "altselfs_semrush13",
+    "semrush8": "altselfs_semrush8",
+    "altselfs_semrush8": "altselfs_semrush8",
+    "domain_metrics_check": "altselfs_domain_metrics_check",
+    "domain-metrics-check": "altselfs_domain_metrics_check",
+    "altselfs_domain_metrics_check": "altselfs_domain_metrics_check",
+}
+
+
+def _altselfs_enabled_competitor_tool_names() -> set[str]:
+    configured = os.environ.get("ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS", "false").strip().lower()
+    if configured in {"1", "true", "yes", "on"}:
+        return {tool["name"] for tool in _ALTSELFS_COMPETITOR_TOOLS}
+    if configured in {"", "0", "false", "no", "off"}:
+        return set()
+    enabled: set[str] = set()
+    for raw_name in configured.split(","):
+        name = raw_name.strip().lower()
+        if not name:
+            continue
+        tool_name = _ALTSELFS_COMPETITOR_TOOL_ALIASES.get(name)
+        if tool_name:
+            enabled.add(tool_name)
+    return enabled
+
 
 def _altselfs_dynamic_tools() -> list[dict[str, Any]]:
     tools: list[dict[str, Any]] = []
@@ -318,6 +426,9 @@ def _altselfs_dynamic_tools() -> list[dict[str, Any]]:
     artifact_enabled = os.environ.get("ALTSELFS_CODEX_READ_ARTIFACT_DYNAMIC_TOOL", "true").lower()
     if artifact_enabled not in {"0", "false", "no", "off"}:
         tools.append(_ALTSELFS_READ_ARTIFACT_TOOL)
+    enabled_competitor_tools = _altselfs_enabled_competitor_tool_names()
+    if enabled_competitor_tools:
+        tools.extend([tool for tool in _ALTSELFS_COMPETITOR_TOOLS if tool["name"] in enabled_competitor_tools])
     return tools
 
 
@@ -376,6 +487,37 @@ def _call_altselfs_read_artifact_tool_bridge(arguments: Any) -> dict[str, Any]:
         "success": True,
     }
 
+
+def _call_altselfs_competitor_tool_bridge(tool: str, arguments: Any) -> dict[str, Any]:
+    bridge_url = os.environ.get(
+        "ALTSELFS_RAPIDAPI_COMPETITOR_BRIDGE_URL",
+        "http://127.0.0.1:8787/internal/tools/rapidapi-competitor",
+    )
+    payload = {
+        "toolName": tool,
+        "arguments": arguments if isinstance(arguments, dict) else {},
+    }
+    request = urllib.request.Request(
+        bridge_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        raw = response.read().decode("utf-8")
+    parsed = json.loads(raw) if raw.strip() else {}
+    if isinstance(parsed, dict) and "contentItems" in parsed:
+        return parsed
+    return {
+        "contentItems": [
+            {
+                "type": "inputText",
+                "text": json.dumps(parsed, ensure_ascii=False),
+            }
+        ],
+        "success": True,
+    }
+
 `;
 
 const helpersAnchor = `# How many tailing stderr lines from the codex subprocess to attach to a
@@ -386,7 +528,7 @@ _STDERR_TAIL_LINES = 12
 `;
 const helpersEndAnchor = `# Permission profile mapping mirrors the docstring in PR proposal:`;
 
-if (codexAppServerSession.includes(dynamicToolHelpersMarker) && codexAppServerSession.includes("_ALTSELFS_READ_ARTIFACT_TOOL")) {
+if (codexAppServerSession.includes(dynamicToolHelpersMarker) && codexAppServerSession.includes("_altselfs_enabled_competitor_tool_names")) {
   console.log("Hermes Codex dynamic tool helper patch already applied.");
   console.log(codexAppServerSessionPath);
 } else if (codexAppServerSession.includes(dynamicToolHelpersMarker)) {
@@ -532,7 +674,16 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
             (not namespace and tool == "altselfs_read_artifact")
             or (namespace == "altselfs" and tool == "read_artifact")
         )
-        if not is_web_search and not is_read_artifact:
+        is_competitor = (
+            not namespace
+            and tool in {
+                "altselfs_similarweb_api1",
+                "altselfs_semrush13",
+                "altselfs_semrush8",
+                "altselfs_domain_metrics_check",
+            }
+        )
+        if not is_web_search and not is_read_artifact and not is_competitor:
             self._client.respond(
                 rid,
                 {
@@ -549,6 +700,8 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
         try:
             if is_read_artifact:
                 result = _call_altselfs_read_artifact_tool_bridge(params.get("arguments") or {})
+            elif is_competitor:
+                result = _call_altselfs_competitor_tool_bridge(tool, params.get("arguments") or {})
             else:
                 result = _call_altselfs_tool_bridge(params.get("arguments") or {})
             self._client.respond(rid, result)
@@ -572,7 +725,7 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
 const dynamicToolMethodAnchor = `    def _decide_exec_approval(self, params: dict) -> str:
 `;
 
-if (codexAppServerSession.includes(dynamicToolMethodMarker) && codexAppServerSession.includes("is_read_artifact = (")) {
+if (codexAppServerSession.includes(dynamicToolMethodMarker) && codexAppServerSession.includes("is_competitor = (")) {
   console.log("Hermes Codex dynamic tool handler patch already applied.");
   console.log(codexAppServerSessionPath);
 } else if (codexAppServerSession.includes(dynamicToolMethodMarker)) {

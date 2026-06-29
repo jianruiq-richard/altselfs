@@ -1,6 +1,7 @@
 import { isRecord } from '../util.js';
 const TOOLS = [
     {
+        provider: 'similarweb_api1',
         source: 'similarweb-api1',
         host: 'similarweb-api1.p.rapidapi.com',
         name: 'altselfs_similarweb_api1',
@@ -24,6 +25,7 @@ const TOOLS = [
         },
     },
     {
+        provider: 'semrush13',
         source: 'semrush13',
         host: 'semrush13.p.rapidapi.com',
         name: 'altselfs_semrush13',
@@ -44,6 +46,7 @@ const TOOLS = [
         },
     },
     {
+        provider: 'semrush8',
         source: 'semrush8',
         host: 'semrush8.p.rapidapi.com',
         name: 'altselfs_semrush8',
@@ -71,6 +74,7 @@ const TOOLS = [
         },
     },
     {
+        provider: 'domain_metrics_check',
         source: 'domain-metrics-check',
         host: 'domain-metrics-check.p.rapidapi.com',
         name: 'altselfs_domain_metrics_check',
@@ -89,8 +93,15 @@ const TOOLS = [
         },
     },
 ];
-export function createRapidApiCompetitorDynamicTools() {
-    return TOOLS.map((tool) => ({
+export const RAPIDAPI_COMPETITOR_PROVIDER_TOOL_NAMES = Object.freeze(Object.fromEntries(TOOLS.map((tool) => [tool.provider, tool.name])));
+export const RAPIDAPI_COMPETITOR_TOOL_PROVIDER_NAMES = Object.freeze(Object.fromEntries(TOOLS.map((tool) => [tool.name, tool.provider])));
+export function getRapidApiCompetitorToolNamesForProviders(providers) {
+    const enabled = new Set(Array.from(providers, (provider) => provider.toLowerCase()));
+    return TOOLS.filter((tool) => enabled.has(tool.provider)).map((tool) => tool.name);
+}
+export function createRapidApiCompetitorDynamicTools(providers) {
+    const enabled = providers ? new Set(Array.from(providers, (provider) => provider.toLowerCase())) : null;
+    return TOOLS.filter((tool) => !enabled || enabled.has(tool.provider)).map((tool) => ({
         namespace: null,
         name: tool.name,
         description: tool.description,

@@ -4,7 +4,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DebugCollapsible } from '@/components/debug-collapsible';
 import { MarkdownMessage } from '@/components/markdown-message';
 
-type ProviderKey = 'gmail' | 'feishu' | 'xiaohongshu' | 'semrush';
+type ProviderKey =
+  | 'gmail'
+  | 'feishu'
+  | 'xiaohongshu'
+  | 'similarweb_api1'
+  | 'semrush13'
+  | 'semrush8'
+  | 'domain_metrics_check';
 
 type IntegrationCard = {
   provider: ProviderKey;
@@ -22,6 +29,53 @@ type AssistantMessage = {
   content: string;
 };
 
+const COMPETITIVE_DATA_SOURCE_PROVIDERS = [
+  'similarweb_api1',
+  'semrush13',
+  'semrush8',
+  'domain_metrics_check',
+] as const satisfies readonly ProviderKey[];
+
+const COMPETITIVE_DATA_SOURCE_SET = new Set<ProviderKey>(COMPETITIVE_DATA_SOURCE_PROVIDERS);
+
+const providerLabels: Record<ProviderKey, string> = {
+  gmail: 'Gmail',
+  feishu: '飞书',
+  xiaohongshu: '小红书',
+  similarweb_api1: 'Similarweb API1',
+  semrush13: 'Semrush13',
+  semrush8: 'Semrush8',
+  domain_metrics_check: 'Domain Metrics Check',
+};
+
+const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
+  similarweb_api1: '提供 Similarweb 类访问量、趋势、国家、设备、来源渠道、关键词和竞品发现信号。',
+  semrush13: '提供较完整的域名情报，覆盖访问量、增长历史、搜索流量、渠道、关键词、竞品和外链摘要。',
+  semrush8: '提供轻量 SEO URL traffic 指标，可作为覆盖不足时的备选流量、关键词、成本和链接代理信号。',
+  domain_metrics_check: '提供 Moz、Majestic、Ahrefs 类域名权威和外链摘要指标，例如 DA、DR、反链和引用域。',
+};
+
+const competitiveDataSourceScopes: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
+  similarweb_api1: '访问量、趋势、国家、设备、渠道、关键词、竞品/来源发现。用户量和营收需要结合代理指标推断。',
+  semrush13: '访问量、增长历史、搜索流量、渠道、关键词、竞品、AI traffic、外链摘要。不提供完整外链 URL 列表。',
+  semrush8: 'Semrush-like rank、关键词数、流量估计、流量价值、链接数。适合补充或兜底，不适合单独确认营收。',
+  domain_metrics_check: 'DA/PA、Spam Score、Trust Flow、Citation Flow、DR、外链、引用域、自然关键词和流量代理指标。',
+};
+
+const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
+  gmail: value,
+  feishu: value,
+  xiaohongshu: value,
+  similarweb_api1: value,
+  semrush13: value,
+  semrush8: value,
+  domain_metrics_check: value,
+});
+
+function isCompetitiveDataSource(provider: ProviderKey): provider is (typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number] {
+  return COMPETITIVE_DATA_SOURCE_SET.has(provider);
+}
+
 export default function InvestorIntegrationsPanel({
   initialCards,
   integrationStatus,
@@ -36,92 +90,45 @@ export default function InvestorIntegrationsPanel({
   const [cards, setCards] = useState(initialCards);
   const [loadingProvider, setLoadingProvider] = useState<ProviderKey | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [assistantInputs, setAssistantInputs] = useState<Record<ProviderKey, string>>({
-    gmail: '',
-    feishu: '',
-    xiaohongshu: '',
-    semrush: '',
-  });
-  const [assistantLoading, setAssistantLoading] = useState<Record<ProviderKey, boolean>>({
-    gmail: false,
-    feishu: false,
-    xiaohongshu: false,
-    semrush: false,
-  });
+  const [assistantInputs, setAssistantInputs] = useState<Record<ProviderKey, string>>(() => recordForProviders(''));
+  const [assistantLoading, setAssistantLoading] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));
   const [assistantChats, setAssistantChats] = useState<Record<ProviderKey, AssistantMessage[]>>({
     gmail: [],
     feishu: [],
     xiaohongshu: [],
-    semrush: [],
+    similarweb_api1: [],
+    semrush13: [],
+    semrush8: [],
+    domain_metrics_check: [],
   });
   const [assistantThreadIds, setAssistantThreadIds] = useState<Record<ProviderKey, string | null>>({
     gmail: null,
     feishu: null,
     xiaohongshu: null,
-    semrush: null,
+    similarweb_api1: null,
+    semrush13: null,
+    semrush8: null,
+    domain_metrics_check: null,
   });
-  const [coachOpen, setCoachOpen] = useState<Record<ProviderKey, boolean>>({
-    gmail: false,
-    feishu: false,
-    xiaohongshu: false,
-    semrush: false,
-  });
-  const [coachLoaded, setCoachLoaded] = useState<Record<ProviderKey, boolean>>({
-    gmail: false,
-    feishu: false,
-    xiaohongshu: false,
-    semrush: false,
-  });
-  const [coachLoading, setCoachLoading] = useState<Record<ProviderKey, boolean>>({
-    gmail: false,
-    feishu: false,
-    xiaohongshu: false,
-    semrush: false,
-  });
-  const [coachSaving, setCoachSaving] = useState<Record<ProviderKey, boolean>>({
-    gmail: false,
-    feishu: false,
-    xiaohongshu: false,
-    semrush: false,
-  });
-  const [coachDraft, setCoachDraft] = useState<Record<ProviderKey, string>>({
-    gmail: '',
-    feishu: '',
-    xiaohongshu: '',
-    semrush: '',
-  });
-  const [coachSaved, setCoachSaved] = useState<Record<ProviderKey, string>>({
-    gmail: '',
-    feishu: '',
-    xiaohongshu: '',
-    semrush: '',
-  });
-  const [coachMessage, setCoachMessage] = useState<Record<ProviderKey, string>>({
-    gmail: '',
-    feishu: '',
-    xiaohongshu: '',
-    semrush: '',
-  });
+  const [coachOpen, setCoachOpen] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));
+  const [coachLoaded, setCoachLoaded] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));
+  const [coachLoading, setCoachLoading] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));
+  const [coachSaving, setCoachSaving] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));
+  const [coachDraft, setCoachDraft] = useState<Record<ProviderKey, string>>(() => recordForProviders(''));
+  const [coachSaved, setCoachSaved] = useState<Record<ProviderKey, string>>(() => recordForProviders(''));
+  const [coachMessage, setCoachMessage] = useState<Record<ProviderKey, string>>(() => recordForProviders(''));
   const assistantViewportRefs = useRef<Partial<Record<ProviderKey, HTMLDivElement | null>>>({});
 
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
-    const providerLabel =
-      integrationProvider === 'gmail'
-        ? 'Gmail'
-        : integrationProvider === 'feishu'
-          ? '飞书'
-          : integrationProvider === 'semrush'
-            ? 'Semrush'
-            : '小红书';
+    const providerLabel = providerLabels[integrationProvider as ProviderKey] || '数据源';
     if (integrationStatus === 'connected') {
       return `${providerLabel} 绑定成功`;
     }
     return `${providerLabel} 绑定失败：${integrationDetail || '未知错误'}`;
   }, [integrationDetail, integrationProvider, integrationStatus]);
 
-  const providerLabel = (provider: ProviderKey) =>
-    provider === 'gmail' ? 'Gmail' : provider === 'feishu' ? '飞书' : provider === 'semrush' ? 'Semrush' : '小红书';
+  const providerLabel = (provider: ProviderKey) => providerLabels[provider];
   const assistantEndpoint = (provider: ProviderKey) =>
     provider === 'xiaohongshu'
       ? '/api/investor/xiaohongshu/assistant'
@@ -162,26 +169,26 @@ export default function InvestorIntegrationsPanel({
   }, [assistantChats, assistantLoading]);
 
   const connect = async (provider: ProviderKey) => {
-    if (provider === 'semrush') {
+    if (isCompetitiveDataSource(provider)) {
       setLoadingProvider(provider);
       setError(null);
       const current = cards.find((card) => card.provider === provider);
       try {
-        const res = await fetch('/api/investor/semrush', {
+        const res = await fetch(`/api/investor/competitive-data-source/${provider}`, {
           method: current?.connected ? 'DELETE' : 'PUT',
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error || '更新 Semrush 员工状态失败');
+          setError(data.error || `更新 ${providerLabel(provider)} 员工状态失败`);
           return;
         }
         setCards((prev) =>
           prev.map((card) =>
-            card.provider === 'semrush'
+            card.provider === provider
               ? {
                   ...card,
                   connected: Boolean(data.integration?.connected),
-                  accountName: data.integration?.accountName || 'Semrush 员工',
+                  accountName: data.integration?.accountName || `${providerLabel(provider)} 员工`,
                   updatedAt: data.integration?.updatedAt || new Date().toISOString(),
                   platformConfigured: Boolean(data.integration?.platformConfigured),
                 }
@@ -236,8 +243,8 @@ export default function InvestorIntegrationsPanel({
     setError(null);
     try {
       const res =
-        provider === 'semrush'
-          ? await fetch('/api/investor/semrush')
+        isCompetitiveDataSource(provider)
+          ? await fetch(`/api/investor/competitive-data-source/${provider}`)
           : provider === 'xiaohongshu'
           ? await fetch('/api/investor/xiaohongshu/assistant')
           : await fetch(`/api/investor/integrations/summary/${provider}`, {
@@ -254,20 +261,20 @@ export default function InvestorIntegrationsPanel({
             ? {
                 ...card,
                 connected:
-                  provider === 'semrush'
+                  isCompetitiveDataSource(provider)
                     ? Boolean(data.integration?.connected)
                     : provider === 'xiaohongshu'
                       ? Boolean(data.integration?.connected)
                       : true,
-                accountEmail: provider === 'xiaohongshu' || provider === 'semrush' ? null : data.integration.accountEmail || null,
+                accountEmail: provider === 'xiaohongshu' || isCompetitiveDataSource(provider) ? null : data.integration.accountEmail || null,
                 accountName:
-                  provider === 'semrush'
-                    ? 'Semrush 员工'
+                  isCompetitiveDataSource(provider)
+                    ? `${providerLabel(provider)} 员工`
                     : provider === 'xiaohongshu'
                     ? (data.integration?.connected ? '小红书助手' : null)
                     : data.integration.accountName || null,
                 updatedAt:
-                  provider === 'semrush'
+                  isCompetitiveDataSource(provider)
                     ? data.integration?.updatedAt || card.updatedAt
                     : provider === 'xiaohongshu'
                       ? data.thread?.messages?.length
@@ -275,7 +282,7 @@ export default function InvestorIntegrationsPanel({
                         : card.updatedAt
                       : data.integration.updatedAt || null,
                 latestSummary:
-                  provider === 'semrush'
+                  isCompetitiveDataSource(provider)
                     ? card.latestSummary
                     : provider === 'xiaohongshu'
                     ? data.thread?.messages?.length
@@ -289,7 +296,7 @@ export default function InvestorIntegrationsPanel({
                       : card.latestSummaryAt
                     : data.latestSummaryAt || null,
                 platformConfigured:
-                  provider === 'semrush' ? Boolean(data.integration?.platformConfigured) : card.platformConfigured,
+                  isCompetitiveDataSource(provider) ? Boolean(data.integration?.platformConfigured) : card.platformConfigured,
               }
             : card
         )
@@ -302,7 +309,7 @@ export default function InvestorIntegrationsPanel({
   };
 
   const sendAssistantMessage = async (provider: ProviderKey) => {
-    if (provider === 'semrush') return;
+    if (isCompetitiveDataSource(provider)) return;
     const text = assistantInputs[provider].trim();
     if (!text || assistantLoading[provider]) return;
 
@@ -348,7 +355,7 @@ export default function InvestorIntegrationsPanel({
   };
 
   const toggleCoach = async (provider: ProviderKey) => {
-    if (provider === 'semrush') return;
+    if (isCompetitiveDataSource(provider)) return;
     const nextOpen = !coachOpen[provider];
     setCoachOpen((prev) => ({ ...prev, [provider]: nextOpen }));
     if (!nextOpen || coachLoaded[provider]) return;
@@ -376,7 +383,7 @@ export default function InvestorIntegrationsPanel({
   };
 
   const saveCoachPrompt = async (provider: ProviderKey) => {
-    if (provider === 'semrush') return;
+    if (isCompetitiveDataSource(provider)) return;
     if (coachSaving[provider]) return;
     setCoachSaving((prev) => ({ ...prev, [provider]: true }));
     setCoachMessage((prev) => ({ ...prev, [provider]: '' }));
@@ -433,19 +440,19 @@ export default function InvestorIntegrationsPanel({
                 }`}
               >
           {card.connected
-            ? (card.provider === 'xiaohongshu' || card.provider === 'semrush' ? '已启用' : '已绑定')
-            : (card.provider === 'xiaohongshu' || card.provider === 'semrush' ? '未启用' : '未绑定')}
+            ? (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? '已启用' : '已绑定')
+            : (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? '未启用' : '未绑定')}
                 </span>
               </div>
 
             <p className="text-sm text-slate-600 mt-2">
-              {card.provider === 'semrush'
-                ? '平台提供 Semrush 数据能力，启用后由主 AI 助手在竞品情报对话中自动调用。'
+              {isCompetitiveDataSource(card.provider)
+                ? competitiveDataSourceDescriptions[card.provider]
                 : card.accountEmail || card.accountName || '尚未绑定账号'}
             </p>
-            {card.provider === 'semrush' && (
+            {isCompetitiveDataSource(card.provider) && (
               <p className={`mt-2 text-xs ${card.platformConfigured ? 'text-emerald-700' : 'text-amber-700'}`}>
-                {card.platformConfigured ? '平台 API Key 已配置' : '平台 API Key 未配置，启用后仍需部署环境填入 Key 才能调用真实数据'}
+                {card.platformConfigured ? '平台 RapidAPI Key 已配置' : '平台 RapidAPI Key 未配置，启用后仍需部署环境填入 Key 才能调用真实数据'}
               </p>
             )}
             {card.updatedAt && (
@@ -464,10 +471,10 @@ export default function InvestorIntegrationsPanel({
                   ? card.connected
                     ? '已启用小红书助手'
                     : '启用小红书助手'
-                  : card.provider === 'semrush'
+                  : isCompetitiveDataSource(card.provider)
                     ? card.connected
-                      ? '停用 Semrush 员工'
-                      : '启用 Semrush 员工'
+                      ? `停用 ${providerLabel(card.provider)}`
+                      : `启用 ${providerLabel(card.provider)}`
                   : card.connected
                     ? '重新绑定'
                     : `绑定${providerLabel(card.provider)}`}
@@ -480,18 +487,18 @@ export default function InvestorIntegrationsPanel({
               >
                 {loadingProvider === card.provider
                   ? '刷新中...'
-                  : card.provider === 'xiaohongshu' || card.provider === 'semrush'
+                  : card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider)
                     ? '刷新状态'
                     : '刷新摘要'}
               </button>
             </div>
 
             <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">{card.provider === 'semrush' ? '调用范围' : '最近摘要'}</p>
+              <p className="text-xs text-slate-500 mb-1">{isCompetitiveDataSource(card.provider) ? '调用范围' : '最近摘要'}</p>
               <p className="text-sm text-slate-700 whitespace-pre-wrap">
                 {card.latestSummary ||
-                  (card.provider === 'semrush'
-                    ? '竞品发现、SEO、PPC、关键词、外链、流量代理指标。真实用户量和营收只做区间推断并标注置信度。'
+                  (isCompetitiveDataSource(card.provider)
+                    ? competitiveDataSourceScopes[card.provider]
                     : card.provider === 'xiaohongshu'
                     ? '暂无摘要，可直接对话触发 skill 抓取。'
                     : '暂无摘要，绑定后点击“刷新摘要”生成。')}
@@ -503,7 +510,7 @@ export default function InvestorIntegrationsPanel({
               )}
             </div>
 
-            {card.provider !== 'semrush' && (
+            {!isCompetitiveDataSource(card.provider) && (
             <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
               <p className="text-xs text-slate-500 mb-2">AI员工对话</p>
               <div
@@ -557,7 +564,7 @@ export default function InvestorIntegrationsPanel({
             </div>
             )}
 
-            {card.provider !== 'semrush' && (
+            {!isCompetitiveDataSource(card.provider) && (
             <div className="mt-3">
               <DebugCollapsible title="高级设置（AI员工调教）">
                 <div className="mt-2">

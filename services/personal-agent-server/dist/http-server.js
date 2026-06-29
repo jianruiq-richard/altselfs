@@ -4,6 +4,7 @@ import path from 'node:path';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import { runWebSearchTool } from './tools/web-search.js';
+import { isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
 import { getAgentThreadRuntimeStatus, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 export function createHttpServer(agent, config, memoryReviewQueue) {
@@ -92,6 +93,23 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 if (!isRecord(body))
                     return json(res, 400, { error: 'JSON body must be an object' });
                 const resultText = await runReadArtifactTool(body, config);
+                return json(res, 200, {
+                    contentItems: [{ type: 'inputText', text: resultText }],
+                    success: !resultText.includes('"error"'),
+                });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/tools/rapidapi-competitor') {
+                if (!config)
+                    return json(res, 500, { error: 'tool bridge config missing' });
+                if (!isLoopbackRequest(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const toolName = typeof body.toolName === 'string' ? body.toolName.trim() : '';
+                if (!isRapidApiCompetitorTool(toolName))
+                    return json(res, 400, { error: `Unsupported competitor data tool: ${toolName}` });
+                const resultText = await runRapidApiCompetitorTool(toolName, body.arguments, config);
                 return json(res, 200, {
                     contentItems: [{ type: 'inputText', text: resultText }],
                     success: !resultText.includes('"error"'),

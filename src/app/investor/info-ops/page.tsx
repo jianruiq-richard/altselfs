@@ -71,15 +71,19 @@ export default async function InfoOpsPage({
     updatedAt: source.updatedAt.toISOString(),
   }));
 
-  const integrationCards = (['gmail', 'feishu', 'xiaohongshu', 'semrush'] as const).map((provider) => {
-    const dbProvider =
-      provider === 'gmail'
-        ? 'GMAIL'
-        : provider === 'feishu'
-          ? 'FEISHU'
-          : provider === 'xiaohongshu'
-            ? 'XIAOHONGSHU'
-            : 'SEMRUSH';
+  const providerDbMap = {
+    gmail: 'GMAIL',
+    feishu: 'FEISHU',
+    xiaohongshu: 'XIAOHONGSHU',
+    similarweb_api1: 'SIMILARWEB_API1',
+    semrush13: 'SEMRUSH13',
+    semrush8: 'SEMRUSH8',
+    domain_metrics_check: 'DOMAIN_METRICS_CHECK',
+  } as const;
+
+  const rapidApiConfigured = Boolean(process.env.RAPIDAPI_KEY?.trim());
+  const integrationCards = (Object.keys(providerDbMap) as Array<keyof typeof providerDbMap>).map((provider) => {
+    const dbProvider = providerDbMap[provider];
     const integration = integrationMap.get(dbProvider);
     const latest = integration?.snapshots[0];
     return {
@@ -90,7 +94,7 @@ export default async function InfoOpsPage({
       updatedAt: integration?.updatedAt.toISOString() || null,
       latestSummary: latest?.summary || null,
       latestSummaryAt: latest?.createdAt.toISOString() || null,
-      platformConfigured: provider === 'semrush' ? Boolean(process.env.SEMRUSH_API_KEY?.trim()) : undefined,
+      platformConfigured: isCompetitiveDataSource(provider) ? rapidApiConfigured : undefined,
     };
   });
 
@@ -99,7 +103,7 @@ export default async function InfoOpsPage({
     feishu: '当前建议先配置 飞书 助手并刷新摘要。',
     wechat: '当前建议先录入公众号，再使用公众号助手对话。',
     xiaohongshu: '当前建议先接入小红书数据源，再启用小红书助手。',
-    semrush: '启用 Semrush 员工后，主 AI 助手会在竞品情报问题中自动使用 SEO/PPC/关键词/外链数据。',
+    semrush: '启用竞品数据源员工后，主 AI 助手会在竞品情报问题中自动使用对应工具。',
   };
 
   return (
@@ -122,4 +126,11 @@ export default async function InfoOpsPage({
       <InvestorWechatSourcesPanel initialSources={initialWechatSources} />
     </FigmaShell>
   );
+}
+
+function isCompetitiveDataSource(provider: string) {
+  return provider === 'similarweb_api1'
+    || provider === 'semrush13'
+    || provider === 'semrush8'
+    || provider === 'domain_metrics_check';
 }

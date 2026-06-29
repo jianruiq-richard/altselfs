@@ -14,16 +14,6 @@ export class PersonalMainAgent {
     async startTurn(request) {
         validateTurnRequest(request);
         const threadId = request.threadId || id('thr');
-        if (this.sourceRuntime) {
-            const result = await this.sourceRuntime.run({ ...request, threadId });
-            return {
-                threadId,
-                route: result.route,
-                reply: result.reply,
-                events: result.events,
-                raw: result.raw,
-            };
-        }
         const memorySnapshot = await this.memoryStore.getSnapshot(request.userId);
         const events = [];
         const emit = async (event) => {
@@ -66,6 +56,44 @@ export class PersonalMainAgent {
         });
         const effectiveDecision = enforceHermesBoundary(routerDecision, currentUserMessage, availableProfiles);
         await emitRouterDecision(effectiveDecision, emit);
+        if (this.sourceRuntime) {
+            const selectedProfile = effectiveDecision.agentProfileId
+                ? availableProfiles.find((profile) => profile.id === effectiveDecision.agentProfileId)
+                : undefined;
+            await emit({
+                type: 'main.route.selected',
+                timestamp: nowIso(),
+                payload: {
+                    route: selectedProfile?.runtimeId || 'main',
+                    agentProfileId: effectiveDecision.agentProfileId,
+                    runtimeId: effectiveDecision.runtimeId,
+                    reason: effectiveDecision.reason,
+                    confidence: effectiveDecision.confidence,
+                    sourceRuntime: true,
+                    availableAgents: this.registry.list(),
+                },
+            });
+            const result = await this.sourceRuntime.run({
+                ...request,
+                threadId,
+                metadata: {
+                    ...(request.metadata || {}),
+                    selectedAgentProfileId: effectiveDecision.agentProfileId || null,
+                    selectedAgentRuntimeId: effectiveDecision.runtimeId || null,
+                    selectedAgentProfile: selectedProfile || null,
+                    routerDecision: effectiveDecision,
+                },
+                onEvent: emit,
+            });
+            return {
+                threadId,
+                route: result.route,
+                reply: result.reply,
+                events,
+                raw: result.raw,
+                memoryWrites,
+            };
+        }
         const route = this.selectRoute(effectiveDecision);
         await emit({
             type: 'main.route.selected',

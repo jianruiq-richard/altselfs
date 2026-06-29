@@ -5,7 +5,7 @@ import { projectCodexNotification } from './event-projector.js';
 import { buildMemoryContext } from '../memory-store.js';
 import { isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { createWebSearchDynamicTool, runWebSearchTool } from '../tools/web-search.js';
-import { createRapidApiCompetitorDynamicTools, isRapidApiCompetitorTool, runRapidApiCompetitorTool, } from '../tools/rapidapi-competitor.js';
+import { createRapidApiCompetitorDynamicTools, getRapidApiCompetitorToolNamesForProviders, isRapidApiCompetitorTool, runRapidApiCompetitorTool, } from '../tools/rapidapi-competitor.js';
 export class CodexAgentRuntime {
     config;
     id = 'codex';
@@ -56,7 +56,7 @@ export class CodexAgentRuntime {
                 ...(nonLocalProfile ? { dynamicTools: this.buildDynamicTools(input) } : {}),
                 ...(selectedModel ? { model: selectedModel } : {}),
                 ...(this.config.codexModelProvider ? { modelProvider: this.config.codexModelProvider } : {}),
-                developerInstructions: this.buildDeveloperInstructions(input.profileId),
+                developerInstructions: this.buildDeveloperInstructions(input.profileId, input.metadata),
                 personality: 'pragmatic',
             }, 15_000);
             codexThreadId = extractThreadId(thread);
@@ -225,8 +225,9 @@ export class CodexAgentRuntime {
     }
     buildDynamicTools(input) {
         const tools = [createWebSearchDynamicTool()];
-        if (input.profileId === 'codex-competitive-intelligence' && isInfoSourceEnabled(input.metadata, 'semrush')) {
-            tools.push(...createRapidApiCompetitorDynamicTools());
+        if (input.profileId === 'codex-competitive-intelligence') {
+            const enabledCompetitorSources = getEnabledInfoSourceNames(input.metadata);
+            tools.push(...createRapidApiCompetitorDynamicTools(enabledCompetitorSources));
         }
         return tools;
     }
@@ -271,7 +272,7 @@ export class CodexAgentRuntime {
         client.respondError(requestId, -32601, `Unsupported server request: ${method}`);
         return 'handled';
     }
-    buildDeveloperInstructions(profileId) {
+    buildDeveloperInstructions(profileId, metadata) {
         const currentTime = new Intl.DateTimeFormat('zh-CN', {
             timeZone: 'Asia/Shanghai',
             dateStyle: 'full',
@@ -283,6 +284,11 @@ export class CodexAgentRuntime {
             'Answer in the user language unless the user asks otherwise.',
         ];
         if (profileId === 'codex-competitive-intelligence') {
+            const enabledCompetitorSources = getEnabledInfoSourceNames(metadata);
+            const enabledToolNames = getRapidApiCompetitorToolNamesForProviders(enabledCompetitorSources);
+            const competitorToolInstruction = enabledToolNames.length > 0
+                ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledToolNames.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
+                : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data; use public web fallback only when appropriate and state the limitation.';
             return [
                 ...shared,
                 '',
@@ -294,7 +300,7 @@ export class CodexAgentRuntime {
                 '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
                 '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.',
                 '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.',
-                '- Use enabled non-local information-source agents and platform/MCP capabilities when available. For competitor intelligence, the enabled RapidAPI-backed tools may include similarweb-api1, semrush13, semrush8, and Domain Metrics Check; choose the narrowest useful tool for the question and cross-check when numbers conflict.',
+                competitorToolInstruction,
                 '- Treat these RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used in the answer.',
                 '- Similarweb, Google, YouTube, X/Twitter, Facebook, WeChat, Xiaohongshu, Gmail, and Feishu may be used only when actually available/enabled in the turn.',
                 '- Treat altselfs_web_search as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.',
@@ -423,18 +429,19 @@ function readMultimodalAttachments(metadata) {
     })
         .filter(Boolean);
 }
-function isInfoSourceEnabled(metadata, provider) {
+function getEnabledInfoSourceNames(metadata) {
     const value = metadata?.enabledInfoSources;
     if (!Array.isArray(value))
-        return false;
-    const target = provider.toLowerCase();
-    return value.some((item) => {
+        return [];
+    return value
+        .map((item) => {
         if (typeof item === 'string')
-            return item.toLowerCase() === target;
+            return item.toLowerCase();
         if (!isRecord(item))
-            return false;
-        return typeof item.provider === 'string' && item.provider.toLowerCase() === target;
-    });
+            return null;
+        return typeof item.provider === 'string' ? item.provider.toLowerCase() : null;
+    })
+        .filter((item) => Boolean(item));
 }
 function tomlString(value) {
     return JSON.stringify(value);

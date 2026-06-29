@@ -313,12 +313,18 @@ function displayMessages(messages: ClientMessage[]) {
 }
 
 async function getEnabledInfoSources(investorId: string) {
+  const providerMap: Record<string, string> = {
+    SIMILARWEB_API1: 'similarweb_api1',
+    SEMRUSH13: 'semrush13',
+    SEMRUSH8: 'semrush8',
+    DOMAIN_METRICS_CHECK: 'domain_metrics_check',
+  };
   const integrations = await prisma.investorIntegration.findMany({
     where: {
       investorId,
       status: 'CONNECTED',
       provider: {
-        in: ['SEMRUSH'],
+        in: Object.keys(providerMap),
       },
     },
     select: {
@@ -328,7 +334,7 @@ async function getEnabledInfoSources(investorId: string) {
   });
 
   return integrations.map((integration) => ({
-    provider: integration.provider.toLowerCase(),
+    provider: providerMap[integration.provider] || integration.provider.toLowerCase(),
     enabledAt: integration.updatedAt.toISOString(),
   }));
 }
@@ -658,7 +664,7 @@ function streamPersonalAgentTurn(params: {
 
       void (async () => {
         let finalResult: PersonalAgentStreamResult | null = null;
-        const semrushEvents: unknown[] = [];
+        const competitorDataEvents: unknown[] = [];
         try {
           write({ type: 'turn_started', timestamp: new Date().toISOString() });
           const response = await fetch(`${getPersonalAgentServerUrl()}/v1/turns/start?stream=1`, {
@@ -696,7 +702,7 @@ function streamPersonalAgentTurn(params: {
                 continue;
               }
               if (parsed.type === 'event' && isRecord(parsed.event) && extractCompetitorDataToolAudit(parsed.event)) {
-                semrushEvents.push(parsed.event);
+                competitorDataEvents.push(parsed.event);
               }
               write(parsed);
             }
@@ -707,7 +713,7 @@ function streamPersonalAgentTurn(params: {
             if (parsed?.type === 'final' && isRecord(parsed.result)) {
               finalResult = parsed.result as PersonalAgentStreamResult;
             } else if (parsed?.type === 'event' && isRecord(parsed.event) && extractCompetitorDataToolAudit(parsed.event)) {
-              semrushEvents.push(parsed.event);
+              competitorDataEvents.push(parsed.event);
               write(parsed);
             } else if (parsed) {
               write(parsed);
@@ -745,7 +751,7 @@ function streamPersonalAgentTurn(params: {
           await persistCompetitorDataToolAudits({
             threadId: params.threadId,
             messageId: params.userMessageId,
-            events: semrushEvents,
+            events: competitorDataEvents,
           });
           const sessions = await listAgentThreads(params.investorId, PERSONAL_AGENT_TYPE);
 

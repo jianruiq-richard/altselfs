@@ -95,6 +95,9 @@ export class HermesSourceRuntime {
         const currentUserMessage = typeof request.metadata?.currentUserMessage === 'string' && request.metadata.currentUserMessage.trim()
             ? request.metadata.currentUserMessage.trim()
             : request.message;
+        const selectedAgentProfileId = typeof request.metadata?.selectedAgentProfileId === 'string' && request.metadata.selectedAgentProfileId.trim()
+            ? request.metadata.selectedAgentProfileId.trim()
+            : '';
         const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(request.userId, currentUserMessage, request.threadId);
         if (rememberedProfile) {
             await emit('hermes.profile.updated', {
@@ -129,6 +132,7 @@ export class HermesSourceRuntime {
             codexLocalEnvironmentDisabled,
             model: this.config.hermesModel,
             provider: 'openrouter',
+            selectedAgentProfileId: selectedAgentProfileId || null,
         });
         const startedAtMs = Date.now();
         const args = [
@@ -160,6 +164,8 @@ export class HermesSourceRuntime {
                 userId: request.userId,
                 threadId: request.threadId || 'default',
                 currentUserMessage,
+                selectedAgentProfileId,
+                enabledCompetitorTools: getEnabledCompetitorToolNames(request.metadata),
                 hermesHome,
                 codexHome,
                 workspace,
@@ -429,10 +435,15 @@ export class HermesSourceRuntime {
                     HERMES_DISABLE_LAZY_INSTALLS: '1',
                     ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: this.config.disableLocalEnvironmentForGeneral ? '1' : '0',
                     ALTSELFS_CODEX_PERSONALITY: 'pragmatic',
+                    ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS: paths.selectedAgentProfileId === 'codex-competitive-intelligence'
+                        ? paths.enabledCompetitorTools.join(',')
+                        : '0',
                     ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS: buildCodexDeveloperInstructions({
                         webSearchMode: this.config.codexWebSearchMode,
                         runtimeStateMode: this.config.runtimeStateMode,
                         message: paths.currentUserMessage,
+                        selectedAgentProfileId: paths.selectedAgentProfileId,
+                        enabledCompetitorTools: paths.enabledCompetitorTools,
                     }),
                     NO_PROXY: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
                     no_proxy: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
@@ -527,6 +538,28 @@ function mergeNoProxy(value) {
     entries.add('::1');
     return Array.from(entries).join(',');
 }
+const COMPETITOR_INFO_SOURCE_TO_TOOL = {
+    similarweb_api1: 'altselfs_similarweb_api1',
+    semrush13: 'altselfs_semrush13',
+    semrush8: 'altselfs_semrush8',
+    domain_metrics_check: 'altselfs_domain_metrics_check',
+};
+function getEnabledCompetitorToolNames(metadata) {
+    const value = metadata?.enabledInfoSources;
+    if (!Array.isArray(value))
+        return [];
+    const names = value
+        .map((item) => {
+        if (typeof item === 'string')
+            return item.toLowerCase();
+        if (!isRecord(item))
+            return null;
+        return typeof item.provider === 'string' ? item.provider.toLowerCase() : null;
+    })
+        .map((provider) => (provider ? COMPETITOR_INFO_SOURCE_TO_TOOL[provider] : null))
+        .filter((item) => Boolean(item));
+    return Array.from(new Set(names));
+}
 function buildRuntimeMessage(input) {
     if (!input.renderedProfile.trim())
         return input.message;
@@ -566,25 +599,18 @@ function buildCodexDeveloperInstructions(input) {
         `Codex web_search mode requested by host: ${input.webSearchMode}.`,
         'Answer in the user language unless the user asks otherwise.',
         '',
-        'Altselfs codex-general policy:',
-        '- You are a general personal agent for discussion, research, planning, and synthesis.',
-        ...artifactAccessPolicy,
-        '- Use conversation and reasoning for tasks that do not need external data.',
-        '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',
-        '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.',
-        '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.',
-        '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.',
-        '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
-        '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.',
-        '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.',
+        `Selected agent profile from Hermes Router: ${input.selectedAgentProfileId || 'main'}.`,
     ];
-    if (isCompetitiveIntelligenceMessage(input.message)) {
-        instructions.push('', 'Competitive intelligence task overlay:', '- For this turn, operate as Altselfs codex-competitive-intelligence even if the source-runtime path does not expose separate Codex profiles.', '- Answer questions about competitors, competitive landscape, user/traffic/revenue estimates, growth rate, acquisition channels, SEO, PPC, keywords, backlinks, Semrush, Similarweb, market share, and growth intelligence.', '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.', '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.', '- Use enabled non-local information-source agents and platform/MCP capabilities when available. Semrush is the preferred source for SEO, PPC, keyword, backlink, top-page, and traffic-proxy evidence when enabled.', '- Never claim that Semrush, Similarweb, Google, a social platform, or a private-channel agent was used unless the corresponding tool/capability was actually called.', '- Structure competitor conclusions around four questions when relevant: who the competitors are, what their user/traffic/revenue scale appears to be, how fast they have grown, and how they acquire users.', '- Separate observable facts, third-party estimates, proxy signals, assumptions, and inference. Do not present inferred users or revenue as confirmed facts.', '- Attach confidence labels to important claims: high, medium, low, or unknown.', '- For revenue and user-count estimates, provide ranges and assumptions, not false precision.', '- If an enabled data source is missing, state the limitation and explain which conclusions remain lower confidence until that source is enabled.');
+    if (input.selectedAgentProfileId === 'codex-competitive-intelligence') {
+        const enabledCompetitorTools = input.enabledCompetitorTools || [];
+        instructions.push('', 'Altselfs codex-competitive-intelligence policy:', '- You are the competitive intelligence analysis profile selected by Hermes Router for this turn.', '- Answer questions about competitors, competitive landscape, user/traffic/revenue estimates, growth rate, acquisition channels, SEO, PPC, keywords, backlinks, Semrush, Similarweb, market share, and growth intelligence.', ...artifactAccessPolicy, '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.', '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.', enabledCompetitorTools.length > 0
+            ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledCompetitorTools.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
+            : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data. If platform evidence is needed, state which specific data source should be enabled for higher-confidence estimates.', '- Treat RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used.', '- Treat altselfs_web_search as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.', '- Never claim that Semrush, Similarweb, Google, a social platform, or a private-channel agent was used unless the corresponding tool/capability was actually called.', '- Structure competitor conclusions around four questions when relevant: who the competitors are, what their user/traffic/revenue scale appears to be, how fast they have grown, and how they acquire users.', '- Separate observable facts, third-party estimates, proxy signals, assumptions, and inference. Do not present inferred users or revenue as confirmed facts.', '- Attach confidence labels to important claims: high, medium, low, or unknown.', '- For revenue and user-count estimates, provide ranges and assumptions, not false precision.', '- If an enabled data source is missing, state the limitation and explain which conclusions remain lower confidence until that source is enabled.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
+    }
+    else {
+        instructions.push('', 'Altselfs codex-general policy:', '- You are the general personal agent profile selected by Hermes Router for this turn.', ...artifactAccessPolicy, '- Use conversation and reasoning for tasks that do not need external data.', '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.', '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.', '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.', '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.', '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
     }
     return instructions.join('\n');
-}
-function isCompetitiveIntelligenceMessage(message) {
-    return /竞品|竞争对手|竞争格局|增长|获客|用户量|访问量|营收|ARR|收入|增速|市场份额|SEO|PPC|关键词|外链|backlink|流量|渠道|投放|广告|semrush|similarweb|competitor|competitive|acquisition|growth|revenue|traffic/i.test(message);
 }
 async function readHermesUserProfile(hermesHome) {
     try {
