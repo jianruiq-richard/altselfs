@@ -294,6 +294,8 @@ export function loadConfig() {
         bingSearchApiKeyEnv: readEnv('BING_SEARCH_API_KEY_ENV', 'BING_SEARCH_API_KEY'),
         bingSearchEndpoint: readEnv('BING_SEARCH_ENDPOINT', 'https://api.bing.microsoft.com/v7.0/search'),
         webSearchTimeoutMs: readIntEnv('WEB_SEARCH_TIMEOUT_MS', 30_000),
+        rapidApiKeyEnv: readEnv('RAPIDAPI_KEY_ENV', 'RAPIDAPI_KEY'),
+        rapidApiRequestTimeoutMs: readIntEnv('RAPIDAPI_REQUEST_TIMEOUT_MS', 30_000),
         disableLocalEnvironmentForGeneral: readBoolEnv('CODEX_GENERAL_DISABLE_LOCAL_ENVIRONMENT', true),
         hermesSourceRuntimeEnabled: readBoolEnv('HERMES_SOURCE_RUNTIME_ENABLED', false),
         hermesSourceRoot: path.resolve(readEnv('HERMES_SOURCE_ROOT', '/Users/richardjian/work/agent-sources/hermes-agent')),

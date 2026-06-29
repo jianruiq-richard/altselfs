@@ -31,8 +31,10 @@ export class HermesRouter {
           '{"route":"main"|"agent","agentProfileId":string|null,"reason":string,"confidence":number,"needsClarification":boolean,"clarificationQuestion":string|null}',
           'confidence must be a number from 0 to 1. Never return a negative confidence.',
           'Hermes main is intentionally small. Choose main only for lightweight conversation continuity, explicit memory writes, user preference updates, user profile maintenance, or brief clarification.',
-          'Delegate to codex-general for all research, web/current information, planning, analysis, recommendations, summarization, tool use, sub-agent orchestration, and non-trivial answers.',
-          'Hermes main must not directly use search, channel agents, business tools, or execution tools. Those capabilities live under codex-general.',
+          'Delegate to the most specific available Codex profile for research, web/current information, planning, analysis, recommendations, summarization, tool use, sub-agent orchestration, and non-trivial answers.',
+          'Choose codex-competitive-intelligence when the user asks about competitors, competitive landscape, user/traffic/revenue estimates, growth rate, acquisition channels, SEO, PPC, keywords, backlinks, Semrush, Similarweb, market share, or growth intelligence.',
+          'Choose codex-general for general research, discussion, planning, synthesis, current information, and tool use when no more specific available profile fits.',
+          'Hermes main must not directly use search, channel agents, business tools, or execution tools. Those capabilities live under Codex child profiles.',
           'When delegating, choose exactly one id from availableAgentProfiles.',
           'If a capability is not represented by an available profile, choose main and explain the limitation.',
         ].join('\n'),
@@ -155,6 +157,16 @@ function fallbackRouterDecision(input: RouterInput, reason: string): RouterDecis
       runtimeId: 'codex',
       reason: `Fallback selected codex-engineering: ${reason}`,
       confidence: 0.55,
+    };
+  }
+  const competitive = /竞品|竞争对手|竞争格局|增长|获客|用户量|访问量|营收|ARR|收入|增速|市场份额|SEO|PPC|关键词|外链|backlink|流量|渠道|投放|广告|semrush|similarweb|competitor|competitive|acquisition|growth|revenue|traffic/i.test(message);
+  if (competitive && input.availableProfiles.some((profile) => profile.id === 'codex-competitive-intelligence')) {
+    return {
+      route: 'agent',
+      agentProfileId: 'codex-competitive-intelligence',
+      runtimeId: 'codex',
+      reason: `Fallback selected codex-competitive-intelligence: ${reason}`,
+      confidence: 0.58,
     };
   }
   const general = /搜索|联网|查一下|研究|分析|讨论|帮我想|总结|资料|外界|新闻|信息|趋势|计划|方案|建议|推荐|今天|今日|最新|为什么|怎么|如何/i.test(message);

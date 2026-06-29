@@ -5,6 +5,11 @@ import { projectCodexNotification } from './event-projector.js';
 import { buildMemoryContext } from '../memory-store.js';
 import { isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { createWebSearchDynamicTool, runWebSearchTool } from '../tools/web-search.js';
+import {
+  createRapidApiCompetitorDynamicTools,
+  isRapidApiCompetitorTool,
+  runRapidApiCompetitorTool,
+} from '../tools/rapidapi-competitor.js';
 import type { ChildAgentRunInput, ChildAgentRunResult, ChildAgentRuntime, AgentEvent } from '../types.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
 
@@ -38,8 +43,8 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     let codexThreadId = '';
     let policyViolationMessage: string | null = null;
     let usedExternalSearch = false;
-    const generalProfile = this.isGeneralProfile(input.profileId);
-    const localEnvironmentDisabled = generalProfile && this.config.disableLocalEnvironmentForGeneral;
+    const nonLocalProfile = this.isNonLocalCodexProfile(input.profileId);
+    const localEnvironmentDisabled = nonLocalProfile && this.config.disableLocalEnvironmentForGeneral;
 
     try {
       await emit({
@@ -60,7 +65,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         {
           cwd: workspace,
           ...(localEnvironmentDisabled ? { environments: [] } : {}),
-          ...(generalProfile ? { dynamicTools: [createWebSearchDynamicTool()] } : {}),
+          ...(nonLocalProfile ? { dynamicTools: this.buildDynamicTools(input) } : {}),
           ...(selectedModel ? { model: selectedModel } : {}),
           ...(this.config.codexModelProvider ? { modelProvider: this.config.codexModelProvider } : {}),
           developerInstructions: this.buildDeveloperInstructions(input.profileId),
@@ -79,7 +84,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
 
       client.on('notification', (notification: Record<string, unknown>) => {
         if (localEnvironmentDisabled && this.isProhibitedLocalToolNotification(notification)) {
-          policyViolationMessage = 'codex-general is not allowed to use local command, file, patch, or image tools';
+          policyViolationMessage = `${input.profileId || 'codex-general'} is not allowed to use local command, file, patch, or image tools`;
           void emit({
             type: 'codex.policy_violation',
             timestamp: nowIso(),
@@ -241,6 +246,14 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     return dir;
   }
 
+  private buildDynamicTools(input: ChildAgentRunInput) {
+    const tools: unknown[] = [createWebSearchDynamicTool()];
+    if (input.profileId === 'codex-competitive-intelligence' && isInfoSourceEnabled(input.metadata, 'semrush')) {
+      tools.push(...createRapidApiCompetitorDynamicTools());
+    }
+    return tools;
+  }
+
   private async handleServerRequest(
     client: CodexJsonRpcClient,
     request: Record<string, unknown>,
@@ -260,6 +273,14 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
           success: true,
         });
         return 'web_search';
+      }
+      if (!namespace && isRapidApiCompetitorTool(tool)) {
+        const resultText = await runRapidApiCompetitorTool(tool, params.arguments, this.config);
+        client.respond(requestId, {
+          contentItems: [{ type: 'inputText', text: resultText }],
+          success: true,
+        });
+        return 'handled';
       }
       client.respond(requestId, {
         contentItems: [{ type: 'inputText', text: `Unsupported dynamic tool: ${namespace}.${tool}` }],
@@ -292,7 +313,33 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       'Answer in the user language unless the user asks otherwise.',
     ];
 
-    if (!this.isGeneralProfile(profileId)) return shared.join('\n');
+    if (profileId === 'codex-competitive-intelligence') {
+      return [
+        ...shared,
+        '',
+        'Altselfs codex-competitive-intelligence policy:',
+        '- You are a competitive intelligence analysis profile under the Altselfs information-processing operation department.',
+        '- The user still interacts through the normal AI assistant chatbox. Produce the final answer directly in chat; do not ask the user to open a separate report surface.',
+        '- Your job is to answer questions about competitors, competitive landscape, user/traffic/revenue estimates, growth rate, acquisition channels, SEO, PPC, keywords, backlinks, Semrush, Similarweb, market share, and growth intelligence.',
+        '- Do not inspect, read, write, patch, or modify local files or repositories.',
+        '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
+        '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.',
+        '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.',
+        '- Use enabled non-local information-source agents and platform/MCP capabilities when available. For competitor intelligence, the enabled RapidAPI-backed tools may include similarweb-api1, semrush13, semrush8, and Domain Metrics Check; choose the narrowest useful tool for the question and cross-check when numbers conflict.',
+        '- Treat these RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used in the answer.',
+        '- Similarweb, Google, YouTube, X/Twitter, Facebook, WeChat, Xiaohongshu, Gmail, and Feishu may be used only when actually available/enabled in the turn.',
+        '- Treat altselfs_web_search as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.',
+        '- Never claim that Semrush, Similarweb, Google, a social platform, or a private-channel agent was used unless the corresponding tool/capability was actually called.',
+        '- Structure competitor conclusions around four questions when relevant: who the competitors are, what their user/traffic/revenue scale appears to be, how fast they have grown, and how they acquire users.',
+        '- Separate observable facts, third-party estimates, proxy signals, model/user assumptions, and your own inference. Do not present inferred users or revenue as confirmed facts.',
+        '- Attach confidence labels to important claims: high when multiple reliable sources agree or the source is official; medium when several proxy signals align; low when the claim depends on one source or strong assumptions; unknown when evidence is insufficient.',
+        '- For revenue and user-count estimates, provide ranges and assumptions, not false precision.',
+        '- If an enabled data source is missing, state the limitation and explain which conclusions remain lower confidence until that source is enabled.',
+        '- Finish with a direct synthesis and actionable implications. Do not end by saying you will call another tool; either call it or answer from available evidence.',
+      ].join('\n');
+    }
+
+    if (!this.isNonLocalCodexProfile(profileId)) return shared.join('\n');
 
     return [
       ...shared,
@@ -312,6 +359,10 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
 
   private isGeneralProfile(profileId?: string) {
     return !profileId || profileId === 'codex-general';
+  }
+
+  private isNonLocalCodexProfile(profileId?: string) {
+    return this.isGeneralProfile(profileId) || profileId === 'codex-competitive-intelligence';
   }
 
   private requiresCurrentExternalInfo(message: string) {
@@ -420,6 +471,17 @@ function readMultimodalAttachments(metadata?: Record<string, unknown>): Multimod
       };
     })
     .filter(Boolean) as MultimodalAttachment[];
+}
+
+function isInfoSourceEnabled(metadata: Record<string, unknown> | undefined, provider: string) {
+  const value = metadata?.enabledInfoSources;
+  if (!Array.isArray(value)) return false;
+  const target = provider.toLowerCase();
+  return value.some((item) => {
+    if (typeof item === 'string') return item.toLowerCase() === target;
+    if (!isRecord(item)) return false;
+    return typeof item.provider === 'string' && item.provider.toLowerCase() === target;
+  });
 }
 
 function tomlString(value: string) {

@@ -154,15 +154,26 @@ function enforceHermesBoundary(
 ): RouterDecision {
   if (decision.route === 'agent') return decision;
   if (isHermesMainOnlyMessage(message)) return decision;
-  const codexGeneral = availableProfiles.find((profile) => profile.id === 'codex-general');
-  if (!codexGeneral) return decision;
+  const defaultProfile = selectBoundaryOverrideProfile(message, availableProfiles);
+  if (!defaultProfile) return decision;
   return {
     route: 'agent',
-    agentProfileId: 'codex-general',
-    runtimeId: codexGeneral.runtimeId,
-    reason: `Hermes boundary override: non-memory/non-profile work is delegated to codex-general. Original router reason: ${decision.reason}`,
+    agentProfileId: defaultProfile.id,
+    runtimeId: defaultProfile.runtimeId,
+    reason: `Hermes boundary override: non-memory/non-profile work is delegated to ${defaultProfile.id}. Original router reason: ${decision.reason}`,
     confidence: Math.max(decision.confidence, 0.75),
   };
+}
+
+function selectBoundaryOverrideProfile(
+  message: string,
+  availableProfiles: ReturnType<AgentRegistry['listAvailableProfiles']>
+) {
+  if (isCompetitiveIntelligenceMessage(message)) {
+    const competitive = availableProfiles.find((profile) => profile.id === 'codex-competitive-intelligence');
+    if (competitive) return competitive;
+  }
+  return availableProfiles.find((profile) => profile.id === 'codex-general');
 }
 
 function isHermesMainOnlyMessage(message: string) {
@@ -170,6 +181,10 @@ function isHermesMainOnlyMessage(message: string) {
   if (/^(你好|hi|hello|嗨|在吗|谢谢|多谢|好的|ok|收到)[。！？!,.，\s]*$/i.test(message.trim())) return true;
   if (/偏好|画像|用户画像|记忆|记住|以后记得|请记住|称呼我/.test(message)) return true;
   return false;
+}
+
+function isCompetitiveIntelligenceMessage(message: string) {
+  return /竞品|竞争对手|竞争格局|增长|获客|用户量|访问量|营收|ARR|收入|增速|市场份额|SEO|PPC|关键词|外链|backlink|流量|渠道|投放|广告|semrush|similarweb|competitor|competitive|acquisition|growth|revenue|traffic/i.test(message);
 }
 
 function buildMainAgentReply(params: {
@@ -237,6 +252,7 @@ function expandAllowedProfiles(allowedAgents?: string[]) {
     expanded.add(id);
     if (id === 'codex') {
       expanded.add('codex-general');
+      expanded.add('codex-competitive-intelligence');
       expanded.add('codex-engineering');
     }
   }

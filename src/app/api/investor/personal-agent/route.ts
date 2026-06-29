@@ -1,8 +1,10 @@
 import { Buffer } from 'node:buffer';
 import { NextRequest, NextResponse } from 'next/server';
 import { getInvestorOrNull } from '@/lib/investor-auth';
+import { prisma } from '@/lib/prisma';
 import {
   appendThreadMessage,
+  appendToolCall,
   createThread,
   ensureThread,
   getLatestThreadWithMessages,
@@ -31,6 +33,13 @@ type PersonalAgentResponse = {
   raw?: unknown;
   runId?: string;
   error?: string;
+};
+
+type CompetitorDataToolAudit = {
+  toolName: string;
+  toolArgs: unknown;
+  eventType: string;
+  timestamp?: string;
 };
 
 type PersonalAgentStreamResult = PersonalAgentResponse & {
@@ -241,6 +250,54 @@ function getAttachmentPayloads(attachments: UploadedAttachment[]) {
   }));
 }
 
+const COMPETITOR_DATA_TOOL_NAMES = new Set([
+  'altselfs_similarweb_api1',
+  'altselfs_semrush13',
+  'altselfs_semrush8',
+  'altselfs_domain_metrics_check',
+]);
+
+function extractCompetitorDataToolAudit(event: unknown): CompetitorDataToolAudit | null {
+  if (!isRecord(event)) return null;
+  const eventType = typeof event.type === 'string' ? event.type : '';
+  const payload = isRecord(event.payload) ? event.payload : {};
+  const request = isRecord(payload.request) ? payload.request : {};
+  const params = isRecord(request.params) ? request.params : {};
+  const namespace = typeof params.namespace === 'string' ? params.namespace : '';
+  const tool = typeof params.tool === 'string' ? params.tool : '';
+  if (namespace || !COMPETITOR_DATA_TOOL_NAMES.has(tool)) return null;
+  return {
+    toolName: tool.replace(/^altselfs_/, ''),
+    toolArgs: params.arguments,
+    eventType,
+    timestamp: typeof event.timestamp === 'string' ? event.timestamp : undefined,
+  };
+}
+
+async function persistCompetitorDataToolAudits(params: {
+  threadId: string;
+  messageId: string | null;
+  events: unknown[] | undefined;
+}) {
+  const audits = (params.events || [])
+    .map(extractCompetitorDataToolAudit)
+    .filter((audit): audit is CompetitorDataToolAudit => Boolean(audit));
+  for (const audit of audits) {
+    await appendToolCall({
+      threadId: params.threadId,
+      messageId: params.messageId,
+      toolName: audit.toolName,
+      status: 'SUCCESS',
+      toolArgs: audit.toolArgs,
+      toolResult: {
+        source: 'personal-agent-server-event',
+        eventType: audit.eventType,
+        timestamp: audit.timestamp,
+      },
+    });
+  }
+}
+
 
 function buildCurrentTurnMessage(messages: ClientMessage[]) {
   return latestUserMessage(messages);
@@ -252,6 +309,27 @@ function displayMessages(messages: ClientMessage[]) {
     role: message.role,
     content: message.content,
     ...(message.createdAt ? { createdAt: message.createdAt } : {}),
+  }));
+}
+
+async function getEnabledInfoSources(investorId: string) {
+  const integrations = await prisma.investorIntegration.findMany({
+    where: {
+      investorId,
+      status: 'CONNECTED',
+      provider: {
+        in: ['SEMRUSH'],
+      },
+    },
+    select: {
+      provider: true,
+      updatedAt: true,
+    },
+  });
+
+  return integrations.map((integration) => ({
+    provider: integration.provider.toLowerCase(),
+    enabledAt: integration.updatedAt.toISOString(),
   }));
 }
 
@@ -414,12 +492,13 @@ export async function POST(req: NextRequest) {
     content: displayUserMessage || userMessage,
     meta: userMessageMeta,
   });
+  const enabledInfoSources = await getEnabledInfoSources(investor.id);
 
   const payload = {
     userId: investor.email || investor.id,
     threadId: thread.id,
     message: buildCurrentTurnMessage(messages),
-    allowedAgents: ['codex-general'],
+    allowedAgents: ['codex-general', 'codex-competitive-intelligence'],
     metadata: {
       currentMessageId: userThreadMessage.id,
       investorId: investor.id,
@@ -429,6 +508,7 @@ export async function POST(req: NextRequest) {
       currentMessageMetadata: userMessageMeta,
       attachments: getAttachmentMetadata(attachments),
       workspaceAttachments: getAttachmentPayloads(attachments),
+      enabledInfoSources,
     },
   };
 
@@ -436,6 +516,7 @@ export async function POST(req: NextRequest) {
     return streamPersonalAgentTurn({
       threadId: thread.id,
       investorId: investor.id,
+      userMessageId: userThreadMessage.id,
       userMessage,
       payload,
       messages,
@@ -474,6 +555,11 @@ export async function POST(req: NextRequest) {
       route: result.route,
       raw: result.raw,
     },
+  });
+  await persistCompetitorDataToolAudits({
+    threadId: thread.id,
+    messageId: userThreadMessage.id,
+    events: Array.isArray(result.events) ? result.events : [],
   });
   const sessions = await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE);
 
@@ -536,6 +622,7 @@ export async function DELETE(req: NextRequest) {
 function streamPersonalAgentTurn(params: {
   threadId: string;
   investorId: string;
+  userMessageId: string | null;
   userMessage: string;
   payload: {
     userId: string;
@@ -571,6 +658,7 @@ function streamPersonalAgentTurn(params: {
 
       void (async () => {
         let finalResult: PersonalAgentStreamResult | null = null;
+        const semrushEvents: unknown[] = [];
         try {
           write({ type: 'turn_started', timestamp: new Date().toISOString() });
           const response = await fetch(`${getPersonalAgentServerUrl()}/v1/turns/start?stream=1`, {
@@ -607,6 +695,9 @@ function streamPersonalAgentTurn(params: {
                 finalResult = parsed.result as PersonalAgentStreamResult;
                 continue;
               }
+              if (parsed.type === 'event' && isRecord(parsed.event) && extractCompetitorDataToolAudit(parsed.event)) {
+                semrushEvents.push(parsed.event);
+              }
               write(parsed);
             }
           }
@@ -615,6 +706,9 @@ function streamPersonalAgentTurn(params: {
             const parsed = parseStreamLine(buffer);
             if (parsed?.type === 'final' && isRecord(parsed.result)) {
               finalResult = parsed.result as PersonalAgentStreamResult;
+            } else if (parsed?.type === 'event' && isRecord(parsed.event) && extractCompetitorDataToolAudit(parsed.event)) {
+              semrushEvents.push(parsed.event);
+              write(parsed);
             } else if (parsed) {
               write(parsed);
             }
@@ -647,6 +741,11 @@ function streamPersonalAgentTurn(params: {
               route: finalResult?.route,
               raw: finalResult?.raw,
             },
+          });
+          await persistCompetitorDataToolAudits({
+            threadId: params.threadId,
+            messageId: params.userMessageId,
+            events: semrushEvents,
           });
           const sessions = await listAgentThreads(params.investorId, PERSONAL_AGENT_TYPE);
 

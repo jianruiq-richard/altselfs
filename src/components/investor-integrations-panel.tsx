@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DebugCollapsible } from '@/components/debug-collapsible';
 import { MarkdownMessage } from '@/components/markdown-message';
 
-type ProviderKey = 'gmail' | 'feishu' | 'xiaohongshu';
+type ProviderKey = 'gmail' | 'feishu' | 'xiaohongshu' | 'semrush';
 
 type IntegrationCard = {
   provider: ProviderKey;
@@ -14,6 +14,7 @@ type IntegrationCard = {
   updatedAt: string | null;
   latestSummary: string | null;
   latestSummaryAt: string | null;
+  platformConfigured?: boolean;
 };
 
 type AssistantMessage = {
@@ -39,63 +40,80 @@ export default function InvestorIntegrationsPanel({
     gmail: '',
     feishu: '',
     xiaohongshu: '',
+    semrush: '',
   });
   const [assistantLoading, setAssistantLoading] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
     xiaohongshu: false,
+    semrush: false,
   });
   const [assistantChats, setAssistantChats] = useState<Record<ProviderKey, AssistantMessage[]>>({
     gmail: [],
     feishu: [],
     xiaohongshu: [],
+    semrush: [],
   });
   const [assistantThreadIds, setAssistantThreadIds] = useState<Record<ProviderKey, string | null>>({
     gmail: null,
     feishu: null,
     xiaohongshu: null,
+    semrush: null,
   });
   const [coachOpen, setCoachOpen] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
     xiaohongshu: false,
+    semrush: false,
   });
   const [coachLoaded, setCoachLoaded] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
     xiaohongshu: false,
+    semrush: false,
   });
   const [coachLoading, setCoachLoading] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
     xiaohongshu: false,
+    semrush: false,
   });
   const [coachSaving, setCoachSaving] = useState<Record<ProviderKey, boolean>>({
     gmail: false,
     feishu: false,
     xiaohongshu: false,
+    semrush: false,
   });
   const [coachDraft, setCoachDraft] = useState<Record<ProviderKey, string>>({
     gmail: '',
     feishu: '',
     xiaohongshu: '',
+    semrush: '',
   });
   const [coachSaved, setCoachSaved] = useState<Record<ProviderKey, string>>({
     gmail: '',
     feishu: '',
     xiaohongshu: '',
+    semrush: '',
   });
   const [coachMessage, setCoachMessage] = useState<Record<ProviderKey, string>>({
     gmail: '',
     feishu: '',
     xiaohongshu: '',
+    semrush: '',
   });
   const assistantViewportRefs = useRef<Partial<Record<ProviderKey, HTMLDivElement | null>>>({});
 
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
     const providerLabel =
-      integrationProvider === 'gmail' ? 'Gmail' : integrationProvider === 'feishu' ? '飞书' : '小红书';
+      integrationProvider === 'gmail'
+        ? 'Gmail'
+        : integrationProvider === 'feishu'
+          ? '飞书'
+          : integrationProvider === 'semrush'
+            ? 'Semrush'
+            : '小红书';
     if (integrationStatus === 'connected') {
       return `${providerLabel} 绑定成功`;
     }
@@ -103,7 +121,7 @@ export default function InvestorIntegrationsPanel({
   }, [integrationDetail, integrationProvider, integrationStatus]);
 
   const providerLabel = (provider: ProviderKey) =>
-    provider === 'gmail' ? 'Gmail' : provider === 'feishu' ? '飞书' : '小红书';
+    provider === 'gmail' ? 'Gmail' : provider === 'feishu' ? '飞书' : provider === 'semrush' ? 'Semrush' : '小红书';
   const assistantEndpoint = (provider: ProviderKey) =>
     provider === 'xiaohongshu'
       ? '/api/investor/xiaohongshu/assistant'
@@ -144,6 +162,39 @@ export default function InvestorIntegrationsPanel({
   }, [assistantChats, assistantLoading]);
 
   const connect = async (provider: ProviderKey) => {
+    if (provider === 'semrush') {
+      setLoadingProvider(provider);
+      setError(null);
+      const current = cards.find((card) => card.provider === provider);
+      try {
+        const res = await fetch('/api/investor/semrush', {
+          method: current?.connected ? 'DELETE' : 'PUT',
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || '更新 Semrush 员工状态失败');
+          return;
+        }
+        setCards((prev) =>
+          prev.map((card) =>
+            card.provider === 'semrush'
+              ? {
+                  ...card,
+                  connected: Boolean(data.integration?.connected),
+                  accountName: data.integration?.accountName || 'Semrush 员工',
+                  updatedAt: data.integration?.updatedAt || new Date().toISOString(),
+                  platformConfigured: Boolean(data.integration?.platformConfigured),
+                }
+              : card
+          )
+        );
+      } catch {
+        setError('网络错误，请稍后重试');
+      } finally {
+        setLoadingProvider(null);
+      }
+      return;
+    }
     if (provider === 'xiaohongshu') {
       setLoadingProvider(provider);
       setError(null);
@@ -185,7 +236,9 @@ export default function InvestorIntegrationsPanel({
     setError(null);
     try {
       const res =
-        provider === 'xiaohongshu'
+        provider === 'semrush'
+          ? await fetch('/api/investor/semrush')
+          : provider === 'xiaohongshu'
           ? await fetch('/api/investor/xiaohongshu/assistant')
           : await fetch(`/api/investor/integrations/summary/${provider}`, {
               method: 'POST',
@@ -200,20 +253,31 @@ export default function InvestorIntegrationsPanel({
           card.provider === provider
             ? {
                 ...card,
-                connected: provider === 'xiaohongshu' ? Boolean(data.integration?.connected) : true,
-                accountEmail: provider === 'xiaohongshu' ? null : data.integration.accountEmail || null,
+                connected:
+                  provider === 'semrush'
+                    ? Boolean(data.integration?.connected)
+                    : provider === 'xiaohongshu'
+                      ? Boolean(data.integration?.connected)
+                      : true,
+                accountEmail: provider === 'xiaohongshu' || provider === 'semrush' ? null : data.integration.accountEmail || null,
                 accountName:
-                  provider === 'xiaohongshu'
+                  provider === 'semrush'
+                    ? 'Semrush 员工'
+                    : provider === 'xiaohongshu'
                     ? (data.integration?.connected ? '小红书助手' : null)
                     : data.integration.accountName || null,
                 updatedAt:
-                  provider === 'xiaohongshu'
-                    ? data.thread?.messages?.length
-                      ? new Date().toISOString()
-                      : card.updatedAt
-                    : data.integration.updatedAt || null,
+                  provider === 'semrush'
+                    ? data.integration?.updatedAt || card.updatedAt
+                    : provider === 'xiaohongshu'
+                      ? data.thread?.messages?.length
+                        ? new Date().toISOString()
+                        : card.updatedAt
+                      : data.integration.updatedAt || null,
                 latestSummary:
-                  provider === 'xiaohongshu'
+                  provider === 'semrush'
+                    ? card.latestSummary
+                    : provider === 'xiaohongshu'
                     ? data.thread?.messages?.length
                       ? String(data.thread.messages[data.thread.messages.length - 1]?.content || card.latestSummary || '')
                       : card.latestSummary
@@ -224,6 +288,8 @@ export default function InvestorIntegrationsPanel({
                       ? new Date().toISOString()
                       : card.latestSummaryAt
                     : data.latestSummaryAt || null,
+                platformConfigured:
+                  provider === 'semrush' ? Boolean(data.integration?.platformConfigured) : card.platformConfigured,
               }
             : card
         )
@@ -236,6 +302,7 @@ export default function InvestorIntegrationsPanel({
   };
 
   const sendAssistantMessage = async (provider: ProviderKey) => {
+    if (provider === 'semrush') return;
     const text = assistantInputs[provider].trim();
     if (!text || assistantLoading[provider]) return;
 
@@ -281,6 +348,7 @@ export default function InvestorIntegrationsPanel({
   };
 
   const toggleCoach = async (provider: ProviderKey) => {
+    if (provider === 'semrush') return;
     const nextOpen = !coachOpen[provider];
     setCoachOpen((prev) => ({ ...prev, [provider]: nextOpen }));
     if (!nextOpen || coachLoaded[provider]) return;
@@ -308,6 +376,7 @@ export default function InvestorIntegrationsPanel({
   };
 
   const saveCoachPrompt = async (provider: ProviderKey) => {
+    if (provider === 'semrush') return;
     if (coachSaving[provider]) return;
     setCoachSaving((prev) => ({ ...prev, [provider]: true }));
     setCoachMessage((prev) => ({ ...prev, [provider]: '' }));
@@ -363,13 +432,22 @@ export default function InvestorIntegrationsPanel({
                   card.connected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                 }`}
               >
-          {card.connected ? (card.provider === 'xiaohongshu' ? '已启用' : '已绑定') : (card.provider === 'xiaohongshu' ? '未启用' : '未绑定')}
+          {card.connected
+            ? (card.provider === 'xiaohongshu' || card.provider === 'semrush' ? '已启用' : '已绑定')
+            : (card.provider === 'xiaohongshu' || card.provider === 'semrush' ? '未启用' : '未绑定')}
                 </span>
               </div>
 
             <p className="text-sm text-slate-600 mt-2">
-              {card.accountEmail || card.accountName || '尚未绑定账号'}
+              {card.provider === 'semrush'
+                ? '平台提供 Semrush 数据能力，启用后由主 AI 助手在竞品情报对话中自动调用。'
+                : card.accountEmail || card.accountName || '尚未绑定账号'}
             </p>
+            {card.provider === 'semrush' && (
+              <p className={`mt-2 text-xs ${card.platformConfigured ? 'text-emerald-700' : 'text-amber-700'}`}>
+                {card.platformConfigured ? '平台 API Key 已配置' : '平台 API Key 未配置，启用后仍需部署环境填入 Key 才能调用真实数据'}
+              </p>
+            )}
             {card.updatedAt && (
               <p className="text-xs text-slate-500 mt-1">
                 最近同步：{new Date(card.updatedAt).toLocaleString('zh-CN')}
@@ -386,6 +464,10 @@ export default function InvestorIntegrationsPanel({
                   ? card.connected
                     ? '已启用小红书助手'
                     : '启用小红书助手'
+                  : card.provider === 'semrush'
+                    ? card.connected
+                      ? '停用 Semrush 员工'
+                      : '启用 Semrush 员工'
                   : card.connected
                     ? '重新绑定'
                     : `绑定${providerLabel(card.provider)}`}
@@ -396,15 +478,21 @@ export default function InvestorIntegrationsPanel({
                 onClick={() => refreshSummary(card.provider)}
                 className="bg-white text-slate-800 px-3 py-2 rounded-lg text-sm border border-slate-300 hover:bg-slate-100 disabled:opacity-50"
               >
-                {loadingProvider === card.provider ? '刷新中...' : card.provider === 'xiaohongshu' ? '刷新状态' : '刷新摘要'}
+                {loadingProvider === card.provider
+                  ? '刷新中...'
+                  : card.provider === 'xiaohongshu' || card.provider === 'semrush'
+                    ? '刷新状态'
+                    : '刷新摘要'}
               </button>
             </div>
 
             <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">最近摘要</p>
+              <p className="text-xs text-slate-500 mb-1">{card.provider === 'semrush' ? '调用范围' : '最近摘要'}</p>
               <p className="text-sm text-slate-700 whitespace-pre-wrap">
                 {card.latestSummary ||
-                  (card.provider === 'xiaohongshu'
+                  (card.provider === 'semrush'
+                    ? '竞品发现、SEO、PPC、关键词、外链、流量代理指标。真实用户量和营收只做区间推断并标注置信度。'
+                    : card.provider === 'xiaohongshu'
                     ? '暂无摘要，可直接对话触发 skill 抓取。'
                     : '暂无摘要，绑定后点击“刷新摘要”生成。')}
               </p>
@@ -415,6 +503,7 @@ export default function InvestorIntegrationsPanel({
               )}
             </div>
 
+            {card.provider !== 'semrush' && (
             <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
               <p className="text-xs text-slate-500 mb-2">AI员工对话</p>
               <div
@@ -466,7 +555,9 @@ export default function InvestorIntegrationsPanel({
                 </button>
               </div>
             </div>
+            )}
 
+            {card.provider !== 'semrush' && (
             <div className="mt-3">
               <DebugCollapsible title="高级设置（AI员工调教）">
                 <div className="mt-2">
@@ -528,6 +619,7 @@ export default function InvestorIntegrationsPanel({
                 </div>
               </DebugCollapsible>
             </div>
+            )}
           </div>
         ))}
       </div>
