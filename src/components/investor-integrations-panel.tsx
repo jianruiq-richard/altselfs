@@ -451,8 +451,8 @@ export default function InvestorIntegrationsPanel({
                 : card.accountEmail || card.accountName || '尚未绑定账号'}
             </p>
             {isCompetitiveDataSource(card.provider) && (
-              <p className={`mt-2 text-xs ${card.platformConfigured ? 'text-emerald-700' : 'text-amber-700'}`}>
-                {card.platformConfigured ? '平台 RapidAPI Key 已配置' : '平台 RapidAPI Key 未配置，启用后仍需部署环境填入 Key 才能调用真实数据'}
+              <p className="mt-2 text-xs text-slate-500">
+                平台托管 RapidAPI 数据源；真实调用由后端个人 Agent 服务的环境变量和供应商额度决定。
               </p>
             )}
             {card.updatedAt && (
