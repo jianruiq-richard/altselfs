@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { isRecord } from '../util.js';
 const TOOLS = [
     {
@@ -178,12 +180,15 @@ async function rapidApiJson(input) {
         });
         const text = await response.text();
         const body = parseBody(text);
+        const quota = rapidApiQuotaFromHeaders(response.headers);
+        await persistRapidApiQuota(input.host, quota, response.status).catch(() => null);
         if (!response.ok) {
             throw new Error(`RapidAPI request failed with HTTP ${response.status}: ${text.slice(0, 1000)}`);
         }
         return {
             request: input.publicInput,
             status: response.status,
+            quota,
             body,
         };
     }
@@ -196,6 +201,104 @@ async function rapidApiJson(input) {
     finally {
         clearTimeout(timeout);
     }
+}
+export async function getRapidApiQuotaSnapshots() {
+    const configured = Boolean(process.env.RAPIDAPI_KEY?.trim());
+    const data = await readRapidApiQuotaFile().catch(() => ({}));
+    return TOOLS.map((tool) => {
+        const rawQuota = data[tool.host];
+        const quota = isRecord(rawQuota) ? rawQuota : null;
+        const remaining = readNumber(quota?.remaining);
+        const limit = readNumber(quota?.limit);
+        const reset = typeof quota?.reset === 'string' ? quota.reset : '';
+        return {
+            provider: 'RapidAPI',
+            account: tool.host,
+            fingerprint: configured ? 'ECS key configured' : '未配置',
+            balance: remaining !== null && limit !== null ? `${remaining.toLocaleString()} / ${limit.toLocaleString()}` : configured ? '未采集' : '未知',
+            usage: reset ? `reset ${reset}` : quota ? `HTTP ${String(quota.status || 'unknown')}` : '等待下一次调用采集',
+            status: !configured ? 'unknown' : remaining === null || limit === null ? 'unknown' : remaining <= 0 ? 'critical' : remaining / limit < 0.1 ? 'warning' : 'ok',
+            updatedAt: typeof quota?.updatedAt === 'string' ? quota.updatedAt : new Date().toISOString(),
+            note: quota ? '来自最近一次 RapidAPI 响应头' : '该订阅源还没有采集到 quota headers',
+        };
+    });
+}
+function rapidApiQuotaFromHeaders(headers) {
+    const limit = headerNumber(headers, [
+        'x-ratelimit-requests-limit',
+        'x-ratelimit-limit',
+        'x-rate-limit-limit',
+        'ratelimit-limit',
+    ]);
+    const remaining = headerNumber(headers, [
+        'x-ratelimit-requests-remaining',
+        'x-ratelimit-remaining',
+        'x-rate-limit-remaining',
+        'ratelimit-remaining',
+    ]);
+    const resetRaw = headerValue(headers, [
+        'x-ratelimit-requests-reset',
+        'x-ratelimit-reset',
+        'x-rate-limit-reset',
+        'ratelimit-reset',
+    ]);
+    return {
+        limit,
+        remaining,
+        reset: formatReset(resetRaw),
+    };
+}
+async function persistRapidApiQuota(host, quota, status) {
+    if (quota.limit === null && quota.remaining === null && !quota.reset)
+        return;
+    const filePath = rapidApiQuotaSnapshotPath();
+    const current = await readRapidApiQuotaFile().catch(() => ({}));
+    current[host] = {
+        ...quota,
+        status,
+        updatedAt: new Date().toISOString(),
+    };
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, `${JSON.stringify(current, null, 2)}\n`, 'utf8');
+}
+async function readRapidApiQuotaFile() {
+    const raw = await fs.readFile(rapidApiQuotaSnapshotPath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    return isRecord(parsed) ? parsed : {};
+}
+function rapidApiQuotaSnapshotPath() {
+    return process.env.RAPIDAPI_QUOTA_SNAPSHOT_PATH?.trim() || '/data/altselfs-agent/ops/rapidapi-quota.json';
+}
+function headerNumber(headers, keys) {
+    const value = headerValue(headers, keys);
+    if (!value)
+        return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+function readNumber(value) {
+    const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+    return Number.isFinite(number) ? number : null;
+}
+function headerValue(headers, keys) {
+    for (const key of keys) {
+        const value = headers.get(key);
+        if (value)
+            return value;
+    }
+    return '';
+}
+function formatReset(value) {
+    if (!value)
+        return '';
+    const number = Number(value);
+    if (!Number.isFinite(number))
+        return value;
+    if (number > 1_000_000_000_000)
+        return new Date(number).toISOString();
+    if (number > 1_000_000_000)
+        return new Date(number * 1000).toISOString();
+    return `${number}s`;
 }
 function parseBody(text) {
     const trimmed = text.trim();

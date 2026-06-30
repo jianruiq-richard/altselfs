@@ -7,7 +7,7 @@ import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import type { PersonalMainAgent } from './main-agent.js';
 import { runWebSearchTool } from './tools/web-search.js';
-import { isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
+import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
 import {
   getAgentThreadRuntimeStatus,
   getAgentContextOpsUserUsage,
@@ -816,7 +816,7 @@ function isOpsAuthorized(req: http.IncomingMessage) {
 }
 
 async function buildOpsSnapshot(config: ServerConfig, jobs: Array<{ status: string }>) {
-  const [resources, userResources] = await Promise.all([
+  const [resources, userResources, apiAccounts] = await Promise.all([
     Promise.all([
     diskResource('/', 'system disk'),
     diskResource(config.sandboxStorageRoot, 'sandbox storage root'),
@@ -825,6 +825,7 @@ async function buildOpsSnapshot(config: ServerConfig, jobs: Array<{ status: stri
     diskResource(config.hermesHomeRoot, 'hermes home root'),
     ]),
     buildOpsUserResources(config),
+    getRapidApiQuotaSnapshots().catch(() => []),
   ]);
   const jobCounts = jobs.reduce<Record<string, number>>((acc, job) => {
     acc[job.status] = (acc[job.status] || 0) + 1;
@@ -846,6 +847,7 @@ async function buildOpsSnapshot(config: ServerConfig, jobs: Array<{ status: stri
     },
     resources: resources.filter(Boolean),
     userResources,
+    apiAccounts,
   };
 }
 

@@ -80,6 +80,14 @@ type AgentUserResource = {
   agentThreads: number;
 };
 
+type AgentSnapshot = {
+  connected: boolean;
+  note: string;
+  resources: ResourceSnapshot[];
+  userResources: AgentUserResource[];
+  apiAccounts: ApiAccountSnapshot[];
+};
+
 export async function getOpsDashboardData(): Promise<OpsDashboardData> {
   const collectedAt = new Date().toISOString();
   const [appStats, openRouter, agentSnapshot] = await Promise.all([
@@ -100,7 +108,7 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
     staticKeyStatus('wxrank', 'WXRANK_API_KEY'),
     staticKeyStatus('dajiala', 'DAJIALA_API_KEY'),
     staticKeyStatus('XHS Spider', 'XHS_SPIDER_SECRET'),
-    staticKeyStatus('RapidAPI', 'RAPIDAPI_KEY'),
+    ...rapidApiAccountsFromAgent(agentSnapshot),
   ];
 
   const resources: ResourceSnapshot[] = [
@@ -346,11 +354,11 @@ async function getOpenRouterAccount(): Promise<ApiAccountSnapshot> {
   }
 }
 
-async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; resources: ResourceSnapshot[]; userResources: AgentUserResource[] }> {
+async function getAgentSnapshot(): Promise<AgentSnapshot> {
   const baseUrl = process.env.OPS_AGENT_BASE_URL?.trim();
   const token = process.env.OPS_AGENT_TOKEN?.trim();
   if (!baseUrl || !token) {
-    return { connected: false, note: '配置 OPS_AGENT_BASE_URL 和 OPS_AGENT_TOKEN 后显示 ECS/workspace 磁盘', resources: [], userResources: [] };
+    return { connected: false, note: '配置 OPS_AGENT_BASE_URL 和 OPS_AGENT_TOKEN 后显示 ECS/workspace 磁盘', resources: [], userResources: [], apiAccounts: [] };
   }
 
   try {
@@ -360,7 +368,7 @@ async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; r
     });
     const data = await response.json().catch(() => null) as unknown;
     if (!response.ok || !isRecord(data)) {
-      return { connected: false, note: `Agent ops 接口 HTTP ${response.status}`, resources: [], userResources: [] };
+      return { connected: false, note: `Agent ops 接口 HTTP ${response.status}`, resources: [], userResources: [], apiAccounts: [] };
     }
     const resources = Array.isArray(data.resources)
       ? data.resources
@@ -393,9 +401,21 @@ async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; r
           agentThreads: readNumber(item.agentThreads) || 0,
         }))
       : [];
-    return { connected: true, note: '来自 personal-agent-server /internal/ops/snapshot', resources, userResources };
+    const apiAccounts = Array.isArray(data.apiAccounts)
+      ? data.apiAccounts.filter(isRecord).map((item): ApiAccountSnapshot => ({
+          provider: typeof item.provider === 'string' ? item.provider : 'Agent API',
+          account: typeof item.account === 'string' ? item.account : 'unknown',
+          fingerprint: typeof item.fingerprint === 'string' ? item.fingerprint : 'ECS',
+          balance: typeof item.balance === 'string' ? item.balance : '未知',
+          usage: typeof item.usage === 'string' ? item.usage : '未知',
+          status: isOpsStatus(item.status) ? item.status : 'unknown',
+          updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : new Date().toISOString(),
+          note: typeof item.note === 'string' ? item.note : undefined,
+        }))
+      : [];
+    return { connected: true, note: '来自 personal-agent-server /internal/ops/snapshot', resources, userResources, apiAccounts };
   } catch (error) {
-    return { connected: false, note: error instanceof Error ? error.message : String(error), resources: [], userResources: [] };
+    return { connected: false, note: error instanceof Error ? error.message : String(error), resources: [], userResources: [], apiAccounts: [] };
   }
 }
 
@@ -567,6 +587,11 @@ function mergeUserResources(users: UserUsageRow[], agentResources: AgentUserReso
       ecsDiskBytes: agent ? agent.ecsDiskBytes : null,
     };
   });
+}
+
+function rapidApiAccountsFromAgent(agentSnapshot: AgentSnapshot) {
+  if (agentSnapshot.apiAccounts.length > 0) return agentSnapshot.apiAccounts;
+  return [staticKeyStatus('RapidAPI', 'RAPIDAPI_KEY')];
 }
 
 function describeDatabaseUrl() {
@@ -1074,6 +1099,10 @@ function statusFromPercent(percent: number | null): OpsStatus {
   if (percent >= 90) return 'critical';
   if (percent >= 80) return 'warning';
   return 'ok';
+}
+
+function isOpsStatus(value: unknown): value is OpsStatus {
+  return value === 'ok' || value === 'warning' || value === 'critical' || value === 'unknown';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

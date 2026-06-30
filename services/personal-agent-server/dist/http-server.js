@@ -4,7 +4,7 @@ import path from 'node:path';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import { runWebSearchTool } from './tools/web-search.js';
-import { isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
+import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
 import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
@@ -786,7 +786,7 @@ function isOpsAuthorized(req) {
     return bearer === token || headerToken === token;
 }
 async function buildOpsSnapshot(config, jobs) {
-    const [resources, userResources] = await Promise.all([
+    const [resources, userResources, apiAccounts] = await Promise.all([
         Promise.all([
             diskResource('/', 'system disk'),
             diskResource(config.sandboxStorageRoot, 'sandbox storage root'),
@@ -795,6 +795,7 @@ async function buildOpsSnapshot(config, jobs) {
             diskResource(config.hermesHomeRoot, 'hermes home root'),
         ]),
         buildOpsUserResources(config),
+        getRapidApiQuotaSnapshots().catch(() => []),
     ]);
     const jobCounts = jobs.reduce((acc, job) => {
         acc[job.status] = (acc[job.status] || 0) + 1;
@@ -815,6 +816,7 @@ async function buildOpsSnapshot(config, jobs) {
         },
         resources: resources.filter(Boolean),
         userResources,
+        apiAccounts,
     };
 }
 async function buildOpsUserResources(config) {
