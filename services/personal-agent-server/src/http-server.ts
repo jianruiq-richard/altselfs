@@ -20,7 +20,7 @@ import {
   type PersistedAgentTurnInput,
 } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
-import { calculateDirectoryBytes } from './sandbox-runtime.js';
+import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
 
 type OpenRouterChatContentPart = Record<string, unknown>;
 type OpenRouterChatMessage = {
@@ -871,7 +871,7 @@ async function buildOpsUserResources(config: ServerConfig) {
     byKey.set(key, {
       userId: row.userId,
       investorId: row.investorId,
-      ecsDiskBytes: 0,
+      ecsDiskBytes: row.diskBytes,
       agentRdsBytes: row.rdsBytes,
       agentMessages: row.messages,
       agentArtifacts: row.artifacts,
@@ -881,9 +881,10 @@ async function buildOpsUserResources(config: ServerConfig) {
   }
 
   for (const row of diskRows) {
-    const key = row.userId;
+    const matched = findUserResourceByDiskSegment(byKey, row.userId);
+    const key = matched?.key || row.userId;
     if (!key) continue;
-    const existing = byKey.get(key) || {
+    const existing = matched?.value || byKey.get(key) || {
       userId: row.userId,
       investorId: '',
       ecsDiskBytes: 0,
@@ -893,11 +894,30 @@ async function buildOpsUserResources(config: ServerConfig) {
       agentRuns: 0,
       agentThreads: 0,
     };
-    existing.ecsDiskBytes += row.bytes;
+    existing.ecsDiskBytes = Math.max(existing.ecsDiskBytes, row.bytes);
     byKey.set(key, existing);
   }
 
   return Array.from(byKey.values()).sort((a, b) => (b.ecsDiskBytes + b.agentRdsBytes) - (a.ecsDiskBytes + a.agentRdsBytes)).slice(0, 200);
+}
+
+function findUserResourceByDiskSegment(
+  resources: Map<string, {
+    userId: string;
+    investorId: string;
+    ecsDiskBytes: number;
+    agentRdsBytes: number;
+    agentMessages: number;
+    agentArtifacts: number;
+    agentRuns: number;
+    agentThreads: number;
+  }>,
+  segment: string
+) {
+  for (const [key, value] of resources.entries()) {
+    if (value.userId && sanitizePathSegment(value.userId) === segment) return { key, value };
+  }
+  return null;
 }
 
 async function getOpsUserDiskUsage(config: ServerConfig) {
@@ -924,7 +944,7 @@ async function diskResource(pathname: string, label: string) {
   try {
     const stat = await fs.statfs(pathname);
     const totalBytes = Number(stat.blocks) * Number(stat.bsize);
-    const freeBytes = Number(stat.bavail) * Number(stat.bsize);
+    const freeBytes = Number(stat.bfree) * Number(stat.bsize);
     const usedBytes = Math.max(0, totalBytes - freeBytes);
     const percent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : null;
     return {

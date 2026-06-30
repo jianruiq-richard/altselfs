@@ -341,24 +341,35 @@ export async function getAgentContextOpsUserUsage(config) {
       select investor_id, max(user_id) as user_id
       from agent_context_threads
       group by investor_id
+    ),
+    disk_usage as (
+      select
+        investor_id,
+        max(user_id) as user_id,
+        coalesce(sum(disk_bytes), 0) as disk_bytes
+      from agent_context_sandbox_state
+      group by investor_id
     )
     select
-      coalesce(max(t.user_id), u.investor_id) as user_id,
-      u.investor_id,
+      coalesce(max(t.user_id), max(d.user_id), coalesce(u.investor_id, d.investor_id)) as user_id,
+      coalesce(u.investor_id, d.investor_id) as investor_id,
+      coalesce(max(d.disk_bytes), 0) as disk_bytes,
       coalesce(sum(u.bytes), 0) as rds_bytes,
       coalesce(sum(u.messages), 0) as messages,
       coalesce(sum(u.artifacts), 0) as artifacts,
       coalesce(sum(u.runs), 0) as runs,
       count(distinct u.thread_id) as threads
     from usage_rows u
-    left join investor_users t on t.investor_id = u.investor_id
-    group by u.investor_id
-    order by rds_bytes desc
+    full outer join disk_usage d on d.investor_id = u.investor_id
+    left join investor_users t on t.investor_id = coalesce(u.investor_id, d.investor_id)
+    group by coalesce(u.investor_id, d.investor_id)
+    order by disk_bytes desc, rds_bytes desc
     limit 200
   `);
     return result.rows.map((row) => ({
         userId: String(row.user_id || ''),
         investorId: String(row.investor_id || ''),
+        diskBytes: readRowNumber(row.disk_bytes),
         rdsBytes: readRowNumber(row.rds_bytes),
         messages: readRowNumber(row.messages),
         artifacts: readRowNumber(row.artifacts),
