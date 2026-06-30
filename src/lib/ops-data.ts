@@ -188,13 +188,13 @@ async function getAppStats() {
     users: rows,
     databaseResource: {
       provider: databaseDescriptor.provider,
-      resource: 'App database',
+      resource: databaseDescriptor.resource,
       used: databaseSize ? formatBytes(databaseSize) : '未知',
       total: '需接入云厂商配额',
       percent: null,
       status: databaseSize ? 'ok' as const : 'unknown' as const,
       updatedAt: new Date().toISOString(),
-      note: databaseSize ? `来自 pg_database_size(current_database()) · ${databaseDescriptor.host}` : '当前数据库不支持容量读取或查询失败',
+      note: databaseSize ? `数据库配额 · 来自 pg_database_size(current_database()) · ${databaseDescriptor.host}` : '当前数据库不支持容量读取或查询失败',
       metadata: {
         usedBytes: databaseSize,
       },
@@ -372,16 +372,16 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
   const storageBytes = await readSupabaseStorageBytes();
   if (storageBytes !== null || storageLimit !== null || token) {
     resources.push({
-      provider: 'Supabase Storage',
-      resource: 'Object storage',
+      provider: 'Supabase',
+      resource: 'Object Storage / bucket 文件',
       used: storageBytes === null ? '未知' : formatBytes(storageBytes),
       total: storageLimit === null ? '需配置套餐上限' : formatBytes(storageLimit),
       percent: storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null,
       status: statusFromPercent(storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null),
       updatedAt: now,
       note: storageBytes === null
-        ? '未检测到 storage.objects 或权限不足'
-        : `来自 storage.objects metadata.size${storageLimitSource ? ` · 上限来自 ${storageLimitSource}` : ''}`,
+        ? '文件存储配额，不是数据库；当前没有 bucket 文件或无法读取 storage.objects'
+        : `文件存储用量，来自 storage.objects metadata.size${storageLimitSource ? ` · 上限来自 ${storageLimitSource}` : ''}`,
     });
   }
 
@@ -396,9 +396,23 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
 async function readSupabaseStorageBytes() {
   try {
     const rows = await prisma.$queryRaw<Array<{ bytes: bigint | number | null }>>`
-      select coalesce(sum((metadata->>'size')::bigint), 0) as bytes
-      from storage.objects
-      where metadata ? 'size'
+      select coalesce(
+        sum(
+          case
+            when raw_size ~ '^[0-9]+$' then raw_size::bigint
+            else 0
+          end
+        ),
+        0
+      ) as bytes
+      from (
+        select coalesce(
+          metadata->>'size',
+          metadata->>'contentLength',
+          metadata->>'content_length'
+        ) as raw_size
+        from storage.objects
+      ) objects
     `;
     const value = rows[0]?.bytes;
     return typeof value === 'bigint' ? Number(value) : typeof value === 'number' ? value : null;
@@ -432,19 +446,19 @@ function mergeAppDatabaseResource(resource: ResourceSnapshot, supabase: Supabase
 
 function describeDatabaseUrl() {
   const raw = process.env.DATABASE_URL?.trim().replace(/^['"]|['"]$/g, '');
-  if (!raw) return { provider: 'PostgreSQL', host: 'DATABASE_URL 未配置' };
+  if (!raw) return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL 未配置' };
   try {
     const url = new URL(raw);
     const host = url.hostname;
     if (host.includes('supabase.co') || host.includes('supabase.com')) {
-      return { provider: 'Supabase PostgreSQL', host };
+      return { provider: 'Supabase', resource: 'Postgres database / App 业务数据', host };
     }
     if (host.includes('rds.aliyuncs.com')) {
-      return { provider: 'Aliyun RDS PostgreSQL', host };
+      return { provider: 'Aliyun RDS', resource: 'Postgres database / App 业务数据', host };
     }
-    return { provider: 'PostgreSQL', host };
+    return { provider: 'PostgreSQL', resource: 'App database', host };
   } catch {
-    return { provider: 'PostgreSQL', host: 'DATABASE_URL 解析失败' };
+    return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL 解析失败' };
   }
 }
 

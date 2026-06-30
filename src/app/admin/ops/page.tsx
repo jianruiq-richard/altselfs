@@ -90,7 +90,7 @@ export default async function OpsPage() {
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white">
-            <SectionTitle title="云资源" subtitle="一期优先接主库和 Agent ECS；其他云资源保留接入位。" />
+            <SectionTitle title="云资源" subtitle="Supabase 分数据库配额和文件存储配额；ECS 分系统盘和工作区盘。" />
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
