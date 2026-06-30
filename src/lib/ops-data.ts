@@ -270,6 +270,7 @@ async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; r
     const resources = Array.isArray(data.resources)
       ? data.resources
           .filter(isRecord)
+          .filter((item) => typeof item.usedBytes === 'number' && typeof item.totalBytes === 'number')
           .map((item): ResourceSnapshot => ({
             provider: 'Agent ECS',
             resource: String(item.resource || 'unknown'),
@@ -574,12 +575,13 @@ async function getAliyunRdsInstance(credentials: AliyunCredentials): Promise<Res
       }];
     }
     const totalGiB = readNumber(attr.DBInstanceStorage);
-    const usedGiB = readNumber(attr.DBInstanceDiskUsed) ?? readNumber(attr.DiskUsed);
-    const percent = totalGiB && usedGiB !== null ? (usedGiB / totalGiB) * 100 : null;
+    const usedBytes = readNumber(attr.DBInstanceDiskUsed) ?? readNumber(attr.DiskUsed);
+    const totalBytes = totalGiB === null ? null : totalGiB * 1024 * 1024 * 1024;
+    const percent = totalBytes && usedBytes !== null ? (usedBytes / totalBytes) * 100 : null;
     return [{
       provider: 'Aliyun',
       resource: `RDS ${String(attr.DBInstanceDescription || instanceId)}`,
-      used: usedGiB === null ? String(attr.DBInstanceStatus || 'unknown') : `${usedGiB} GiB`,
+      used: usedBytes === null ? String(attr.DBInstanceStatus || 'unknown') : formatBytes(usedBytes),
       total: totalGiB === null ? '未知' : `${totalGiB} GiB provisioned`,
       percent,
       status: percent === null ? (attr.DBInstanceStatus === 'Running' ? 'ok' : 'unknown') : statusFromPercent(percent),
