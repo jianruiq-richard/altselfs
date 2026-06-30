@@ -57,6 +57,13 @@ export type OpsDashboardData = {
 
 type SizeRow = { database_size: bigint | number | null };
 
+type SupabaseSnapshot = {
+  databaseLimitBytes: number | null;
+  databaseLimitSource: string | null;
+  projectNote: string | null;
+  resources: ResourceSnapshot[];
+};
+
 export async function getOpsDashboardData(): Promise<OpsDashboardData> {
   const collectedAt = new Date().toISOString();
   const [appStats, openRouter, agentSnapshot] = await Promise.all([
@@ -64,11 +71,12 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
     getOpenRouterAccount(),
     getAgentSnapshot(),
   ]);
-  const [supabaseResources, vercelResources, aliyunResources] = await Promise.all([
-    getSupabaseResources(appStats.databaseBytes),
+  const [supabaseSnapshot, vercelResources, aliyunResources] = await Promise.all([
+    getSupabaseResources(),
     getVercelResources(),
     getAliyunResources(),
   ]);
+  const appDatabaseResource = mergeAppDatabaseResource(appStats.databaseResource, supabaseSnapshot);
 
   const apiAccounts: ApiAccountSnapshot[] = [
     openRouter,
@@ -80,9 +88,9 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
   ];
 
   const resources: ResourceSnapshot[] = [
-    appStats.databaseResource,
+    appDatabaseResource,
     ...mergeEcsDiskResources(agentSnapshot.resources, aliyunResources),
-    ...supabaseResources,
+    ...supabaseSnapshot.resources,
     ...vercelResources,
     ...aliyunResources.filter((resource) => resource.metadata?.kind !== 'ecs_disk'),
   ];
@@ -111,13 +119,14 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
     notes: [
       '一期已接入 Clerk 管理权限、主库统计、OpenRouter credits、可选 Agent server 磁盘快照。',
       '用户 token 成本目前用消息字符数估算；下一步需要在每次 LLM/tool 调用后写 ops_usage_events 才能做到精确计费。',
-      'Supabase、Vercel、阿里云已接入轻量 API 采集；部分套餐配额仍需要额外配置 limit env 或云厂商监控指标。',
+      'Supabase、Vercel、阿里云已接入轻量 API 采集；Supabase 配额优先读 API，读不到时使用 limit env。',
     ],
   };
 }
 
 async function getAppStats() {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const databaseDescriptor = describeDatabaseUrl();
   const [userCount, investorCount, candidateCount, recentMessageCount, users, databaseSize] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { role: 'INVESTOR' } }),
@@ -178,14 +187,17 @@ async function getAppStats() {
     recentMessageCount,
     users: rows,
     databaseResource: {
-      provider: 'PostgreSQL',
+      provider: databaseDescriptor.provider,
       resource: 'App database',
       used: databaseSize ? formatBytes(databaseSize) : '未知',
       total: '需接入云厂商配额',
       percent: null,
       status: databaseSize ? 'ok' as const : 'unknown' as const,
       updatedAt: new Date().toISOString(),
-      note: databaseSize ? '来自 pg_database_size(current_database())' : '当前数据库不支持容量读取或查询失败',
+      note: databaseSize ? `来自 pg_database_size(current_database()) · ${databaseDescriptor.host}` : '当前数据库不支持容量读取或查询失败',
+      metadata: {
+        usedBytes: databaseSize,
+      },
     },
     databaseBytes: databaseSize,
   };
@@ -293,28 +305,20 @@ async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; r
   }
 }
 
-async function getSupabaseResources(databaseBytes: number | null): Promise<ResourceSnapshot[]> {
+async function getSupabaseResources(): Promise<SupabaseSnapshot> {
   const token = process.env.SUPABASE_ACCESS_TOKEN?.trim();
   const projectRef = process.env.SUPABASE_PROJECT_REF?.trim() || process.env.NEXT_PUBLIC_SUPABASE_PROJECT_REF?.trim();
   const now = new Date().toISOString();
   const resources: ResourceSnapshot[] = [];
+  const configuredDbLimit = readBytesEnv('SUPABASE_DB_LIMIT_BYTES');
+  const configuredStorageLimit = readBytesEnv('SUPABASE_STORAGE_LIMIT_BYTES');
+  let databaseLimitBytes = configuredDbLimit;
+  let databaseLimitSource = configuredDbLimit === null ? null : 'SUPABASE_DB_LIMIT_BYTES';
+  let projectNote: string | null = null;
+  let storageLimit = configuredStorageLimit;
+  let storageLimitSource = configuredStorageLimit === null ? null : 'SUPABASE_STORAGE_LIMIT_BYTES';
 
-  if (!token) {
-    return [staticResourceStatus('Supabase', 'Project / Database / Storage', 'SUPABASE_ACCESS_TOKEN')];
-  }
-
-  if (!projectRef) {
-    resources.push({
-      provider: 'Supabase',
-      resource: 'Project',
-      used: '已配置 token',
-      total: '缺项目 ref',
-      percent: null,
-      status: 'unknown',
-      updatedAt: now,
-      note: '补充 SUPABASE_PROJECT_REF 后可读取项目状态',
-    });
-  } else {
+  if (token && projectRef) {
     try {
       const response = await fetch(`https://api.supabase.com/v1/projects/${encodeURIComponent(projectRef)}`, {
         headers: { authorization: `Bearer ${token}` },
@@ -323,19 +327,23 @@ async function getSupabaseResources(databaseBytes: number | null): Promise<Resou
       const data = await response.json().catch(() => null) as unknown;
       if (response.ok && isRecord(data)) {
         const status = String(data.status || data.state || 'unknown');
-        resources.push({
-          provider: 'Supabase',
-          resource: `Project ${projectRef}`,
-          used: status,
-          total: typeof data.region === 'string' ? data.region : 'management api',
-          percent: null,
-          status: /active|healthy|running/i.test(status) ? 'ok' : 'unknown',
-          updatedAt: now,
-          note: typeof data.name === 'string' ? data.name : '来自 Supabase Management API',
-        });
+        const projectName = typeof data.name === 'string' ? data.name : projectRef;
+        const region = typeof data.region === 'string' ? data.region : null;
+        projectNote = `${projectName} · ${status}${region ? ` · ${region}` : ''}`;
+        const apiDbLimit = readSupabaseLimitBytes(data, ['database_size_limit', 'db_size_limit', 'databaseLimitBytes', 'dbLimitBytes']);
+        const apiStorageLimit = readSupabaseLimitBytes(data, ['storage_size_limit', 'storageLimitBytes', 'storageLimit']);
+        const inferred = inferSupabasePlanLimits(data);
+        if (databaseLimitBytes === null) {
+          databaseLimitBytes = apiDbLimit ?? inferred.databaseLimitBytes;
+          databaseLimitSource = apiDbLimit === null && inferred.databaseLimitBytes !== null ? inferred.source : apiDbLimit === null ? null : 'Supabase Management API';
+        }
+        if (storageLimit === null) {
+          storageLimit = apiStorageLimit ?? inferred.storageLimitBytes;
+          storageLimitSource = apiStorageLimit === null && inferred.storageLimitBytes !== null ? inferred.source : apiStorageLimit === null ? null : 'Supabase Management API';
+        }
       } else {
         resources.push({
-          provider: 'Supabase',
+          provider: 'Supabase API',
           resource: `Project ${projectRef}`,
           used: '读取失败',
           total: `HTTP ${response.status}`,
@@ -346,36 +354,43 @@ async function getSupabaseResources(databaseBytes: number | null): Promise<Resou
         });
       }
     } catch (error) {
-      resources.push(apiErrorResource('Supabase', `Project ${projectRef}`, error));
+      resources.push(apiErrorResource('Supabase API', `Project ${projectRef}`, error));
     }
+  } else if (token && !projectRef) {
+    resources.push({
+      provider: 'Supabase API',
+      resource: 'Project metadata',
+      used: '已配置 token',
+      total: '缺项目 ref',
+      percent: null,
+      status: 'unknown',
+      updatedAt: now,
+      note: '补充 SUPABASE_PROJECT_REF 后可读取项目和套餐信息',
+    });
   }
 
-  const dbLimit = readBytesEnv('SUPABASE_DB_LIMIT_BYTES');
-  resources.push({
-    provider: 'Supabase',
-    resource: 'Database size',
-    used: databaseBytes === null ? '未知' : formatBytes(databaseBytes),
-    total: dbLimit === null ? '配置 SUPABASE_DB_LIMIT_BYTES 后计算占比' : formatBytes(dbLimit),
-    percent: databaseBytes !== null && dbLimit ? (databaseBytes / dbLimit) * 100 : null,
-    status: statusFromPercent(databaseBytes !== null && dbLimit ? (databaseBytes / dbLimit) * 100 : null),
-    updatedAt: now,
-    note: '数据库已用来自 pg_database_size；套餐上限需要手动配置',
-  });
-
   const storageBytes = await readSupabaseStorageBytes();
-  const storageLimit = readBytesEnv('SUPABASE_STORAGE_LIMIT_BYTES');
-  resources.push({
-    provider: 'Supabase',
-    resource: 'Storage objects',
-    used: storageBytes === null ? '未知' : formatBytes(storageBytes),
-    total: storageLimit === null ? '配置 SUPABASE_STORAGE_LIMIT_BYTES 后计算占比' : formatBytes(storageLimit),
-    percent: storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null,
-    status: statusFromPercent(storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null),
-    updatedAt: now,
-    note: storageBytes === null ? '未检测到 storage.objects 或权限不足' : '来自 storage.objects metadata.size 汇总',
-  });
+  if (storageBytes !== null || storageLimit !== null || token) {
+    resources.push({
+      provider: 'Supabase Storage',
+      resource: 'Object storage',
+      used: storageBytes === null ? '未知' : formatBytes(storageBytes),
+      total: storageLimit === null ? '需配置套餐上限' : formatBytes(storageLimit),
+      percent: storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null,
+      status: statusFromPercent(storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null),
+      updatedAt: now,
+      note: storageBytes === null
+        ? '未检测到 storage.objects 或权限不足'
+        : `来自 storage.objects metadata.size${storageLimitSource ? ` · 上限来自 ${storageLimitSource}` : ''}`,
+    });
+  }
 
-  return resources;
+  return {
+    databaseLimitBytes,
+    databaseLimitSource,
+    projectNote,
+    resources,
+  };
 }
 
 async function readSupabaseStorageBytes() {
@@ -390,6 +405,82 @@ async function readSupabaseStorageBytes() {
   } catch {
     return null;
   }
+}
+
+function mergeAppDatabaseResource(resource: ResourceSnapshot, supabase: SupabaseSnapshot): ResourceSnapshot {
+  if (supabase.databaseLimitBytes === null) {
+    return {
+      ...resource,
+      note: [resource.note, supabase.projectNote].filter(Boolean).join(' · '),
+    };
+  }
+
+  const usedBytes = typeof resource.metadata?.usedBytes === 'number' ? resource.metadata.usedBytes : null;
+  const percent = usedBytes === null ? null : (usedBytes / supabase.databaseLimitBytes) * 100;
+  return {
+    ...resource,
+    total: formatBytes(supabase.databaseLimitBytes),
+    percent,
+    status: statusFromPercent(percent),
+    note: [
+      resource.note,
+      supabase.projectNote,
+      supabase.databaseLimitSource ? `上限来自 ${supabase.databaseLimitSource}` : null,
+    ].filter(Boolean).join(' · '),
+  };
+}
+
+function describeDatabaseUrl() {
+  const raw = process.env.DATABASE_URL?.trim().replace(/^['"]|['"]$/g, '');
+  if (!raw) return { provider: 'PostgreSQL', host: 'DATABASE_URL 未配置' };
+  try {
+    const url = new URL(raw);
+    const host = url.hostname;
+    if (host.includes('supabase.co') || host.includes('supabase.com')) {
+      return { provider: 'Supabase PostgreSQL', host };
+    }
+    if (host.includes('rds.aliyuncs.com')) {
+      return { provider: 'Aliyun RDS PostgreSQL', host };
+    }
+    return { provider: 'PostgreSQL', host };
+  } catch {
+    return { provider: 'PostgreSQL', host: 'DATABASE_URL 解析失败' };
+  }
+}
+
+function readSupabaseLimitBytes(data: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const direct = readFlexibleBytes(data[key]);
+    if (direct !== null) return direct;
+  }
+  for (const value of Object.values(data)) {
+    if (!isRecord(value)) continue;
+    const nested: number | null = readSupabaseLimitBytes(value, keys);
+    if (nested !== null) return nested;
+  }
+  return null;
+}
+
+function readFlexibleBytes(value: unknown) {
+  const number = readNumber(value);
+  if (number === null || number <= 0) return null;
+  return number < 10_000 ? number * 1024 * 1024 * 1024 : number;
+}
+
+function inferSupabasePlanLimits(data: Record<string, unknown>) {
+  const planText = Object.entries(data)
+    .filter(([key]) => /plan|tier|subscription|pricing/i.test(key))
+    .map(([, value]) => String(value))
+    .join(' ')
+    .toLowerCase();
+  if (!planText.includes('free')) {
+    return { databaseLimitBytes: null, storageLimitBytes: null, source: null };
+  }
+  return {
+    databaseLimitBytes: 500 * 1024 * 1024,
+    storageLimitBytes: 1024 * 1024 * 1024,
+    source: 'Supabase free plan fallback',
+  };
 }
 
 async function getVercelResources(): Promise<ResourceSnapshot[]> {
