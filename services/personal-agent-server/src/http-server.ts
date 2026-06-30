@@ -51,6 +51,13 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         });
       }
 
+      if (req.method === 'GET' && url.pathname === '/internal/ops/snapshot') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const jobs = memoryReviewQueue ? await memoryReviewQueue.listRecent(100) : [];
+        return json(res, 200, await buildOpsSnapshot(config, jobs));
+      }
+
       if (req.method === 'GET' && url.pathname === '/v1/threads/status') {
         if (!config) return json(res, 500, { error: 'config missing' });
         const threadId = url.searchParams.get('threadId')?.trim() || '';
@@ -795,6 +802,73 @@ function html(res: http.ServerResponse, status: number, body: string) {
 function isLoopbackRequest(req: http.IncomingMessage) {
   const address = req.socket.remoteAddress || '';
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
+function isOpsAuthorized(req: http.IncomingMessage) {
+  const token = process.env.OPS_AGENT_TOKEN?.trim();
+  if (!token) return false;
+  const authorization = req.headers.authorization || '';
+  const bearer = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length).trim() : '';
+  const headerToken = Array.isArray(req.headers['x-ops-token']) ? req.headers['x-ops-token'][0] : req.headers['x-ops-token'];
+  return bearer === token || headerToken === token;
+}
+
+async function buildOpsSnapshot(config: ServerConfig, jobs: Array<{ status: string }>) {
+  const resources = await Promise.all([
+    diskResource('/', 'system disk'),
+    diskResource(config.sandboxStorageRoot, 'sandbox storage root'),
+    diskResource(config.workspaceRoot, 'codex workspace root'),
+    diskResource(config.codexHomeRoot, 'codex home root'),
+    diskResource(config.hermesHomeRoot, 'hermes home root'),
+  ]);
+  const jobCounts = jobs.reduce<Record<string, number>>((acc, job) => {
+    acc[job.status] = (acc[job.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    ok: true,
+    collectedAt: new Date().toISOString(),
+    env: config.env,
+    processRole: config.processRole,
+    storageBackend: config.storageBackend,
+    runtimeStateMode: config.runtimeStateMode,
+    sandboxStorageRoot: config.sandboxStorageRoot,
+    memoryReview: {
+      mode: config.memoryReviewMode,
+      recentJobs: jobs.length,
+      jobCounts,
+    },
+    resources: resources.filter(Boolean),
+  };
+}
+
+async function diskResource(pathname: string, label: string) {
+  try {
+    const stat = await fs.statfs(pathname);
+    const totalBytes = Number(stat.blocks) * Number(stat.bsize);
+    const freeBytes = Number(stat.bavail) * Number(stat.bsize);
+    const usedBytes = Math.max(0, totalBytes - freeBytes);
+    const percent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : null;
+    return {
+      resource: label,
+      path: pathname,
+      usedBytes,
+      totalBytes,
+      freeBytes,
+      percent,
+    };
+  } catch (error) {
+    return {
+      resource: label,
+      path: pathname,
+      usedBytes: null,
+      totalBytes: null,
+      freeBytes: null,
+      percent: null,
+      note: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function runReadArtifactTool(body: Record<string, unknown>, config: ServerConfig) {
