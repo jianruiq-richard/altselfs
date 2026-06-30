@@ -213,7 +213,7 @@ export async function getRapidApiQuotaSnapshots() {
         const reset = typeof quota?.reset === 'string' ? quota.reset : '';
         return {
             provider: 'RapidAPI',
-            account: tool.host,
+            account: `${tool.source} · ${tool.host}`,
             fingerprint: configured ? 'ECS key configured' : '未配置',
             balance: remaining !== null && limit !== null ? `${remaining.toLocaleString()} / ${limit.toLocaleString()}` : configured ? '未采集' : '未知',
             usage: reset ? `reset ${reset}` : quota ? `HTTP ${String(quota.status || 'unknown')}` : '等待下一次调用采集',

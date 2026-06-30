@@ -74,6 +74,7 @@ export default async function OpsPage() {
                     <tr key={`${row.provider}-${row.account}`}>
                       <td className="px-4 py-3">
                         <p className="font-medium">{row.provider}</p>
+                        <p className="mt-1 font-mono text-xs text-slate-500">{row.account}</p>
                         <p className="mt-1 text-xs text-slate-500">{row.note}</p>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-600">{row.fingerprint}</td>
