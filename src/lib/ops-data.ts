@@ -42,6 +42,10 @@ export type UserUsageRow = {
   chats: number;
   agentThreads: number;
   estimatedTokens: number;
+  supabaseDbBytes: number | null;
+  supabaseStorageBytes: number | null;
+  agentRdsBytes: number | null;
+  ecsDiskBytes: number | null;
   lastActiveAt: string;
 };
 
@@ -60,8 +64,20 @@ type SizeRow = { database_size: bigint | number | null };
 type SupabaseSnapshot = {
   databaseLimitBytes: number | null;
   databaseLimitSource: string | null;
+  storageBytes: number | null;
   projectNote: string | null;
   resources: ResourceSnapshot[];
+};
+
+type AgentUserResource = {
+  userId: string;
+  investorId: string;
+  ecsDiskBytes: number;
+  agentRdsBytes: number;
+  agentMessages: number;
+  agentArtifacts: number;
+  agentRuns: number;
+  agentThreads: number;
 };
 
 export async function getOpsDashboardData(): Promise<OpsDashboardData> {
@@ -107,14 +123,15 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
     },
   ];
 
-  const alerts = buildAlerts(apiAccounts, resources, appStats.users);
+  const users = mergeUserResources(appStats.users, agentSnapshot.userResources, supabaseSnapshot);
+  const alerts = buildAlerts(apiAccounts, resources, users);
 
   return {
     collectedAt,
     summary,
     apiAccounts,
     resources,
-    users: appStats.users,
+    users,
     alerts,
     notes: [
       '一期已接入 Clerk 管理权限、主库统计、OpenRouter credits、可选 Agent server 磁盘快照。',
@@ -127,7 +144,7 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
 async function getAppStats() {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const databaseDescriptor = describeDatabaseUrl();
-  const [userCount, investorCount, candidateCount, recentMessageCount, users, databaseSize] = await Promise.all([
+  const [userCount, investorCount, candidateCount, recentMessageCount, users, databaseSize, appUserDbBytes] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { role: 'INVESTOR' } }),
     prisma.user.count({ where: { role: 'CANDIDATE' } }),
@@ -159,6 +176,7 @@ async function getAppStats() {
       },
     }),
     readDatabaseSize(),
+    readAppUserDbBytes(),
   ]);
 
   const rows = users
@@ -175,6 +193,10 @@ async function getAppStats() {
         chats: user._count.chatsAsCandidate,
         agentThreads: user._count.agentThreads,
         estimatedTokens,
+        supabaseDbBytes: appUserDbBytes.get(user.id) || 0,
+        supabaseStorageBytes: null,
+        agentRdsBytes: null,
+        ecsDiskBytes: null,
         lastActiveAt: user.updatedAt.toISOString(),
       };
     })
@@ -211,6 +233,66 @@ async function readDatabaseSize() {
   } catch {
     return null;
   }
+}
+
+async function readAppUserDbBytes() {
+  const rows = await prisma.$queryRaw<Array<{ user_id: string; bytes: bigint | number | null }>>`
+    with usage_rows as (
+      select
+        u.id as user_id,
+        octet_length(coalesce(u.email, ''))
+          + octet_length(coalesce(u.name, ''))
+          + octet_length(coalesce(u.nickname, '')) as bytes
+      from users u
+
+      union all
+
+      select
+        c."candidateId" as user_id,
+        octet_length(m.content) as bytes
+      from messages m
+      join chats c on c.id = m."chatId"
+
+      union all
+
+      select
+        a."investorId" as user_id,
+        octet_length(coalesce(a.name, ''))
+          + octet_length(coalesce(a.description, ''))
+          + octet_length(coalesce(a."systemPrompt", '')) as bytes
+      from avatars a
+
+      union all
+
+      select
+        t."investorId" as user_id,
+        octet_length(am.content) + coalesce(octet_length(am.meta::text), 0) as bytes
+      from agent_messages am
+      join agent_threads t on t.id = am."threadId"
+
+      union all
+
+      select
+        t."investorId" as user_id,
+        coalesce(octet_length(tc."toolArgs"::text), 0)
+          + coalesce(octet_length(tc."toolResult"::text), 0) as bytes
+      from agent_tool_calls tc
+      join agent_threads t on t.id = tc."threadId"
+
+      union all
+
+      select
+        i."investorId" as user_id,
+        coalesce(octet_length(i."accountEmail"), 0)
+          + coalesce(octet_length(i."accountName"), 0)
+          + coalesce(octet_length(i."assistantCustomPrompt"), 0) as bytes
+      from investor_integrations i
+    )
+    select user_id, coalesce(sum(bytes), 0) as bytes
+    from usage_rows
+    group by user_id
+  `;
+  return new Map(rows.map((row) => [row.user_id, typeof row.bytes === 'bigint' ? Number(row.bytes) : typeof row.bytes === 'number' ? row.bytes : 0]));
 }
 
 async function getOpenRouterAccount(): Promise<ApiAccountSnapshot> {
@@ -264,11 +346,11 @@ async function getOpenRouterAccount(): Promise<ApiAccountSnapshot> {
   }
 }
 
-async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; resources: ResourceSnapshot[] }> {
+async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; resources: ResourceSnapshot[]; userResources: AgentUserResource[] }> {
   const baseUrl = process.env.OPS_AGENT_BASE_URL?.trim();
   const token = process.env.OPS_AGENT_TOKEN?.trim();
   if (!baseUrl || !token) {
-    return { connected: false, note: '配置 OPS_AGENT_BASE_URL 和 OPS_AGENT_TOKEN 后显示 ECS/workspace 磁盘', resources: [] };
+    return { connected: false, note: '配置 OPS_AGENT_BASE_URL 和 OPS_AGENT_TOKEN 后显示 ECS/workspace 磁盘', resources: [], userResources: [] };
   }
 
   try {
@@ -278,7 +360,7 @@ async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; r
     });
     const data = await response.json().catch(() => null) as unknown;
     if (!response.ok || !isRecord(data)) {
-      return { connected: false, note: `Agent ops 接口 HTTP ${response.status}`, resources: [] };
+      return { connected: false, note: `Agent ops 接口 HTTP ${response.status}`, resources: [], userResources: [] };
     }
     const resources = Array.isArray(data.resources)
       ? data.resources
@@ -299,9 +381,21 @@ async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; r
             },
           }))
       : [];
-    return { connected: true, note: '来自 personal-agent-server /internal/ops/snapshot', resources };
+    const userResources = Array.isArray(data.userResources)
+      ? data.userResources.filter(isRecord).map((item): AgentUserResource => ({
+          userId: typeof item.userId === 'string' ? item.userId : '',
+          investorId: typeof item.investorId === 'string' ? item.investorId : '',
+          ecsDiskBytes: readNumber(item.ecsDiskBytes) || 0,
+          agentRdsBytes: readNumber(item.agentRdsBytes) || 0,
+          agentMessages: readNumber(item.agentMessages) || 0,
+          agentArtifacts: readNumber(item.agentArtifacts) || 0,
+          agentRuns: readNumber(item.agentRuns) || 0,
+          agentThreads: readNumber(item.agentThreads) || 0,
+        }))
+      : [];
+    return { connected: true, note: '来自 personal-agent-server /internal/ops/snapshot', resources, userResources };
   } catch (error) {
-    return { connected: false, note: error instanceof Error ? error.message : String(error), resources: [] };
+    return { connected: false, note: error instanceof Error ? error.message : String(error), resources: [], userResources: [] };
   }
 }
 
@@ -388,6 +482,7 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
   return {
     databaseLimitBytes,
     databaseLimitSource,
+    storageBytes,
     projectNote,
     resources,
   };
@@ -454,6 +549,24 @@ function mergeAppDatabaseResource(resource: ResourceSnapshot, supabase: Supabase
       supabase.databaseLimitSource ? `上限来自 ${supabase.databaseLimitSource}` : null,
     ].filter(Boolean).join(' · '),
   };
+}
+
+function mergeUserResources(users: UserUsageRow[], agentResources: AgentUserResource[], supabase: SupabaseSnapshot) {
+  const agentByKey = new Map<string, AgentUserResource>();
+  for (const item of agentResources) {
+    if (item.investorId) agentByKey.set(item.investorId, item);
+    if (item.userId) agentByKey.set(item.userId, item);
+  }
+
+  return users.map((user) => {
+    const agent = agentByKey.get(user.userId) || agentByKey.get(user.email);
+    return {
+      ...user,
+      supabaseStorageBytes: supabase.storageBytes === 0 ? 0 : null,
+      agentRdsBytes: agent ? agent.agentRdsBytes : null,
+      ecsDiskBytes: agent ? agent.ecsDiskBytes : null,
+    };
+  });
 }
 
 function describeDatabaseUrl() {

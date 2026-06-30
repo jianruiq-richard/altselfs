@@ -10,6 +10,7 @@ import { runWebSearchTool } from './tools/web-search.js';
 import { isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
 import {
   getAgentThreadRuntimeStatus,
+  getAgentContextOpsUserUsage,
   persistAgentRunEvent,
   persistAgentTurnError,
   persistAgentTurnCancelled,
@@ -19,6 +20,7 @@ import {
   type PersistedAgentTurnInput,
 } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
+import { calculateDirectoryBytes } from './sandbox-runtime.js';
 
 type OpenRouterChatContentPart = Record<string, unknown>;
 type OpenRouterChatMessage = {
@@ -814,12 +816,15 @@ function isOpsAuthorized(req: http.IncomingMessage) {
 }
 
 async function buildOpsSnapshot(config: ServerConfig, jobs: Array<{ status: string }>) {
-  const resources = await Promise.all([
+  const [resources, userResources] = await Promise.all([
+    Promise.all([
     diskResource('/', 'system disk'),
     diskResource(config.sandboxStorageRoot, 'sandbox storage root'),
     diskResource(config.workspaceRoot, 'codex workspace root'),
     diskResource(config.codexHomeRoot, 'codex home root'),
     diskResource(config.hermesHomeRoot, 'hermes home root'),
+    ]),
+    buildOpsUserResources(config),
   ]);
   const jobCounts = jobs.reduce<Record<string, number>>((acc, job) => {
     acc[job.status] = (acc[job.status] || 0) + 1;
@@ -840,7 +845,79 @@ async function buildOpsSnapshot(config: ServerConfig, jobs: Array<{ status: stri
       jobCounts,
     },
     resources: resources.filter(Boolean),
+    userResources,
   };
+}
+
+async function buildOpsUserResources(config: ServerConfig) {
+  const [diskRows, rdsRows] = await Promise.all([
+    getOpsUserDiskUsage(config).catch(() => []),
+    getAgentContextOpsUserUsage(config).catch(() => []),
+  ]);
+  const byKey = new Map<string, {
+    userId: string;
+    investorId: string;
+    ecsDiskBytes: number;
+    agentRdsBytes: number;
+    agentMessages: number;
+    agentArtifacts: number;
+    agentRuns: number;
+    agentThreads: number;
+  }>();
+
+  for (const row of rdsRows) {
+    const key = row.investorId || row.userId;
+    if (!key) continue;
+    byKey.set(key, {
+      userId: row.userId,
+      investorId: row.investorId,
+      ecsDiskBytes: 0,
+      agentRdsBytes: row.rdsBytes,
+      agentMessages: row.messages,
+      agentArtifacts: row.artifacts,
+      agentRuns: row.runs,
+      agentThreads: row.threads,
+    });
+  }
+
+  for (const row of diskRows) {
+    const key = row.userId;
+    if (!key) continue;
+    const existing = byKey.get(key) || {
+      userId: row.userId,
+      investorId: '',
+      ecsDiskBytes: 0,
+      agentRdsBytes: 0,
+      agentMessages: 0,
+      agentArtifacts: 0,
+      agentRuns: 0,
+      agentThreads: 0,
+    };
+    existing.ecsDiskBytes += row.bytes;
+    byKey.set(key, existing);
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => (b.ecsDiskBytes + b.agentRdsBytes) - (a.ecsDiskBytes + a.agentRdsBytes)).slice(0, 200);
+}
+
+async function getOpsUserDiskUsage(config: ServerConfig) {
+  const roots = config.runtimeStateMode === 'sandbox'
+    ? [path.join(config.sandboxStorageRoot, 'users')]
+    : [config.workspaceRoot, config.hermesWorkspaceRoot, config.codexHomeRoot, config.hermesHomeRoot];
+  const rows: Array<{ userId: string; bytes: number }> = [];
+  for (const root of roots) {
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw error;
+    });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const userId = entry.name;
+      const bytes = await calculateDirectoryBytes(path.join(root, userId)).catch(() => 0);
+      rows.push({ userId, bytes });
+    }
+  }
+  return rows;
 }
 
 async function diskResource(pathname: string, label: string) {

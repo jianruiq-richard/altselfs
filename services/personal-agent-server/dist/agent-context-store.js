@@ -284,6 +284,88 @@ export async function getAgentThreadRuntimeStatus(config, input) {
         recentEvents,
     };
 }
+export async function getAgentContextOpsUserUsage(config) {
+    if (!config.contextDatabaseUrl)
+        return [];
+    const pool = await getRequiredContextPool(config);
+    const result = await pool.query(`
+    with usage_rows as (
+      select
+        investor_id,
+        thread_id,
+        octet_length(content) + coalesce(octet_length(metadata::text), 0) as bytes,
+        1 as messages,
+        0 as artifacts,
+        0 as runs
+      from agent_context_messages
+
+      union all
+
+      select
+        investor_id,
+        thread_id,
+        coalesce(size_bytes, 0)
+          + coalesce(octet_length(content_text), 0)
+          + coalesce(octet_length(metadata::text), 0) as bytes,
+        0 as messages,
+        1 as artifacts,
+        0 as runs
+      from agent_context_artifacts
+
+      union all
+
+      select
+        investor_id,
+        thread_id,
+        coalesce(octet_length(request::text), 0)
+          + coalesce(octet_length(result::text), 0)
+          + coalesce(octet_length(error), 0) as bytes,
+        0 as messages,
+        0 as artifacts,
+        1 as runs
+      from agent_context_runs
+
+      union all
+
+      select
+        t.investor_id,
+        s.thread_id,
+        octet_length(s.summary) as bytes,
+        0 as messages,
+        0 as artifacts,
+        0 as runs
+      from agent_context_thread_summaries s
+      join agent_context_threads t on t.thread_id = s.thread_id
+    ),
+    investor_users as (
+      select investor_id, max(user_id) as user_id
+      from agent_context_threads
+      group by investor_id
+    )
+    select
+      coalesce(max(t.user_id), u.investor_id) as user_id,
+      u.investor_id,
+      coalesce(sum(u.bytes), 0) as rds_bytes,
+      coalesce(sum(u.messages), 0) as messages,
+      coalesce(sum(u.artifacts), 0) as artifacts,
+      coalesce(sum(u.runs), 0) as runs,
+      count(distinct u.thread_id) as threads
+    from usage_rows u
+    left join investor_users t on t.investor_id = u.investor_id
+    group by u.investor_id
+    order by rds_bytes desc
+    limit 200
+  `);
+    return result.rows.map((row) => ({
+        userId: String(row.user_id || ''),
+        investorId: String(row.investor_id || ''),
+        rdsBytes: readRowNumber(row.rds_bytes),
+        messages: readRowNumber(row.messages),
+        artifacts: readRowNumber(row.artifacts),
+        runs: readRowNumber(row.runs),
+        threads: readRowNumber(row.threads),
+    }));
+}
 export async function touchAgentRunHeartbeat(config, input) {
     if (!config.contextDatabaseUrl)
         return;
@@ -737,4 +819,15 @@ function formatArtifactRow(row) {
 }
 function escapeAttr(value) {
     return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function readRowNumber(value) {
+    if (typeof value === 'bigint')
+        return Number(value);
+    if (typeof value === 'number')
+        return Number.isFinite(value) ? value : 0;
+    if (typeof value === 'string') {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : 0;
+    }
+    return 0;
 }

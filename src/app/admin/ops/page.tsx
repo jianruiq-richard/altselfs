@@ -121,7 +121,7 @@ export default async function OpsPage() {
         </section>
 
         <section className="mt-6 rounded-lg border border-slate-200 bg-white">
-          <SectionTitle title="用户资源使用" subtitle="当前为主库消息和 agent thread 的一期估算，精确成本需要后续 usage event 埋点。" />
+          <SectionTitle title="用户资源使用" subtitle="Token 为估算；数据库按用户相关内容字节估算，ECS 为 Agent workspace 目录实际占用。" />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
@@ -131,6 +131,10 @@ export default async function OpsPage() {
                   <th className="px-4 py-3 font-medium">聊天消息</th>
                   <th className="px-4 py-3 font-medium">Agent 消息</th>
                   <th className="px-4 py-3 font-medium">估算 tokens</th>
+                  <th className="px-4 py-3 font-medium">Supabase DB</th>
+                  <th className="px-4 py-3 font-medium">Storage</th>
+                  <th className="px-4 py-3 font-medium">Agent RDS</th>
+                  <th className="px-4 py-3 font-medium">ECS 硬盘</th>
                   <th className="px-4 py-3 font-medium">最近活跃</th>
                 </tr>
               </thead>
@@ -145,6 +149,10 @@ export default async function OpsPage() {
                     <td className="px-4 py-3">{user.messages.toLocaleString()} / {user.chats} chats</td>
                     <td className="px-4 py-3">{user.agentMessages.toLocaleString()} / {user.agentThreads} threads</td>
                     <td className="px-4 py-3">{user.estimatedTokens.toLocaleString()}</td>
+                    <td className="px-4 py-3">{formatBytes(user.supabaseDbBytes)}</td>
+                    <td className="px-4 py-3">{formatBytes(user.supabaseStorageBytes)}</td>
+                    <td className="px-4 py-3">{formatBytes(user.agentRdsBytes)}</td>
+                    <td className="px-4 py-3">{formatBytes(user.ecsDiskBytes)}</td>
                     <td className="px-4 py-3">{formatDateTime(user.lastActiveAt)}</td>
                   </tr>
                 ))}
@@ -196,4 +204,17 @@ function formatDateTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+function formatBytes(bytes: number | null) {
+  if (bytes === null) return '未知';
+  if (!Number.isFinite(bytes) || bytes < 0) return '未知';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }

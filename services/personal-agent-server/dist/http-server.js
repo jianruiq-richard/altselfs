@@ -5,8 +5,9 @@ import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import { runWebSearchTool } from './tools/web-search.js';
 import { isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
-import { getAgentThreadRuntimeStatus, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
+import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
+import { calculateDirectoryBytes } from './sandbox-runtime.js';
 export function createHttpServer(agent, config, memoryReviewQueue) {
     return http.createServer(async (req, res) => {
         try {
@@ -29,6 +30,14 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 return json(res, 200, {
                     jobs: memoryReviewQueue ? await memoryReviewQueue.listRecent(Number.isFinite(limit) ? limit : 50) : [],
                 });
+            }
+            if (req.method === 'GET' && url.pathname === '/internal/ops/snapshot') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const jobs = memoryReviewQueue ? await memoryReviewQueue.listRecent(100) : [];
+                return json(res, 200, await buildOpsSnapshot(config, jobs));
             }
             if (req.method === 'GET' && url.pathname === '/v1/threads/status') {
                 if (!config)
@@ -766,6 +775,136 @@ function html(res, status, body) {
 function isLoopbackRequest(req) {
     const address = req.socket.remoteAddress || '';
     return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+function isOpsAuthorized(req) {
+    const token = process.env.OPS_AGENT_TOKEN?.trim();
+    if (!token)
+        return false;
+    const authorization = req.headers.authorization || '';
+    const bearer = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length).trim() : '';
+    const headerToken = Array.isArray(req.headers['x-ops-token']) ? req.headers['x-ops-token'][0] : req.headers['x-ops-token'];
+    return bearer === token || headerToken === token;
+}
+async function buildOpsSnapshot(config, jobs) {
+    const [resources, userResources] = await Promise.all([
+        Promise.all([
+            diskResource('/', 'system disk'),
+            diskResource(config.sandboxStorageRoot, 'sandbox storage root'),
+            diskResource(config.workspaceRoot, 'codex workspace root'),
+            diskResource(config.codexHomeRoot, 'codex home root'),
+            diskResource(config.hermesHomeRoot, 'hermes home root'),
+        ]),
+        buildOpsUserResources(config),
+    ]);
+    const jobCounts = jobs.reduce((acc, job) => {
+        acc[job.status] = (acc[job.status] || 0) + 1;
+        return acc;
+    }, {});
+    return {
+        ok: true,
+        collectedAt: new Date().toISOString(),
+        env: config.env,
+        processRole: config.processRole,
+        storageBackend: config.storageBackend,
+        runtimeStateMode: config.runtimeStateMode,
+        sandboxStorageRoot: config.sandboxStorageRoot,
+        memoryReview: {
+            mode: config.memoryReviewMode,
+            recentJobs: jobs.length,
+            jobCounts,
+        },
+        resources: resources.filter(Boolean),
+        userResources,
+    };
+}
+async function buildOpsUserResources(config) {
+    const [diskRows, rdsRows] = await Promise.all([
+        getOpsUserDiskUsage(config).catch(() => []),
+        getAgentContextOpsUserUsage(config).catch(() => []),
+    ]);
+    const byKey = new Map();
+    for (const row of rdsRows) {
+        const key = row.investorId || row.userId;
+        if (!key)
+            continue;
+        byKey.set(key, {
+            userId: row.userId,
+            investorId: row.investorId,
+            ecsDiskBytes: 0,
+            agentRdsBytes: row.rdsBytes,
+            agentMessages: row.messages,
+            agentArtifacts: row.artifacts,
+            agentRuns: row.runs,
+            agentThreads: row.threads,
+        });
+    }
+    for (const row of diskRows) {
+        const key = row.userId;
+        if (!key)
+            continue;
+        const existing = byKey.get(key) || {
+            userId: row.userId,
+            investorId: '',
+            ecsDiskBytes: 0,
+            agentRdsBytes: 0,
+            agentMessages: 0,
+            agentArtifacts: 0,
+            agentRuns: 0,
+            agentThreads: 0,
+        };
+        existing.ecsDiskBytes += row.bytes;
+        byKey.set(key, existing);
+    }
+    return Array.from(byKey.values()).sort((a, b) => (b.ecsDiskBytes + b.agentRdsBytes) - (a.ecsDiskBytes + a.agentRdsBytes)).slice(0, 200);
+}
+async function getOpsUserDiskUsage(config) {
+    const roots = config.runtimeStateMode === 'sandbox'
+        ? [path.join(config.sandboxStorageRoot, 'users')]
+        : [config.workspaceRoot, config.hermesWorkspaceRoot, config.codexHomeRoot, config.hermesHomeRoot];
+    const rows = [];
+    for (const root of roots) {
+        const entries = await fs.readdir(root, { withFileTypes: true }).catch((error) => {
+            if (error.code === 'ENOENT')
+                return [];
+            throw error;
+        });
+        for (const entry of entries) {
+            if (!entry.isDirectory())
+                continue;
+            const userId = entry.name;
+            const bytes = await calculateDirectoryBytes(path.join(root, userId)).catch(() => 0);
+            rows.push({ userId, bytes });
+        }
+    }
+    return rows;
+}
+async function diskResource(pathname, label) {
+    try {
+        const stat = await fs.statfs(pathname);
+        const totalBytes = Number(stat.blocks) * Number(stat.bsize);
+        const freeBytes = Number(stat.bavail) * Number(stat.bsize);
+        const usedBytes = Math.max(0, totalBytes - freeBytes);
+        const percent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : null;
+        return {
+            resource: label,
+            path: pathname,
+            usedBytes,
+            totalBytes,
+            freeBytes,
+            percent,
+        };
+    }
+    catch (error) {
+        return {
+            resource: label,
+            path: pathname,
+            usedBytes: null,
+            totalBytes: null,
+            freeBytes: null,
+            percent: null,
+            note: error instanceof Error ? error.message : String(error),
+        };
+    }
 }
 async function runReadArtifactTool(body, config) {
     const requestedPath = typeof body.path === 'string' ? body.path.trim() : '';
