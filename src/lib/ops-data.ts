@@ -30,6 +30,7 @@ export type ResourceSnapshot = {
   status: OpsStatus;
   updatedAt: string;
   note?: string;
+  metadata?: Record<string, string | number | boolean | null>;
 };
 
 export type UserUsageRow = {
@@ -80,10 +81,10 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
 
   const resources: ResourceSnapshot[] = [
     appStats.databaseResource,
-    ...agentSnapshot.resources,
+    ...mergeEcsDiskResources(agentSnapshot.resources, aliyunResources),
     ...supabaseResources,
     ...vercelResources,
-    ...aliyunResources,
+    ...aliyunResources.filter((resource) => resource.metadata?.kind !== 'ecs_disk'),
   ];
 
   const summary: OpsMetric[] = [
@@ -280,6 +281,10 @@ async function getAgentSnapshot(): Promise<{ connected: boolean; note: string; r
             status: statusFromPercent(typeof item.percent === 'number' ? item.percent : null),
             updatedAt: typeof data.collectedAt === 'string' ? data.collectedAt : new Date().toISOString(),
             note: typeof item.note === 'string' ? item.note : undefined,
+            metadata: {
+              kind: 'agent_disk',
+              path: typeof item.path === 'string' ? item.path : null,
+            },
           }))
       : [];
     return { connected: true, note: '来自 personal-agent-server /internal/ops/snapshot', resources };
@@ -508,6 +513,44 @@ async function getAliyunResources(): Promise<ResourceSnapshot[]> {
   return resources;
 }
 
+function mergeEcsDiskResources(agentResources: ResourceSnapshot[], aliyunResources: ResourceSnapshot[]) {
+  const ecsDisks = aliyunResources.filter((resource) => resource.metadata?.kind === 'ecs_disk');
+  return agentResources.map((agent) => {
+    const disk = findMatchingAliyunDisk(agent, ecsDisks);
+    if (!disk) return agent;
+    const diskName = stringValue(disk.metadata?.diskName) || stringValue(disk.metadata?.diskId) || disk.resource.replace(/^ECS disk\s+/, '');
+    const device = stringValue(disk.metadata?.device) || disk.note || '';
+    const size = typeof disk.metadata?.sizeGiB === 'number' ? `${disk.metadata.sizeGiB} GiB` : disk.total;
+    const cloudStatus = stringValue(disk.metadata?.status) || disk.used;
+    return {
+      ...agent,
+      provider: 'ECS',
+      note: `云盘 ${diskName} / ${device} / ${size} / ${cloudStatus}`,
+      metadata: {
+        ...(agent.metadata || {}),
+        aliyunDiskId: stringValue(disk.metadata?.diskId) || null,
+        aliyunDiskName: stringValue(disk.metadata?.diskName) || null,
+        aliyunDevice: device || null,
+      },
+    };
+  });
+}
+
+function findMatchingAliyunDisk(agent: ResourceSnapshot, disks: ResourceSnapshot[]) {
+  const resource = agent.resource.toLowerCase();
+  if (resource.includes('system disk')) {
+    return disks.find((disk) => disk.metadata?.device === '/dev/xvda') || disks.find((disk) => stringValue(disk.metadata?.diskName).toLowerCase().includes('system'));
+  }
+  if (resource.includes('sandbox storage root')) {
+    return (
+      disks.find((disk) => disk.metadata?.device === '/dev/xvdb') ||
+      disks.find((disk) => stringValue(disk.metadata?.diskName).toLowerCase().includes('workspace')) ||
+      disks.find((disk) => stringValue(disk.metadata?.diskName).toLowerCase().includes('data'))
+    );
+  }
+  return null;
+}
+
 async function getAliyunEcsDisks(credentials: AliyunCredentials): Promise<ResourceSnapshot[]> {
   const diskIds = readCsvEnv('ALIYUN_ECS_DISK_IDS');
   const instanceId = process.env.ALIYUN_ECS_INSTANCE_ID?.trim();
@@ -544,6 +587,14 @@ async function getAliyunEcsDisks(credentials: AliyunCredentials): Promise<Resour
         status: status === 'In_use' || status === 'Available' ? 'ok' : 'unknown',
         updatedAt: new Date().toISOString(),
         note: String(disk.Device || disk.Type || '来自 ECS DescribeDisks'),
+        metadata: {
+          kind: 'ecs_disk',
+          device: typeof disk.Device === 'string' ? disk.Device : null,
+          diskId: typeof disk.DiskId === 'string' ? disk.DiskId : null,
+          diskName: typeof disk.DiskName === 'string' ? disk.DiskName : null,
+          status,
+          sizeGiB,
+        },
       };
     });
   } catch (error) {
