@@ -395,6 +395,18 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
 
 async function readSupabaseStorageBytes() {
   try {
+    const countRows = await prisma.$queryRaw<Array<{ object_count: bigint | number | null }>>`
+      select count(*) as object_count
+      from storage.objects
+    `;
+    const objectCountValue = countRows[0]?.object_count;
+    const objectCount = typeof objectCountValue === 'bigint'
+      ? Number(objectCountValue)
+      : typeof objectCountValue === 'number'
+        ? objectCountValue
+        : null;
+    if (objectCount === 0) return 0;
+
     const rows = await prisma.$queryRaw<Array<{ bytes: bigint | number | null }>>`
       select coalesce(
         sum(
