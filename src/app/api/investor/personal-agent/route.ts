@@ -63,8 +63,23 @@ type ParsedPostBody = {
   messages: ClientMessage[];
   userMessage: string;
   displayUserMessage: string;
+  codexModel: 'deepseek/deepseek-v3.2' | 'gpt-5.5';
   attachments: UploadedAttachment[];
 };
+
+function normalizeCodexModel(value: unknown): ParsedPostBody['codexModel'] {
+  if (typeof value !== 'string') return 'deepseek/deepseek-v3.2';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'gpt-5.5' || normalized === 'chatgpt-5.5') return 'gpt-5.5';
+  if (
+    normalized === 'deepseek/deepseek-v3.2' ||
+    normalized === 'deepseek-v3.2' ||
+    normalized === 'deepseek3.2'
+  ) {
+    return 'deepseek/deepseek-v3.2';
+  }
+  return 'deepseek/deepseek-v3.2';
+}
 
 function getPersonalAgentServerUrl() {
   return (process.env.PERSONAL_AGENT_SERVER_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
@@ -171,6 +186,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       message?: unknown;
       displayMessage?: unknown;
       messages?: unknown;
+      codexModel?: unknown;
     };
     const messages = normalizeMessages(body.messages);
     const explicitMessage = typeof body.message === 'string' ? body.message.trim() : '';
@@ -181,6 +197,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       messages: userMessage ? [{ role: 'user', content: userMessage }] : messages,
       userMessage,
       displayUserMessage: displayMessage || userMessage,
+      codexModel: normalizeCodexModel(body.codexModel),
       attachments: [],
     };
   }
@@ -223,6 +240,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     messages: [{ role: 'user', content: userMessage }],
     userMessage,
     displayUserMessage,
+    codexModel: normalizeCodexModel(getStringFormValue(form.get('codexModel'))),
     attachments,
   };
 }
@@ -476,7 +494,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: detail }, { status });
   }
 
-  const { messages, userMessage, displayUserMessage, attachments } = parsedBody;
+  const { messages, userMessage, displayUserMessage, attachments, codexModel } = parsedBody;
   if (!userMessage && attachments.length === 0) return NextResponse.json({ error: '消息不能为空' }, { status: 400 });
 
   const thread = await ensureThread({
@@ -515,6 +533,7 @@ export async function POST(req: NextRequest) {
       attachments: getAttachmentMetadata(attachments),
       workspaceAttachments: getAttachmentPayloads(attachments),
       enabledInfoSources,
+      codexModel,
     },
   };
 

@@ -132,6 +132,30 @@ type CompletedCodexActivity = {
 };
 
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
+const CODEX_MODEL_STORAGE_KEY = 'altselfs:personal-agent-codex-model';
+
+type CodexModelOption = {
+  value: 'deepseek/deepseek-v3.2' | 'gpt-5.5';
+  label: string;
+  detail: string;
+};
+
+const codexModelOptions: CodexModelOption[] = [
+  {
+    value: 'deepseek/deepseek-v3.2',
+    label: 'DeepSeek 3.2',
+    detail: 'OpenRouter',
+  },
+  {
+    value: 'gpt-5.5',
+    label: 'ChatGPT 5.5',
+    detail: 'OpenAI + web.run',
+  },
+];
+
+function normalizeCodexModelOption(value: unknown): CodexModelOption['value'] {
+  return codexModelOptions.find((option) => option.value === value)?.value || 'deepseek/deepseek-v3.2';
+}
 
 const suggestedQuestions = [
   '请帮我搜集一下今日关于 OPC 相关的行业或者技术信息。',
@@ -1117,6 +1141,7 @@ export default function InvestorAgentChatPage() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stoppingRun, setStoppingRun] = useState(false);
   const [recoveringRunState, setRecoveringRunState] = useState(false);
+  const [codexModel, setCodexModel] = useState<CodexModelOption['value']>('deepseek/deepseek-v3.2');
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const liveStreamRunIdRef = useRef<string | null>(null);
@@ -1137,7 +1162,17 @@ export default function InvestorAgentChatPage() {
       ? hasPlannerErrors
         ? '查看上次过程和错误'
         : '查看上次执行过程'
-      : '等待本轮 planner';
+        : '等待本轮 planner';
+  const selectedCodexModel = codexModelOptions.find((option) => option.value === codexModel) || codexModelOptions[0];
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(CODEX_MODEL_STORAGE_KEY);
+    if (stored) setCodexModel(normalizeCodexModelOption(stored));
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(CODEX_MODEL_STORAGE_KEY, codexModel);
+  }, [codexModel]);
   const applyAgentConfig = useCallback((agentConfig: AgentConfig | null | undefined) => {
     if (!agentConfig) return;
     const systemPrompt = String(agentConfig.systemPrompt || '');
@@ -1618,6 +1653,7 @@ export default function InvestorAgentChatPage() {
           if (threadId) formData.append('threadId', threadId);
           formData.append('message', content);
           formData.append('displayMessage', displayContent);
+          formData.append('codexModel', codexModel);
           requestAttachments.forEach((attachment) => {
             formData.append('attachments', attachment.file, attachment.name);
           });
@@ -1627,6 +1663,7 @@ export default function InvestorAgentChatPage() {
             threadId,
             message: content,
             displayMessage: displayContent,
+            codexModel,
           });
 
       const res = await fetch('/api/investor/personal-agent?stream=1', {
@@ -2076,16 +2113,34 @@ export default function InvestorAgentChatPage() {
                 用户画像和长期偏好跨会话共享；对话上下文、附件和工作区按会话隔离。
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void createNewSession()}
-              disabled={creatingSession || sending || recoveringRunState}
-              title="新建会话"
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" />
-              {creatingSession ? '创建中...' : '新会话'}
-            </button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <label className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                <span className="text-xs font-medium text-slate-500">模型</span>
+                <select
+                  value={codexModel}
+                  onChange={(event) => setCodexModel(normalizeCodexModelOption(event.target.value))}
+                  disabled={sending || recoveringRunState}
+                  title={`当前：${selectedCodexModel.detail}`}
+                  className="bg-transparent text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {codexModelOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void createNewSession()}
+                disabled={creatingSession || sending || recoveringRunState}
+                title="新建会话"
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                {creatingSession ? '创建中...' : '新会话'}
+              </button>
+            </div>
           </div>
 
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1">

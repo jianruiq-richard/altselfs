@@ -58,5 +58,8 @@ Altselfsfigma/
 # log
 docs/
 
+# local secrets
+.secrets/
+
 # .debug/
 .debug/

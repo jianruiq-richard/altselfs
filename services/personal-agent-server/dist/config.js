@@ -281,6 +281,8 @@ export function loadConfig() {
         workspaceRoot: path.resolve(readEnv('WORKSPACE_ROOT', '/tmp/altselfs-workspaces')),
         codexModel,
         codexModelProvider,
+        codexOpenAiAuthJsonPath: process.env.CODEX_OPENAI_AUTH_JSON_PATH?.trim() || undefined,
+        codexOpenAiProxyUrl: process.env.CODEX_OPENAI_PROXY_URL?.trim() || undefined,
         codexModelCatalog: readCodexModelCatalog(codexModel),
         openRouterBaseUrl: readEnv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
         openRouterApiKeyEnv,

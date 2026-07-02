@@ -31,6 +31,8 @@ export class HermesSourceRuntime {
             : id('run');
         const runtimePaths = resolveRuntimePaths(this.config, request, runId);
         const { hermesHome, codexHome, workspace } = runtimePaths;
+        const selectedCodexModel = resolveSelectedCodexModel(this.config, request);
+        const codexModelSelection = resolveCodexModelSelection(this.config, selectedCodexModel);
         const runtimeStatePaths = { hermesHome, codexHome, workspace };
         const codexLocalEnvironmentDisabled = this.config.disableLocalEnvironmentForGeneral;
         const previousSandboxState = await readSandboxState(runtimePaths);
@@ -51,7 +53,7 @@ export class HermesSourceRuntime {
                 });
             }
         }
-        await this.prepareHomes(runtimePaths);
+        await this.prepareHomes(runtimePaths, codexModelSelection);
         await writeSandboxState(runtimePaths, {
             status: 'ACTIVE',
             activeRunId: runId,
@@ -132,6 +134,8 @@ export class HermesSourceRuntime {
             codexLocalEnvironmentDisabled,
             model: this.config.hermesModel,
             provider: 'openrouter',
+            codexModel: codexModelSelection.model || null,
+            codexModelProvider: codexModelSelection.provider || null,
             selectedAgentProfileId: selectedAgentProfileId || null,
         });
         const startedAtMs = Date.now();
@@ -169,6 +173,7 @@ export class HermesSourceRuntime {
                 hermesHome,
                 codexHome,
                 workspace,
+                codexModelSelection,
             });
         }
         catch (error) {
@@ -330,7 +335,7 @@ export class HermesSourceRuntime {
             },
         };
     }
-    async prepareHomes(paths) {
+    async prepareHomes(paths, codexModelSelection) {
         await prepareRuntimeDirectories(paths);
         await fs.writeFile(path.join(paths.hermesHome, 'config.yaml'), [
             'model:',
@@ -353,15 +358,42 @@ export class HermesSourceRuntime {
             '  allow_lazy_installs: false',
             '',
         ].join('\n'), 'utf8');
+        await this.writeCodexConfig(paths, codexModelSelection);
+        if (codexModelSelection.provider === 'openai')
+            await this.ensureOpenAiAuth(paths.codexHome);
+    }
+    async writeCodexConfig(paths, selection) {
+        const metadata = resolveCodexModelMetadata(this.config, selection.model);
+        const model = selection.model || this.config.codexModel || this.config.hermesModel;
+        const provider = selection.provider || 'openrouter';
+        const configPath = path.join(paths.codexHome, 'config.toml');
+        if (provider === 'openai') {
+            await fs.writeFile(configPath, [
+                `model = ${tomlString(model)}`,
+                'model_provider = "openai"',
+                `web_search = ${tomlString(this.config.codexWebSearchMode)}`,
+                'sandbox_mode = "workspace-write"',
+                'approval_policy = "never"',
+                'disable_response_storage = true',
+                ...codexModelMetadataLines(metadata),
+                '',
+                '[sandbox_workspace_write]',
+                'network_access = true',
+                `writable_roots = [${tomlString(paths.workspace)}]`,
+                '',
+            ].filter(Boolean).join('\n'), 'utf8');
+            return;
+        }
         const openRouterBaseUrl = this.config.hermesCodexResponsesProxyEnabled
             ? `http://127.0.0.1:${this.config.port}/openrouter-responses-proxy/v1`
             : this.config.openRouterBaseUrl;
-        await fs.writeFile(path.join(paths.codexHome, 'config.toml'), [
-            `model = ${tomlString(this.config.codexModel || this.config.hermesModel)}`,
+        await fs.writeFile(configPath, [
+            `model = ${tomlString(model)}`,
             'model_provider = "openrouter"',
             `web_search = ${tomlString(this.config.codexWebSearchMode)}`,
             'sandbox_mode = "workspace-write"',
             'approval_policy = "never"',
+            ...codexModelMetadataLines(metadata),
             '',
             '[sandbox_workspace_write]',
             'network_access = true',
@@ -378,6 +410,16 @@ export class HermesSourceRuntime {
             '"X-OpenRouter-Title" = ' + tomlString(this.config.openRouterAppTitle),
             '',
         ].join('\n'), 'utf8');
+    }
+    async ensureOpenAiAuth(codexHome) {
+        const authPath = path.join(codexHome, 'auth.json');
+        if (await pathExists(authPath))
+            return;
+        const source = this.config.codexOpenAiAuthJsonPath;
+        if (!source)
+            return;
+        await fs.copyFile(source, authPath);
+        await fs.chmod(authPath, 0o600).catch(() => undefined);
     }
     async calculateSandboxDiskBytes(paths) {
         try {
@@ -424,6 +466,7 @@ export class HermesSourceRuntime {
     spawnHermes(args, paths) {
         return new Promise((resolve, reject) => {
             const codexBinDir = path.dirname(this.config.codexBin);
+            const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
             const child = spawn(this.config.uvBin, args, {
                 cwd: this.config.hermesSourceRoot,
                 env: {
@@ -438,15 +481,18 @@ export class HermesSourceRuntime {
                     ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS: paths.selectedAgentProfileId === 'codex-competitive-intelligence'
                         ? paths.enabledCompetitorTools.join(',')
                         : '0',
+                    ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL: paths.codexModelSelection.provider === 'openai' ? '0' : '1',
                     ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS: buildCodexDeveloperInstructions({
                         webSearchMode: this.config.codexWebSearchMode,
                         runtimeStateMode: this.config.runtimeStateMode,
                         message: paths.currentUserMessage,
                         selectedAgentProfileId: paths.selectedAgentProfileId,
                         enabledCompetitorTools: paths.enabledCompetitorTools,
+                        codexModelProvider: paths.codexModelSelection.provider,
                     }),
-                    NO_PROXY: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
-                    no_proxy: mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || ''),
+                    NO_PROXY: noProxy,
+                    no_proxy: noProxy,
+                    ...this.buildCodexProcessEnv(paths.codexModelSelection, noProxy),
                 },
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
@@ -503,6 +549,21 @@ export class HermesSourceRuntime {
             }
         }
         await emit('runtime_state.ephemeral_cleaned', { removed, warnings });
+    }
+    buildCodexProcessEnv(selection, noProxy) {
+        if (selection.provider !== 'openai' || !this.config.codexOpenAiProxyUrl)
+            return {};
+        const proxyUrl = this.config.codexOpenAiProxyUrl;
+        return {
+            HTTP_PROXY: proxyUrl,
+            HTTPS_PROXY: proxyUrl,
+            ALL_PROXY: proxyUrl,
+            http_proxy: proxyUrl,
+            https_proxy: proxyUrl,
+            all_proxy: proxyUrl,
+            NO_PROXY: noProxy,
+            no_proxy: noProxy,
+        };
     }
 }
 function extractSessionId(stdout) {
@@ -597,18 +658,27 @@ function buildCodexDeveloperInstructions(input) {
     const instructions = [
         `Current time: ${currentTime} (Asia/Shanghai).`,
         `Codex web_search mode requested by host: ${input.webSearchMode}.`,
+        `Codex model provider for this turn: ${input.codexModelProvider || 'openrouter'}.`,
+        input.codexModelProvider === 'openai'
+            ? 'When public web research is needed, use the native web.run tool exposed by the OpenAI Codex provider.'
+            : 'When public web research is needed, use the registered altselfs_web_search tool.',
         'Answer in the user language unless the user asks otherwise.',
         '',
         `Selected agent profile from Hermes Router: ${input.selectedAgentProfileId || 'main'}.`,
     ];
     if (input.selectedAgentProfileId === 'codex-competitive-intelligence') {
         const enabledCompetitorTools = input.enabledCompetitorTools || [];
+        const publicWebFallbackInstruction = input.codexModelProvider === 'openai'
+            ? '- Treat native web.run as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.'
+            : '- Treat altselfs_web_search as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.';
         instructions.push('', 'Altselfs codex-competitive-intelligence policy:', '- You are the competitive intelligence analysis profile selected by Hermes Router for this turn.', '- Answer questions about competitors, competitive landscape, user/traffic/revenue estimates, growth rate, acquisition channels, SEO, PPC, keywords, backlinks, Semrush, Similarweb, market share, and growth intelligence.', ...artifactAccessPolicy, '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.', '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.', enabledCompetitorTools.length > 0
             ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledCompetitorTools.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
-            : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data. If platform evidence is needed, state which specific data source should be enabled for higher-confidence estimates.', '- Treat RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used.', '- Treat altselfs_web_search as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.', '- Never claim that Semrush, Similarweb, Google, a social platform, or a private-channel agent was used unless the corresponding tool/capability was actually called.', '- Structure competitor conclusions around four questions when relevant: who the competitors are, what their user/traffic/revenue scale appears to be, how fast they have grown, and how they acquire users.', '- Separate observable facts, third-party estimates, proxy signals, assumptions, and inference. Do not present inferred users or revenue as confirmed facts.', '- Attach confidence labels to important claims: high, medium, low, or unknown.', '- For revenue and user-count estimates, provide ranges and assumptions, not false precision.', '- If an enabled data source is missing, state the limitation and explain which conclusions remain lower confidence until that source is enabled.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
+            : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data. If platform evidence is needed, state which specific data source should be enabled for higher-confidence estimates.', '- Treat RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used.', publicWebFallbackInstruction, '- Never claim that Semrush, Similarweb, Google, a social platform, or a private-channel agent was used unless the corresponding tool/capability was actually called.', '- Structure competitor conclusions around four questions when relevant: who the competitors are, what their user/traffic/revenue scale appears to be, how fast they have grown, and how they acquire users.', '- Separate observable facts, third-party estimates, proxy signals, assumptions, and inference. Do not present inferred users or revenue as confirmed facts.', '- Attach confidence labels to important claims: high, medium, low, or unknown.', '- For revenue and user-count estimates, provide ranges and assumptions, not false precision.', '- If an enabled data source is missing, state the limitation and explain which conclusions remain lower confidence until that source is enabled.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
     }
     else {
-        instructions.push('', 'Altselfs codex-general policy:', '- You are the general personal agent profile selected by Hermes Router for this turn.', ...artifactAccessPolicy, '- Use conversation and reasoning for tasks that do not need external data.', '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.', '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.', '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.', '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.', '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
+        instructions.push('', 'Altselfs codex-general policy:', '- You are the general personal agent profile selected by Hermes Router for this turn.', ...artifactAccessPolicy, '- Use conversation and reasoning for tasks that do not need external data.', '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.', input.codexModelProvider === 'openai'
+            ? '- Use native web.run when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.'
+            : '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.', '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.', '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.', '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
     }
     return instructions.join('\n');
 }
@@ -624,6 +694,73 @@ async function readHermesUserProfile(hermesHome) {
     }
     catch {
         return '';
+    }
+}
+function resolveSelectedCodexModel(config, request) {
+    const requested = request.metadata?.codexModel;
+    return normalizeCodexModel(typeof requested === 'string' && requested.trim() ? requested.trim() : config.codexModel);
+}
+function resolveCodexModelSelection(config, model) {
+    const configuredProvider = normalizeCodexProvider(config.codexModelProvider);
+    if (model === 'gpt-5.5')
+        return { model, provider: 'openai' };
+    if (model === 'deepseek/deepseek-v3.2')
+        return { model, provider: 'openrouter' };
+    return {
+        model,
+        provider: configuredProvider || (model ? 'openrouter' : undefined),
+    };
+}
+function normalizeCodexModel(model) {
+    const value = model?.trim();
+    if (!value)
+        return undefined;
+    const normalized = value.toLowerCase();
+    if (normalized === 'gpt-5.5' || normalized === 'chatgpt-5.5')
+        return 'gpt-5.5';
+    if (normalized === 'deepseek/deepseek-v3.2' ||
+        normalized === 'deepseek-v3.2' ||
+        normalized === 'deepseek3.2') {
+        return 'deepseek/deepseek-v3.2';
+    }
+    return value;
+}
+function normalizeCodexProvider(provider) {
+    const value = provider?.trim().toLowerCase();
+    if (value === 'openai' || value === 'openrouter')
+        return value;
+    return undefined;
+}
+function resolveCodexModelMetadata(config, model) {
+    return {
+        ...config.codexModelCatalog.defaultMetadata,
+        ...(model ? config.codexModelCatalog.models[model] || {} : {}),
+    };
+}
+function codexModelMetadataLines(metadata) {
+    const lines = [];
+    if (metadata.contextWindow)
+        lines.push(`model_context_window = ${metadata.contextWindow}`);
+    if (metadata.autoCompactTokenLimit)
+        lines.push(`model_auto_compact_token_limit = ${metadata.autoCompactTokenLimit}`);
+    if (metadata.toolOutputTokenLimit)
+        lines.push(`tool_output_token_limit = ${metadata.toolOutputTokenLimit}`);
+    if (metadata.reasoningSummary)
+        lines.push(`model_reasoning_summary = ${tomlString(metadata.reasoningSummary)}`);
+    if (metadata.verbosity)
+        lines.push(`model_verbosity = ${tomlString(metadata.verbosity)}`);
+    if (metadata.supportsReasoningSummaries !== undefined) {
+        lines.push(`model_supports_reasoning_summaries = ${metadata.supportsReasoningSummaries ? 'true' : 'false'}`);
+    }
+    return lines;
+}
+async function pathExists(file) {
+    try {
+        await fs.access(file);
+        return true;
+    }
+    catch {
+        return false;
     }
 }
 function combineProfileBlocks(...blocks) {

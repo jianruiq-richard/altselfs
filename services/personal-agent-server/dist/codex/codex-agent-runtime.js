@@ -23,11 +23,13 @@ export class CodexAgentRuntime {
             await input.onEvent?.(event);
         };
         const selectedModel = this.resolveSelectedModel(input);
-        const codexHome = await this.ensureCodexHome(input.userId, selectedModel);
+        const modelSelection = this.resolveModelSelection(selectedModel);
+        const codexHome = await this.ensureCodexHome(input.userId, modelSelection);
         const workspace = await this.ensureWorkspace(input.userId, input.threadId);
         const client = new CodexJsonRpcClient({
             codexBin: this.config.codexBin,
             codexHome,
+            env: this.buildCodexProcessEnv(modelSelection),
         });
         let finalText = '';
         let assistantBuffer = '';
@@ -47,16 +49,18 @@ export class CodexAgentRuntime {
                     localEnvironmentDisabled,
                     webSearchMode: this.config.codexWebSearchMode,
                     webSearchProvider: this.config.webSearchProvider,
+                    codexModel: modelSelection.model,
+                    codexModelProvider: modelSelection.provider,
                 },
             });
             await client.initialize();
             const thread = await client.request('thread/start', {
                 cwd: workspace,
                 ...(localEnvironmentDisabled ? { environments: [] } : {}),
-                ...(nonLocalProfile ? { dynamicTools: this.buildDynamicTools(input) } : {}),
-                ...(selectedModel ? { model: selectedModel } : {}),
-                ...(this.config.codexModelProvider ? { modelProvider: this.config.codexModelProvider } : {}),
-                developerInstructions: this.buildDeveloperInstructions(input.profileId, input.metadata),
+                ...(nonLocalProfile ? { dynamicTools: this.buildDynamicTools(input, modelSelection) } : {}),
+                ...(modelSelection.model ? { model: modelSelection.model } : {}),
+                ...(modelSelection.provider ? { modelProvider: modelSelection.provider } : {}),
+                developerInstructions: this.buildDeveloperInstructions(input.profileId, input.metadata, modelSelection),
                 personality: 'pragmatic',
             }, 15_000);
             codexThreadId = extractThreadId(thread);
@@ -78,6 +82,8 @@ export class CodexAgentRuntime {
                     client.close();
                     return;
                 }
+                if (this.isNativeWebSearchNotification(notification))
+                    usedExternalSearch = true;
                 const projected = projectCodexNotification(notification);
                 if (projected.assistantDelta)
                     assistantBuffer += projected.assistantDelta;
@@ -145,22 +151,39 @@ export class CodexAgentRuntime {
             client.close();
         }
     }
-    async ensureCodexHome(userId, selectedModel) {
+    async ensureCodexHome(userId, selection) {
         const dir = path.join(this.config.codexHomeRoot, sanitizePathSegment(userId));
         await fs.mkdir(dir, { recursive: true });
-        await this.writeCodexConfig(dir, selectedModel);
+        await this.writeCodexConfig(dir, selection);
+        if (selection.provider === 'openai')
+            await this.ensureOpenAiAuth(dir);
         return dir;
     }
-    async writeCodexConfig(codexHome, selectedModel) {
-        if (this.config.codexModelProvider !== 'openrouter')
-            return;
+    async writeCodexConfig(codexHome, selection) {
         const configPath = path.join(codexHome, 'config.toml');
-        const metadata = this.resolveModelMetadata(selectedModel);
-        const catalogPath = await this.writeCodexModelCatalog(codexHome, selectedModel);
-        const modelLine = selectedModel ? `model = ${tomlString(selectedModel)}\n` : '';
+        const metadata = this.resolveModelMetadata(selection.model);
+        const catalogPath = selection.provider === 'openrouter'
+            ? await this.writeCodexModelCatalog(codexHome, selection.model)
+            : undefined;
+        const modelLine = selection.model ? `model = ${tomlString(selection.model)}\n` : '';
+        const providerLine = selection.provider ? `model_provider = ${tomlString(selection.provider)}` : '';
+        if (selection.provider === 'openai') {
+            const content = [
+                modelLine.trimEnd(),
+                providerLine,
+                `web_search = ${tomlString(this.config.codexWebSearchMode)}`,
+                catalogPath ? `model_catalog_json = ${tomlString(catalogPath)}` : '',
+                'disable_response_storage = true',
+                ...codexModelMetadataLines(metadata),
+            ].filter(Boolean).join('\n') + '\n';
+            await fs.writeFile(configPath, content, 'utf8');
+            return;
+        }
+        if (selection.provider !== 'openrouter')
+            return;
         const content = [
             modelLine.trimEnd(),
-            'model_provider = "openrouter"',
+            providerLine,
             `web_search = ${tomlString(this.config.codexWebSearchMode)}`,
             catalogPath ? `model_catalog_json = ${tomlString(catalogPath)}` : '',
             ...codexModelMetadataLines(metadata),
@@ -175,6 +198,16 @@ export class CodexAgentRuntime {
             '"X-OpenRouter-Title" = ' + tomlString(this.config.openRouterAppTitle),
         ].filter(Boolean).join('\n') + '\n';
         await fs.writeFile(configPath, content, 'utf8');
+    }
+    async ensureOpenAiAuth(codexHome) {
+        const authPath = path.join(codexHome, 'auth.json');
+        if (await pathExists(authPath))
+            return;
+        const source = this.config.codexOpenAiAuthJsonPath;
+        if (!source)
+            return;
+        await fs.copyFile(source, authPath);
+        await fs.chmod(authPath, 0o600).catch(() => undefined);
     }
     async writeCodexModelCatalog(codexHome, selectedModel) {
         const models = new Set(Object.keys(this.config.codexModelCatalog.models));
@@ -191,7 +224,18 @@ export class CodexAgentRuntime {
     }
     resolveSelectedModel(input) {
         const requested = input.metadata?.codexModel;
-        return typeof requested === 'string' && requested.trim() ? requested.trim() : this.config.codexModel;
+        return normalizeCodexModel(typeof requested === 'string' && requested.trim() ? requested.trim() : this.config.codexModel);
+    }
+    resolveModelSelection(model) {
+        const configuredProvider = normalizeCodexProvider(this.config.codexModelProvider);
+        if (model === 'gpt-5.5')
+            return { model, provider: 'openai' };
+        if (model === 'deepseek/deepseek-v3.2')
+            return { model, provider: 'openrouter' };
+        return {
+            model,
+            provider: configuredProvider || (model ? 'openrouter' : undefined),
+        };
     }
     resolveModelMetadata(model) {
         return {
@@ -223,8 +267,8 @@ export class CodexAgentRuntime {
         await fs.mkdir(dir, { recursive: true });
         return dir;
     }
-    buildDynamicTools(input) {
-        const tools = [createWebSearchDynamicTool()];
+    buildDynamicTools(input, selection) {
+        const tools = selection.provider === 'openai' ? [] : [createWebSearchDynamicTool()];
         if (input.profileId === 'codex-competitive-intelligence') {
             const enabledCompetitorSources = getEnabledInfoSourceNames(input.metadata);
             tools.push(...createRapidApiCompetitorDynamicTools(enabledCompetitorSources));
@@ -272,7 +316,7 @@ export class CodexAgentRuntime {
         client.respondError(requestId, -32601, `Unsupported server request: ${method}`);
         return 'handled';
     }
-    buildDeveloperInstructions(profileId, metadata) {
+    buildDeveloperInstructions(profileId, metadata, selection) {
         const currentTime = new Intl.DateTimeFormat('zh-CN', {
             timeZone: 'Asia/Shanghai',
             dateStyle: 'full',
@@ -282,6 +326,9 @@ export class CodexAgentRuntime {
             `Current time: ${currentTime} (Asia/Shanghai).`,
             `Codex web_search mode requested by host: ${this.config.codexWebSearchMode}.`,
             'Answer in the user language unless the user asks otherwise.',
+            selection?.provider === 'openai'
+                ? 'When public web research is needed, use the native web.run tool exposed by the OpenAI Codex provider.'
+                : 'When public web research is needed, use the registered altselfs_web_search tool.',
         ];
         if (profileId === 'codex-competitive-intelligence') {
             const enabledCompetitorSources = getEnabledInfoSourceNames(metadata);
@@ -289,6 +336,9 @@ export class CodexAgentRuntime {
             const competitorToolInstruction = enabledToolNames.length > 0
                 ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledToolNames.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
                 : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data; use public web fallback only when appropriate and state the limitation.';
+            const publicWebFallbackInstruction = selection?.provider === 'openai'
+                ? '- Treat native web.run as the public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.'
+                : '- Treat altselfs_web_search as the public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.';
             return [
                 ...shared,
                 '',
@@ -303,7 +353,7 @@ export class CodexAgentRuntime {
                 competitorToolInstruction,
                 '- Treat these RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used in the answer.',
                 '- Similarweb, Google, YouTube, X/Twitter, Facebook, WeChat, Xiaohongshu, Gmail, and Feishu may be used only when actually available/enabled in the turn.',
-                '- Treat altselfs_web_search as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.',
+                publicWebFallbackInstruction,
                 '- Never claim that Semrush, Similarweb, Google, a social platform, or a private-channel agent was used unless the corresponding tool/capability was actually called.',
                 '- Structure competitor conclusions around four questions when relevant: who the competitors are, what their user/traffic/revenue scale appears to be, how fast they have grown, and how they acquire users.',
                 '- Separate observable facts, third-party estimates, proxy signals, model/user assumptions, and your own inference. Do not present inferred users or revenue as confirmed facts.',
@@ -315,6 +365,9 @@ export class CodexAgentRuntime {
         }
         if (!this.isNonLocalCodexProfile(profileId))
             return shared.join('\n');
+        const generalPublicWebInstruction = selection?.provider === 'openai'
+            ? '- Use native web.run when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.'
+            : '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.';
         return [
             ...shared,
             '',
@@ -324,7 +377,7 @@ export class CodexAgentRuntime {
             '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
             '- Use conversation and reasoning for tasks that do not need external data.',
             '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',
-            '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.',
+            generalPublicWebInstruction,
             '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.',
             '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.',
             '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
@@ -353,6 +406,26 @@ export class CodexAgentRuntime {
             itemType.includes('file') ||
             itemType.includes('patch') ||
             itemType.includes('view_image'));
+    }
+    buildCodexProcessEnv(selection) {
+        if (selection.provider !== 'openai' || !this.config.codexOpenAiProxyUrl)
+            return undefined;
+        const proxyUrl = this.config.codexOpenAiProxyUrl;
+        const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
+        return {
+            HTTP_PROXY: proxyUrl,
+            HTTPS_PROXY: proxyUrl,
+            ALL_PROXY: proxyUrl,
+            http_proxy: proxyUrl,
+            https_proxy: proxyUrl,
+            all_proxy: proxyUrl,
+            NO_PROXY: noProxy,
+            no_proxy: noProxy,
+        };
+    }
+    isNativeWebSearchNotification(notification) {
+        const text = JSON.stringify(notification).toLowerCase();
+        return text.includes('websearch') || text.includes('web_search') || text.includes('web.run');
     }
     waitForTurnCompletion(client, emit) {
         return new Promise((resolve, reject) => {
@@ -442,6 +515,44 @@ function getEnabledInfoSourceNames(metadata) {
         return typeof item.provider === 'string' ? item.provider.toLowerCase() : null;
     })
         .filter((item) => Boolean(item));
+}
+function normalizeCodexModel(model) {
+    const value = model?.trim();
+    if (!value)
+        return undefined;
+    const normalized = value.toLowerCase();
+    if (normalized === 'gpt-5.5' || normalized === 'chatgpt-5.5')
+        return 'gpt-5.5';
+    if (normalized === 'deepseek/deepseek-v3.2' ||
+        normalized === 'deepseek-v3.2' ||
+        normalized === 'deepseek3.2') {
+        return 'deepseek/deepseek-v3.2';
+    }
+    return value;
+}
+function normalizeCodexProvider(provider) {
+    const value = provider?.trim().toLowerCase();
+    if (value === 'openai' || value === 'openrouter')
+        return value;
+    return undefined;
+}
+function mergeNoProxy(existing) {
+    const values = new Set(existing
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean));
+    for (const item of ['localhost', '127.0.0.1'])
+        values.add(item);
+    return [...values].join(',');
+}
+async function pathExists(file) {
+    try {
+        await fs.access(file);
+        return true;
+    }
+    catch {
+        return false;
+    }
 }
 function tomlString(value) {
     return JSON.stringify(value);
