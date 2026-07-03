@@ -44,7 +44,13 @@ export async function prepareRuntimeDirectories(paths) {
     await fs.mkdir(paths.workspace, { recursive: true });
     if (paths.userProfileDir)
         await fs.mkdir(paths.userProfileDir, { recursive: true });
+    await fs.mkdir(path.join(paths.workspace, 'uploads'), { recursive: true });
     await fs.mkdir(path.join(paths.workspace, 'artifacts'), { recursive: true });
+    await fs.mkdir(path.join(paths.workspace, 'artifacts', 'parsed'), { recursive: true });
+    await fs.mkdir(path.join(paths.workspace, 'outputs'), { recursive: true });
+    await fs.mkdir(path.join(paths.workspace, 'scripts'), { recursive: true });
+    await fs.mkdir(path.join(paths.workspace, 'cache'), { recursive: true });
+    await fs.mkdir(path.join(paths.workspace, '.runs'), { recursive: true });
     await fs.mkdir(path.join(paths.workspace, 'external-memory'), { recursive: true });
     await fs.mkdir(path.join(paths.workspace, 'logs'), { recursive: true });
 }

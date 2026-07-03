@@ -16,6 +16,7 @@ services:
       - "${PERSONAL_AGENT_HOST_PORT:-8787}:8787"
     volumes:
       - /data/altselfs-agent:/data/altselfs-agent
+      - ${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}:${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}
     healthcheck:
       test:
         [

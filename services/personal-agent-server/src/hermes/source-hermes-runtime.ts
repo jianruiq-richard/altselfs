@@ -571,8 +571,13 @@ export class HermesSourceRuntime {
           HERMES_BACKGROUND_REVIEW_INLINE:
             this.config.memoryReviewMode === 'inline' && this.config.hermesBackgroundReviewInline ? '1' : '0',
           HERMES_DISABLE_LAZY_INSTALLS: '1',
+          ALTSELFS_RUN_ID: paths.runId,
+          ALTSELFS_USER_ID: paths.userId,
+          ALTSELFS_THREAD_ID: paths.threadId,
+          ALTSELFS_WORKSPACE: paths.workspace,
           ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: this.config.disableLocalEnvironmentForGeneral ? '1' : '0',
           ALTSELFS_CODEX_PERSONALITY: 'pragmatic',
+          ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL: this.config.sandboxExecEnabled ? '1' : '0',
           ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS:
             paths.selectedAgentProfileId === 'codex-competitive-intelligence'
               ? paths.enabledCompetitorTools.join(',')
@@ -586,6 +591,7 @@ export class HermesSourceRuntime {
             selectedAgentProfileId: paths.selectedAgentProfileId,
             enabledCompetitorTools: paths.enabledCompetitorTools,
             codexModelProvider: paths.codexModelSelection.provider,
+            sandboxExecEnabled: this.config.sandboxExecEnabled,
           }),
           NO_PROXY: noProxy,
           no_proxy: noProxy,
@@ -750,6 +756,7 @@ function buildCodexDeveloperInstructions(input: {
   selectedAgentProfileId?: string;
   enabledCompetitorTools?: string[];
   codexModelProvider?: CodexModelProvider;
+  sandboxExecEnabled?: boolean;
 }) {
   const currentTime = new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -757,18 +764,27 @@ function buildCodexDeveloperInstructions(input: {
     timeStyle: 'long',
   }).format(new Date());
 
+  const sandboxExecPolicy = input.sandboxExecEnabled
+    ? [
+        '- Do not use native local shell, file, patch, image, or repository tools. Do not inspect, read, write, patch, or modify local repositories.',
+        '- When deterministic computation, parsing, scraping, or small file transformation is truly needed, use only the registered `altselfs_sandbox_exec` tool. Keep commands short, scoped to /workspace, and prefer registered platform tools for third-party data.',
+        '- Do not install packages or run package managers unless the task cannot be solved with the sandbox image and standard libraries. If a package install is necessary, keep it minimal and explain it.',
+      ]
+    : [
+        '- Do not use native local shell, file, patch, image, or repository tools. Do not inspect, read, write, patch, or modify local repositories.',
+        '- Sandboxed command execution is not enabled in this environment. Do not run shell commands, tests, builds, package managers, scripts, network scanners, or local code.',
+      ];
+
   const artifactAccessPolicy = input.runtimeStateMode === 'sandbox'
     ? [
         '- This run is inside an Altselfs sandbox workspace. User-provided artifacts listed in host context are available through the `altselfs_read_artifact` tool.',
         '- If the user asks about an uploaded file or indexed material, call `altselfs_read_artifact` with `parsed_text_path` first, then `workspace_path` if needed.',
-        '- Do not inspect arbitrary local repositories, source trees, system directories, or unrelated filesystem paths.',
-        '- Do not run shell commands, tests, builds, package managers, scripts, network scanners, or local code.',
+        ...sandboxExecPolicy,
       ]
     : [
-        '- Do not inspect, read, write, patch, or modify local repositories or arbitrary local filesystem paths.',
+        ...sandboxExecPolicy,
         '- User-provided artifacts listed in host context are available through the `altselfs_read_artifact` tool. If the user asks about an uploaded file, call `altselfs_read_artifact` with `parsed_text_path` first, then `workspace_path` if needed.',
         '- Do not say you cannot access an uploaded file when an artifact path is listed. Try `altselfs_read_artifact` first; if the tool fails, report the concrete failure.',
-        '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
       ];
 
   const instructions = [

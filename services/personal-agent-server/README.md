@@ -105,6 +105,16 @@ changing the Hermes/Codex orchestration path:
 - `RUNTIME_STATE_MODE=snapshot` is retained as a debugging/compatibility mode.
   In that mode, `RUNTIME_STATE_SYNC_ENABLED=true` hydrates runtime directories
   from RDS before the turn and flushes compressed snapshots back after the turn.
+- `RUNTIME_STATE_MODE=sandbox` keeps a per-user/per-thread workspace under
+  `SANDBOX_STORAGE_ROOT/users/{user}/threads/{thread}/workspace`. Uploaded
+  originals go to `uploads/`, parsed text and indexes go to `artifacts/`, agent
+  generated files should go to `outputs/`, and command audit data goes to
+  `.runs/`.
+- True command isolation is separate from the state mode. Enable
+  `SANDBOX_EXEC_ENABLED=true`, mount the host Docker socket, and set the
+  `SANDBOX_EXEC_*` limits to expose `altselfs_sandbox_exec` to non-local Codex
+  profiles. The server creates short-lived Docker containers instead of giving
+  the model direct host shell access.
 
 PostgreSQL/RDS mode is selected with:
 
@@ -154,8 +164,9 @@ The Codex path requires `codex` on `PATH`.
 Known MVP limitations:
 
 - Memory is still in-process only. Restarting the service clears it.
-- `codex-general` has local shell/files/patching disabled. It can use the
-  `altselfs_web_search` dynamic tool when a provider is configured.
+- `codex-general` has native local shell/files/patching disabled. It can use
+  `altselfs_web_search` when a provider is configured, and can use
+  `altselfs_sandbox_exec` only when sandbox execution is explicitly enabled.
 - `codex-engineering` uses an isolated empty workspace unless a product
   workspace is explicitly bound.
 - Approval requests are currently declined by default, so write operations are

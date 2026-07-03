@@ -292,7 +292,7 @@ _ALTSELFS_READ_ARTIFACT_TOOL = {
         "Read a user-uploaded artifact or parsed text file from the current "
         "Altselfs workspace. Use this when the host context lists an artifact "
         "path and the user asks about the uploaded file. Only listed "
-        "workspace artifacts or external-memory files are allowed."
+        "workspace uploads, artifacts, outputs, or external-memory files are allowed."
     ),
     "inputSchema": {
         "type": "object",
@@ -304,6 +304,32 @@ _ALTSELFS_READ_ARTIFACT_TOOL = {
             },
         },
         "required": ["path"],
+        "additionalProperties": False,
+    },
+    "deferLoading": False,
+}
+
+_ALTSELFS_SANDBOX_EXEC_TOOL = {
+    "namespace": None,
+    "name": "altselfs_sandbox_exec",
+    "description": (
+        "Run a short Python or shell command in the current Altselfs sandbox "
+        "workspace when deterministic computation, parsing, scraping, or file "
+        "transformation is needed. The command runs in an isolated Docker "
+        "container with limited CPU, memory, process count, timeout, and "
+        "workspace-only filesystem access. Prefer registered platform tools "
+        "for third-party data. Do not use this for repository edits or package builds."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "command": {"type": "string", "description": "Shell command or Python script to run inside /workspace."},
+            "cwd": {"type": "string", "description": "Optional working directory relative to /workspace, default '.'."},
+            "stdin": {"type": "string", "description": "Optional stdin passed to the command."},
+            "timeoutMs": {"type": "number", "description": "Optional timeout in milliseconds, capped by server policy."},
+            "useProxy": {"type": "boolean", "description": "Set true only when network access needs the configured proxy/VPN."},
+        },
+        "required": ["command"],
         "additionalProperties": False,
     },
     "deferLoading": False,
@@ -426,6 +452,9 @@ def _altselfs_dynamic_tools() -> list[dict[str, Any]]:
     artifact_enabled = os.environ.get("ALTSELFS_CODEX_READ_ARTIFACT_DYNAMIC_TOOL", "true").lower()
     if artifact_enabled not in {"0", "false", "no", "off"}:
         tools.append(_ALTSELFS_READ_ARTIFACT_TOOL)
+    sandbox_enabled = os.environ.get("ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL", "false").lower()
+    if sandbox_enabled not in {"0", "false", "no", "off"}:
+        tools.append(_ALTSELFS_SANDBOX_EXEC_TOOL)
     enabled_competitor_tools = _altselfs_enabled_competitor_tool_names()
     if enabled_competitor_tools:
         tools.extend([tool for tool in _ALTSELFS_COMPETITOR_TOOLS if tool["name"] in enabled_competitor_tools])
@@ -488,6 +517,43 @@ def _call_altselfs_read_artifact_tool_bridge(arguments: Any) -> dict[str, Any]:
     }
 
 
+def _call_altselfs_sandbox_exec_tool_bridge(arguments: Any) -> dict[str, Any]:
+    bridge_url = os.environ.get(
+        "ALTSELFS_SANDBOX_EXEC_BRIDGE_URL",
+        "http://127.0.0.1:8787/internal/tools/sandbox-exec",
+    )
+    payload = arguments if isinstance(arguments, dict) else {}
+    payload = {
+        **payload,
+        "_context": {
+            "runId": os.environ.get("ALTSELFS_RUN_ID", ""),
+            "userId": os.environ.get("ALTSELFS_USER_ID", ""),
+            "threadId": os.environ.get("ALTSELFS_THREAD_ID", ""),
+            "workspace": os.environ.get("ALTSELFS_WORKSPACE", ""),
+        },
+    }
+    request = urllib.request.Request(
+        bridge_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=130) as response:
+        raw = response.read().decode("utf-8")
+    parsed = json.loads(raw) if raw.strip() else {}
+    if isinstance(parsed, dict) and "contentItems" in parsed:
+        return parsed
+    return {
+        "contentItems": [
+            {
+                "type": "inputText",
+                "text": json.dumps(parsed, ensure_ascii=False),
+            }
+        ],
+        "success": True,
+    }
+
+
 def _call_altselfs_competitor_tool_bridge(tool: str, arguments: Any) -> dict[str, Any]:
     bridge_url = os.environ.get(
         "ALTSELFS_RAPIDAPI_COMPETITOR_BRIDGE_URL",
@@ -528,7 +594,7 @@ _STDERR_TAIL_LINES = 12
 `;
 const helpersEndAnchor = `# Permission profile mapping mirrors the docstring in PR proposal:`;
 
-if (codexAppServerSession.includes(dynamicToolHelpersMarker) && codexAppServerSession.includes("_altselfs_enabled_competitor_tool_names")) {
+if (codexAppServerSession.includes(dynamicToolHelpersMarker) && codexAppServerSession.includes("_call_altselfs_sandbox_exec_tool_bridge")) {
   console.log("Hermes Codex dynamic tool helper patch already applied.");
   console.log(codexAppServerSessionPath);
 } else if (codexAppServerSession.includes(dynamicToolHelpersMarker)) {
@@ -674,6 +740,10 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
             (not namespace and tool == "altselfs_read_artifact")
             or (namespace == "altselfs" and tool == "read_artifact")
         )
+        is_sandbox_exec = (
+            (not namespace and tool == "altselfs_sandbox_exec")
+            or (namespace == "altselfs" and tool == "sandbox_exec")
+        )
         is_competitor = (
             not namespace
             and tool in {
@@ -683,7 +753,7 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
                 "altselfs_domain_metrics_check",
             }
         )
-        if not is_web_search and not is_read_artifact and not is_competitor:
+        if not is_web_search and not is_read_artifact and not is_sandbox_exec and not is_competitor:
             self._client.respond(
                 rid,
                 {
@@ -700,6 +770,8 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
         try:
             if is_read_artifact:
                 result = _call_altselfs_read_artifact_tool_bridge(params.get("arguments") or {})
+            elif is_sandbox_exec:
+                result = _call_altselfs_sandbox_exec_tool_bridge(params.get("arguments") or {})
             elif is_competitor:
                 result = _call_altselfs_competitor_tool_bridge(tool, params.get("arguments") or {})
             else:
@@ -725,7 +797,7 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
 const dynamicToolMethodAnchor = `    def _decide_exec_approval(self, params: dict) -> str:
 `;
 
-if (codexAppServerSession.includes(dynamicToolMethodMarker) && codexAppServerSession.includes("is_competitor = (")) {
+if (codexAppServerSession.includes(dynamicToolMethodMarker) && codexAppServerSession.includes("is_sandbox_exec = (")) {
   console.log("Hermes Codex dynamic tool handler patch already applied.");
   console.log(codexAppServerSessionPath);
 } else if (codexAppServerSession.includes(dynamicToolMethodMarker)) {

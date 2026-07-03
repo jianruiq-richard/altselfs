@@ -92,6 +92,7 @@ for (const entry of [
   'package.json',
   'tsconfig.json',
   'Dockerfile.source-runtime',
+  'scripts',
   'src',
 ]) {
   copyTree(path.join(serviceRoot, entry), path.join(outputRoot, 'personal-agent-server', entry));

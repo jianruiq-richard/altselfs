@@ -6,6 +6,7 @@ import { buildMemoryContext } from '../memory-store.js';
 import { isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { createWebSearchDynamicTool, runWebSearchTool } from '../tools/web-search.js';
 import { createRapidApiCompetitorDynamicTools, getRapidApiCompetitorToolNamesForProviders, isRapidApiCompetitorTool, runRapidApiCompetitorTool, } from '../tools/rapidapi-competitor.js';
+import { createSandboxExecDynamicTool, isSandboxExecTool, runSandboxExecTool, } from '../tools/sandbox-exec.js';
 export class CodexAgentRuntime {
     config;
     id = 'codex';
@@ -65,8 +66,14 @@ export class CodexAgentRuntime {
             }, 15_000);
             codexThreadId = extractThreadId(thread);
             await emit({ type: 'codex.thread.started', timestamp: nowIso(), payload: { codexThreadId, raw: thread } });
+            const sandboxExecContext = {
+                userId: input.userId,
+                threadId: input.threadId,
+                runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : undefined,
+                workspace,
+            };
             client.on('serverRequest', (request) => {
-                this.handleServerRequest(client, request, emit).then((handled) => {
+                this.handleServerRequest(client, request, emit, sandboxExecContext).then((handled) => {
                     if (handled === 'web_search')
                         usedExternalSearch = true;
                 });
@@ -269,13 +276,15 @@ export class CodexAgentRuntime {
     }
     buildDynamicTools(input, selection) {
         const tools = selection.provider === 'openai' ? [] : [createWebSearchDynamicTool()];
+        if (this.config.sandboxExecEnabled)
+            tools.push(createSandboxExecDynamicTool());
         if (input.profileId === 'codex-competitive-intelligence') {
             const enabledCompetitorSources = getEnabledInfoSourceNames(input.metadata);
             tools.push(...createRapidApiCompetitorDynamicTools(enabledCompetitorSources));
         }
         return tools;
     }
-    async handleServerRequest(client, request, emit) {
+    async handleServerRequest(client, request, emit, sandboxExecContext) {
         const method = String(request.method || '');
         const requestId = request.id;
         void emit({ type: `codex.server_request.${method}`, timestamp: nowIso(), payload: safeJson({ request }) });
@@ -296,6 +305,14 @@ export class CodexAgentRuntime {
                 client.respond(requestId, {
                     contentItems: [{ type: 'inputText', text: resultText }],
                     success: true,
+                });
+                return 'handled';
+            }
+            if ((!namespace && isSandboxExecTool(tool)) || (namespace === 'altselfs' && tool === 'sandbox_exec')) {
+                const resultText = await runSandboxExecTool(params.arguments, this.config, sandboxExecContext);
+                client.respond(requestId, {
+                    contentItems: [{ type: 'inputText', text: resultText }],
+                    success: !resultText.includes('"error"'),
                 });
                 return 'handled';
             }
@@ -346,8 +363,10 @@ export class CodexAgentRuntime {
                 '- You are a competitive intelligence analysis profile under the Altselfs information-processing operation department.',
                 '- The user still interacts through the normal AI assistant chatbox. Produce the final answer directly in chat; do not ask the user to open a separate report surface.',
                 '- Your job is to answer questions about competitors, competitive landscape, user/traffic/revenue estimates, growth rate, acquisition channels, SEO, PPC, keywords, backlinks, Semrush, Similarweb, market share, and growth intelligence.',
-                '- Do not inspect, read, write, patch, or modify local files or repositories.',
-                '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
+                '- Do not use native local shell, file, patch, image, or repository tools. Do not inspect, read, write, patch, or modify local repositories.',
+                this.config.sandboxExecEnabled
+                    ? '- When deterministic computation, parsing, scraping, or small file transformation is truly needed, use only the registered altselfs_sandbox_exec tool. Keep commands short, scoped to /workspace, and explain any important command output in the final answer.'
+                    : '- Sandboxed command execution is not enabled in this environment. Do not run shell commands, scripts, package managers, or local code.',
                 '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.',
                 '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.',
                 competitorToolInstruction,
@@ -373,8 +392,10 @@ export class CodexAgentRuntime {
             '',
             'Altselfs codex-general policy:',
             '- You are a general personal agent for discussion, research, planning, and synthesis.',
-            '- Do not inspect, read, write, patch, or modify local files or repositories.',
-            '- Do not run shell commands, tests, builds, package managers, scripts, or local code.',
+            '- Do not use native local shell, file, patch, image, or repository tools. Do not inspect, read, write, patch, or modify local repositories.',
+            this.config.sandboxExecEnabled
+                ? '- When deterministic computation, parsing, scraping, or small file transformation is truly needed, use only the registered altselfs_sandbox_exec tool. Keep commands short, scoped to /workspace, and prefer registered platform tools for third-party data.'
+                : '- Sandboxed command execution is not enabled in this environment. Do not run shell commands, scripts, package managers, or local code.',
             '- Use conversation and reasoning for tasks that do not need external data.',
             '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',
             generalPublicWebInstruction,

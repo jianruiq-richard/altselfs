@@ -12,21 +12,25 @@ export async function ingestWorkspaceAttachments(config, request, paths, runId) 
     const investorId = metadataString(request, 'investorId') || request.userId;
     const threadId = request.threadId || 'default';
     const artifactsDir = path.join(paths.workspace, 'artifacts');
+    const uploadsDir = path.join(paths.workspace, 'uploads');
+    const parsedDir = path.join(artifactsDir, 'parsed');
     await fs.mkdir(artifactsDir, { recursive: true });
+    await fs.mkdir(uploadsDir, { recursive: true });
+    await fs.mkdir(parsedDir, { recursive: true });
     const persisted = [];
     const indexLines = ['# Workspace Artifacts', '', `Updated: ${nowIso()}`, ''];
     for (const [index, attachment] of attachments.entries()) {
         try {
             const decoded = decodeDataUrl(attachment.dataUrl);
             const basename = buildArtifactFileName(index, attachment.name, decoded.mimeType || attachment.type);
-            const filePath = path.join(artifactsDir, basename);
+            const filePath = path.join(uploadsDir, basename);
             await fs.writeFile(filePath, decoded.bytes);
             const parsed = await parseAttachment(config, attachment, decoded, filePath).catch((error) => {
                 warnings.push(`${attachment.name}: parser failed: ${error instanceof Error ? error.message : String(error)}`);
                 return null;
             });
             const parsedTextPath = parsed?.text
-                ? path.join(artifactsDir, `${basename}.txt`)
+                ? path.join(parsedDir, `${basename}.txt`)
                 : '';
             if (parsed?.text && parsedTextPath) {
                 await fs.writeFile(parsedTextPath, parsed.text, 'utf8');

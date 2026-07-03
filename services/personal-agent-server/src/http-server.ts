@@ -8,6 +8,7 @@ import { isRecord } from './util.js';
 import type { PersonalMainAgent } from './main-agent.js';
 import { runWebSearchTool } from './tools/web-search.js';
 import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
+import { runSandboxExecTool, type SandboxExecContext } from './tools/sandbox-exec.js';
 import {
   getAgentThreadRuntimeStatus,
   getAgentContextOpsUserUsage,
@@ -37,6 +38,9 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           ok: true,
           runtimeStateMode: config?.runtimeStateMode,
           sandboxStorageRoot: config?.sandboxStorageRoot,
+          sandboxExecEnabled: config?.sandboxExecEnabled,
+          sandboxExecImage: config?.sandboxExecImage,
+          sandboxExecNetworkEnabled: config?.sandboxExecNetworkEnabled,
         });
       }
 
@@ -129,6 +133,19 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const toolName = typeof body.toolName === 'string' ? body.toolName.trim() : '';
         if (!isRapidApiCompetitorTool(toolName)) return json(res, 400, { error: `Unsupported competitor data tool: ${toolName}` });
         const resultText = await runRapidApiCompetitorTool(toolName, body.arguments, config);
+        return json(res, 200, {
+          contentItems: [{ type: 'inputText', text: resultText }],
+          success: !resultText.includes('"error"'),
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/tools/sandbox-exec') {
+        if (!config) return json(res, 500, { error: 'tool bridge config missing' });
+        if (!isLoopbackRequest(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        const { argumentsValue, context } = parseSandboxExecBridgeBody(body);
+        const resultText = await runSandboxExecTool(argumentsValue, config, context);
         return json(res, 200, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: !resultText.includes('"error"'),
@@ -984,13 +1001,18 @@ async function runReadArtifactTool(body: Record<string, unknown>, config: Server
   const normalized = resolved.split(path.sep).join('/');
   const allowed =
     normalized.startsWith(`${sandboxRoot.split(path.sep).join('/')}/users/`) &&
-    (normalized.includes('/workspace/artifacts/') || normalized.includes('/workspace/external-memory/'));
+    (
+      normalized.includes('/workspace/uploads/') ||
+      normalized.includes('/workspace/artifacts/') ||
+      normalized.includes('/workspace/outputs/') ||
+      normalized.includes('/workspace/external-memory/')
+    );
 
   if (!allowed) {
     return JSON.stringify({
       error: 'path is outside allowed workspace artifact directories',
       requestedPath,
-      allowedRoot: `${sandboxRoot}/users/*/threads/*/workspace/{artifacts,external-memory}`,
+      allowedRoot: `${sandboxRoot}/users/*/threads/*/workspace/{uploads,artifacts,outputs,external-memory}`,
     }, null, 2);
   }
 
@@ -1012,6 +1034,24 @@ async function runReadArtifactTool(body: Record<string, unknown>, config: Server
       path: resolved,
     }, null, 2);
   }
+}
+
+function parseSandboxExecBridgeBody(body: Record<string, unknown>): {
+  argumentsValue: Record<string, unknown>;
+  context: SandboxExecContext;
+} {
+  const rawContext = isRecord(body._context) ? body._context : {};
+  const context: SandboxExecContext = {
+    userId: typeof rawContext.userId === 'string' ? rawContext.userId : undefined,
+    threadId: typeof rawContext.threadId === 'string' ? rawContext.threadId : undefined,
+    runId: typeof rawContext.runId === 'string' ? rawContext.runId : undefined,
+    workspace: typeof rawContext.workspace === 'string' ? rawContext.workspace : undefined,
+  };
+  if (isRecord(body.arguments)) {
+    return { argumentsValue: body.arguments, context };
+  }
+  const { _context: _ignored, ...argumentsValue } = body;
+  return { argumentsValue, context };
 }
 
 function readJsonBody(req: http.IncomingMessage) {
