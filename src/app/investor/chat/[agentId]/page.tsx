@@ -131,6 +131,9 @@ type CompletedCodexActivity = {
   completedAt: string;
 };
 
+type PersonalAgentStatusRecoveryResult = 'active' | 'success' | 'terminal' | 'idle' | 'unavailable';
+type PersonalAgentStreamRecoveryResult = 'active' | 'recovered' | 'saved' | 'failed';
+
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 const CODEX_MODEL_STORAGE_KEY = 'altselfs:personal-agent-codex-model';
 
@@ -1312,19 +1315,28 @@ export default function InvestorAgentChatPage() {
     }
   }, [activeRunId, stoppingRun, threadId]);
 
-  const refreshPersonalAgentStatus = useCallback(async (targetThreadId: string) => {
-    if (!targetThreadId) return;
+  const refreshPersonalAgentStatus = useCallback(async (
+    targetThreadId?: string | null
+  ): Promise<PersonalAgentStatusRecoveryResult> => {
     try {
       const query = new URLSearchParams({
         status: '1',
-        threadId: targetThreadId,
       });
+      if (targetThreadId) query.set('threadId', targetThreadId);
       const res = await fetch(`/api/investor/personal-agent?${query.toString()}`, {
         cache: 'no-store',
         credentials: 'same-origin',
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!res.ok) return;
+      if (!res.ok) return 'unavailable';
+      const recoveredThreadId = typeof data.threadId === 'string' ? data.threadId : '';
+      if (recoveredThreadId) setThreadId(recoveredThreadId);
+      if (Array.isArray(data.sessions)) {
+        setSessions(data.sessions as AgentSessionSummary[]);
+      }
+      if (typeof data.hasMore === 'boolean') {
+        setHasMoreMessages(data.hasMore);
+      }
       const sandbox = isRecord(data.sandbox) ? data.sandbox : {};
       const activeRun = isRecord(data.activeRun) ? data.activeRun : {};
       const status = typeof sandbox.status === 'string'
@@ -1363,9 +1375,9 @@ export default function InvestorAgentChatPage() {
         activeRunIdRef.current = nextRunId;
         setActiveRunId(nextRunId);
         setSending(true);
-        if (liveStreamRunIdRef.current === nextRunId) return;
+        if (liveStreamRunIdRef.current === nextRunId) return 'active';
         if (projected.length > 0) setCodexStreamItems(projected.slice(-18));
-        return;
+        return 'active';
       }
 
       const recentRuns = Array.isArray(data.recentRuns) ? data.recentRuns.filter(isRecord) : [];
@@ -1403,7 +1415,33 @@ export default function InvestorAgentChatPage() {
             });
           }
         }
-        return;
+        setError(null);
+        return 'success';
+      }
+
+      if (latestTerminalRun && latestTerminalStatus) {
+        activeRunIdRef.current = null;
+        liveStreamRunIdRef.current = null;
+        setActiveRunId(null);
+        setSending(false);
+        setAssistantDraft('');
+        setCodexStreamItems([]);
+        if (projected.length > 0) {
+          setCompletedCodexActivity(buildCompletedActivityFromStatus({
+            run: latestTerminalRun,
+            events: projected,
+          }));
+        }
+
+        const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+        if (recoveredMessages.length > 0) setMessages(recoveredMessages);
+        const terminalError = typeof latestTerminalRun.error === 'string' && latestTerminalRun.error.trim()
+          ? latestTerminalRun.error.trim()
+          : latestTerminalStatus === 'CANCELLED'
+            ? '已停止本次执行。'
+            : '发送失败';
+        setError(terminalError);
+        return 'terminal';
       }
 
       if (activeRunIdRef.current === nextRunId || !nextRunId) {
@@ -1412,8 +1450,12 @@ export default function InvestorAgentChatPage() {
         setActiveRunId(null);
         setSending(false);
       }
+      const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+      if (recoveredMessages.length > 0) setMessages(recoveredMessages);
+      return 'idle';
     } catch {
       // Status recovery is best-effort; the normal send flow still reports errors.
+      return 'unavailable';
     }
   }, []);
 
@@ -1616,6 +1658,85 @@ export default function InvestorAgentChatPage() {
     setAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
   };
 
+  const syncLatestPersonalAgentMessages = useCallback(async (
+    targetThreadId?: string | null
+  ): Promise<ChatMessage[]> => {
+    const query = new URLSearchParams({ sessions: '1' });
+    if (targetThreadId) query.set('threadId', targetThreadId);
+    const res = await fetch(`/api/investor/personal-agent?${query.toString()}`, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) return [];
+    const syncedThreadId = typeof data.threadId === 'string' ? data.threadId : '';
+    if (syncedThreadId) setThreadId(syncedThreadId);
+    if (Array.isArray(data.sessions)) {
+      setSessions(data.sessions as AgentSessionSummary[]);
+    }
+    if (typeof data.hasMore === 'boolean') {
+      setHasMoreMessages(data.hasMore);
+    }
+    const syncedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+    if (syncedMessages.length > 0) setMessages(syncedMessages);
+    return syncedMessages;
+  }, []);
+
+  const hasSyncedCurrentUserTurn = useCallback(async (
+    expectedUserContent: string,
+    targetThreadId?: string | null
+  ) => {
+    const syncedMessages = await syncLatestPersonalAgentMessages(targetThreadId);
+    return syncedMessages.some((message) => message.role === 'user' && message.content === expectedUserContent);
+  }, [syncLatestPersonalAgentMessages]);
+
+  const recoverPersonalAgentStreamState = useCallback(async (
+    targetThreadId: string | null | undefined,
+    expectedUserContent: string
+  ): Promise<PersonalAgentStreamRecoveryResult> => {
+    setRecoveringRunState(true);
+    setCodexStreamItems((prev) => [
+      ...prev,
+      {
+        id: `stream-recovery-${Date.now()}`,
+        title: '连接中断，正在恢复',
+        detail: '后台任务可能仍在执行，正在同步最新状态',
+        status: 'running' as const,
+        timestamp: new Date().toISOString(),
+      },
+    ].slice(-18));
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const knownRunId = activeRunIdRef.current || liveStreamRunIdRef.current || '';
+      const status = await refreshPersonalAgentStatus(targetThreadId || threadId);
+      if (status === 'success' || status === 'terminal') {
+        const hasCurrentTurn = await hasSyncedCurrentUserTurn(expectedUserContent, targetThreadId || threadId);
+        return hasCurrentTurn || knownRunId ? 'recovered' : 'failed';
+      }
+      if (status === 'active') {
+        const hasCurrentTurn = await hasSyncedCurrentUserTurn(expectedUserContent, targetThreadId || threadId);
+        if (!hasCurrentTurn && !knownRunId) return 'failed';
+        setError(null);
+        setCodexStreamItems((prev) => [
+          ...prev,
+          {
+            id: `stream-recovery-active-${Date.now()}`,
+            title: '已切换为后台恢复',
+            detail: '网络连接断开过，结果完成后会自动同步到当前会话',
+            status: 'running' as const,
+            timestamp: new Date().toISOString(),
+          },
+        ].slice(-18));
+        return 'active';
+      }
+      await sleep(1000 + attempt * 500);
+    }
+
+    const hasCurrentTurn = await hasSyncedCurrentUserTurn(expectedUserContent, targetThreadId || threadId);
+    if (hasCurrentTurn) return 'saved';
+    return 'failed';
+  }, [hasSyncedCurrentUserTurn, refreshPersonalAgentStatus, threadId]);
+
   const handleSend = async (textFromSuggestion?: string) => {
     const content = (textFromSuggestion || input).trim();
     const requestAttachments = attachments;
@@ -1645,6 +1766,7 @@ export default function InvestorAgentChatPage() {
     liveStreamRunIdRef.current = null;
     setActiveRunId(null);
     requestedStopRunIdRef.current = null;
+    let preserveRunStateAfterSend = false;
 
     try {
       const requestBody = hasAttachments
@@ -1670,6 +1792,7 @@ export default function InvestorAgentChatPage() {
         method: 'POST',
         ...(hasAttachments ? {} : { headers: { 'Content-Type': 'application/json' } }),
         body: requestBody,
+        credentials: 'same-origin',
       });
 
       if (!res.ok || !res.body) {
@@ -1778,6 +1901,19 @@ export default function InvestorAgentChatPage() {
         return;
       }
 
+      if (!receivedFinalData) {
+        const recoveryResult = await recoverPersonalAgentStreamState(threadId, displayContent);
+        if (recoveryResult === 'active') {
+          preserveRunStateAfterSend = true;
+          return;
+        }
+        if (recoveryResult === 'recovered') return;
+        if (recoveryResult === 'saved') {
+          setError('网络连接中断，本轮消息已保存；请稍后刷新当前会话查看结果。');
+          return;
+        }
+      }
+
       if (!receivedFinalData || finalStatus >= 400) {
         const finalError = (receivedFinalData as { error?: unknown } | null)?.error;
         const finalErrorMessage = typeof finalError === 'string' ? finalError : '发送失败';
@@ -1818,16 +1954,30 @@ export default function InvestorAgentChatPage() {
       setAssistantDraft('');
       setCodexStreamItems([]);
     } catch (err) {
+      const recoveryResult = await recoverPersonalAgentStreamState(threadId, displayContent);
+      if (recoveryResult === 'active') {
+        preserveRunStateAfterSend = true;
+        return;
+      }
+      if (recoveryResult === 'recovered') return;
+      if (recoveryResult === 'saved') {
+        setError('网络连接中断，本轮消息已保存；请稍后刷新当前会话查看结果。');
+        return;
+      }
+
       setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
       setMessages(messages);
       setAttachments(requestAttachments);
       setAssistantDraft('');
     } finally {
-      activeRunIdRef.current = null;
-      liveStreamRunIdRef.current = null;
-      setActiveRunId(null);
-      setSending(false);
+      if (!preserveRunStateAfterSend) {
+        activeRunIdRef.current = null;
+        liveStreamRunIdRef.current = null;
+        setActiveRunId(null);
+        setSending(false);
+      }
       setStoppingRun(false);
+      setRecoveringRunState(false);
     }
   };
 
