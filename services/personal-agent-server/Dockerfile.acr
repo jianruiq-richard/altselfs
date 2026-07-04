@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 ARG CODEX_RUNTIME_IMAGE=crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/codex-app-server:latest
 ARG HERMES_RUNTIME_IMAGE=crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/hermes-runtime:latest
 
