@@ -63,8 +63,8 @@ services/personal-agent-server/Dockerfile.acr
 ACR build rule:
 
 - Source repository: `jianruiq-richard/altselfs`
-- Dockerfile path: `/services/personal-agent-server/Dockerfile.acr`
-- Build context: `/`
+- Dockerfile path: `Dockerfile.acr`
+- Build context: `/services/personal-agent-server/`
 - Image tag: `latest`
 
 Optional build args:
