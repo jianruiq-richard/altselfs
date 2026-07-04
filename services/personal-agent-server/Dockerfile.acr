@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1
+
+ARG CODEX_RUNTIME_IMAGE=crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/codex-app-server:latest
+ARG HERMES_RUNTIME_IMAGE=crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/hermes-runtime:latest
+
+FROM ${CODEX_RUNTIME_IMAGE} AS codex-runtime
+FROM ${HERMES_RUNTIME_IMAGE} AS hermes-runtime
+
+FROM node:22-bookworm-slim AS server-build
+
+WORKDIR /app
+COPY services/personal-agent-server/package.json services/personal-agent-server/tsconfig.json ./
+RUN npm install
+
+COPY services/personal-agent-server/src ./src
+RUN npm run build
+
+FROM node:22-bookworm-slim AS runtime
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates python3 python3-venv python3-pip \
+  && pip3 install --break-system-packages --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com pypdf pdfplumber python-docx openpyxl \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY services/personal-agent-server/package.json ./
+RUN npm install --omit=dev
+
+COPY --from=server-build /app/dist ./dist
+COPY --from=codex-runtime /opt/altselfs/codex-bin /opt/altselfs/codex-bin
+COPY --from=hermes-runtime /opt/altselfs/hermes-agent /opt/altselfs/hermes-agent
+COPY --from=hermes-runtime /usr/local/bin/altselfs-hermes-run /usr/local/bin/altselfs-hermes-run
+
+ENV NODE_ENV=production
+ENV ALTSELFS_AGENT_ENV=production
+ENV PORT=8787
+ENV HERMES_SOURCE_RUNTIME_ENABLED=true
+ENV HERMES_SOURCE_ROOT=/opt/altselfs/hermes-agent
+ENV UV_BIN=/usr/local/bin/altselfs-hermes-run
+ENV CODEX_BIN=/opt/altselfs/codex-bin/codex
+
+EXPOSE 8787
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "dist/index.js"]

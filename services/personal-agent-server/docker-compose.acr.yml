@@ -1,0 +1,28 @@
+services:
+  personal-agent-server:
+    image: ${PERSONAL_AGENT_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server:latest}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      HERMES_SOURCE_RUNTIME_ENABLED: "${HERMES_SOURCE_RUNTIME_ENABLED:-true}"
+      HERMES_SOURCE_ROOT: /opt/altselfs/hermes-agent
+      UV_BIN: /usr/local/bin/altselfs-hermes-run
+      CODEX_BIN: /opt/altselfs/codex-bin/codex
+    ports:
+      - "${PERSONAL_AGENT_HOST_PORT:-8787}:8787"
+    volumes:
+      - /data/altselfs-agent:/data/altselfs-agent
+      - ${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}:${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
