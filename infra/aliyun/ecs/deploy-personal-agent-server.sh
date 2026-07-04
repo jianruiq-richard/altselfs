@@ -6,7 +6,7 @@ ACR_NAMESPACE="${ACR_NAMESPACE:-altselfs}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 APP_DIR="${APP_DIR:-/opt/altselfs/personal-agent-server-docker}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.acr.yml}"
-PERSONAL_AGENT_IMAGE="${PERSONAL_AGENT_IMAGE:-${ACR_REGISTRY}/${ACR_NAMESPACE}/personal-agent-server:${IMAGE_TAG}}"
+ALTSELFS_PERSONAL_AGENT_IMAGE="${ALTSELFS_PERSONAL_AGENT_IMAGE:-${ACR_REGISTRY}/${ACR_NAMESPACE}/personal-agent-server:${IMAGE_TAG}}"
 
 mkdir -p "${APP_DIR}"
 cd "${APP_DIR}"
@@ -21,7 +21,7 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
   exit 1
 fi
 
-docker pull "${PERSONAL_AGENT_IMAGE}"
-PERSONAL_AGENT_IMAGE="${PERSONAL_AGENT_IMAGE}" docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
+docker pull "${ALTSELFS_PERSONAL_AGENT_IMAGE}"
+ALTSELFS_PERSONAL_AGENT_IMAGE="${ALTSELFS_PERSONAL_AGENT_IMAGE}" docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 docker image prune -f >/dev/null
 docker compose -f "${COMPOSE_FILE}" ps

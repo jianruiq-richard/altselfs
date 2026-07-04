@@ -1,6 +1,6 @@
 services:
   personal-agent-server:
-    image: ${PERSONAL_AGENT_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server:latest}
+    image: ${ALTSELFS_PERSONAL_AGENT_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server:latest}
     restart: unless-stopped
     env_file:
       - .env.production
