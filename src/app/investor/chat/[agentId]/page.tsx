@@ -206,6 +206,10 @@ function getPendingAttachmentKind(file: File): PendingAttachmentKind {
   return 'file';
 }
 
+function normalizeMessageContentForRecovery(value: string) {
+  return value.replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').trim();
+}
+
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -1687,7 +1691,11 @@ export default function InvestorAgentChatPage() {
     targetThreadId?: string | null
   ) => {
     const syncedMessages = await syncLatestPersonalAgentMessages(targetThreadId);
-    return syncedMessages.some((message) => message.role === 'user' && message.content === expectedUserContent);
+    const expected = normalizeMessageContentForRecovery(expectedUserContent);
+    return syncedMessages.some((message) => (
+      message.role === 'user' &&
+      normalizeMessageContentForRecovery(message.content) === expected
+    ));
   }, [syncLatestPersonalAgentMessages]);
 
   const recoverPersonalAgentStreamState = useCallback(async (
@@ -1798,7 +1806,8 @@ export default function InvestorAgentChatPage() {
       if (!res.ok || !res.body) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         setError(typeof data.error === 'string' ? data.error : '发送失败');
-        setMessages(messages);
+        setMessages(nextMessages);
+        setInput(content);
         setAttachments(requestAttachments);
         return;
       }
@@ -1918,7 +1927,12 @@ export default function InvestorAgentChatPage() {
         const finalError = (receivedFinalData as { error?: unknown } | null)?.error;
         const finalErrorMessage = typeof finalError === 'string' ? finalError : '发送失败';
         setError(finalErrorMessage);
-        setMessages(messages);
+        if (Array.isArray(receivedFinalData?.messages) && receivedFinalData.messages.length >= nextMessages.length) {
+          setMessages(receivedFinalData.messages);
+        } else {
+          setMessages(nextMessages);
+        }
+        setInput(content);
         setAttachments(requestAttachments);
         setAssistantDraft('');
         setCodexStreamItems((prev) => [
@@ -1966,7 +1980,8 @@ export default function InvestorAgentChatPage() {
       }
 
       setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
-      setMessages(messages);
+      setMessages(nextMessages);
+      setInput(content);
       setAttachments(requestAttachments);
       setAssistantDraft('');
     } finally {

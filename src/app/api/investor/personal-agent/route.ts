@@ -744,6 +744,28 @@ function streamPersonalAgentTurn(params: {
             : '个人 Agent 已完成本轮处理，但没有返回可展示的回复。';
 
           if (finalResult?.cancelled || finalResult?.error) {
+            const finalErrorMessage = finalResult.error || (finalResult.cancelled ? '已停止本次执行。' : '发送失败');
+            const persistedErrorReply = finalResult.cancelled ? finalErrorMessage : `执行失败：${finalErrorMessage}`;
+            await appendThreadMessage({
+              threadId: params.threadId,
+              role: 'ASSISTANT',
+              content: persistedErrorReply,
+              meta: {
+                route: finalResult.route,
+                raw: finalResult.raw,
+                runId: finalResult.runId,
+                error: finalErrorMessage,
+                cancelled: Boolean(finalResult.cancelled),
+              },
+            }).catch(() => null);
+            const page = await getThreadMessagesPage({
+              investorId: params.investorId,
+              agentType: PERSONAL_AGENT_TYPE,
+              threadId: params.threadId,
+              limit: 60,
+            }).catch(() => null);
+            const sessions = await listAgentThreads(params.investorId, PERSONAL_AGENT_TYPE).catch(() => []);
+
             write({
               type: 'final',
               status: finalResult.cancelled ? 499 : 500,
@@ -751,8 +773,9 @@ function streamPersonalAgentTurn(params: {
                 threadId: params.threadId,
                 runId: finalResult.runId,
                 cancelled: Boolean(finalResult.cancelled),
-                error: finalResult.error || '发送失败',
-                messages: displayMessages(params.messages),
+                error: finalErrorMessage,
+                messages: page ? toClientMessages(page.messages) : displayMessages([...params.messages, { role: 'assistant', content: persistedErrorReply }]),
+                sessions,
               },
             });
             return;
