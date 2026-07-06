@@ -218,6 +218,15 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     return json(res, 500, { error: 'config missing' });
                 const turnRequest = parseTurnStartRequest(body);
                 const persisted = await persistAgentTurnInput(config, turnRequest);
+                if (backgroundTurnRunIds.has(persisted.runId)) {
+                    return json(res, 202, {
+                        runId: persisted.runId,
+                        threadId: turnRequest.threadId || null,
+                        status: 'RUNNING',
+                        pollIntervalMs: ASYNC_TURN_POLL_INTERVAL_MS,
+                        existing: true,
+                    });
+                }
                 const startedEvent = {
                     type: 'agent_context.async_turn_started',
                     timestamp: new Date().toISOString(),

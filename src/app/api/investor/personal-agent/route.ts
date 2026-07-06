@@ -18,6 +18,7 @@ export const maxDuration = 800;
 const PERSONAL_AGENT_TYPE = 'PERSONAL';
 const DEFAULT_MULTIMODAL_MAX_FILES = 6;
 const DEFAULT_MULTIMODAL_MAX_FILE_BYTES = 20 * 1024 * 1024;
+const PERSONAL_AGENT_FETCH_TIMEOUT_MS = 15_000;
 
 type ClientMessage = {
   id?: string;
@@ -83,6 +84,67 @@ function normalizeCodexModel(value: unknown): ParsedPostBody['codexModel'] {
 
 function getPersonalAgentServerUrl() {
   return (process.env.PERSONAL_AGENT_SERVER_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
+}
+
+function stableRunIdFromMessageId(messageId: string | null | undefined) {
+  if (!messageId) return undefined;
+  return `run_${messageId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+}
+
+function describeFetchError(error: unknown) {
+  const base = error instanceof Error ? error.message : String(error);
+  const cause = error instanceof Error && 'cause' in error ? (error as { cause?: unknown }).cause : null;
+  if (!isRecord(cause)) return base;
+  const details = ['code', 'errno', 'syscall', 'address', 'port']
+    .map((key) => {
+      const value = cause[key];
+      return typeof value === 'string' || typeof value === 'number' ? `${key}=${value}` : '';
+    })
+    .filter(Boolean);
+  return details.length > 0 ? `${base} (${details.join(', ')})` : base;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchPersonalAgentServerJson<T>(
+  path: string,
+  init: RequestInit,
+  options?: { attempts?: number; timeoutMs?: number }
+) {
+  const url = `${getPersonalAgentServerUrl()}${path}`;
+  const attempts = Math.max(1, Math.floor(options?.attempts || 1));
+  const timeoutMs = Math.max(1_000, Math.floor(options?.timeoutMs || PERSONAL_AGENT_FETCH_TIMEOUT_MS));
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      const data = (await response.json().catch(() => ({}))) as T;
+      return { response, data, url, attempt };
+    } catch (error) {
+      lastError = error;
+      console.error('[personal-agent] upstream fetch failed', {
+        path,
+        url,
+        attempt,
+        attempts,
+        detail: describeFetchError(error),
+      });
+      if (attempt < attempts) await wait(600 * attempt);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw new Error(describeFetchError(lastError));
 }
 
 function getOpenRouterMultimodalMaxFiles() {
@@ -636,19 +698,23 @@ export async function POST(req: NextRequest) {
       workspaceAttachments: getAttachmentPayloads(attachments),
       enabledInfoSources,
       codexModel,
+      runId: stableRunIdFromMessageId(userThreadMessage.id),
     },
   };
 
   if (req.nextUrl.searchParams.get('async') === '1') {
     let result: PersonalAgentResponse & { status?: string; pollIntervalMs?: number };
     try {
-      const response = await fetch(`${getPersonalAgentServerUrl()}/v1/turns/start-async`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        cache: 'no-store',
-      });
-      result = (await response.json().catch(() => ({}))) as PersonalAgentResponse & { status?: string; pollIntervalMs?: number };
+      const { response, data } = await fetchPersonalAgentServerJson<PersonalAgentResponse & { status?: string; pollIntervalMs?: number }>(
+        '/v1/turns/start-async',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        { attempts: 2 }
+      );
+      result = data;
       if (!response.ok) {
         return NextResponse.json(
           { error: result.error || `personal-agent-server HTTP ${response.status}` },
