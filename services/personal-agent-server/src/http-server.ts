@@ -31,7 +31,6 @@ type OpenRouterChatMessage = {
 };
 
 const ASYNC_TURN_POLL_INTERVAL_MS = 3000;
-const backgroundTurnRunIds = new Set<string>();
 
 export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig, memoryReviewQueue?: MemoryReviewJobStore) {
   return http.createServer(async (req, res) => {
@@ -224,12 +223,15 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
         if (!config) return json(res, 500, { error: 'config missing' });
         const turnRequest = parseTurnStartRequest(body);
-        const persisted = await persistAgentTurnInput(config, turnRequest);
-        if (backgroundTurnRunIds.has(persisted.runId)) {
+        const persisted = await persistAgentTurnInput(config, turnRequest, {
+          status: 'QUEUED',
+          storeExecutionRequest: true,
+        });
+        if (persisted.status && persisted.status !== 'QUEUED') {
           return json(res, 202, {
             runId: persisted.runId,
             threadId: turnRequest.threadId || null,
-            status: 'RUNNING',
+            status: persisted.status || 'QUEUED',
             pollIntervalMs: ASYNC_TURN_POLL_INTERVAL_MS,
             existing: true,
           });
@@ -244,16 +246,10 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           },
         };
         await persistAgentRunEvent(config, { runId: persisted.runId, event: startedEvent, index: 0 }).catch(() => null);
-        backgroundTurnRunIds.add(persisted.runId);
-        setImmediate(() => {
-          void executePersistedTurn(agent, config, turnRequest, persisted, 1).finally(() => {
-            backgroundTurnRunIds.delete(persisted.runId);
-          });
-        });
         return json(res, 202, {
           runId: persisted.runId,
           threadId: turnRequest.threadId || null,
-          status: 'RUNNING',
+          status: persisted.status || 'QUEUED',
           pollIntervalMs: ASYNC_TURN_POLL_INTERVAL_MS,
         });
       }
@@ -282,60 +278,6 @@ function parseTurnStartRequest(body: Record<string, unknown>): TurnStartRequest 
     allowedAgents: Array.isArray(body.allowedAgents) ? body.allowedAgents.map(String) : undefined,
     metadata: isRecord(body.metadata) ? body.metadata : undefined,
   };
-}
-
-async function executePersistedTurn(
-  agent: PersonalMainAgent,
-  config: ServerConfig,
-  turnRequest: TurnStartRequest,
-  persisted: PersistedAgentTurnInput,
-  eventIndexStart = 0
-) {
-  let runHeartbeat: ReturnType<typeof setInterval> | null = null;
-  let eventIndex = eventIndexStart;
-  try {
-    runHeartbeat = setInterval(() => {
-      void touchAgentRunHeartbeat(config, {
-        threadId: turnRequest.threadId || '',
-        runId: persisted.runId,
-      }).catch(() => null);
-    }, 15_000);
-    const result = await agent.startTurn({
-      ...turnRequest,
-      metadata: { ...(turnRequest.metadata || {}), runId: persisted.runId },
-      onEvent: async (event) => {
-        const index = eventIndex;
-        eventIndex += 1;
-        await persistAgentRunEvent(config, { runId: persisted.runId, event, index }).catch(() => null);
-      },
-    });
-    await persistAgentTurnSuccess(config, persisted, {
-      threadId: result.threadId,
-      route: result.route,
-      reply: result.reply,
-      events: result.events,
-      raw: 'raw' in result ? result.raw : undefined,
-    });
-  } catch (error) {
-    if (isAgentRunCancelledError(error)) {
-      await persistAgentTurnCancelled(config, {
-        runId: persisted.runId,
-        threadId: turnRequest.threadId,
-        investorId: persisted.investorId,
-        userId: turnRequest.userId,
-        reason: 'cancelled by user',
-      }).catch(() => null);
-      return;
-    }
-    const detail = error instanceof Error ? error.message : String(error);
-    await persistAgentTurnError(config, persisted, {
-      threadId: turnRequest.threadId,
-      error: detail,
-    }).catch(() => null);
-    console.warn(`[personal-agent-server] async turn failed run=${persisted.runId}: ${detail}`);
-  } finally {
-    if (runHeartbeat) clearInterval(runHeartbeat);
-  }
 }
 
 function streamTurnStart(

@@ -8,6 +8,7 @@ import { InMemoryMemoryStore } from './memory-store.js';
 import { MemoryReviewWorker } from './memory-review-queue.js';
 import { PersonalMainAgent } from './main-agent.js';
 import { createStores } from './storage.js';
+import { AgentTurnQueueWorker } from './turn-queue-worker.js';
 const config = loadConfig();
 const registry = new AgentRegistry();
 const memoryStore = new InMemoryMemoryStore();
@@ -30,6 +31,8 @@ if (config.processRole === 'api' || config.processRole === 'all') {
     });
 }
 if (config.processRole === 'worker' || config.processRole === 'all') {
+    const turnQueueWorker = new AgentTurnQueueWorker(agent, config);
+    turnQueueWorker.start();
     const memoryReviewWorker = new MemoryReviewWorker(config, stores.memoryReviewJobStore, stores.userProfileStore);
     memoryReviewWorker.start();
     console.log(`[personal-agent-worker] role=${config.processRole} storage=${config.storageBackend} memoryReviewMode=${config.memoryReviewMode} jobStore=${config.memoryReviewJobStorePath}`);

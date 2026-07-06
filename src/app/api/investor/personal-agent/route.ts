@@ -409,7 +409,7 @@ function storedRunEventToAgentEvent(row: unknown) {
 function normalizeTerminalRun(value: unknown) {
   if (!isRecord(value)) return null;
   const status = typeof value.status === 'string' ? value.status : '';
-  if (!['SUCCESS', 'ERROR', 'CANCELLED'].includes(status)) return null;
+  if (!['SUCCESS', 'ERROR', 'CANCELLED', 'TIMEOUT'].includes(status)) return null;
   const id = typeof value.id === 'string' ? value.id : '';
   if (!id) return null;
   return {
@@ -438,6 +438,8 @@ async function syncTerminalPersonalAgentRun(params: {
         : '个人 Agent 已完成本轮处理，但没有返回可展示的回复。')
     : terminalRun.status === 'CANCELLED'
       ? '已停止本次执行。'
+      : terminalRun.status === 'TIMEOUT'
+        ? `执行超时：${terminalRun.error || '任务超过运行时间限制'}`
       : `执行失败：${terminalRun.error || '发送失败'}`;
 
   const existingMessages = await prisma.agentMessage.findMany({

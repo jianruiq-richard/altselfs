@@ -53,7 +53,7 @@ export async function loadCleanTurnContext(config, request) {
         warnings,
     };
 }
-export async function persistAgentTurnInput(config, request) {
+export async function persistAgentTurnInput(config, request, options = {}) {
     const pool = await getRequiredContextPool(config);
     const investorId = metadataString(request, 'investorId') || request.userId;
     const threadId = request.threadId || '';
@@ -67,17 +67,41 @@ export async function persistAgentTurnInput(config, request) {
         ? request.metadata.currentMessageMetadata
         : {};
     const warnings = [];
-    await pool.query([
+    const status = options.status || 'RUNNING';
+    const modelSelection = resolveRunModelSelection(config, request);
+    const timeoutAt = status === 'RUNNING' && options.timeoutMs
+        ? new Date(Date.now() + options.timeoutMs).toISOString()
+        : null;
+    const runResult = await pool.query([
         'insert into agent_context_runs',
-        '(id, investor_id, thread_id, status, started_at, request)',
-        'values ($1, $2, $3, $4, now(), $5::jsonb)',
+        '(',
+        'id, investor_id, thread_id, status, queued_at, started_at, request, execution_request,',
+        'model_provider, model, timeout_at',
+        ')',
+        'values ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7::jsonb, $8::jsonb, $9, $10, $11::timestamptz)',
         'on conflict (id) do update set',
-        'status = excluded.status, started_at = excluded.started_at, request = excluded.request, updated_at = now()',
+        'request = excluded.request,',
+        "execution_request = case when agent_context_runs.status in ('QUEUED', 'ERROR', 'CANCELLED', 'TIMEOUT') then excluded.execution_request else agent_context_runs.execution_request end,",
+        "status = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then excluded.status else agent_context_runs.status end,",
+        "queued_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then excluded.queued_at else agent_context_runs.queued_at end,",
+        "started_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then excluded.started_at else agent_context_runs.started_at end,",
+        "completed_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.completed_at end,",
+        "result = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.result end,",
+        "error = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.error end,",
+        "worker_id = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.worker_id end,",
+        "worker_heartbeat_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.worker_heartbeat_at end,",
+        "attempt_count = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then 0 else agent_context_runs.attempt_count end,",
+        "next_attempt_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.next_attempt_at end,",
+        "timeout_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.timeout_at end,",
+        'model_provider = excluded.model_provider, model = excluded.model, updated_at = now()',
+        'returning status',
     ].join(' '), [
         runId,
         investorId,
         threadId,
-        'RUNNING',
+        status,
+        status === 'QUEUED' ? new Date().toISOString() : null,
+        status === 'RUNNING' ? new Date().toISOString() : null,
         stringifyJson({
             userId: request.userId,
             threadId,
@@ -85,6 +109,10 @@ export async function persistAgentTurnInput(config, request) {
             allowedAgents: request.allowedAgents,
             metadata: requestMetadataForStorage(request.metadata),
         }),
+        options.storeExecutionRequest ? stringifyJson(requestForExecutionStorage(request)) : null,
+        modelSelection.provider || null,
+        modelSelection.model || null,
+        timeoutAt,
     ]);
     await pool.query([
         'insert into agent_context_messages',
@@ -121,7 +149,110 @@ export async function persistAgentTurnInput(config, request) {
         investorId,
         currentUserMessage: message,
         warnings,
+        status: typeof runResult.rows[0]?.status === 'string' ? String(runResult.rows[0].status) : status,
     };
+}
+export async function claimNextQueuedAgentTurn(config, input) {
+    const pool = await getRequiredContextPool(config);
+    const result = await pool.query([
+        'with candidate as (',
+        'select r.*',
+        'from agent_context_runs r',
+        "where r.status = 'QUEUED'",
+        "and pg_try_advisory_xact_lock(hashtext('altselfs_agent_turn_queue_claim'))",
+        'and (r.next_attempt_at is null or r.next_attempt_at <= now())',
+        'and (select count(*) from agent_context_runs g where g.status = $2) < $3',
+        'and (',
+        '  coalesce(r.model_provider, $12) <> $4',
+        '  or (select count(*) from agent_context_runs o where o.status = $2 and o.model_provider = $4) < $5',
+        ')',
+        'and (',
+        '  coalesce(r.model_provider, $12) <> $6',
+        '  or (select count(*) from agent_context_runs o where o.status = $2 and o.model_provider = $6) < $7',
+        ')',
+        'and (',
+        '  $8 <= 0',
+        '  or (select count(*) from agent_context_runs u where u.status = $2 and u.investor_id = r.investor_id) < $8',
+        ')',
+        'and (',
+        '  $9 <= 0',
+        '  or (select count(*) from agent_context_runs t where t.status = $2 and t.thread_id = r.thread_id) < $9',
+        ')',
+        'and not exists (',
+        '  select 1 from agent_context_runs e',
+        '  where e.thread_id = r.thread_id',
+        "  and e.status = 'QUEUED'",
+        '  and (e.created_at, e.id) < (r.created_at, r.id)',
+        ')',
+        'order by r.created_at asc, r.id asc',
+        'for update skip locked',
+        'limit 1',
+        ')',
+        'update agent_context_runs r',
+        'set status = $2,',
+        'started_at = now(),',
+        'worker_id = $1,',
+        'worker_heartbeat_at = now(),',
+        'attempt_count = coalesce(r.attempt_count, 0) + 1,',
+        'timeout_at = now() + ($10::bigint * interval \'1 millisecond\'),',
+        'updated_at = now()',
+        'from candidate c',
+        'where r.id = c.id',
+        'returning r.*',
+    ].join(' '), [
+        input.workerId,
+        'RUNNING',
+        Math.max(1, input.limits.maxConcurrency),
+        'openai',
+        Math.max(1, input.limits.maxOpenAi),
+        'openrouter',
+        Math.max(1, input.limits.maxOpenRouter),
+        Math.max(0, input.limits.maxPerUser),
+        Math.max(0, input.limits.maxPerThread),
+        Math.max(1_000, input.timeoutMs),
+        'QUEUED',
+        '',
+    ]);
+    const row = result.rows[0];
+    if (!row)
+        return null;
+    try {
+        return rowToQueuedAgentTurn(row);
+    }
+    catch (error) {
+        await pool.query([
+            'update agent_context_runs',
+            "set status = 'ERROR', error = $2, execution_request = null, completed_at = now(), updated_at = now()",
+            'where id = $1',
+        ].join(' '), [String(row.id || ''), error instanceof Error ? error.message : String(error)]).catch(() => null);
+        return null;
+    }
+}
+export async function expireStaleAgentTurns(config, input) {
+    const pool = await getRequiredContextPool(config);
+    const result = await pool.query([
+        'update agent_context_runs',
+        "set status = 'TIMEOUT',",
+        "error = coalesce(error, 'agent worker timeout'),",
+        'execution_request = null, completed_at = now(), updated_at = now()',
+        "where status = 'RUNNING'",
+        'and (',
+        '  timeout_at < now()',
+        '  or (worker_heartbeat_at is not null and worker_heartbeat_at < now() - ($1::bigint * interval \'1 millisecond\'))',
+        ')',
+        'returning id',
+    ].join(' '), [Math.max(1_000, input.staleHeartbeatMs)]);
+    return result.rows.length;
+}
+export async function markQueuedAgentTurnWaiting(config, input) {
+    const pool = await getRequiredContextPool(config);
+    await pool.query([
+        'update agent_context_runs',
+        'set next_attempt_at = now() + ($3::bigint * interval \'1 millisecond\'),',
+        "error = case when status = 'QUEUED' then $2 else error end,",
+        'updated_at = now()',
+        "where id = $1 and status = 'QUEUED'",
+    ].join(' '), [input.runId, input.reason, Math.max(1_000, input.delayMs)]);
 }
 export async function persistAgentArtifacts(config, artifacts) {
     if (artifacts.length === 0)
@@ -244,7 +375,8 @@ export async function getAgentThreadRuntimeStatus(config, input) {
             'limit 1',
         ].join(' '), threadValues),
         pool.query([
-            'select id, investor_id, thread_id, status, route, result, error, started_at, completed_at, created_at, updated_at',
+            'select id, investor_id, thread_id, status, route, result, error, queued_at, started_at, completed_at,',
+            'worker_id, worker_heartbeat_at, attempt_count, model_provider, model, created_at, updated_at',
             'from agent_context_runs',
             'where thread_id = $1',
             input.investorId ? 'and investor_id = $2' : '',
@@ -256,7 +388,7 @@ export async function getAgentThreadRuntimeStatus(config, input) {
     const activeRunId = typeof sandbox?.active_run_id === 'string' ? sandbox.active_run_id : '';
     const activeRun = activeRunId
         ? runsResult.rows.find((run) => run.id === activeRunId) || null
-        : runsResult.rows.find((run) => run.status === 'RUNNING') || null;
+        : runsResult.rows.find((run) => run.status === 'RUNNING' || run.status === 'QUEUED') || null;
     const runIds = activeRunId
         ? [activeRunId]
         : runsResult.rows
@@ -389,12 +521,15 @@ export async function touchAgentRunHeartbeat(config, input) {
         'where thread_id = $1',
     ].join(' '), input.runId ? [input.threadId, input.runId] : [input.threadId]);
     await pool.query('update agent_context_threads set last_active_at = now(), updated_at = now() where thread_id = $1', [input.threadId]);
+    if (input.runId) {
+        await pool.query('update agent_context_runs set worker_heartbeat_at = now(), updated_at = now() where id = $1 and status = $2', [input.runId, 'RUNNING']);
+    }
 }
 export async function persistAgentTurnCancelled(config, input) {
     const pool = await getRequiredContextPool(config);
     await pool.query([
         'update agent_context_runs',
-        'set status = $2, error = $3, completed_at = now(), updated_at = now()',
+        'set status = $2, error = $3, execution_request = null, completed_at = now(), updated_at = now()',
         'where id = $1',
     ].join(' '), [input.runId, 'CANCELLED', input.reason || 'cancelled by user']);
     if (input.threadId) {
@@ -424,6 +559,31 @@ export async function persistAgentTurnCancelled(config, input) {
             stringifyJson({
                 cancelledRunId: input.runId,
                 cancelledAt: new Date().toISOString(),
+            }),
+        ]);
+    }
+}
+export async function persistAgentTurnTimeout(config, input) {
+    const pool = await getRequiredContextPool(config);
+    await pool.query([
+        'update agent_context_runs',
+        'set status = $2, error = $3, execution_request = null, completed_at = now(), updated_at = now()',
+        'where id = $1',
+    ].join(' '), [input.runId, 'TIMEOUT', input.reason || 'agent run timed out']);
+    if (input.threadId) {
+        await pool.query([
+            'update agent_context_sandbox_state',
+            'set status = $2, active_run_id = null, last_heartbeat = now(),',
+            "metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb, updated_at = now()",
+            'where thread_id = $1',
+        ].join(' '), [
+            input.threadId,
+            'ERROR',
+            stringifyJson({
+                phase: 'timeout',
+                timedOutAt: new Date().toISOString(),
+                timeoutRunId: input.runId,
+                reason: input.reason || 'agent run timed out',
             }),
         ]);
     }
@@ -473,7 +633,7 @@ export async function persistAgentTurnSuccess(config, input, params) {
     await upsertThreadSummary(pool, params.threadId, input.currentUserMessage, params.reply);
     await pool.query([
         'update agent_context_runs',
-        'set status = $2, route = $3, result = $4::jsonb, completed_at = now(), updated_at = now()',
+        'set status = $2, route = $3, result = $4::jsonb, execution_request = null, completed_at = now(), updated_at = now()',
         'where id = $1',
     ].join(' '), [
         input.runId,
@@ -493,9 +653,43 @@ export async function persistAgentTurnError(config, input, params) {
     const pool = await getRequiredContextPool(config);
     await pool.query([
         'update agent_context_runs',
-        'set status = $2, error = $3, result = $4::jsonb, completed_at = now(), updated_at = now()',
+        'set status = $2, error = $3, result = $4::jsonb, execution_request = null, completed_at = now(), updated_at = now()',
         'where id = $1',
     ].join(' '), [input.runId, 'ERROR', params.error, stringifyJson(params.result ?? null)]);
+}
+function rowToQueuedAgentTurn(row) {
+    const runId = String(row.id || '');
+    const request = storedTurnRequest(row.execution_request) || storedTurnRequest(row.request);
+    if (!request)
+        throw new Error(`Queued agent run ${runId || '(unknown)'} is missing an executable request`);
+    const requestMetadata = isRecord(request.metadata) ? request.metadata : {};
+    const currentUserMessage = typeof requestMetadata.currentUserMessage === 'string'
+        ? requestMetadata.currentUserMessage
+        : request.message;
+    const userMessageId = typeof requestMetadata.currentMessageId === 'string' && requestMetadata.currentMessageId
+        ? requestMetadata.currentMessageId
+        : id('msg');
+    return {
+        persisted: {
+            runId,
+            userMessageId,
+            investorId: String(row.investor_id || request.userId),
+            currentUserMessage,
+            warnings: [],
+            status: 'RUNNING',
+        },
+        request: {
+            ...request,
+            metadata: {
+                ...requestMetadata,
+                runId,
+            },
+        },
+        eventIndexStart: 2,
+        model: typeof row.model === 'string' ? row.model : undefined,
+        modelProvider: typeof row.model_provider === 'string' ? row.model_provider : undefined,
+        attemptCount: readRowNumber(row.attempt_count),
+    };
 }
 function buildMessageQuery(input) {
     const values = [input.threadId];
@@ -606,23 +800,46 @@ async function createAgentContextSchema(pool) {
   `);
     await pool.query('create index if not exists agent_context_messages_thread_created_idx on agent_context_messages(thread_id, created_at, id)');
     await pool.query(`
-    create table if not exists agent_context_runs (
-      id text primary key,
-      investor_id text not null,
-      thread_id text not null,
-      status text not null default 'RUNNING',
-      route text,
-      request jsonb,
-      result jsonb,
-      error text,
-      started_at timestamptz,
-      completed_at timestamptz,
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
-    )
-  `);
+	    create table if not exists agent_context_runs (
+	      id text primary key,
+	      investor_id text not null,
+	      thread_id text not null,
+	      status text not null default 'RUNNING',
+	      route text,
+	      request jsonb,
+	      execution_request jsonb,
+	      result jsonb,
+	      error text,
+	      queued_at timestamptz,
+	      started_at timestamptz,
+	      completed_at timestamptz,
+	      worker_id text,
+	      worker_heartbeat_at timestamptz,
+	      attempt_count integer not null default 0,
+	      next_attempt_at timestamptz,
+	      timeout_at timestamptz,
+	      cancel_requested boolean not null default false,
+	      model_provider text,
+	      model text,
+	      created_at timestamptz not null default now(),
+	      updated_at timestamptz not null default now()
+	    )
+	  `);
+    await pool.query('alter table agent_context_runs add column if not exists execution_request jsonb');
+    await pool.query('alter table agent_context_runs add column if not exists queued_at timestamptz');
+    await pool.query('alter table agent_context_runs add column if not exists worker_id text');
+    await pool.query('alter table agent_context_runs add column if not exists worker_heartbeat_at timestamptz');
+    await pool.query('alter table agent_context_runs add column if not exists attempt_count integer not null default 0');
+    await pool.query('alter table agent_context_runs add column if not exists next_attempt_at timestamptz');
+    await pool.query('alter table agent_context_runs add column if not exists timeout_at timestamptz');
+    await pool.query('alter table agent_context_runs add column if not exists cancel_requested boolean not null default false');
+    await pool.query('alter table agent_context_runs add column if not exists model_provider text');
+    await pool.query('alter table agent_context_runs add column if not exists model text');
     await pool.query('create index if not exists agent_context_runs_thread_created_idx on agent_context_runs(thread_id, created_at)');
     await pool.query('create index if not exists agent_context_runs_investor_status_updated_idx on agent_context_runs(investor_id, status, updated_at)');
+    await pool.query('create index if not exists agent_context_runs_queue_idx on agent_context_runs(status, next_attempt_at, created_at, id)');
+    await pool.query('create index if not exists agent_context_runs_worker_heartbeat_idx on agent_context_runs(status, worker_heartbeat_at, timeout_at)');
+    await pool.query('create index if not exists agent_context_runs_provider_status_idx on agent_context_runs(model_provider, status, updated_at)');
     await pool.query(`
     create table if not exists agent_context_run_events (
       id text primary key,
@@ -748,6 +965,63 @@ function requestMetadataForStorage(metadata) {
         });
     }
     return copy;
+}
+function requestForExecutionStorage(request) {
+    return {
+        userId: request.userId,
+        threadId: request.threadId || null,
+        message: request.message,
+        allowedAgents: request.allowedAgents || null,
+        metadata: request.metadata || null,
+    };
+}
+function storedTurnRequest(value) {
+    if (!isRecord(value))
+        return null;
+    const userId = typeof value.userId === 'string' ? value.userId : '';
+    const message = typeof value.message === 'string' ? value.message : '';
+    if (!userId || !message)
+        return null;
+    return {
+        userId,
+        threadId: typeof value.threadId === 'string' ? value.threadId : undefined,
+        message,
+        allowedAgents: Array.isArray(value.allowedAgents) ? value.allowedAgents.map(String) : undefined,
+        metadata: isRecord(value.metadata) ? value.metadata : undefined,
+    };
+}
+function resolveRunModelSelection(config, request) {
+    const requested = request.metadata?.codexModel;
+    const model = normalizeRunModel(typeof requested === 'string' && requested.trim() ? requested.trim() : config.codexModel);
+    if (model === 'gpt-5.5')
+        return { model, provider: 'openai' };
+    if (model === 'deepseek/deepseek-v3.2')
+        return { model, provider: 'openrouter' };
+    const configuredProvider = normalizeRunProvider(config.codexModelProvider);
+    return {
+        model,
+        provider: configuredProvider || (model ? 'openrouter' : undefined),
+    };
+}
+function normalizeRunModel(model) {
+    const value = model?.trim();
+    if (!value)
+        return undefined;
+    const normalized = value.toLowerCase();
+    if (normalized === 'gpt-5.5' || normalized === 'chatgpt-5.5')
+        return 'gpt-5.5';
+    if (normalized === 'deepseek/deepseek-v3.2' ||
+        normalized === 'deepseek-v3.2' ||
+        normalized === 'deepseek3.2') {
+        return 'deepseek/deepseek-v3.2';
+    }
+    return value;
+}
+function normalizeRunProvider(provider) {
+    const value = provider?.trim().toLowerCase();
+    if (value === 'openai' || value === 'openrouter')
+        return value;
+    return undefined;
 }
 function stringifyJson(value) {
     return JSON.stringify(value === undefined ? null : value);

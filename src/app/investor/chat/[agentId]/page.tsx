@@ -557,6 +557,20 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     };
   }
 
+  if (type === 'agent_context.queue_claimed' || type === 'agent_context.queue_timeout_requested') {
+    const model = typeof payload.model === 'string' ? payload.model : '';
+    const provider = typeof payload.modelProvider === 'string' ? payload.modelProvider : '';
+    const workerId = typeof payload.workerId === 'string' ? payload.workerId : '';
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: type === 'agent_context.queue_claimed' ? '开始执行后台任务' : '任务超时，正在停止',
+      detail: [model, provider, workerId ? `worker: ${workerId}` : ''].filter(Boolean).join(' · ') || type.replace('agent_context.', ''),
+      status: type === 'agent_context.queue_claimed' ? 'running' : 'error',
+      timestamp,
+      method: type,
+    };
+  }
+
   if (type === 'workspace_artifacts.ingested') {
     const count = typeof payload.count === 'number' ? payload.count : 0;
     const artifacts = Array.isArray(payload.artifacts) ? payload.artifacts : [];
@@ -813,6 +827,8 @@ function codexActionLabel(item: CodexStreamItem) {
   if (method.includes('tool') || item.title.includes('工具')) {
     return item.status === 'completed' ? '已调用工具' : '正在调用工具';
   }
+  if (method.includes('queue_claimed')) return '开始执行';
+  if (method.includes('queue_timeout')) return '执行超时';
   if (method.includes('plan') || item.title.includes('计划')) return '正在规划';
   if (method.includes('thread') || method.includes('session')) return '准备会话';
   if (method.includes('agent_context') || method.includes('runtime_state')) return '读取上下文';
@@ -826,6 +842,8 @@ function codexCompletedActionLabel(item: CodexStreamItem) {
   const method = item.method || '';
   if (item.status === 'error') return item.title || '执行失败';
   if (method.includes('tool') || item.title.includes('工具')) return '调用工具';
+  if (method.includes('queue_claimed')) return '开始执行';
+  if (method.includes('queue_timeout')) return '执行超时';
   if (method.includes('plan') || item.title.includes('计划')) return '规划';
   if (method.includes('thread') || method.includes('session')) return '准备会话';
   if (method.includes('agent_context') || method.includes('runtime_state')) return '读取上下文';
@@ -1355,7 +1373,7 @@ export default function InvestorAgentChatPage() {
         })
         .filter(Boolean) as CodexStreamItem[];
 
-      if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING') && nextRunId) {
+      if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING' || activeRunStatus === 'QUEUED') && nextRunId) {
         activeRunIdRef.current = nextRunId;
         setActiveRunId(nextRunId);
         setSending(true);
@@ -1367,7 +1385,7 @@ export default function InvestorAgentChatPage() {
       const recentRuns = Array.isArray(data.recentRuns) ? data.recentRuns.filter(isRecord) : [];
       const latestTerminalRun = [activeRun, ...recentRuns].find((run) => {
         const runStatus = typeof run.status === 'string' ? run.status : '';
-        return ['SUCCESS', 'ERROR', 'CANCELLED'].includes(runStatus);
+        return ['SUCCESS', 'ERROR', 'CANCELLED', 'TIMEOUT'].includes(runStatus);
       });
       const latestTerminalStatus = isRecord(latestTerminalRun) && typeof latestTerminalRun.status === 'string'
         ? latestTerminalRun.status
@@ -1421,9 +1439,11 @@ export default function InvestorAgentChatPage() {
         if (recoveredMessages.length > 0) setMessages(recoveredMessages);
         const terminalError = typeof latestTerminalRun.error === 'string' && latestTerminalRun.error.trim()
           ? latestTerminalRun.error.trim()
-          : latestTerminalStatus === 'CANCELLED'
-            ? '已停止本次执行。'
-            : '发送失败';
+            : latestTerminalStatus === 'CANCELLED'
+              ? '已停止本次执行。'
+              : latestTerminalStatus === 'TIMEOUT'
+                ? '执行超时。'
+              : '发送失败';
         setError(terminalError);
         return 'terminal';
       }
