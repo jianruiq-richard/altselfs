@@ -1118,6 +1118,22 @@ function projectCodexRolloutEvents(parsed, rolloutFile) {
         payloadType,
         rolloutTimestamp: timestamp,
     };
+    if (rolloutType === 'event_msg' && payloadType === 'warning') {
+        const message = typeof payload.message === 'string' ? payload.message : '';
+        const timingPrefix = 'ALTSELFS_CODEX_TIMING ';
+        if (message.startsWith(timingPrefix)) {
+            const parsedTiming = parseJsonValue(message.slice(timingPrefix.length));
+            if (isRecord(parsedTiming)) {
+                return [{
+                        type: 'codex.timing',
+                        payload: {
+                            ...base,
+                            ...safeJson(parsedTiming),
+                        },
+                    }];
+            }
+        }
+    }
     if (rolloutType === 'response_item' && payloadType === 'function_call') {
         const name = typeof payload.name === 'string' ? payload.name : 'function_call';
         const callId = typeof payload.call_id === 'string' ? payload.call_id : '';
