@@ -768,6 +768,17 @@ function createClientRequestId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
+function messagesContainUserTurn(value: unknown, expectedUserContent: string) {
+  const expected = normalizeMessageContentForRecovery(expectedUserContent);
+  if (!expected || !Array.isArray(value)) return false;
+  return value.some((message) => {
+    if (!isRecord(message)) return false;
+    const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
+    const content = typeof message.content === 'string' ? message.content : '';
+    return role === 'user' && normalizeMessageContentForRecovery(content) === expected;
+  });
+}
+
 function getRunPollErrorMessage(data: ExecutiveRunPollResult, status: number) {
   const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : '查询任务状态失败';
   return `查询任务状态失败（HTTP ${status}）：${detail}`;
@@ -1723,26 +1734,65 @@ export default function InvestorAgentChatPage() {
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const knownRunId = activeRunIdRef.current || liveStreamRunIdRef.current || '';
-      const status = await refreshPersonalAgentStatus(targetThreadId || threadId);
-      if (status === 'success' || status === 'terminal') {
-        const hasCurrentTurn = await hasSyncedCurrentUserTurn(expectedUserContent, targetThreadId || threadId);
-        return hasCurrentTurn || knownRunId ? 'recovered' : 'failed';
-      }
-      if (status === 'active') {
-        const hasCurrentTurn = await hasSyncedCurrentUserTurn(expectedUserContent, targetThreadId || threadId);
-        if (!hasCurrentTurn && !knownRunId) return 'failed';
-        setError(null);
-        setCodexStreamItems((prev) => [
-          ...prev,
-          {
-            id: `stream-recovery-active-${Date.now()}`,
-            title: '已切换为后台恢复',
-            detail: '网络连接断开过，结果完成后会自动同步到当前会话',
-            status: 'running' as const,
-            timestamp: new Date().toISOString(),
-          },
-        ].slice(-18));
-        return 'active';
+      try {
+        const query = new URLSearchParams({ status: '1' });
+        const statusThreadId = targetThreadId || threadId;
+        if (statusThreadId) query.set('threadId', statusThreadId);
+        const res = await fetch(`/api/investor/personal-agent?${query.toString()}`, {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        });
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!res.ok) {
+          await sleep(1000 + attempt * 500);
+          continue;
+        }
+
+        const hasCurrentTurn = messagesContainUserTurn(data.messages, expectedUserContent);
+        const sandbox = isRecord(data.sandbox) ? data.sandbox : {};
+        const activeRun = isRecord(data.activeRun) ? data.activeRun : {};
+        const status = typeof sandbox.status === 'string'
+          ? sandbox.status
+          : isRecord(data.thread) && typeof data.thread.status === 'string'
+            ? data.thread.status
+            : '';
+        const activeRunStatus = typeof activeRun.status === 'string' ? activeRun.status : '';
+        const nextRunId = typeof sandbox.active_run_id === 'string'
+          ? sandbox.active_run_id
+          : typeof activeRun.id === 'string'
+            ? activeRun.id
+            : '';
+
+        if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING' || activeRunStatus === 'QUEUED') && nextRunId) {
+          if (!hasCurrentTurn && !knownRunId) return 'failed';
+          const applied = await refreshPersonalAgentStatus(statusThreadId);
+          if (applied !== 'active') return applied === 'success' || applied === 'terminal' ? 'recovered' : 'failed';
+          setError(null);
+          setCodexStreamItems((prev) => [
+            ...prev,
+            {
+              id: `stream-recovery-active-${Date.now()}`,
+              title: '已切换为后台恢复',
+              detail: '网络连接断开过，结果完成后会自动同步到当前会话',
+              status: 'running' as const,
+              timestamp: new Date().toISOString(),
+            },
+          ].slice(-18));
+          return 'active';
+        }
+
+        const recentRuns = Array.isArray(data.recentRuns) ? data.recentRuns.filter(isRecord) : [];
+        const latestTerminalRun = [activeRun, ...recentRuns].find((run) => {
+          const runStatus = typeof run.status === 'string' ? run.status : '';
+          return ['SUCCESS', 'ERROR', 'CANCELLED', 'TIMEOUT'].includes(runStatus);
+        });
+        if (latestTerminalRun) {
+          if (!hasCurrentTurn && !knownRunId) return 'failed';
+          const applied = await refreshPersonalAgentStatus(statusThreadId);
+          return applied === 'success' || applied === 'terminal' ? 'recovered' : 'failed';
+        }
+      } catch {
+        // Keep retrying; the outer send path will surface the original network error.
       }
       await sleep(1000 + attempt * 500);
     }
@@ -1896,6 +1946,8 @@ export default function InvestorAgentChatPage() {
       setMessages(nextMessages);
       setInput(content);
       setAttachments(requestAttachments);
+      setCodexStreamItems([]);
+      setCompletedCodexActivity(null);
       setAssistantDraft('');
     } finally {
       if (!preserveRunStateAfterSend) {
