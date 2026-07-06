@@ -20,6 +20,7 @@ export class HermesSourceRuntime {
         this.profileStore = profileStore || new LocalProfileStore(config.profileStorePath);
     }
     async run(request) {
+        const runtimeRunStartedAtMs = Date.now();
         const events = [];
         const emit = async (type, payload) => {
             const event = { type, timestamp: nowIso(), payload: safeJson(payload) };
@@ -41,6 +42,7 @@ export class HermesSourceRuntime {
             ? previousHermesSessionId
             : '';
         if (this.runtimeStateStore && this.config.runtimeStateMode === 'snapshot') {
+            const hydrateStartedAtMs = Date.now();
             const hydrated = await this.runtimeStateStore.hydrate({
                 userId: request.userId,
                 threadId: request.threadId || 'default',
@@ -50,10 +52,22 @@ export class HermesSourceRuntime {
                 await emit('runtime_state.hydrated', {
                     restored: hydrated.restored,
                     warnings: hydrated.warnings,
+                    durationMs: Date.now() - hydrateStartedAtMs,
+                    sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
                 });
             }
         }
+        const prepareHomesStartedAtMs = Date.now();
         await this.prepareHomes(runtimePaths, codexModelSelection);
+        await emit('hermes.runtime.prepare_homes_timing', {
+            durationMs: Date.now() - prepareHomesStartedAtMs,
+            sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
+            hermesHome,
+            codexHome,
+            workspace,
+            codexModelProvider: codexModelSelection.provider || null,
+            codexModel: codexModelSelection.model || null,
+        });
         await writeSandboxState(runtimePaths, {
             status: 'ACTIVE',
             activeRunId: runId,
@@ -72,7 +86,14 @@ export class HermesSourceRuntime {
                 previousHermesSessionId: resumeSessionId || null,
             },
         });
+        const ingestArtifactsStartedAtMs = Date.now();
         const ingestedArtifacts = await ingestWorkspaceAttachments(this.config, request, runtimePaths, runId);
+        await emit('workspace_artifacts.ingest_timing', {
+            durationMs: Date.now() - ingestArtifactsStartedAtMs,
+            sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
+            count: ingestedArtifacts.artifacts.length,
+            warningCount: ingestedArtifacts.warnings.length,
+        });
         if (ingestedArtifacts.artifacts.length > 0 || ingestedArtifacts.warnings.length > 0) {
             await emit('workspace_artifacts.ingested', {
                 count: ingestedArtifacts.artifacts.length,
@@ -86,13 +107,17 @@ export class HermesSourceRuntime {
                 warnings: ingestedArtifacts.warnings,
             });
         }
+        const contextLoadStartedAtMs = Date.now();
         const cleanContext = await loadCleanTurnContext(this.config, request);
+        const contextLoadDurationMs = Date.now() - contextLoadStartedAtMs;
         await emit('agent_context.loaded', {
             loaded: cleanContext.loaded,
             summaryChars: cleanContext.summaryChars,
             messageCount: cleanContext.messageCount,
             artifactCount: cleanContext.artifactCount,
             warnings: cleanContext.warnings,
+            durationMs: contextLoadDurationMs,
+            sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
         });
         const currentUserMessage = typeof request.metadata?.currentUserMessage === 'string' && request.metadata.currentUserMessage.trim()
             ? request.metadata.currentUserMessage.trim()
@@ -100,6 +125,7 @@ export class HermesSourceRuntime {
         const selectedAgentProfileId = typeof request.metadata?.selectedAgentProfileId === 'string' && request.metadata.selectedAgentProfileId.trim()
             ? request.metadata.selectedAgentProfileId.trim()
             : '';
+        const profileLoadStartedAtMs = Date.now();
         const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(request.userId, currentUserMessage, request.threadId);
         if (rememberedProfile) {
             await emit('hermes.profile.updated', {
@@ -121,7 +147,10 @@ export class HermesSourceRuntime {
             hermesUserProfileChars: hermesUserProfile.length,
             injected: Boolean(combinedProfile),
             renderedProfile: truncate(combinedProfile, 4000),
+            durationMs: Date.now() - profileLoadStartedAtMs,
+            sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
         });
+        const sourceRuntimeStartingAtMs = Date.now();
         await emit('hermes.source_runtime.starting', {
             runId,
             hermesHome,
@@ -137,6 +166,8 @@ export class HermesSourceRuntime {
             codexModel: codexModelSelection.model || null,
             codexModelProvider: codexModelSelection.provider || null,
             selectedAgentProfileId: selectedAgentProfileId || null,
+            preSpawnDurationMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
+            sinceRunStartMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
         });
         const startedAtMs = Date.now();
         const args = [
@@ -174,6 +205,10 @@ export class HermesSourceRuntime {
                 codexHome,
                 workspace,
                 codexModelSelection,
+            }, {
+                emit,
+                startedAtMs,
+                runtimeRunStartedAtMs,
             });
         }
         catch (error) {
@@ -463,10 +498,20 @@ export class HermesSourceRuntime {
             });
         }
     }
-    spawnHermes(args, paths) {
+    spawnHermes(args, paths, timing) {
         return new Promise((resolve, reject) => {
             const codexBinDir = path.dirname(this.config.codexBin);
             const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
+            const spawnRequestedAtMs = Date.now();
+            const emitTiming = (type, payload) => {
+                if (!timing)
+                    return;
+                void timing.emit(type, {
+                    ...payload,
+                    sinceHermesStartMs: Date.now() - timing.startedAtMs,
+                    sinceRunStartMs: Date.now() - timing.runtimeRunStartedAtMs,
+                }).catch(() => undefined);
+            };
             const child = spawn(this.config.uvBin, args, {
                 cwd: this.config.hermesSourceRoot,
                 env: {
@@ -502,6 +547,13 @@ export class HermesSourceRuntime {
                 },
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
+            const spawnedAtMs = Date.now();
+            emitTiming('hermes.process.spawned', {
+                pid: child.pid || null,
+                command: path.basename(this.config.uvBin),
+                spawnReturnMs: spawnedAtMs - spawnRequestedAtMs,
+                cwd: this.config.hermesSourceRoot,
+            });
             registerActiveRun({
                 runId: paths.runId,
                 userId: paths.userId,
@@ -510,26 +562,59 @@ export class HermesSourceRuntime {
             });
             let stdout = '';
             let stderr = '';
+            let firstStdoutAtMs = null;
+            let firstStderrAtMs = null;
             const timeout = setTimeout(() => {
+                emitTiming('hermes.process.timeout', {
+                    durationMs: Date.now() - spawnedAtMs,
+                });
                 child.kill('SIGTERM');
                 reject(new Error('Hermes source runtime timed out after 10 minutes'));
             }, 600_000);
             child.stdout.setEncoding('utf8');
             child.stderr.setEncoding('utf8');
             child.stdout.on('data', (chunk) => {
+                if (firstStdoutAtMs === null) {
+                    firstStdoutAtMs = Date.now();
+                    emitTiming('hermes.process.first_stdout', {
+                        sinceSpawnMs: firstStdoutAtMs - spawnedAtMs,
+                        bytes: Buffer.byteLength(chunk, 'utf8'),
+                        preview: truncate(chunk, 2000),
+                    });
+                }
                 stdout += chunk;
             });
             child.stderr.on('data', (chunk) => {
+                if (firstStderrAtMs === null) {
+                    firstStderrAtMs = Date.now();
+                    emitTiming('hermes.process.first_stderr', {
+                        sinceSpawnMs: firstStderrAtMs - spawnedAtMs,
+                        bytes: Buffer.byteLength(chunk, 'utf8'),
+                        preview: truncate(chunk, 2000),
+                    });
+                }
                 stderr += chunk;
             });
             child.on('error', (error) => {
                 unregisterActiveRun(paths.runId);
                 clearTimeout(timeout);
+                emitTiming('hermes.process.error', {
+                    durationMs: Date.now() - spawnedAtMs,
+                    error: error instanceof Error ? error.message : String(error),
+                });
                 reject(isRunCancelled(paths.runId) ? createRunCancelledError(paths.runId) : error);
             });
             child.on('close', (code) => {
                 unregisterActiveRun(paths.runId);
                 clearTimeout(timeout);
+                emitTiming('hermes.process.closed', {
+                    code,
+                    durationMs: Date.now() - spawnedAtMs,
+                    stdoutBytes: Buffer.byteLength(stdout, 'utf8'),
+                    stderrBytes: Buffer.byteLength(stderr, 'utf8'),
+                    firstStdoutDelayMs: firstStdoutAtMs === null ? null : firstStdoutAtMs - spawnedAtMs,
+                    firstStderrDelayMs: firstStderrAtMs === null ? null : firstStderrAtMs - spawnedAtMs,
+                });
                 if (isRunCancelled(paths.runId)) {
                     reject(createRunCancelledError(paths.runId));
                     return;
@@ -872,6 +957,9 @@ function startCodexRolloutEventBridge(input) {
     const sessionsDir = path.join(input.codexHome, 'sessions');
     const offsets = new Map();
     const pendingText = new Map();
+    let firstFileDetectedAtMs = null;
+    let firstRolloutEventAtMs = null;
+    let firstProjectedEventAtMs = null;
     let stopped = false;
     let scanning = false;
     let timer = null;
@@ -892,6 +980,15 @@ function startCodexRolloutEventBridge(input) {
                     return null;
                 }
             }))).filter((file) => Boolean(file));
+            if (candidates.length > 0 && firstFileDetectedAtMs === null) {
+                firstFileDetectedAtMs = Date.now();
+                await input.emit('codex.rollout.first_file_detected', {
+                    durationMs: firstFileDetectedAtMs - input.startedAtMs,
+                    sinceHermesStartMs: firstFileDetectedAtMs - input.startedAtMs,
+                    fileCount: candidates.length,
+                    files: candidates.slice(0, 3).map((candidate) => path.relative(input.codexHome, candidate.file)),
+                });
+            }
             for (const candidate of candidates) {
                 const offset = offsets.get(candidate.file) ?? 0;
                 if (candidate.size <= offset)
@@ -906,8 +1003,29 @@ function startCodexRolloutEventBridge(input) {
                     const parsed = parseJsonLine(line);
                     if (!parsed)
                         continue;
+                    if (firstRolloutEventAtMs === null) {
+                        firstRolloutEventAtMs = Date.now();
+                        const payload = isRecord(parsed.payload) ? parsed.payload : {};
+                        await input.emit('codex.rollout.first_event_seen', {
+                            durationMs: firstRolloutEventAtMs - input.startedAtMs,
+                            sinceHermesStartMs: firstRolloutEventAtMs - input.startedAtMs,
+                            rolloutFile,
+                            rolloutType: typeof parsed.type === 'string' ? parsed.type : '',
+                            payloadType: typeof payload.type === 'string' ? payload.type : '',
+                            rolloutTimestamp: typeof parsed.timestamp === 'string' ? parsed.timestamp : null,
+                        });
+                    }
                     const events = projectCodexRolloutEvents(parsed, rolloutFile);
                     for (const event of events) {
+                        if (firstProjectedEventAtMs === null) {
+                            firstProjectedEventAtMs = Date.now();
+                            await input.emit('codex.rollout.first_projected_event', {
+                                durationMs: firstProjectedEventAtMs - input.startedAtMs,
+                                sinceHermesStartMs: firstProjectedEventAtMs - input.startedAtMs,
+                                projectedType: event.type,
+                                rolloutFile,
+                            });
+                        }
                         await input.emit(event.type, event.payload);
                     }
                 }
@@ -928,8 +1046,29 @@ function startCodexRolloutEventBridge(input) {
             if (!parsed)
                 continue;
             const rolloutFile = path.relative(input.codexHome, file);
+            if (firstRolloutEventAtMs === null) {
+                firstRolloutEventAtMs = Date.now();
+                const payload = isRecord(parsed.payload) ? parsed.payload : {};
+                await input.emit('codex.rollout.first_event_seen', {
+                    durationMs: firstRolloutEventAtMs - input.startedAtMs,
+                    sinceHermesStartMs: firstRolloutEventAtMs - input.startedAtMs,
+                    rolloutFile,
+                    rolloutType: typeof parsed.type === 'string' ? parsed.type : '',
+                    payloadType: typeof payload.type === 'string' ? payload.type : '',
+                    rolloutTimestamp: typeof parsed.timestamp === 'string' ? parsed.timestamp : null,
+                });
+            }
             const events = projectCodexRolloutEvents(parsed, rolloutFile);
             for (const event of events) {
+                if (firstProjectedEventAtMs === null) {
+                    firstProjectedEventAtMs = Date.now();
+                    await input.emit('codex.rollout.first_projected_event', {
+                        durationMs: firstProjectedEventAtMs - input.startedAtMs,
+                        sinceHermesStartMs: firstProjectedEventAtMs - input.startedAtMs,
+                        projectedType: event.type,
+                        rolloutFile,
+                    });
+                }
                 await input.emit(event.type, event.payload);
             }
         }
