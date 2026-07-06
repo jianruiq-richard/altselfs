@@ -624,6 +624,7 @@ export class HermesSourceRuntime {
           ALTSELFS_USER_ID: paths.userId,
           ALTSELFS_THREAD_ID: paths.threadId,
           ALTSELFS_WORKSPACE: paths.workspace,
+          ALTSELFS_CODEX_TIMING: '1',
           ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: this.config.disableLocalEnvironmentForGeneral ? '1' : '0',
           ALTSELFS_CODEX_PERSONALITY: 'pragmatic',
           ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL: this.config.sandboxExecEnabled ? '1' : '0',
@@ -666,6 +667,7 @@ export class HermesSourceRuntime {
       let stderr = '';
       let firstStdoutAtMs: number | null = null;
       let firstStderrAtMs: number | null = null;
+      let stderrTimingBuffer = '';
       const timeout = setTimeout(() => {
         emitTiming('hermes.process.timeout', {
           durationMs: Date.now() - spawnedAtMs,
@@ -688,15 +690,17 @@ export class HermesSourceRuntime {
         stdout += chunk;
       });
       child.stderr.on('data', (chunk) => {
+        const chunkText = String(chunk);
         if (firstStderrAtMs === null) {
           firstStderrAtMs = Date.now();
           emitTiming('hermes.process.first_stderr', {
             sinceSpawnMs: firstStderrAtMs - spawnedAtMs,
-            bytes: Buffer.byteLength(chunk, 'utf8'),
-            preview: truncate(chunk, 2000),
+            bytes: Buffer.byteLength(chunkText, 'utf8'),
+            preview: truncate(chunkText, 2000),
           });
         }
-        stderr += chunk;
+        stderr += chunkText;
+        stderrTimingBuffer = emitCodexTimingFromStderrChunk(stderrTimingBuffer, chunkText, emitTiming);
       });
       child.on('error', (error) => {
         unregisterActiveRun(paths.runId);
@@ -710,6 +714,7 @@ export class HermesSourceRuntime {
       child.on('close', (code) => {
         unregisterActiveRun(paths.runId);
         clearTimeout(timeout);
+        stderrTimingBuffer = flushCodexTimingFromStderrBuffer(stderrTimingBuffer, emitTiming);
         emitTiming('hermes.process.closed', {
           code,
           durationMs: Date.now() - spawnedAtMs,
@@ -1273,6 +1278,49 @@ async function readFileRange(file: string, start: number, end: number) {
   } finally {
     await handle.close();
   }
+}
+
+const CODEX_TIMING_STDERR_PREFIX = 'ALTSELFS_CODEX_TIMING ';
+
+function emitCodexTimingFromStderrChunk(
+  buffer: string,
+  chunk: string,
+  emitTiming: (type: string, payload: Record<string, unknown>) => void
+) {
+  const combined = buffer + chunk;
+  const lines = combined.split(/\r?\n/);
+  const nextBuffer = lines.pop() || '';
+  for (const line of lines) {
+    emitCodexTimingFromStderrLine(line, emitTiming);
+  }
+  return nextBuffer;
+}
+
+function flushCodexTimingFromStderrBuffer(
+  buffer: string,
+  emitTiming: (type: string, payload: Record<string, unknown>) => void
+) {
+  if (buffer.trim()) {
+    emitCodexTimingFromStderrLine(buffer, emitTiming);
+  }
+  return '';
+}
+
+function emitCodexTimingFromStderrLine(
+  line: string,
+  emitTiming: (type: string, payload: Record<string, unknown>) => void
+) {
+  const prefixIndex = line.indexOf(CODEX_TIMING_STDERR_PREFIX);
+  if (prefixIndex < 0) return;
+
+  const rawPayload = line.slice(prefixIndex + CODEX_TIMING_STDERR_PREFIX.length).trim();
+  const parsed = parseJsonValue(rawPayload);
+  if (!isRecord(parsed)) return;
+
+  emitTiming('codex.timing', {
+    source: 'stderr',
+    ...safeJson(parsed),
+  });
 }
 
 function projectCodexRolloutEvents(parsed: Record<string, unknown>, rolloutFile: string) {
