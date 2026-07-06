@@ -9,6 +9,8 @@ import { runSandboxExecTool } from './tools/sandbox-exec.js';
 import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
+const ASYNC_TURN_POLL_INTERVAL_MS = 3000;
+const backgroundTurnRunIds = new Set();
 export function createHttpServer(agent, config, memoryReviewQueue) {
     return http.createServer(async (req, res) => {
         try {
@@ -147,13 +149,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 const body = await readJsonBody(req);
                 if (!isRecord(body))
                     return json(res, 400, { error: 'JSON body must be an object' });
-                const turnRequest = {
-                    userId: String(body.userId || ''),
-                    threadId: typeof body.threadId === 'string' ? body.threadId : undefined,
-                    message: String(body.message || ''),
-                    allowedAgents: Array.isArray(body.allowedAgents) ? body.allowedAgents.map(String) : undefined,
-                    metadata: isRecord(body.metadata) ? body.metadata : undefined,
-                };
+                const turnRequest = parseTurnStartRequest(body);
                 if (url.searchParams.get('stream') === '1') {
                     return streamTurnStart(res, agent, turnRequest, config);
                 }
@@ -214,6 +210,37 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     throw error;
                 }
             }
+            if (req.method === 'POST' && url.pathname === '/v1/turns/start-async') {
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                const turnRequest = parseTurnStartRequest(body);
+                const persisted = await persistAgentTurnInput(config, turnRequest);
+                const startedEvent = {
+                    type: 'agent_context.async_turn_started',
+                    timestamp: new Date().toISOString(),
+                    payload: {
+                        runId: persisted.runId,
+                        userMessageId: persisted.userMessageId,
+                        warnings: persisted.warnings,
+                    },
+                };
+                await persistAgentRunEvent(config, { runId: persisted.runId, event: startedEvent, index: 0 }).catch(() => null);
+                backgroundTurnRunIds.add(persisted.runId);
+                setImmediate(() => {
+                    void executePersistedTurn(agent, config, turnRequest, persisted, 1).finally(() => {
+                        backgroundTurnRunIds.delete(persisted.runId);
+                    });
+                });
+                return json(res, 202, {
+                    runId: persisted.runId,
+                    threadId: turnRequest.threadId || null,
+                    status: 'RUNNING',
+                    pollIntervalMs: ASYNC_TURN_POLL_INTERVAL_MS,
+                });
+            }
             if (req.method === 'POST' && url.pathname === '/openrouter-responses-proxy/v1/responses') {
                 if (!config)
                     return json(res, 500, { error: 'proxy config missing' });
@@ -230,6 +257,65 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
             });
         }
     });
+}
+function parseTurnStartRequest(body) {
+    return {
+        userId: String(body.userId || ''),
+        threadId: typeof body.threadId === 'string' ? body.threadId : undefined,
+        message: String(body.message || ''),
+        allowedAgents: Array.isArray(body.allowedAgents) ? body.allowedAgents.map(String) : undefined,
+        metadata: isRecord(body.metadata) ? body.metadata : undefined,
+    };
+}
+async function executePersistedTurn(agent, config, turnRequest, persisted, eventIndexStart = 0) {
+    let runHeartbeat = null;
+    let eventIndex = eventIndexStart;
+    try {
+        runHeartbeat = setInterval(() => {
+            void touchAgentRunHeartbeat(config, {
+                threadId: turnRequest.threadId || '',
+                runId: persisted.runId,
+            }).catch(() => null);
+        }, 15_000);
+        const result = await agent.startTurn({
+            ...turnRequest,
+            metadata: { ...(turnRequest.metadata || {}), runId: persisted.runId },
+            onEvent: async (event) => {
+                const index = eventIndex;
+                eventIndex += 1;
+                await persistAgentRunEvent(config, { runId: persisted.runId, event, index }).catch(() => null);
+            },
+        });
+        await persistAgentTurnSuccess(config, persisted, {
+            threadId: result.threadId,
+            route: result.route,
+            reply: result.reply,
+            events: result.events,
+            raw: 'raw' in result ? result.raw : undefined,
+        });
+    }
+    catch (error) {
+        if (isAgentRunCancelledError(error)) {
+            await persistAgentTurnCancelled(config, {
+                runId: persisted.runId,
+                threadId: turnRequest.threadId,
+                investorId: persisted.investorId,
+                userId: turnRequest.userId,
+                reason: 'cancelled by user',
+            }).catch(() => null);
+            return;
+        }
+        const detail = error instanceof Error ? error.message : String(error);
+        await persistAgentTurnError(config, persisted, {
+            threadId: turnRequest.threadId,
+            error: detail,
+        }).catch(() => null);
+        console.warn(`[personal-agent-server] async turn failed run=${persisted.runId}: ${detail}`);
+    }
+    finally {
+        if (runHeartbeat)
+            clearInterval(runHeartbeat);
+    }
 }
 function streamTurnStart(res, agent, request, config) {
     let closed = false;

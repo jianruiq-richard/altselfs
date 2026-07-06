@@ -301,15 +301,6 @@ function formatPlannerPayload(payload: unknown) {
   }
 }
 
-function parseNdjsonLine(line: string) {
-  if (!line.trim()) return null;
-  try {
-    return JSON.parse(line) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
 function getEventPayload(event: unknown) {
   if (!isRecord(event)) return {};
   return isRecord(event.payload) ? event.payload : {};
@@ -555,10 +546,10 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     };
   }
 
-  if (type === 'agent_context.input_persisted') {
+  if (type === 'agent_context.input_persisted' || type === 'agent_context.async_turn_started') {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '创建任务',
+      title: type === 'agent_context.async_turn_started' ? '后台任务已创建' : '创建任务',
       detail: typeof payload.runId === 'string' ? `runId: ${payload.runId}` : '已记录本轮输入',
       status: 'completed',
       timestamp,
@@ -750,18 +741,6 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     timestamp,
     method: type,
   };
-}
-
-function extractAssistantDelta(envelope: Record<string, unknown>) {
-  if (String(envelope.type || '') !== 'event' || !isRecord(envelope.event)) return '';
-  const payload = getEventPayload(envelope.event);
-  const projected = isRecord(payload.projected) ? payload.projected : {};
-  const delta = projected.assistantDelta;
-  if (typeof delta === 'string') return delta;
-  const notification = getCodexNotification(envelope);
-  if (!notification || notification.method !== 'item/agentMessage/delta') return '';
-  const params = isRecord(notification.params) ? notification.params : {};
-  return typeof params.delta === 'string' ? params.delta : '';
 }
 
 function sleep(ms: number) {
@@ -1348,6 +1327,7 @@ export default function InvestorAgentChatPage() {
         : isRecord(data.thread) && typeof data.thread.status === 'string'
           ? data.thread.status
           : '';
+      const activeRunStatus = typeof activeRun.status === 'string' ? activeRun.status : '';
       const nextRunId = typeof sandbox.active_run_id === 'string'
         ? sandbox.active_run_id
         : typeof activeRun.id === 'string'
@@ -1375,7 +1355,7 @@ export default function InvestorAgentChatPage() {
         })
         .filter(Boolean) as CodexStreamItem[];
 
-      if (status === 'ACTIVE' && nextRunId) {
+      if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING') && nextRunId) {
         activeRunIdRef.current = nextRunId;
         setActiveRunId(nextRunId);
         setSending(true);
@@ -1520,7 +1500,7 @@ export default function InvestorAgentChatPage() {
     if (!threadId || !activeRunId) return;
     const timer = window.setInterval(() => {
       void refreshPersonalAgentStatus(threadId);
-    }, 10_000);
+    }, 3000);
     return () => window.clearInterval(timer);
   }, [activeRunId, refreshPersonalAgentStatus, threadId]);
 
@@ -1796,15 +1776,19 @@ export default function InvestorAgentChatPage() {
             codexModel,
           });
 
-      const res = await fetch('/api/investor/personal-agent?stream=1', {
+      const res = await fetch('/api/investor/personal-agent?async=1', {
         method: 'POST',
         ...(hasAttachments ? {} : { headers: { 'Content-Type': 'application/json' } }),
         body: requestBody,
         credentials: 'same-origin',
       });
 
-      if (!res.ok || !res.body) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as PersonalAgentFinalData & {
+        status?: string;
+        pollIntervalMs?: number;
+        hasMore?: boolean;
+      };
+      if (!res.ok) {
         setError(typeof data.error === 'string' ? data.error : '发送失败');
         setMessages(nextMessages);
         setInput(content);
@@ -1812,161 +1796,36 @@ export default function InvestorAgentChatPage() {
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let finalData: PersonalAgentFinalData | null = null;
-      let finalStatus = 200;
-      const activityStartedAt = Date.now();
-      let collectedCodexItems: CodexStreamItem[] = [];
-
-      const appendCodexItem = (item: CodexStreamItem | null) => {
-        if (!item) return;
-        const existingIndex = collectedCodexItems.findIndex((entry) => entry.id === item.id);
-        if (existingIndex >= 0) {
-          collectedCodexItems = [
-            ...collectedCodexItems.slice(0, existingIndex),
-            { ...collectedCodexItems[existingIndex], ...item },
-            ...collectedCodexItems.slice(existingIndex + 1),
-          ].slice(-18);
-        } else {
-          collectedCodexItems = [...collectedCodexItems, item].slice(-18);
-        }
-        setCodexStreamItems((prev) => {
-          const existingIndex = prev.findIndex((entry) => entry.id === item.id);
-          if (existingIndex >= 0) {
-            const next = [...prev];
-            next[existingIndex] = { ...next[existingIndex], ...item };
-            return next.slice(-18);
-          }
-          return [...prev, item].slice(-18);
-        });
-      };
-
-      const handleEnvelope = (envelope: Record<string, unknown>) => {
-        if (envelope.type === 'heartbeat') return;
-        if (envelope.type === 'run') {
-          const runId = typeof envelope.runId === 'string' ? envelope.runId : '';
-          if (runId) {
-            activeRunIdRef.current = runId;
-            liveStreamRunIdRef.current = runId;
-            setActiveRunId(runId);
-          }
-          return;
-        }
-        if (envelope.type === 'final') {
-          finalStatus = typeof envelope.status === 'number' ? envelope.status : 200;
-          finalData = isRecord(envelope.data) ? (envelope.data as PersonalAgentFinalData) : null;
-          return;
-        }
-        const index = codexEventIndexRef.current;
-        codexEventIndexRef.current += 1;
-        const delta = extractAssistantDelta(envelope);
-        if (delta) setAssistantDraft((prev) => `${prev}${delta}`);
-        const event = isRecord(envelope.event) ? envelope.event : null;
-        const eventPayload = isRecord(event?.payload) ? event.payload : null;
-        const eventRunId = typeof eventPayload?.runId === 'string' ? eventPayload.runId : '';
-        if (eventRunId && event?.type === 'agent_context.input_persisted') {
-          activeRunIdRef.current = eventRunId;
-          setActiveRunId(eventRunId);
-        }
-        appendCodexItem(projectCodexStreamItem(envelope, index));
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          const parsed = parseNdjsonLine(line);
-          if (parsed) handleEnvelope(parsed);
-        }
-      }
-
-      if (buffer.trim()) {
-        const parsed = parseNdjsonLine(buffer);
-        if (parsed) handleEnvelope(parsed);
-      }
-
-      const receivedFinalData = finalData as PersonalAgentFinalData | null;
-
-      if (receivedFinalData?.cancelled) {
-        const finalErrorMessage = receivedFinalData.error || '已停止本次执行。';
-        setError(finalErrorMessage);
+      const asyncThreadId = typeof data.threadId === 'string' ? data.threadId : threadId;
+      const runId = typeof data.runId === 'string' ? data.runId : '';
+      if (!runId) {
+        setError('后台任务启动失败：未返回 runId');
         setMessages(nextMessages);
-        setAssistantDraft('');
-        setCodexStreamItems((prev) => [
-          ...prev,
-          {
-            id: `final-cancelled-${Date.now()}`,
-            title: '本轮已停止',
-            detail: finalErrorMessage,
-            status: 'completed' as const,
-            timestamp: new Date().toISOString(),
-          },
-        ].slice(-18));
-        return;
-      }
-
-      if (!receivedFinalData) {
-        const recoveryResult = await recoverPersonalAgentStreamState(threadId, displayContent);
-        if (recoveryResult === 'active') {
-          preserveRunStateAfterSend = true;
-          return;
-        }
-        if (recoveryResult === 'recovered') return;
-        if (recoveryResult === 'saved') {
-          setError('网络连接中断，本轮消息已保存；请稍后刷新当前会话查看结果。');
-          return;
-        }
-      }
-
-      if (!receivedFinalData || finalStatus >= 400) {
-        const finalError = (receivedFinalData as { error?: unknown } | null)?.error;
-        const finalErrorMessage = typeof finalError === 'string' ? finalError : '发送失败';
-        setError(finalErrorMessage);
-        if (Array.isArray(receivedFinalData?.messages) && receivedFinalData.messages.length >= nextMessages.length) {
-          setMessages(receivedFinalData.messages);
-        } else {
-          setMessages(nextMessages);
-        }
         setInput(content);
         setAttachments(requestAttachments);
-        setAssistantDraft('');
-        setCodexStreamItems((prev) => [
-          ...prev,
-          {
-            id: `final-error-${Date.now()}`,
-            title: '执行失败',
-            detail: finalErrorMessage,
-            status: 'error' as const,
-            timestamp: new Date().toISOString(),
-          },
-        ]);
         return;
       }
 
-      const completedData = receivedFinalData;
+      if (asyncThreadId) setThreadId(asyncThreadId);
+      if (Array.isArray(data.sessions)) setSessions(data.sessions);
+      if (typeof data.hasMore === 'boolean') setHasMoreMessages(data.hasMore);
+      if (Array.isArray(data.messages) && data.messages.length >= nextMessages.length) {
+        setMessages(data.messages);
+      }
+      activeRunIdRef.current = runId;
       liveStreamRunIdRef.current = null;
-      setThreadId(typeof completedData.threadId === 'string' ? completedData.threadId : threadId);
-      if (Array.isArray(completedData.sessions)) {
-        setSessions(completedData.sessions);
-      }
-      if (Array.isArray(completedData.messages) && completedData.messages.length >= nextMessages.length) {
-        setMessages(completedData.messages);
-      } else if (typeof completedData.reply === 'string') {
-        setMessages([...nextMessages, { role: 'assistant', content: completedData.reply }]);
-      }
-      setCompletedCodexActivity({
-        id: completedData.runId || `activity-${Date.now()}`,
-        durationMs: Math.max(0, Date.now() - activityStartedAt),
-        items: collectedCodexItems,
-        completedAt: new Date().toISOString(),
-      });
-      setAssistantDraft('');
-      setCodexStreamItems([]);
+      setActiveRunId(runId);
+      setCodexStreamItems([
+        {
+          id: `async-run-${runId}`,
+          title: '后台任务已启动',
+          detail: `runId: ${runId}`,
+          status: 'running' as const,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      preserveRunStateAfterSend = true;
+      void refreshPersonalAgentStatus(asyncThreadId);
     } catch (err) {
       const recoveryResult = await recoverPersonalAgentStreamState(threadId, displayContent);
       if (recoveryResult === 'active') {

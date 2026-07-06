@@ -330,6 +330,93 @@ function displayMessages(messages: ClientMessage[]) {
   }));
 }
 
+function storedRunEventToAgentEvent(row: unknown) {
+  if (!isRecord(row)) return null;
+  const payload = isRecord(row.payload) ? row.payload : {};
+  return {
+    type: typeof row.type === 'string' ? row.type : 'agent_context.event',
+    timestamp: typeof payload.timestamp === 'string'
+      ? payload.timestamp
+      : typeof row.created_at === 'string'
+        ? row.created_at
+        : new Date().toISOString(),
+    payload: isRecord(payload.payload) ? payload.payload : {},
+  };
+}
+
+function normalizeTerminalRun(value: unknown) {
+  if (!isRecord(value)) return null;
+  const status = typeof value.status === 'string' ? value.status : '';
+  if (!['SUCCESS', 'ERROR', 'CANCELLED'].includes(status)) return null;
+  const id = typeof value.id === 'string' ? value.id : '';
+  if (!id) return null;
+  return {
+    id,
+    status,
+    route: typeof value.route === 'string' ? value.route : undefined,
+    result: isRecord(value.result) ? value.result : {},
+    error: typeof value.error === 'string' ? value.error : '',
+  };
+}
+
+async function syncTerminalPersonalAgentRun(params: {
+  threadId: string;
+  statusPayload: Record<string, unknown>;
+}) {
+  const activeRun = normalizeTerminalRun(params.statusPayload.activeRun);
+  const recentRuns = Array.isArray(params.statusPayload.recentRuns)
+    ? params.statusPayload.recentRuns.map(normalizeTerminalRun).filter(Boolean)
+    : [];
+  const terminalRun = activeRun || recentRuns[0];
+  if (!terminalRun) return false;
+
+  const reply = terminalRun.status === 'SUCCESS'
+    ? (typeof terminalRun.result.reply === 'string' && terminalRun.result.reply.trim()
+        ? terminalRun.result.reply.trim()
+        : '个人 Agent 已完成本轮处理，但没有返回可展示的回复。')
+    : terminalRun.status === 'CANCELLED'
+      ? '已停止本次执行。'
+      : `执行失败：${terminalRun.error || '发送失败'}`;
+
+  const existingMessages = await prisma.agentMessage.findMany({
+    where: {
+      threadId: params.threadId,
+      role: 'ASSISTANT',
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 30,
+  });
+  const alreadySynced = existingMessages.some((message) => {
+    const meta = isRecord(message.meta) ? message.meta : {};
+    return meta.runId === terminalRun.id || message.content.trim() === reply;
+  });
+  if (alreadySynced) return false;
+
+  await appendThreadMessage({
+    threadId: params.threadId,
+    role: 'ASSISTANT',
+    content: reply,
+    meta: {
+      route: terminalRun.route || (typeof terminalRun.result.route === 'string' ? terminalRun.result.route : undefined),
+      raw: terminalRun.result.raw ?? null,
+      runId: terminalRun.id,
+      error: terminalRun.status === 'ERROR' ? terminalRun.error || '发送失败' : undefined,
+      cancelled: terminalRun.status === 'CANCELLED' || undefined,
+      source: 'personal-agent-async',
+    },
+  });
+
+  const recentEvents = Array.isArray(params.statusPayload.recentEvents)
+    ? params.statusPayload.recentEvents.map(storedRunEventToAgentEvent).filter(Boolean)
+    : [];
+  await persistCompetitorDataToolAudits({
+    threadId: params.threadId,
+    messageId: null,
+    events: recentEvents,
+  });
+  return true;
+}
+
 async function getEnabledInfoSources(investorId: string) {
   const providerMap: Record<string, string> = {
     SIMILARWEB_API1: 'similarweb_api1',
@@ -414,11 +501,26 @@ export async function GET(req: NextRequest) {
           { status: 502 }
         );
       }
+      const syncedTerminalRun = await syncTerminalPersonalAgentRun({
+        threadId,
+        statusPayload,
+      }).catch(() => false);
+      const nextThreadPage = syncedTerminalRun
+        ? await getThreadMessagesPage({
+            investorId: investor.id,
+            agentType: PERSONAL_AGENT_TYPE,
+            threadId,
+            limit: 60,
+          }).catch(() => null)
+        : null;
+      const nextMessages = nextThreadPage
+        ? toClientMessages(nextThreadPage.messages)
+        : statusMessages;
       return NextResponse.json({
         threadId,
         ...statusPayload,
-        messages: statusMessages,
-        hasMore: statusHasMore,
+        messages: nextMessages,
+        hasMore: nextThreadPage ? nextThreadPage.hasMore : statusHasMore,
         ...(sessions ? { sessions } : {}),
       });
     } catch (error) {
@@ -536,6 +638,51 @@ export async function POST(req: NextRequest) {
       codexModel,
     },
   };
+
+  if (req.nextUrl.searchParams.get('async') === '1') {
+    let result: PersonalAgentResponse & { status?: string; pollIntervalMs?: number };
+    try {
+      const response = await fetch(`${getPersonalAgentServerUrl()}/v1/turns/start-async`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        cache: 'no-store',
+      });
+      result = (await response.json().catch(() => ({}))) as PersonalAgentResponse & { status?: string; pollIntervalMs?: number };
+      if (!response.ok) {
+        return NextResponse.json(
+          { error: result.error || `personal-agent-server HTTP ${response.status}` },
+          { status: 502 }
+        );
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return NextResponse.json({ error: `个人 Agent 服务不可用：${detail}` }, { status: 502 });
+    }
+
+    const [page, sessions] = await Promise.all([
+      getThreadMessagesPage({
+        investorId: investor.id,
+        agentType: PERSONAL_AGENT_TYPE,
+        threadId: thread.id,
+        limit: 60,
+      }),
+      listAgentThreads(investor.id, PERSONAL_AGENT_TYPE),
+    ]);
+
+    return NextResponse.json(
+      {
+        threadId: thread.id,
+        runId: result.runId,
+        status: result.status || 'RUNNING',
+        pollIntervalMs: typeof result.pollIntervalMs === 'number' ? result.pollIntervalMs : 3000,
+        messages: page ? toClientMessages(page.messages) : displayMessages([...messages]),
+        hasMore: page ? page.hasMore : false,
+        sessions,
+      },
+      { status: 202 }
+    );
+  }
 
   if (req.nextUrl.searchParams.get('stream') === '1') {
     return streamPersonalAgentTurn({
