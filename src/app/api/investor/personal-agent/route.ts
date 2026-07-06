@@ -64,6 +64,7 @@ type ParsedPostBody = {
   messages: ClientMessage[];
   userMessage: string;
   displayUserMessage: string;
+  clientRequestId?: string | null;
   codexModel: 'deepseek/deepseek-v3.2' | 'gpt-5.5';
   attachments: UploadedAttachment[];
 };
@@ -80,6 +81,12 @@ function normalizeCodexModel(value: unknown): ParsedPostBody['codexModel'] {
     return 'deepseek/deepseek-v3.2';
   }
   return 'deepseek/deepseek-v3.2';
+}
+
+function normalizeClientRequestId(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return /^[a-zA-Z0-9._:-]{8,160}$/.test(trimmed) ? trimmed : null;
 }
 
 function getPersonalAgentServerUrl() {
@@ -249,6 +256,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       displayMessage?: unknown;
       messages?: unknown;
       codexModel?: unknown;
+      clientRequestId?: unknown;
     };
     const messages = normalizeMessages(body.messages);
     const explicitMessage = typeof body.message === 'string' ? body.message.trim() : '';
@@ -259,6 +267,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       messages: userMessage ? [{ role: 'user', content: userMessage }] : messages,
       userMessage,
       displayUserMessage: displayMessage || userMessage,
+      clientRequestId: normalizeClientRequestId(body.clientRequestId),
       codexModel: normalizeCodexModel(body.codexModel),
       attachments: [],
     };
@@ -302,6 +311,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     messages: [{ role: 'user', content: userMessage }],
     userMessage,
     displayUserMessage,
+    clientRequestId: normalizeClientRequestId(getStringFormValue(form.get('clientRequestId'))),
     codexModel: normalizeCodexModel(getStringFormValue(form.get('codexModel'))),
     attachments,
   };
@@ -669,18 +679,36 @@ export async function POST(req: NextRequest) {
     threadId: parsedBody.threadId || null,
   });
 
-  const userMessageMeta = attachments.length > 0
-    ? {
-        attachments: getAttachmentMetadata(attachments),
-        storedInAgentWorkspace: true,
-      }
-    : undefined;
+  const persistedUserContent = displayUserMessage || userMessage;
+  const userMessageMeta = {
+    ...(parsedBody.clientRequestId ? { clientRequestId: parsedBody.clientRequestId } : {}),
+    ...(attachments.length > 0
+      ? {
+          attachments: getAttachmentMetadata(attachments),
+          storedInAgentWorkspace: true,
+        }
+      : {}),
+  };
+  const existingUserThreadMessage = parsedBody.clientRequestId
+    ? await prisma.agentMessage.findFirst({
+        where: {
+          threadId: thread.id,
+          role: 'USER',
+          content: persistedUserContent,
+          meta: {
+            path: ['clientRequestId'],
+            equals: parsedBody.clientRequestId,
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+    : null;
 
-  const userThreadMessage = await appendThreadMessage({
+  const userThreadMessage = existingUserThreadMessage || await appendThreadMessage({
     threadId: thread.id,
     role: 'USER',
-    content: displayUserMessage || userMessage,
-    meta: userMessageMeta,
+    content: persistedUserContent,
+    meta: Object.keys(userMessageMeta).length > 0 ? userMessageMeta : undefined,
   });
   const enabledInfoSources = await getEnabledInfoSources(investor.id);
 

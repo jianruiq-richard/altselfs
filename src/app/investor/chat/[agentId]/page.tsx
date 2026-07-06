@@ -761,6 +761,13 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function createClientRequestId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 function getRunPollErrorMessage(data: ExecutiveRunPollResult, status: number) {
   const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : '查询任务状态失败';
   return `查询任务状态失败（HTTP ${status}）：${detail}`;
@@ -1708,7 +1715,7 @@ export default function InvestorAgentChatPage() {
       {
         id: `stream-recovery-${Date.now()}`,
         title: '连接中断，正在恢复',
-        detail: '后台任务可能仍在执行，正在同步最新状态',
+        detail: '正在确认后台任务是否已创建',
         status: 'running' as const,
         timestamp: new Date().toISOString(),
       },
@@ -1775,33 +1782,60 @@ export default function InvestorAgentChatPage() {
     setActiveRunId(null);
     requestedStopRunIdRef.current = null;
     let preserveRunStateAfterSend = false;
+    const clientRequestId = createClientRequestId();
 
     try {
-      const requestBody = hasAttachments
-        ? (() => {
+      const buildRequestBody = () => (
+        hasAttachments
+          ? (() => {
           const formData = new FormData();
           if (threadId) formData.append('threadId', threadId);
           formData.append('message', content);
           formData.append('displayMessage', displayContent);
           formData.append('codexModel', codexModel);
+          formData.append('clientRequestId', clientRequestId);
           requestAttachments.forEach((attachment) => {
             formData.append('attachments', attachment.file, attachment.name);
           });
           return formData;
         })()
-        : JSON.stringify({
+          : JSON.stringify({
             threadId,
             message: content,
             displayMessage: displayContent,
             codexModel,
-          });
+            clientRequestId,
+          })
+      );
 
-      const res = await fetch('/api/investor/personal-agent?async=1', {
-        method: 'POST',
-        ...(hasAttachments ? {} : { headers: { 'Content-Type': 'application/json' } }),
-        body: requestBody,
-        credentials: 'same-origin',
-      });
+      let res: Response | null = null;
+      let lastStartError: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          res = await fetch('/api/investor/personal-agent?async=1', {
+            method: 'POST',
+            ...(hasAttachments ? {} : { headers: { 'Content-Type': 'application/json' } }),
+            body: buildRequestBody(),
+            credentials: 'same-origin',
+          });
+          break;
+        } catch (err) {
+          lastStartError = err;
+          if (attempt >= 2) break;
+          setCodexStreamItems((prev) => [
+            ...prev,
+            {
+              id: `personal-agent-start-retry-${clientRequestId}-${attempt}`,
+              title: '创建任务连接中断，正在重试',
+              detail: `第 ${attempt + 2} 次尝试`,
+              status: 'running' as const,
+              timestamp: new Date().toISOString(),
+            },
+          ].slice(-18));
+          await sleep(600 + attempt * 900);
+        }
+      }
+      if (!res) throw lastStartError || new Error('Failed to fetch');
 
       const data = (await res.json().catch(() => ({}))) as PersonalAgentFinalData & {
         status?: string;
