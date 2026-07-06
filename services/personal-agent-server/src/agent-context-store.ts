@@ -288,11 +288,11 @@ export async function claimNextQueuedAgentTurn(
       'and (r.next_attempt_at is null or r.next_attempt_at <= now())',
       'and (select count(*) from agent_context_runs g where g.status = $2) < $3',
       'and (',
-      '  coalesce(r.model_provider, $12) <> $4',
+      '  coalesce(r.model_provider, $11) <> $4',
       '  or (select count(*) from agent_context_runs o where o.status = $2 and o.model_provider = $4) < $5',
       ')',
       'and (',
-      '  coalesce(r.model_provider, $12) <> $6',
+      '  coalesce(r.model_provider, $11) <> $6',
       '  or (select count(*) from agent_context_runs o where o.status = $2 and o.model_provider = $6) < $7',
       ')',
       'and (',
@@ -336,7 +336,6 @@ export async function claimNextQueuedAgentTurn(
       Math.max(0, input.limits.maxPerUser),
       Math.max(0, input.limits.maxPerThread),
       Math.max(1_000, input.timeoutMs),
-      'QUEUED',
       '',
     ]
   );
