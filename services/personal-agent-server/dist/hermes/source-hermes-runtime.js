@@ -525,6 +525,7 @@ export class HermesSourceRuntime {
                     ALTSELFS_USER_ID: paths.userId,
                     ALTSELFS_THREAD_ID: paths.threadId,
                     ALTSELFS_WORKSPACE: paths.workspace,
+                    ALTSELFS_HERMES_TIMING: '1',
                     ALTSELFS_CODEX_TIMING: '1',
                     ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: this.config.disableLocalEnvironmentForGeneral ? '1' : '0',
                     ALTSELFS_CODEX_PERSONALITY: 'pragmatic',
@@ -597,7 +598,7 @@ export class HermesSourceRuntime {
                     });
                 }
                 stderr += chunkText;
-                stderrTimingBuffer = emitCodexTimingFromStderrChunk(stderrTimingBuffer, chunkText, emitTiming);
+                stderrTimingBuffer = emitRuntimeTimingFromStderrChunk(stderrTimingBuffer, chunkText, emitTiming);
             });
             child.on('error', (error) => {
                 unregisterActiveRun(paths.runId);
@@ -611,7 +612,7 @@ export class HermesSourceRuntime {
             child.on('close', (code) => {
                 unregisterActiveRun(paths.runId);
                 clearTimeout(timeout);
-                stderrTimingBuffer = flushCodexTimingFromStderrBuffer(stderrTimingBuffer, emitTiming);
+                stderrTimingBuffer = flushRuntimeTimingFromStderrBuffer(stderrTimingBuffer, emitTiming);
                 emitTiming('hermes.process.closed', {
                     code,
                     durationMs: Date.now() - spawnedAtMs,
@@ -1112,34 +1113,40 @@ async function readFileRange(file, start, end) {
         await handle.close();
     }
 }
-const CODEX_TIMING_STDERR_PREFIX = 'ALTSELFS_CODEX_TIMING ';
-function emitCodexTimingFromStderrChunk(buffer, chunk, emitTiming) {
+const STDERR_TIMING_PREFIXES = [
+    { prefix: 'ALTSELFS_CODEX_TIMING ', eventType: 'codex.timing', source: 'stderr' },
+    { prefix: 'ALTSELFS_HERMES_TIMING ', eventType: 'hermes.timing', source: 'stderr' },
+];
+function emitRuntimeTimingFromStderrChunk(buffer, chunk, emitTiming) {
     const combined = buffer + chunk;
     const lines = combined.split(/\r?\n/);
     const nextBuffer = lines.pop() || '';
     for (const line of lines) {
-        emitCodexTimingFromStderrLine(line, emitTiming);
+        emitRuntimeTimingFromStderrLine(line, emitTiming);
     }
     return nextBuffer;
 }
-function flushCodexTimingFromStderrBuffer(buffer, emitTiming) {
+function flushRuntimeTimingFromStderrBuffer(buffer, emitTiming) {
     if (buffer.trim()) {
-        emitCodexTimingFromStderrLine(buffer, emitTiming);
+        emitRuntimeTimingFromStderrLine(buffer, emitTiming);
     }
     return '';
 }
-function emitCodexTimingFromStderrLine(line, emitTiming) {
-    const prefixIndex = line.indexOf(CODEX_TIMING_STDERR_PREFIX);
-    if (prefixIndex < 0)
+function emitRuntimeTimingFromStderrLine(line, emitTiming) {
+    for (const timingPrefix of STDERR_TIMING_PREFIXES) {
+        const prefixIndex = line.indexOf(timingPrefix.prefix);
+        if (prefixIndex < 0)
+            continue;
+        const rawPayload = line.slice(prefixIndex + timingPrefix.prefix.length).trim();
+        const parsed = parseJsonValue(rawPayload);
+        if (!isRecord(parsed))
+            return;
+        emitTiming(timingPrefix.eventType, {
+            source: timingPrefix.source,
+            ...safeJson(parsed),
+        });
         return;
-    const rawPayload = line.slice(prefixIndex + CODEX_TIMING_STDERR_PREFIX.length).trim();
-    const parsed = parseJsonValue(rawPayload);
-    if (!isRecord(parsed))
-        return;
-    emitTiming('codex.timing', {
-        source: 'stderr',
-        ...safeJson(parsed),
-    });
+    }
 }
 function projectCodexRolloutEvents(parsed, rolloutFile) {
     const payload = isRecord(parsed.payload) ? parsed.payload : {};
