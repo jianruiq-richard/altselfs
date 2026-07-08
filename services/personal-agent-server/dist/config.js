@@ -37,6 +37,15 @@ function readBoolEnv(key, fallback) {
         return fallback;
     return ['1', 'true', 'yes', 'on'].includes(raw);
 }
+function readCsvEnv(key) {
+    const raw = process.env[key]?.trim();
+    if (!raw)
+        return [];
+    return raw
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
 function readWebSearchModeEnv(key, fallback) {
     const raw = process.env[key]?.trim().toLowerCase();
     if (raw === 'live' || raw === 'cached' || raw === 'disabled')
@@ -287,6 +296,8 @@ export function loadConfig() {
         openRouterBaseUrl: readEnv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
         openRouterApiKeyEnv,
         openRouterAppTitle: readEnv('OPENROUTER_APP_TITLE', 'Altselfs Personal Agent Server'),
+        outboundProxyUrl: process.env.OUTBOUND_PROXY_URL?.trim() || undefined,
+        outboundProxyBypassHosts: readCsvEnv('OUTBOUND_PROXY_BYPASS_HOSTS'),
         codexWebSearchMode: readWebSearchModeEnv('CODEX_WEB_SEARCH_MODE', 'live'),
         webSearchProvider: readWebSearchProviderEnv('WEB_SEARCH_PROVIDER', 'auto'),
         serpApiKeyEnv: readEnv('SERPAPI_API_KEY_ENV', 'SERPAPI_API_KEY'),

@@ -1,5 +1,6 @@
 import type { ServerConfig } from '../config.js';
 import { decryptCredentialPayload, isCredentialVaultConfigured } from '../credential-vault.js';
+import { externalFetch } from '../outbound-fetch.js';
 import {
   listPersonalConnections,
   loadPersonalCredential,
@@ -173,7 +174,7 @@ async function gmailSearchMessages(config: ServerConfig, context: PersonalToolCo
   const accounts = [];
   for (const connection of connections) {
     const token = await getFreshGmailAccessToken(config, context, connection);
-    const messages = await gmailSearch(token, { query, maxResults, includeSpamTrash: args.includeSpamTrash === true });
+    const messages = await gmailSearch(config, token, { query, maxResults, includeSpamTrash: args.includeSpamTrash === true });
     accounts.push({
       account: publicConnection(connection),
       query,
@@ -194,7 +195,7 @@ async function gmailGetMessage(config: ServerConfig, context: PersonalToolContex
   if (!messageId) throw new Error('messageId is required.');
   const [connection] = await resolveGmailConnections(config, context, args, { allowAll: false });
   const token = await getFreshGmailAccessToken(config, context, connection);
-  const message = await gmailFetch<GmailMessageFull>(token, `messages/${encodeURIComponent(messageId)}?format=full`);
+  const message = await gmailFetch<GmailMessageFull>(config, token, `messages/${encodeURIComponent(messageId)}?format=full`);
   return {
     source: 'gmail',
     fetchedAt: new Date().toISOString(),
@@ -209,7 +210,7 @@ async function gmailGetThread(config: ServerConfig, context: PersonalToolContext
   const maxMessages = clampNumber(args.maxMessages, 10, 1, 20);
   const [connection] = await resolveGmailConnections(config, context, args, { allowAll: false });
   const token = await getFreshGmailAccessToken(config, context, connection);
-  const thread = await gmailFetch<GmailThreadFull>(token, `threads/${encodeURIComponent(threadId)}?format=full`);
+  const thread = await gmailFetch<GmailThreadFull>(config, token, `threads/${encodeURIComponent(threadId)}?format=full`);
   return {
     source: 'gmail',
     fetchedAt: new Date().toISOString(),
@@ -259,7 +260,7 @@ async function getFreshGmailAccessToken(config: ServerConfig, context: PersonalT
   const expiresAt = payload.expiresAt ? Date.parse(payload.expiresAt) : 0;
   if (payload.accessToken && (!expiresAt || expiresAt > Date.now() + 60_000)) return payload.accessToken;
   if (!payload.refreshToken) throw new Error(`Gmail account ${connection.externalAccountId} needs reconnect: no refresh token is available.`);
-  const refreshed = await refreshGoogleAccessToken(payload.refreshToken);
+  const refreshed = await refreshGoogleAccessToken(config, payload.refreshToken);
   const nextPayload: GmailCredentialPayload = {
     ...payload,
     accessToken: refreshed.access_token,
@@ -275,7 +276,7 @@ async function getFreshGmailAccessToken(config: ServerConfig, context: PersonalT
   return nextPayload.accessToken;
 }
 
-async function refreshGoogleAccessToken(refreshToken: string) {
+async function refreshGoogleAccessToken(config: ServerConfig, refreshToken: string) {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
   if (!clientId || !clientSecret) throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured on personal-agent-server.');
@@ -285,37 +286,37 @@ async function refreshGoogleAccessToken(refreshToken: string) {
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
   });
-  const res = await fetch('https://oauth2.googleapis.com/token', {
+  const res = await externalFetch(config, 'https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
-  });
+  }, { networkPolicy: 'proxy' });
   const data = await res.json();
   if (!res.ok) throw new Error(`Google token refresh failed: ${JSON.stringify(data)}`);
   return data as { access_token: string; expires_in?: number; scope?: string; token_type?: string };
 }
 
-async function gmailSearch(accessToken: string, input: { query: string; maxResults: number; includeSpamTrash: boolean }) {
+async function gmailSearch(config: ServerConfig, accessToken: string, input: { query: string; maxResults: number; includeSpamTrash: boolean }) {
   const params = new URLSearchParams();
   params.set('maxResults', String(input.maxResults));
   if (input.query) params.set('q', input.query);
   if (input.includeSpamTrash) params.set('includeSpamTrash', 'true');
-  const list = await gmailFetch<GmailMessageList>(accessToken, `messages?${params.toString()}`);
+  const list = await gmailFetch<GmailMessageList>(config, accessToken, `messages?${params.toString()}`);
   const ids = (list.messages || []).slice(0, input.maxResults);
   const messages = [];
   for (const item of ids) {
     const params = new URLSearchParams({ format: 'metadata' });
     for (const header of ['Subject', 'From', 'To', 'Cc', 'Date']) params.append('metadataHeaders', header);
-    const message = await gmailFetch<GmailMessageFull>(accessToken, `messages/${encodeURIComponent(item.id)}?${params.toString()}`);
+    const message = await gmailFetch<GmailMessageFull>(config, accessToken, `messages/${encodeURIComponent(item.id)}?${params.toString()}`);
     messages.push(metadataMessageDigest(message));
   }
   return messages;
 }
 
-async function gmailFetch<T>(accessToken: string, path: string): Promise<T> {
-  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, {
+async function gmailFetch<T>(config: ServerConfig, accessToken: string, path: string): Promise<T> {
+  const res = await externalFetch(config, `https://gmail.googleapis.com/gmail/v1/users/me/${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  }, { networkPolicy: 'proxy' });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Gmail API failed: ${JSON.stringify(data).slice(0, 1000)}`);
   return data as T;

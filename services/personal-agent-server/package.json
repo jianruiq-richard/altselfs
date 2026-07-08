@@ -22,7 +22,8 @@
     "docker:source-runtime-context": "node scripts/prepare-source-runtime-docker-context.mjs"
   },
   "dependencies": {
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "undici": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
