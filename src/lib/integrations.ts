@@ -111,6 +111,58 @@ export function buildGoogleAuthUrl(origin: string, state: string): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
+export function buildGoogleReadonlyAuthUrl(origin: string, state: string): string {
+  const redirectUri = `${origin}/api/investor/personal-data/gmail/callback`;
+  const clientId = getEnv('GOOGLE_CLIENT_ID');
+  const scope = [
+    'openid',
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/gmail.readonly',
+  ].join(' ');
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope,
+    access_type: 'offline',
+    prompt: 'consent',
+    state,
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+export async function exchangeGoogleReadonlyCode(origin: string, code: string) {
+  const redirectUri = `${origin}/api/investor/personal-data/gmail/callback`;
+  const body = new URLSearchParams({
+    client_id: getEnv('GOOGLE_CLIENT_ID'),
+    client_secret: getEnv('GOOGLE_CLIENT_SECRET'),
+    code,
+    grant_type: 'authorization_code',
+    redirect_uri: redirectUri,
+  });
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Google token exchange failed: ${JSON.stringify(data)}`);
+  }
+
+  return data as {
+    access_token: string;
+    expires_in: number;
+    refresh_token?: string;
+    scope: string;
+    token_type: string;
+    id_token?: string;
+  };
+}
+
 export function buildFeishuAuthUrl(origin: string, state: string): string {
   const redirectUri = getOAuthRedirectUri('feishu', origin);
   const appId = getEnv('FEISHU_APP_ID');

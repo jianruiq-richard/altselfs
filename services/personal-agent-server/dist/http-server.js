@@ -6,6 +6,7 @@ import { isRecord } from './util.js';
 import { runWebSearchTool } from './tools/web-search.js';
 import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
 import { runSandboxExecTool } from './tools/sandbox-exec.js';
+import { disablePersonalConnection, listPersonalConnections, upsertGmailOAuthConnection, } from './personal-data-store.js';
 import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
@@ -43,6 +44,60 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     return json(res, 403, { error: 'Forbidden' });
                 const jobs = memoryReviewQueue ? await memoryReviewQueue.listRecent(100) : [];
                 return json(res, 200, await buildOpsSnapshot(config, jobs));
+            }
+            if (req.method === 'GET' && url.pathname === '/internal/personal-data/accounts') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const investorId = url.searchParams.get('investorId')?.trim() || '';
+                if (!investorId)
+                    return json(res, 400, { error: 'investorId is required' });
+                const provider = url.searchParams.get('provider')?.trim().toLowerCase() || undefined;
+                const accounts = await listPersonalConnections(config, { investorId, provider });
+                return json(res, 200, { accounts: accounts.map(publicPersonalConnection) });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/personal-data/oauth-connection') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const provider = typeof body.provider === 'string' ? body.provider.trim().toLowerCase() : '';
+                if (provider !== 'gmail')
+                    return json(res, 400, { error: `Unsupported personal data provider: ${provider}` });
+                const token = isRecord(body.token) ? body.token : {};
+                const account = await upsertGmailOAuthConnection(config, {
+                    investorId: readRequiredBodyString(body, 'investorId'),
+                    userId: readRequiredBodyString(body, 'userId'),
+                    accountEmail: readRequiredBodyString(body, 'accountEmail'),
+                    accountName: typeof body.accountName === 'string' ? body.accountName : undefined,
+                    token: {
+                        accessToken: readRequiredBodyString(token, 'accessToken'),
+                        refreshToken: typeof token.refreshToken === 'string' ? token.refreshToken : undefined,
+                        tokenType: typeof token.tokenType === 'string' ? token.tokenType : undefined,
+                        scope: typeof token.scope === 'string' ? token.scope : undefined,
+                        expiresIn: typeof token.expiresIn === 'number' ? token.expiresIn : null,
+                    },
+                    profile: isRecord(body.profile) ? body.profile : undefined,
+                });
+                return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
+            }
+            if (req.method === 'DELETE' && url.pathname === '/internal/personal-data/connections') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const ok = await disablePersonalConnection(config, {
+                    investorId: readRequiredBodyString(body, 'investorId'),
+                    connectionId: readRequiredBodyString(body, 'connectionId'),
+                });
+                return json(res, ok ? 200 : 404, ok ? { ok: true } : { error: 'Connection not found' });
             }
             if (req.method === 'GET' && url.pathname === '/v1/threads/status') {
                 if (!config)
@@ -844,6 +899,23 @@ function isOpsAuthorized(req) {
     const bearer = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length).trim() : '';
     const headerToken = Array.isArray(req.headers['x-ops-token']) ? req.headers['x-ops-token'][0] : req.headers['x-ops-token'];
     return bearer === token || headerToken === token;
+}
+function readRequiredBodyString(body, key) {
+    const value = body[key];
+    if (typeof value !== 'string' || !value.trim())
+        throw new Error(`${key} is required`);
+    return value.trim();
+}
+function publicPersonalConnection(connection) {
+    return {
+        connectionId: connection.id,
+        provider: connection.provider,
+        accountEmail: connection.externalAccountId,
+        displayName: connection.displayName,
+        scopes: connection.scopes,
+        status: connection.status,
+        updatedAt: connection.updatedAt,
+    };
 }
 async function buildOpsSnapshot(config, jobs) {
     const [resources, userResources, apiAccounts] = await Promise.all([

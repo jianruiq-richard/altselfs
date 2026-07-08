@@ -7,6 +7,7 @@ import { isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { createWebSearchDynamicTool, runWebSearchTool } from '../tools/web-search.js';
 import { createRapidApiCompetitorDynamicTools, getRapidApiCompetitorToolNamesForProviders, isRapidApiCompetitorTool, runRapidApiCompetitorTool, } from '../tools/rapidapi-competitor.js';
 import { createSandboxExecDynamicTool, isSandboxExecTool, runSandboxExecTool, } from '../tools/sandbox-exec.js';
+import { createPersonalDataDynamicTools, isPersonalDataTool, runPersonalDataTool, } from '../tools/personal-data.js';
 export class CodexAgentRuntime {
     config;
     id = 'codex';
@@ -55,10 +56,11 @@ export class CodexAgentRuntime {
                 },
             });
             await client.initialize();
+            const dynamicTools = nonLocalProfile ? await this.buildDynamicTools(input, modelSelection) : undefined;
             const thread = await client.request('thread/start', {
                 cwd: workspace,
                 ...(localEnvironmentDisabled ? { environments: [] } : {}),
-                ...(nonLocalProfile ? { dynamicTools: this.buildDynamicTools(input, modelSelection) } : {}),
+                ...(nonLocalProfile ? { dynamicTools } : {}),
                 ...(modelSelection.model ? { model: modelSelection.model } : {}),
                 ...(modelSelection.provider ? { modelProvider: modelSelection.provider } : {}),
                 developerInstructions: this.buildDeveloperInstructions(input.profileId, input.metadata, modelSelection),
@@ -72,8 +74,16 @@ export class CodexAgentRuntime {
                 runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : undefined,
                 workspace,
             };
+            const personalToolContext = {
+                userId: input.userId,
+                investorId: typeof input.metadata?.investorId === 'string' && input.metadata.investorId.trim()
+                    ? input.metadata.investorId.trim()
+                    : input.userId,
+                threadId: input.threadId,
+                runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : undefined,
+            };
             client.on('serverRequest', (request) => {
-                this.handleServerRequest(client, request, emit, sandboxExecContext).then((handled) => {
+                this.handleServerRequest(client, request, emit, sandboxExecContext, personalToolContext).then((handled) => {
                     if (handled === 'web_search')
                         usedExternalSearch = true;
                 });
@@ -274,7 +284,7 @@ export class CodexAgentRuntime {
         await fs.mkdir(dir, { recursive: true });
         return dir;
     }
-    buildDynamicTools(input, selection) {
+    async buildDynamicTools(input, selection) {
         const tools = selection.provider === 'openai' ? [] : [createWebSearchDynamicTool()];
         if (this.config.sandboxExecEnabled)
             tools.push(createSandboxExecDynamicTool());
@@ -282,9 +292,11 @@ export class CodexAgentRuntime {
             const enabledCompetitorSources = getEnabledInfoSourceNames(input.metadata);
             tools.push(...createRapidApiCompetitorDynamicTools(enabledCompetitorSources));
         }
+        const investorId = typeof input.metadata?.investorId === 'string' ? input.metadata.investorId : undefined;
+        tools.push(...await createPersonalDataDynamicTools(this.config, { investorId }));
         return tools;
     }
-    async handleServerRequest(client, request, emit, sandboxExecContext) {
+    async handleServerRequest(client, request, emit, sandboxExecContext, personalToolContext) {
         const method = String(request.method || '');
         const requestId = request.id;
         void emit({ type: `codex.server_request.${method}`, timestamp: nowIso(), payload: safeJson({ request }) });
@@ -305,6 +317,14 @@ export class CodexAgentRuntime {
                 client.respond(requestId, {
                     contentItems: [{ type: 'inputText', text: resultText }],
                     success: true,
+                });
+                return 'handled';
+            }
+            if (!namespace && isPersonalDataTool(tool)) {
+                const resultText = await runPersonalDataTool(tool, params.arguments, this.config, personalToolContext);
+                client.respond(requestId, {
+                    contentItems: [{ type: 'inputText', text: resultText }],
+                    success: !resultText.includes('"error"'),
                 });
                 return 'handled';
             }
@@ -346,6 +366,7 @@ export class CodexAgentRuntime {
             selection?.provider === 'openai'
                 ? 'When public web research is needed, use the native web.run tool exposed by the OpenAI Codex provider.'
                 : 'When public web research is needed, use the registered altselfs_web_search tool.',
+            'Personal account tools such as Gmail are available only when registered for this user. Use them only when the user asks for private-channel information or the task clearly requires it; never claim to have read private accounts unless the corresponding tool was actually called.',
         ];
         if (profileId === 'codex-competitive-intelligence') {
             const enabledCompetitorSources = getEnabledInfoSourceNames(metadata);
