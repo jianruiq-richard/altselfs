@@ -8,6 +8,7 @@ import { isRecord } from './util.js';
 import type { PersonalMainAgent } from './main-agent.js';
 import { runWebSearchTool } from './tools/web-search.js';
 import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
+import { isPersonalDataTool, runPersonalDataTool } from './tools/personal-data.js';
 import { runSandboxExecTool, type SandboxExecContext } from './tools/sandbox-exec.js';
 import {
   disablePersonalConnection,
@@ -188,6 +189,27 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const toolName = typeof body.toolName === 'string' ? body.toolName.trim() : '';
         if (!isRapidApiCompetitorTool(toolName)) return json(res, 400, { error: `Unsupported competitor data tool: ${toolName}` });
         const resultText = await runRapidApiCompetitorTool(toolName, body.arguments, config);
+        return json(res, 200, {
+          contentItems: [{ type: 'inputText', text: resultText }],
+          success: !resultText.includes('"error"'),
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/tools/personal-data') {
+        if (!config) return json(res, 500, { error: 'tool bridge config missing' });
+        if (!isLoopbackRequest(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        const toolName = typeof body.toolName === 'string' ? body.toolName.trim() : '';
+        if (!isPersonalDataTool(toolName)) return json(res, 400, { error: `Unsupported personal data tool: ${toolName}` });
+        const context = isRecord(body._context) ? body._context : {};
+        const investorId = readRequiredBodyString(context, 'investorId');
+        const resultText = await runPersonalDataTool(toolName, body.arguments, config, {
+          investorId,
+          userId: typeof context.userId === 'string' && context.userId.trim() ? context.userId.trim() : investorId,
+          threadId: typeof context.threadId === 'string' && context.threadId.trim() ? context.threadId.trim() : undefined,
+          runId: typeof context.runId === 'string' && context.runId.trim() ? context.runId.trim() : undefined,
+        });
         return json(res, 200, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: !resultText.includes('"error"'),

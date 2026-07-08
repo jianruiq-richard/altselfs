@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadCleanTurnContext, upsertAgentSandboxControlPlane, } from '../agent-context-store.js';
 import { ingestWorkspaceAttachments } from '../artifact-ingestion.js';
+import { createPersonalDataDynamicTools } from '../tools/personal-data.js';
 import { LocalProfileStore } from '../profile-store.js';
 import { createRunCancelledError, isAgentRunCancelledError, isRunCancelled, registerActiveRun, unregisterActiveRun, } from '../run-control.js';
 import { calculateDirectoryBytes, prepareRuntimeDirectories, readSandboxState, resolveRuntimePaths, writeSandboxState, } from '../sandbox-runtime.js';
@@ -122,9 +123,13 @@ export class HermesSourceRuntime {
         const currentUserMessage = typeof request.metadata?.currentUserMessage === 'string' && request.metadata.currentUserMessage.trim()
             ? request.metadata.currentUserMessage.trim()
             : request.message;
+        const investorId = typeof request.metadata?.investorId === 'string' && request.metadata.investorId.trim()
+            ? request.metadata.investorId.trim()
+            : request.userId;
         const selectedAgentProfileId = typeof request.metadata?.selectedAgentProfileId === 'string' && request.metadata.selectedAgentProfileId.trim()
             ? request.metadata.selectedAgentProfileId.trim()
             : '';
+        const personalDataToolNames = await getPersonalDataToolNames(this.config, investorId);
         const profileLoadStartedAtMs = Date.now();
         const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(request.userId, currentUserMessage, request.threadId);
         if (rememberedProfile) {
@@ -166,6 +171,7 @@ export class HermesSourceRuntime {
             codexModel: codexModelSelection.model || null,
             codexModelProvider: codexModelSelection.provider || null,
             selectedAgentProfileId: selectedAgentProfileId || null,
+            personalDataToolCount: personalDataToolNames.length,
             preSpawnDurationMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
             sinceRunStartMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
         });
@@ -197,10 +203,12 @@ export class HermesSourceRuntime {
             result = await this.spawnHermes(args, {
                 runId,
                 userId: request.userId,
+                investorId,
                 threadId: request.threadId || 'default',
                 currentUserMessage,
                 selectedAgentProfileId,
                 enabledCompetitorTools: getEnabledCompetitorToolNames(request.metadata),
+                personalDataToolNames,
                 hermesHome,
                 codexHome,
                 workspace,
@@ -523,6 +531,7 @@ export class HermesSourceRuntime {
                     HERMES_DISABLE_LAZY_INSTALLS: '1',
                     ALTSELFS_RUN_ID: paths.runId,
                     ALTSELFS_USER_ID: paths.userId,
+                    ALTSELFS_INVESTOR_ID: paths.investorId,
                     ALTSELFS_THREAD_ID: paths.threadId,
                     ALTSELFS_WORKSPACE: paths.workspace,
                     ALTSELFS_HERMES_TIMING: '1',
@@ -533,6 +542,7 @@ export class HermesSourceRuntime {
                     ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS: paths.selectedAgentProfileId === 'codex-competitive-intelligence'
                         ? paths.enabledCompetitorTools.join(',')
                         : '0',
+                    ALTSELFS_CODEX_PERSONAL_DATA_DYNAMIC_TOOLS: paths.personalDataToolNames.join(','),
                     ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL: paths.codexModelSelection.provider === 'openai' ? '0' : '1',
                     ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS: buildCodexDeveloperInstructions({
                         webSearchMode: this.config.codexWebSearchMode,
@@ -540,6 +550,7 @@ export class HermesSourceRuntime {
                         message: paths.currentUserMessage,
                         selectedAgentProfileId: paths.selectedAgentProfileId,
                         enabledCompetitorTools: paths.enabledCompetitorTools,
+                        personalDataToolNames: paths.personalDataToolNames,
                         codexModelProvider: paths.codexModelSelection.provider,
                         sandboxExecEnabled: this.config.sandboxExecEnabled,
                     }),
@@ -718,6 +729,17 @@ function getEnabledCompetitorToolNames(metadata) {
         .filter((item) => Boolean(item));
     return Array.from(new Set(names));
 }
+async function getPersonalDataToolNames(config, investorId) {
+    try {
+        const tools = await createPersonalDataDynamicTools(config, { investorId });
+        return tools
+            .map((tool) => isRecord(tool) && typeof tool.name === 'string' ? tool.name : '')
+            .filter(Boolean);
+    }
+    catch {
+        return [];
+    }
+}
 function buildRuntimeMessage(input) {
     if (!input.renderedProfile.trim())
         return input.message;
@@ -771,6 +793,9 @@ function buildCodexDeveloperInstructions(input) {
         '',
         `Selected agent profile from Hermes Router: ${input.selectedAgentProfileId || 'main'}.`,
     ];
+    const personalDataToolInstruction = input.personalDataToolNames?.length
+        ? `- The following private personal-data tools are enabled for this user in this turn: ${input.personalDataToolNames.join(', ')}. When the user asks about Gmail, email, inbox, messages, or personal-channel content, call the relevant Gmail/personal-data tool before answering.`
+        : '- No private personal-data tools are enabled for this user in this turn. Do not claim to have read Gmail, Feishu, or other private-channel accounts.';
     if (input.selectedAgentProfileId === 'codex-competitive-intelligence') {
         const enabledCompetitorTools = input.enabledCompetitorTools || [];
         const publicWebFallbackInstruction = input.codexModelProvider === 'openai'
@@ -781,7 +806,7 @@ function buildCodexDeveloperInstructions(input) {
             : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data. If platform evidence is needed, state which specific data source should be enabled for higher-confidence estimates.', '- Treat RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used.', publicWebFallbackInstruction, '- Never claim that Semrush, Similarweb, Google, a social platform, or a private-channel agent was used unless the corresponding tool/capability was actually called.', '- Structure competitor conclusions around four questions when relevant: who the competitors are, what their user/traffic/revenue scale appears to be, how fast they have grown, and how they acquire users.', '- Separate observable facts, third-party estimates, proxy signals, assumptions, and inference. Do not present inferred users or revenue as confirmed facts.', '- Attach confidence labels to important claims: high, medium, low, or unknown.', '- For revenue and user-count estimates, provide ranges and assumptions, not false precision.', '- If an enabled data source is missing, state the limitation and explain which conclusions remain lower confidence until that source is enabled.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
     }
     else {
-        instructions.push('', 'Altselfs codex-general policy:', '- You are the general personal agent profile selected by Hermes Router for this turn.', ...artifactAccessPolicy, '- Use conversation and reasoning for tasks that do not need external data.', '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.', input.codexModelProvider === 'openai'
+        instructions.push('', 'Altselfs codex-general policy:', '- You are the general personal agent profile selected by Hermes Router for this turn.', ...artifactAccessPolicy, '- Use conversation and reasoning for tasks that do not need external data.', '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.', personalDataToolInstruction, input.codexModelProvider === 'openai'
             ? '- Use native web.run when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.'
             : '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.', '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.', '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.', '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
     }

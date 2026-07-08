@@ -413,6 +413,88 @@ _ALTSELFS_COMPETITOR_TOOLS = [
 ]
 
 
+_ALTSELFS_PERSONAL_DATA_TOOLS = [
+    {
+        "namespace": None,
+        "name": "altselfs_connected_accounts_list",
+        "description": (
+            "List the user-connected personal data accounts available to this turn, "
+            "such as Gmail accounts. Use before private-channel research when you "
+            "need to know what the user has authorized."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "provider": {"type": "string", "description": "Optional provider filter, for example gmail."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_gmail_search_messages",
+        "description": (
+            "Search the user-authorized Gmail account(s). Best for recent email, "
+            "inbox triage, todos, follow-ups, sender/subject queries, and "
+            "date-window scans. Returns compact message metadata and snippets; "
+            "call get_message for full body only when needed."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Gmail search query, e.g. newer_than:1d, from:alice@example.com, subject:(invoice)."},
+                "maxResults": {"type": "number", "description": "Max messages per account, default 10, capped at 20."},
+                "accountId": {"type": "string", "description": "Optional Altselfs connection id. If omitted, searches all connected Gmail accounts."},
+                "accountEmail": {"type": "string", "description": "Optional Gmail email. If omitted, searches all connected Gmail accounts."},
+                "includeSpamTrash": {"type": "boolean", "description": "Whether to include spam/trash. Default false."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_gmail_get_message",
+        "description": (
+            "Read one full Gmail message from a user-authorized account. Use only "
+            "after search finds a relevant message or the user provides a message id."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "messageId": {"type": "string", "description": "Gmail message id."},
+                "accountId": {"type": "string", "description": "Altselfs connection id. Required when multiple Gmail accounts are connected."},
+                "accountEmail": {"type": "string", "description": "Gmail email. Alternative to accountId."},
+            },
+            "required": ["messageId"],
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_gmail_get_thread",
+        "description": (
+            "Read a Gmail thread from a user-authorized account. Use when thread "
+            "context is needed for follow-up decisions or summaries."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "threadId": {"type": "string", "description": "Gmail thread id."},
+                "maxMessages": {"type": "number", "description": "Max thread messages to return, default 10, capped at 20."},
+                "accountId": {"type": "string", "description": "Altselfs connection id. Required when multiple Gmail accounts are connected."},
+                "accountEmail": {"type": "string", "description": "Gmail email. Alternative to accountId."},
+            },
+            "required": ["threadId"],
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+]
+
+
 _ALTSELFS_COMPETITOR_TOOL_ALIASES = {
     "similarweb_api1": "altselfs_similarweb_api1",
     "similarweb-api1": "altselfs_similarweb_api1",
@@ -444,6 +526,19 @@ def _altselfs_enabled_competitor_tool_names() -> set[str]:
     return enabled
 
 
+def _altselfs_enabled_personal_data_tool_names() -> set[str]:
+    configured = os.environ.get("ALTSELFS_CODEX_PERSONAL_DATA_DYNAMIC_TOOLS", "").strip()
+    if not configured:
+        return set()
+    available = {tool["name"] for tool in _ALTSELFS_PERSONAL_DATA_TOOLS}
+    enabled: set[str] = set()
+    for raw_name in configured.split(","):
+        name = raw_name.strip()
+        if name in available:
+            enabled.add(name)
+    return enabled
+
+
 def _altselfs_dynamic_tools() -> list[dict[str, Any]]:
     tools: list[dict[str, Any]] = []
     web_enabled = os.environ.get("ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL", "true").lower()
@@ -458,6 +553,9 @@ def _altselfs_dynamic_tools() -> list[dict[str, Any]]:
     enabled_competitor_tools = _altselfs_enabled_competitor_tool_names()
     if enabled_competitor_tools:
         tools.extend([tool for tool in _ALTSELFS_COMPETITOR_TOOLS if tool["name"] in enabled_competitor_tools])
+    enabled_personal_data_tools = _altselfs_enabled_personal_data_tool_names()
+    if enabled_personal_data_tools:
+        tools.extend([tool for tool in _ALTSELFS_PERSONAL_DATA_TOOLS if tool["name"] in enabled_personal_data_tools])
     return tools
 
 
@@ -584,6 +682,43 @@ def _call_altselfs_competitor_tool_bridge(tool: str, arguments: Any) -> dict[str
         "success": True,
     }
 
+
+def _call_altselfs_personal_data_tool_bridge(tool: str, arguments: Any) -> dict[str, Any]:
+    bridge_url = os.environ.get(
+        "ALTSELFS_PERSONAL_DATA_BRIDGE_URL",
+        "http://127.0.0.1:8787/internal/tools/personal-data",
+    )
+    payload = {
+        "toolName": tool,
+        "arguments": arguments if isinstance(arguments, dict) else {},
+        "_context": {
+            "runId": os.environ.get("ALTSELFS_RUN_ID", ""),
+            "userId": os.environ.get("ALTSELFS_USER_ID", ""),
+            "investorId": os.environ.get("ALTSELFS_INVESTOR_ID", ""),
+            "threadId": os.environ.get("ALTSELFS_THREAD_ID", ""),
+        },
+    }
+    request = urllib.request.Request(
+        bridge_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=45) as response:
+        raw = response.read().decode("utf-8")
+    parsed = json.loads(raw) if raw.strip() else {}
+    if isinstance(parsed, dict) and "contentItems" in parsed:
+        return parsed
+    return {
+        "contentItems": [
+            {
+                "type": "inputText",
+                "text": json.dumps(parsed, ensure_ascii=False),
+            }
+        ],
+        "success": True,
+    }
+
 `;
 
 const helpersAnchor = `# How many tailing stderr lines from the codex subprocess to attach to a
@@ -594,7 +729,7 @@ _STDERR_TAIL_LINES = 12
 `;
 const helpersEndAnchor = `# Permission profile mapping mirrors the docstring in PR proposal:`;
 
-if (codexAppServerSession.includes(dynamicToolHelpersMarker) && codexAppServerSession.includes("_call_altselfs_sandbox_exec_tool_bridge")) {
+if (codexAppServerSession.includes(dynamicToolHelpersMarker) && codexAppServerSession.includes("_call_altselfs_personal_data_tool_bridge")) {
   console.log("Hermes Codex dynamic tool helper patch already applied.");
   console.log(codexAppServerSessionPath);
 } else if (codexAppServerSession.includes(dynamicToolHelpersMarker)) {
@@ -753,7 +888,16 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
                 "altselfs_domain_metrics_check",
             }
         )
-        if not is_web_search and not is_read_artifact and not is_sandbox_exec and not is_competitor:
+        is_personal_data = (
+            not namespace
+            and tool in {
+                "altselfs_connected_accounts_list",
+                "altselfs_gmail_search_messages",
+                "altselfs_gmail_get_message",
+                "altselfs_gmail_get_thread",
+            }
+        )
+        if not is_web_search and not is_read_artifact and not is_sandbox_exec and not is_competitor and not is_personal_data:
             self._client.respond(
                 rid,
                 {
@@ -774,6 +918,8 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
                 result = _call_altselfs_sandbox_exec_tool_bridge(params.get("arguments") or {})
             elif is_competitor:
                 result = _call_altselfs_competitor_tool_bridge(tool, params.get("arguments") or {})
+            elif is_personal_data:
+                result = _call_altselfs_personal_data_tool_bridge(tool, params.get("arguments") or {})
             else:
                 result = _call_altselfs_tool_bridge(params.get("arguments") or {})
             self._client.respond(rid, result)
@@ -797,7 +943,7 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
 const dynamicToolMethodAnchor = `    def _decide_exec_approval(self, params: dict) -> str:
 `;
 
-if (codexAppServerSession.includes(dynamicToolMethodMarker) && codexAppServerSession.includes("is_sandbox_exec = (")) {
+if (codexAppServerSession.includes(dynamicToolMethodMarker) && codexAppServerSession.includes("is_personal_data = (")) {
   console.log("Hermes Codex dynamic tool handler patch already applied.");
   console.log(codexAppServerSessionPath);
 } else if (codexAppServerSession.includes(dynamicToolMethodMarker)) {
