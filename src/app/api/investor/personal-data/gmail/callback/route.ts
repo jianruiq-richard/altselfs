@@ -17,6 +17,13 @@ function friendlyError(detail: string) {
   if (normalized.includes('invalid_grant')) return 'Gmail 授权码无效或已过期，请重新绑定。';
   if (normalized.includes('credential vault')) return '后端密钥保险箱未配置，请先配置 ECS secret。';
   if (normalized.includes('ops_agent_token')) return '后端 internal API 授权未配置。';
+  if (
+    normalized.includes('und_err_connect_timeout') ||
+    normalized.includes('connect timeout') ||
+    normalized.includes('fetch failed')
+  ) {
+    return 'Gmail 授权成功，但连接后端保存授权信息超时，请稍后重试或联系管理员检查 personal-agent-server 网络。';
+  }
   return 'Gmail 绑定失败，请稍后重试或联系管理员。';
 }
 
