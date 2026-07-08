@@ -799,7 +799,7 @@ const threadParamsPreviousPatch = `        params: dict[str, Any] = {"cwd": self
         result = self._client.request("thread/start", params, timeout=15)
 `;
 
-const threadParamsAfter = `        params: dict[str, Any] = {"cwd": self._cwd}
+const threadParamsBlockAfter = `        params: dict[str, Any] = {"cwd": self._cwd}
         dynamic_tools = _altselfs_dynamic_tools()
         if dynamic_tools:
             params["dynamicTools"] = dynamic_tools
@@ -811,10 +811,54 @@ const threadParamsAfter = `        params: dict[str, Any] = {"cwd": self._cwd}
         personality = os.environ.get("ALTSELFS_CODEX_PERSONALITY", "pragmatic").strip()
         if personality:
             params["personality"] = personality
-        result = self._client.request("thread/start", params, timeout=15)
 `;
 
-if (codexAppServerSession.includes(threadParamsAfter)) {
+const threadParamsAfter = `${threadParamsBlockAfter}        result = self._client.request("thread/start", params, timeout=15)
+`;
+
+function hasCompleteThreadStartPatch(source) {
+  return (
+    source.includes('        dynamic_tools = _altselfs_dynamic_tools()') &&
+    source.includes('            params["dynamicTools"] = dynamic_tools') &&
+    source.includes("ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT") &&
+    source.includes("ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS") &&
+    source.includes("ALTSELFS_CODEX_PERSONALITY") &&
+    source.includes('self._client.request("thread/start", params')
+  );
+}
+
+function patchThreadStartParams(source) {
+  const threadStartRequest = '        result = self._client.request("thread/start", params, timeout=15)\n';
+  const requestIndex = source.indexOf(threadStartRequest);
+  if (requestIndex < 0) {
+    return null;
+  }
+
+  const prefix = source.slice(0, requestIndex);
+  const paramsLineMatches = [...prefix.matchAll(/\n        params(?:: dict\[str, Any\])? = \{"cwd": self\._cwd\}\n/g)];
+  const paramsLineMatch = paramsLineMatches.at(-1);
+  if (!paramsLineMatch || typeof paramsLineMatch.index !== "number") {
+    return null;
+  }
+
+  const paramsStart = paramsLineMatch.index + 1;
+  const instrumentationAnchors = [
+    '        emit_altselfs_hermes_timing(\n            "codex_app_server.thread_start.start"',
+    "        thread_start_started_at = time.monotonic()\n",
+    "        try:\n",
+  ];
+  let blockEnd = requestIndex;
+  for (const anchor of instrumentationAnchors) {
+    const anchorIndex = source.indexOf(anchor, paramsStart);
+    if (anchorIndex >= paramsStart && anchorIndex < blockEnd) {
+      blockEnd = anchorIndex;
+    }
+  }
+
+  return `${source.slice(0, paramsStart)}${threadParamsBlockAfter}${source.slice(blockEnd)}`;
+}
+
+if (hasCompleteThreadStartPatch(codexAppServerSession)) {
   console.log("Hermes Codex dynamic tool registration patch already applied.");
   console.log(codexAppServerSessionPath);
 } else if (codexAppServerSession.includes(threadParamsPreviousPatch)) {
@@ -822,12 +866,19 @@ if (codexAppServerSession.includes(threadParamsAfter)) {
   writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
   console.log("Hermes Codex dynamic tool registration patch upgraded.");
   console.log(codexAppServerSessionPath);
-} else if (!codexAppServerSession.includes(threadParamsBefore)) {
-  console.error("Could not find the Hermes Codex thread/start params block to patch.");
-  console.error(codexAppServerSessionPath);
-  process.exit(1);
-} else {
+} else if (codexAppServerSession.includes(threadParamsBefore)) {
   codexAppServerSession = codexAppServerSession.replace(threadParamsBefore, threadParamsAfter);
+  writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
+  console.log("Hermes Codex dynamic tool registration patch applied.");
+  console.log(codexAppServerSessionPath);
+} else {
+  const patchedCodexAppServerSession = patchThreadStartParams(codexAppServerSession);
+  if (!patchedCodexAppServerSession) {
+    console.error("Could not find the Hermes Codex thread/start params block to patch.");
+    console.error(codexAppServerSessionPath);
+    process.exit(1);
+  }
+  codexAppServerSession = patchedCodexAppServerSession;
   writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
   console.log("Hermes Codex dynamic tool registration patch applied.");
   console.log(codexAppServerSessionPath);
