@@ -29,6 +29,10 @@ COPY --from=server-build /app/dist ./dist
 COPY --from=codex-runtime /opt/altselfs/codex-bin /opt/altselfs/codex-bin
 COPY --from=hermes-runtime /opt/altselfs/hermes-agent /opt/altselfs/hermes-agent
 COPY --from=hermes-runtime /usr/local/bin/altselfs-hermes-run /usr/local/bin/altselfs-hermes-run
+COPY scripts/patch-hermes-openrouter-runtime.mjs /tmp/patch-hermes-openrouter-runtime.mjs
+
+RUN ALTSELFS_HERMES_SOURCE_ROOT=/opt/altselfs/hermes-agent node /tmp/patch-hermes-openrouter-runtime.mjs \
+  && rm -f /tmp/patch-hermes-openrouter-runtime.mjs
 
 ENV NODE_ENV=production
 ENV ALTSELFS_AGENT_ENV=production
