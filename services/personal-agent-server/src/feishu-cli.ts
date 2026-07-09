@@ -24,7 +24,7 @@ export const DEFAULT_FEISHU_CLI_FEATURE_PACKAGES: FeishuCliFeaturePackage[] = ['
 const FEISHU_CLI_FEATURE_PACKAGE_CONFIG: Record<FeishuCliFeaturePackage, { domains: string[]; scopes: string[] }> = {
   messages: { domains: ['im'], scopes: ['search:message'] },
   contacts: { domains: ['contact'], scopes: [] },
-  calendar: { domains: ['calendar'], scopes: [] },
+  calendar: { domains: ['calendar'], scopes: ['calendar:calendar.event:read'] },
   docs: { domains: ['docs', 'drive'], scopes: [] },
   meetings: { domains: ['vc', 'minutes', 'note'], scopes: [] },
 };
