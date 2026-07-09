@@ -193,12 +193,12 @@ export async function restoreFeishuCliProfileSnapshot(
 }
 
 export function makeFeishuCliProfileName(investorId: string) {
-  const safeInvestor = investorId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 28) || 'user';
-  return `altselfs_${safeInvestor}_${id('lark').replace(/[^a-zA-Z0-9_-]/g, '')}`.slice(0, 80);
+  const safeInvestor = investorId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 16) || 'user';
+  return normalizeProfileName(`altselfs_${safeInvestor}_${id('l')}`);
 }
 
 export function normalizeProfileName(value: string) {
-  return value.trim().replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 120);
+  return value.trim().replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 64);
 }
 
 async function ensureFeishuCliProfile(config: ServerConfig, profileName: string, cliHome?: string) {

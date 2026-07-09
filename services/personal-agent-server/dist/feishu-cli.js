@@ -143,11 +143,11 @@ export async function restoreFeishuCliProfileSnapshot(config, profileName, snaps
     }
 }
 export function makeFeishuCliProfileName(investorId) {
-    const safeInvestor = investorId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 28) || 'user';
-    return `altselfs_${safeInvestor}_${id('lark').replace(/[^a-zA-Z0-9_-]/g, '')}`.slice(0, 80);
+    const safeInvestor = investorId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 16) || 'user';
+    return normalizeProfileName(`altselfs_${safeInvestor}_${id('l')}`);
 }
 export function normalizeProfileName(value) {
-    return value.trim().replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 120);
+    return value.trim().replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 64);
 }
 async function ensureFeishuCliProfile(config, profileName, cliHome) {
     const appId = process.env.FEISHU_APP_ID?.trim();
