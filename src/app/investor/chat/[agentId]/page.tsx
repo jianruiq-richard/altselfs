@@ -210,6 +210,18 @@ function normalizeMessageContentForRecovery(value: string) {
   return value.replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').trim();
 }
 
+function appendAssistantReplyIfMissing(messages: ChatMessage[], reply: string) {
+  const content = reply.trim();
+  if (!content) return messages;
+  const normalizedReply = normalizeMessageContentForRecovery(content);
+  const exists = messages.some((message) => (
+    message.role === 'assistant' &&
+    normalizeMessageContentForRecovery(message.content) === normalizedReply
+  ));
+  if (exists) return messages;
+  return [...messages, { role: 'assistant' as const, content }];
+}
+
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -1220,10 +1232,11 @@ export default function InvestorAgentChatPage() {
       }
 
       setThreadId(typeof data.threadId === 'string' ? data.threadId : null);
+      const reply = typeof data.reply === 'string' ? data.reply : '';
       if (Array.isArray(data.messages)) {
-        setMessages(data.messages as ChatMessage[]);
-      } else if (typeof data.reply === 'string') {
-        setMessages([...fallbackMessages, { role: 'assistant', content: data.reply }]);
+        setMessages(appendAssistantReplyIfMissing(data.messages as ChatMessage[], reply));
+      } else if (reply.trim()) {
+        setMessages(appendAssistantReplyIfMissing(fallbackMessages, reply));
       }
       if (data.briefing) {
         setBriefing(data.briefing as Briefing);
@@ -1423,17 +1436,12 @@ export default function InvestorAgentChatPage() {
         }
 
         const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+        const result = isRecord(latestTerminalRun.result) ? latestTerminalRun.result : {};
+        const reply = typeof result.reply === 'string' ? result.reply : '';
         if (recoveredMessages.length > 0) {
-          setMessages(recoveredMessages);
-        } else {
-          const result = isRecord(latestTerminalRun.result) ? latestTerminalRun.result : {};
-          const reply = typeof result.reply === 'string' ? result.reply.trim() : '';
-          if (reply) {
-            setMessages((prev) => {
-              if (prev.some((message) => message.role === 'assistant' && message.content === reply)) return prev;
-              return [...prev, { role: 'assistant', content: reply }];
-            });
-          }
+          setMessages(appendAssistantReplyIfMissing(recoveredMessages, reply));
+        } else if (reply.trim()) {
+          setMessages((prev) => appendAssistantReplyIfMissing(prev, reply));
         }
         setError(null);
         return 'success';
