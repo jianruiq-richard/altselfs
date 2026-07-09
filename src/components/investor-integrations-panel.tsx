@@ -32,6 +32,7 @@ type AssistantMessage = {
 type PersonalAccount = {
   connectionId: string;
   provider: string;
+  connectionType?: string;
   accountEmail: string;
   displayName: string;
   status: string;
@@ -98,15 +99,21 @@ export default function InvestorIntegrationsPanel({
   integrationStatus,
   integrationProvider,
   integrationDetail,
+  feishuAuthUrl,
+  feishuUserCode,
 }: {
   initialCards: IntegrationCard[];
   integrationStatus?: string;
   integrationProvider?: string;
   integrationDetail?: string;
+  feishuAuthUrl?: string;
+  feishuUserCode?: string;
 }) {
   const [cards, setCards] = useState(initialCards);
   const [loadingProvider, setLoadingProvider] = useState<ProviderKey | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [feishuCliCompleting, setFeishuCliCompleting] = useState(false);
+  const [feishuCliMessage, setFeishuCliMessage] = useState('');
   const [assistantInputs, setAssistantInputs] = useState<Record<ProviderKey, string>>(() => recordForProviders(''));
   const [assistantLoading, setAssistantLoading] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));
   const [assistantChats, setAssistantChats] = useState<Record<ProviderKey, AssistantMessage[]>>({
@@ -143,6 +150,9 @@ export default function InvestorIntegrationsPanel({
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
     const providerLabel = providerLabels[integrationProvider as ProviderKey] || '数据源';
+    if (integrationStatus === 'pending') {
+      return `${providerLabel} 授权待完成：${integrationDetail || '请完成授权后返回本页。'}`;
+    }
     if (integrationStatus === 'connected') {
       return `${providerLabel} 绑定成功`;
     }
@@ -323,6 +333,29 @@ export default function InvestorIntegrationsPanel({
       setError('网络错误，请稍后重试');
     } finally {
       setLoadingProvider(null);
+    }
+  };
+
+  const completeFeishuCliBinding = async () => {
+    setFeishuCliCompleting(true);
+    setFeishuCliMessage('');
+    setError(null);
+    try {
+      const res = await fetch('/api/investor/personal-data/feishu/complete', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFeishuCliMessage(data.error || '飞书绑定完成失败，请确认已在飞书页面完成授权。');
+        return;
+      }
+      setFeishuCliMessage('飞书绑定成功，已切换到 lark-cli 增强连接。');
+      await loadPersonalAccounts('feishu');
+    } catch {
+      setFeishuCliMessage('网络错误，请稍后重试。');
+    } finally {
+      setFeishuCliCompleting(false);
     }
   };
 
@@ -527,10 +560,42 @@ export default function InvestorIntegrationsPanel({
       </div>
 
       {banner && (
-        <p className={`mt-4 text-sm ${integrationStatus === 'connected' ? 'text-emerald-700' : 'text-red-600'}`}>
+        <p className={`mt-4 text-sm ${integrationStatus === 'connected' || integrationStatus === 'pending' ? 'text-emerald-700' : 'text-red-600'}`}>
           {banner}
         </p>
       )}
+      {integrationProvider === 'feishu' && integrationStatus === 'pending' && feishuAuthUrl ? (
+        <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-slate-700">
+          <p className="font-medium text-sky-950">飞书增强授权</p>
+          <p className="mt-1">
+            先打开飞书授权链接完成授权，再回到这里点击完成绑定。
+            {feishuUserCode ? ` 页面提示时输入验证码：${feishuUserCode}` : ''}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a
+              href={feishuAuthUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
+            >
+              打开飞书授权
+            </a>
+            <button
+              type="button"
+              onClick={() => void completeFeishuCliBinding()}
+              disabled={feishuCliCompleting}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {feishuCliCompleting ? '绑定中...' : '我已授权，完成绑定'}
+            </button>
+          </div>
+          {feishuCliMessage && (
+            <p className={`mt-2 ${feishuCliMessage.includes('成功') ? 'text-emerald-700' : 'text-red-600'}`}>
+              {feishuCliMessage}
+            </p>
+          )}
+        </div>
+      ) : null}
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
       <div className="grid md:grid-cols-2 gap-4 mt-5">
@@ -574,7 +639,7 @@ export default function InvestorIntegrationsPanel({
                   <p className="mt-2 text-sm text-slate-600">
                     {card.provider === 'gmail'
                       ? '暂无 Gmail 授权。绑定后主 AI 助手会按需调用 Gmail 搜索、读取邮件和线程工具。'
-                      : '暂无飞书授权。绑定后主 AI 助手会按需调用飞书 IM 会话和消息工具。'}
+                      : '暂无飞书授权。绑定后主 AI 助手会按需调用飞书消息搜索、联系人、日历和文档搜索工具。'}
                   </p>
                 ) : (
                   <div className="mt-2 space-y-2">
@@ -586,7 +651,10 @@ export default function InvestorIntegrationsPanel({
                             <p className="truncate text-xs text-slate-500">{account.accountEmail}</p>
                           )}
                           <p className="text-xs text-slate-500">
-                            {account.status === 'connected' ? '已绑定' : account.status} · {new Date(account.updatedAt).toLocaleString('zh-CN')}
+                            {account.status === 'connected' ? '已绑定' : account.status}
+                            {card.provider === 'feishu' && account.connectionType === 'lark_cli_user' ? ' · CLI增强' : ''}
+                            {' · '}
+                            {new Date(account.updatedAt).toLocaleString('zh-CN')}
                           </p>
                         </div>
                         <button
@@ -647,7 +715,7 @@ export default function InvestorIntegrationsPanel({
                     : card.provider === 'gmail'
                     ? 'Gmail 账号会作为主 AI 助手的原生工具使用；用户提问需要邮件信息时，Codex 会按需调用已授权账号。'
                     : card.provider === 'feishu'
-                    ? '飞书账号会作为主 AI 助手的原生工具使用；用户提问需要飞书 IM 消息时，Codex 会按需调用已授权账号。飞书邮箱、日历、文档需要后续单独接入。'
+                    ? '飞书账号会作为主 AI 助手的 lark-cli 增强工具使用；用户提问需要飞书消息、联系人、日历或文档信息时，Codex 会按需调用已授权账号。'
                     : card.provider === 'xiaohongshu'
                     ? '暂无摘要，可直接对话触发 skill 抓取。'
                     : '暂无摘要，绑定后点击“刷新摘要”生成。')}

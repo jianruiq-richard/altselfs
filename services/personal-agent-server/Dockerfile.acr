@@ -23,7 +23,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev \
+  && npm install -g @larksuite/cli@1.0.67
 
 COPY --from=server-build /app/dist ./dist
 COPY --from=codex-runtime /opt/altselfs/codex-bin /opt/altselfs/codex-bin

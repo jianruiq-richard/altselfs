@@ -201,6 +201,88 @@ export async function upsertFeishuOAuthConnection(config, input) {
     const connections = await listPersonalConnections(config, { investorId: input.investorId, provider: 'feishu' });
     return connections.find((connection) => connection.id === connectionId) || null;
 }
+export async function upsertFeishuCliConnection(config, input) {
+    const pool = await getPersonalDataPool(config);
+    const capabilityId = await upsertCapability(pool, {
+        investorId: input.investorId,
+        userId: input.userId,
+        capabilityKey: 'feishu',
+        capabilityType: 'oauth_account',
+        displayName: '飞书',
+    });
+    const accountId = input.accountId.trim();
+    if (!accountId)
+        throw new Error('Feishu accountId is required.');
+    const profileName = input.profileName.trim();
+    if (!profileName)
+        throw new Error('Feishu CLI profileName is required.');
+    const existing = await pool.query([
+        'select id',
+        'from personal_external_connections',
+        'where investor_id = $1 and provider = $2 and external_account_id = $3',
+        'limit 1',
+    ].join(' '), [input.investorId, 'feishu', accountId]);
+    const connectionId = existing.rows[0]?.id ? String(existing.rows[0].id) : id('conn');
+    const metadata = {
+        auth_mode: 'lark_cli_user',
+        cli_profile_name: profileName,
+        credential_source: 'encrypted_rds_snapshot',
+        snapshot_captured_at: input.profileSnapshot.capturedAt,
+    };
+    const encrypted = encryptCredentialPayload({
+        provider: 'feishu',
+        authMode: 'lark_cli_user',
+        accountId,
+        cliProfileName: profileName,
+        cliProfileSnapshot: input.profileSnapshot,
+        scope: (input.scopes || []).join(' '),
+        expiresAt: null,
+    });
+    await pool.query([
+        'insert into personal_external_connections',
+        '(id, capability_id, investor_id, user_id, provider, connection_type, external_account_id, display_name, scopes, status, expires_at, metadata, created_at, updated_at)',
+        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, null, $11::jsonb, now(), now())',
+        'on conflict (investor_id, provider, external_account_id) do update set',
+        'capability_id = excluded.capability_id, user_id = excluded.user_id, connection_type = excluded.connection_type,',
+        'display_name = excluded.display_name, scopes = excluded.scopes,',
+        "status = 'connected', expires_at = null, metadata = excluded.metadata, updated_at = now()",
+    ].join(' '), [
+        connectionId,
+        capabilityId,
+        input.investorId,
+        input.userId,
+        'feishu',
+        'lark_cli_user',
+        accountId,
+        input.accountName || accountId,
+        input.scopes || [],
+        'connected',
+        JSON.stringify(metadata),
+    ]);
+    await pool.query([
+        'insert into personal_credentials',
+        '(id, connection_id, investor_id, user_id, credential_type, encrypted_payload, encrypted_data_key, key_provider, key_version, expires_at, status, created_at, updated_at)',
+        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, null, $10, now(), now())',
+        'on conflict (connection_id) do update set',
+        'investor_id = excluded.investor_id, user_id = excluded.user_id, credential_type = excluded.credential_type,',
+        'encrypted_payload = excluded.encrypted_payload, encrypted_data_key = excluded.encrypted_data_key,',
+        'key_provider = excluded.key_provider, key_version = excluded.key_version, expires_at = null,',
+        "status = 'active', updated_at = now()",
+    ].join(' '), [
+        id('cred'),
+        connectionId,
+        input.investorId,
+        input.userId,
+        'lark_cli_profile_snapshot',
+        encrypted.encryptedPayload,
+        encrypted.encryptedDataKey,
+        encrypted.keyProvider,
+        encrypted.keyVersion,
+        'active',
+    ]);
+    const connections = await listPersonalConnections(config, { investorId: input.investorId, provider: 'feishu' });
+    return connections.find((connection) => connection.id === connectionId) || null;
+}
 export async function disablePersonalConnection(config, input) {
     const pool = await getPersonalDataPool(config);
     const updated = await pool.query([

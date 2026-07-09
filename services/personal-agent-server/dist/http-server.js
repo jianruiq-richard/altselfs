@@ -7,7 +7,8 @@ import { runWebSearchTool } from './tools/web-search.js';
 import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
 import { isPersonalDataTool, runPersonalDataTool } from './tools/personal-data.js';
 import { runSandboxExecTool } from './tools/sandbox-exec.js';
-import { disablePersonalConnection, listPersonalConnections, upsertFeishuOAuthConnection, upsertGmailOAuthConnection, } from './personal-data-store.js';
+import { disablePersonalConnection, listPersonalConnections, upsertFeishuCliConnection, upsertFeishuOAuthConnection, upsertGmailOAuthConnection, } from './personal-data-store.js';
+import { completeFeishuCliAuthorization, startFeishuCliAuthorization, } from './feishu-cli.js';
 import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
@@ -103,6 +104,43 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
                 }
                 return json(res, 400, { error: `Unsupported personal data provider: ${provider}` });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/personal-data/feishu-cli/start') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const started = await startFeishuCliAuthorization(config, {
+                    investorId: readRequiredBodyString(body, 'investorId'),
+                    userId: readRequiredBodyString(body, 'userId'),
+                });
+                return json(res, 200, { ok: true, ...started });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/personal-data/feishu-cli/complete') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const completed = await completeFeishuCliAuthorization(config, {
+                    profileName: readRequiredBodyString(body, 'profileName'),
+                    deviceCode: readRequiredBodyString(body, 'deviceCode'),
+                });
+                const account = await upsertFeishuCliConnection(config, {
+                    investorId: readRequiredBodyString(body, 'investorId'),
+                    userId: readRequiredBodyString(body, 'userId'),
+                    accountId: completed.accountId,
+                    accountName: completed.displayName,
+                    profileName: completed.profileName,
+                    profileSnapshot: completed.profileSnapshot,
+                    scopes: completed.scopes,
+                });
+                return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
             }
             if (req.method === 'DELETE' && url.pathname === '/internal/personal-data/connections') {
                 if (!config)
@@ -953,6 +991,7 @@ function publicPersonalConnection(connection) {
     return {
         connectionId: connection.id,
         provider: connection.provider,
+        connectionType: connection.connectionType,
         accountEmail: connection.externalAccountId,
         displayName: connection.displayName,
         scopes: connection.scopes,

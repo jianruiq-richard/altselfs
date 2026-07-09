@@ -35,6 +35,11 @@ export type ServerConfig = {
   webSearchTimeoutMs: number;
   rapidApiKeyEnv: string;
   rapidApiRequestTimeoutMs: number;
+  larkCliBin: string;
+  larkCliHomeRoot: string;
+  larkCliTimeoutMs: number;
+  feishuCliAuthDomains: string[];
+  feishuCliAuthExtraScopes: string[];
   disableLocalEnvironmentForGeneral: boolean;
   hermesSourceRuntimeEnabled: boolean;
   hermesSourceRoot: string;
@@ -131,9 +136,9 @@ function readBoolEnv(key: string, fallback: boolean) {
   return ['1', 'true', 'yes', 'on'].includes(raw);
 }
 
-function readCsvEnv(key: string) {
+function readCsvEnv(key: string, fallback: string[] = []) {
   const raw = process.env[key]?.trim();
-  if (!raw) return [];
+  if (!raw) return fallback;
   return raw
     .split(',')
     .map((item) => item.trim())
@@ -397,6 +402,11 @@ export function loadConfig(): ServerConfig {
     webSearchTimeoutMs: readIntEnv('WEB_SEARCH_TIMEOUT_MS', 30_000),
     rapidApiKeyEnv: readEnv('RAPIDAPI_KEY_ENV', 'RAPIDAPI_KEY'),
     rapidApiRequestTimeoutMs: readIntEnv('RAPIDAPI_REQUEST_TIMEOUT_MS', 30_000),
+    larkCliBin: readEnv('LARK_CLI_BIN', 'lark-cli'),
+    larkCliHomeRoot: path.resolve(readEnv('LARK_CLI_HOME_ROOT', '/data/altselfs-agent/lark-cli-runtime')),
+    larkCliTimeoutMs: readIntEnv('LARK_CLI_TIMEOUT_MS', 60_000),
+    feishuCliAuthDomains: readCsvEnv('FEISHU_CLI_AUTH_DOMAINS', ['im', 'contact', 'calendar', 'docs', 'drive']),
+    feishuCliAuthExtraScopes: readCsvEnv('FEISHU_CLI_AUTH_EXTRA_SCOPES', ['search:message']),
     disableLocalEnvironmentForGeneral: readBoolEnv('CODEX_GENERAL_DISABLE_LOCAL_ENVIRONMENT', true),
     hermesSourceRuntimeEnabled: readBoolEnv('HERMES_SOURCE_RUNTIME_ENABLED', false),
     hermesSourceRoot: path.resolve(readEnv('HERMES_SOURCE_ROOT', '/Users/richardjian/work/agent-sources/hermes-agent')),

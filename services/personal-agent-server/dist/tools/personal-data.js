@@ -1,6 +1,7 @@
 import { decryptCredentialPayload, isCredentialVaultConfigured } from '../credential-vault.js';
 import { externalFetch } from '../outbound-fetch.js';
 import { listPersonalConnections, loadPersonalCredential, recordPersonalToolCallAudit, updatePersonalCredentialPayload, } from '../personal-data-store.js';
+import { runFeishuCliWithSnapshot, } from '../feishu-cli.js';
 import { isRecord, truncate } from '../util.js';
 const PERSONAL_TOOL_NAMES = new Set([
     'altselfs_connected_accounts_list',
@@ -10,6 +11,10 @@ const PERSONAL_TOOL_NAMES = new Set([
     'altselfs_feishu_list_chats',
     'altselfs_feishu_list_messages',
     'altselfs_feishu_recent_messages',
+    'altselfs_feishu_search_messages',
+    'altselfs_feishu_search_users',
+    'altselfs_feishu_today_calendar',
+    'altselfs_feishu_search_docs',
 ]);
 export function isPersonalDataTool(toolName) {
     return PERSONAL_TOOL_NAMES.has(toolName);
@@ -95,8 +100,47 @@ export async function createPersonalDataDynamicTools(config, input) {
     if (feishuConnections.length > 0) {
         tools.push({
             namespace: null,
+            name: 'altselfs_feishu_search_messages',
+            description: 'Search Feishu/Lark IM messages across chats with the user-authorized lark-cli profile. Prefer this for questions about a person, keyword, today\'s messages, mentions, or follow-ups because it does not require a prior chat list.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    query: { type: 'string', description: 'Keyword to search, e.g. a person name, project, customer, or topic. Optional for time-window scans if Feishu allows it.' },
+                    startTime: { type: 'string', description: 'Optional start time as ISO string, Unix seconds, or milliseconds. Default 24 hours ago.' },
+                    endTime: { type: 'string', description: 'Optional end time as ISO string, Unix seconds, or milliseconds. Default now.' },
+                    chatType: { type: 'string', description: 'Optional chat type filter: p2p or group.' },
+                    isAtMe: { type: 'boolean', description: 'Only messages that mention the authorized user.' },
+                    pageSize: { type: 'number', description: 'Page size, default 20, capped at 50.' },
+                    pageLimit: { type: 'number', description: 'Auto-pagination page limit, default 1, capped at 5.' },
+                    accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, searches up to 3 connected Feishu accounts.' },
+                    accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
+                },
+                additionalProperties: false,
+            },
+            deferLoading: false,
+        }, {
+            namespace: null,
+            name: 'altselfs_feishu_search_users',
+            description: 'Search Feishu/Lark contacts by name/email/open id with the user-authorized lark-cli profile. Use before reading a direct conversation by person name; results may include p2p_chat_id/open_id.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    query: { type: 'string', description: 'Person name, email, or keyword.' },
+                    queries: { type: 'string', description: 'Optional comma-separated multi-name search.' },
+                    userIds: { type: 'string', description: 'Optional comma-separated open_ids; use me for current user.' },
+                    hasChatted: { type: 'boolean', description: 'Restrict to users the authorized user has chatted with. Default true when query is provided.' },
+                    excludeExternalUsers: { type: 'boolean', description: 'Exclude external cross-tenant users.' },
+                    pageSize: { type: 'number', description: 'Rows per request, default 20, capped at 30.' },
+                    accountId: { type: 'string', description: 'Optional Altselfs connection id.' },
+                    accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
+                },
+                additionalProperties: false,
+            },
+            deferLoading: false,
+        }, {
+            namespace: null,
             name: 'altselfs_feishu_list_chats',
-            description: 'List Feishu/Lark IM chats visible through the user-authorized account and app scopes. Use before reading Feishu messages when a chat id is needed. This covers IM chats only, not Feishu Mail, Calendar, Docs, or Drive.',
+            description: 'List Feishu/Lark IM chats visible through the user-authorized lark-cli profile. Includes p2p and group chats when Feishu returns them. Prefer search_messages for person/topic questions.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -111,11 +155,12 @@ export async function createPersonalDataDynamicTools(config, input) {
         }, {
             namespace: null,
             name: 'altselfs_feishu_list_messages',
-            description: 'Read messages from one Feishu/Lark IM chat or thread that the user/app can access. Requires containerId (chat_id or thread_id). This does not read Feishu Mail, Calendar, Docs, or Drive.',
+            description: 'Read messages from one Feishu/Lark chat or direct user conversation with the user-authorized lark-cli profile. Provide chatId/containerId or a direct userId/open_id.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     containerId: { type: 'string', description: 'Feishu chat_id or thread_id.' },
+                    userId: { type: 'string', description: 'Feishu user open_id for a direct P2P conversation. Alternative to containerId.' },
                     containerIdType: { type: 'string', description: 'chat or thread. Default chat.' },
                     startTime: { type: 'string', description: 'Optional start time as Unix seconds, milliseconds, or ISO string. Default 24 hours ago.' },
                     endTime: { type: 'string', description: 'Optional end time as Unix seconds, milliseconds, or ISO string. Default now.' },
@@ -125,7 +170,6 @@ export async function createPersonalDataDynamicTools(config, input) {
                     accountId: { type: 'string', description: 'Altselfs connection id. Required when multiple Feishu accounts are connected.' },
                     accountEmail: { type: 'string', description: 'Feishu account external id/email/open id. Alternative to accountId.' },
                 },
-                required: ['containerId'],
                 additionalProperties: false,
             },
             deferLoading: false,
@@ -143,6 +187,39 @@ export async function createPersonalDataDynamicTools(config, input) {
                     accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, scans up to 3 connected Feishu accounts.' },
                     accountEmail: { type: 'string', description: 'Optional Feishu account external id/email/open id. Alternative to accountId.' },
                 },
+                additionalProperties: false,
+            },
+            deferLoading: false,
+        }, {
+            namespace: null,
+            name: 'altselfs_feishu_today_calendar',
+            description: 'Read the authorized user\'s Feishu/Lark calendar agenda for a date window with lark-cli. Use for today\'s meetings, schedule, and time commitments.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    startTime: { type: 'string', description: 'Optional start time as ISO string, Unix seconds, or milliseconds. Default start of today.' },
+                    endTime: { type: 'string', description: 'Optional end time as ISO string, Unix seconds, or milliseconds. Default end of start day.' },
+                    calendarId: { type: 'string', description: 'Optional calendar id, default primary.' },
+                    accountId: { type: 'string', description: 'Optional Altselfs connection id.' },
+                    accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
+                },
+                additionalProperties: false,
+            },
+            deferLoading: false,
+        }, {
+            namespace: null,
+            name: 'altselfs_feishu_search_docs',
+            description: 'Search Feishu/Lark docs, wiki, and spreadsheet files visible to the authorized user with lark-cli. Use when the question refers to Feishu docs, plans, specs, or knowledge base content.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    query: { type: 'string', description: 'Document search keyword.' },
+                    pageSize: { type: 'number', description: 'Page size, default 10, capped at 20.' },
+                    pageToken: { type: 'string', description: 'Optional pagination token.' },
+                    accountId: { type: 'string', description: 'Optional Altselfs connection id.' },
+                    accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
+                },
+                required: ['query'],
                 additionalProperties: false,
             },
             deferLoading: false,
@@ -173,6 +250,16 @@ export async function runPersonalDataTool(toolName, argumentsValue, config, cont
             await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'gmail', result.account?.connectionId);
             return JSON.stringify(result, null, 2);
         }
+        if (toolName === 'altselfs_feishu_search_messages') {
+            const result = await feishuSearchMessages(config, context, args);
+            await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
+            return JSON.stringify(result, null, 2);
+        }
+        if (toolName === 'altselfs_feishu_search_users') {
+            const result = await feishuSearchUsers(config, context, args);
+            await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
+            return JSON.stringify(result, null, 2);
+        }
         if (toolName === 'altselfs_feishu_list_chats') {
             const result = await feishuListChats(config, context, args);
             await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
@@ -185,6 +272,16 @@ export async function runPersonalDataTool(toolName, argumentsValue, config, cont
         }
         if (toolName === 'altselfs_feishu_recent_messages') {
             const result = await feishuRecentMessages(config, context, args);
+            await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
+            return JSON.stringify(result, null, 2);
+        }
+        if (toolName === 'altselfs_feishu_today_calendar') {
+            const result = await feishuTodayCalendar(config, context, args);
+            await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
+            return JSON.stringify(result, null, 2);
+        }
+        if (toolName === 'altselfs_feishu_search_docs') {
+            const result = await feishuSearchDocs(config, context, args);
             await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
             return JSON.stringify(result, null, 2);
         }
@@ -267,125 +364,207 @@ async function gmailGetThread(config, context, args) {
     };
 }
 async function feishuListChats(config, context, args) {
-    const pageSize = clampNumber(args.pageSize, 20, 1, 50);
+    const pageSize = clampNumber(args.pageSize, 20, 1, 100);
     const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
     const accounts = [];
     for (const connection of connections) {
-        const token = await getFreshFeishuAccessToken(config, context, connection);
-        const result = await feishuFetch(config, token, 'im/v1/chats', {
-            page_size: String(pageSize),
-            page_token: readArgString(args.pageToken),
-        });
+        const result = await runFeishuCliForConnection(config, context, connection, [
+            'im',
+            '+chat-list',
+            '--as',
+            'user',
+            '--types',
+            'p2p,group',
+            '--sort',
+            'active_time',
+            '--page-size',
+            String(pageSize),
+            '--json',
+            ...optionalCliArg('--page-token', readArgString(args.pageToken)),
+        ]);
         accounts.push({
             account: publicConnection(connection),
-            chats: (result.items || []).map(chatDigest),
-            hasMore: Boolean(result.has_more),
-            nextPageToken: result.page_token || null,
+            result,
         });
     }
     return {
         source: 'feishu',
-        resource: 'im_chats',
+        resource: 'lark_cli_im_chats',
         fetchedAt: new Date().toISOString(),
         accounts,
         limitations: [
-            'Only Feishu/Lark IM chats visible to the authorized user and app scopes are returned.',
-            'Feishu Mail, Calendar, Docs, Wiki, and Drive require separate APIs and scopes.',
+            'Uses lark-cli im +chat-list with user identity and types=p2p,group.',
+            'Feishu may still limit which conversations are enumerable for the authorized app/user.',
         ],
     };
 }
 async function feishuListMessages(config, context, args) {
     const containerId = readArgString(args.containerId) || readArgString(args.chatId) || readArgString(args.threadId);
-    if (!containerId)
-        throw new Error('containerId is required.');
-    const containerIdType = normalizeFeishuContainerType(readArgString(args.containerIdType) || (readArgString(args.threadId) ? 'thread' : 'chat'));
+    const userId = readArgString(args.userId) || readArgString(args.openId);
+    if (!containerId && !userId)
+        throw new Error('containerId/chatId or userId is required.');
     const pageSize = clampNumber(args.pageSize, 20, 1, 50);
     const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1 });
-    const token = await getFreshFeishuAccessToken(config, context, connection);
     const timeWindow = resolveFeishuTimeWindow(args);
-    const result = await feishuFetch(config, token, 'im/v1/messages', {
-        container_id_type: containerIdType,
-        container_id: containerId,
-        start_time: timeWindow.startTime,
-        end_time: timeWindow.endTime,
-        sort_type: normalizeFeishuSortType(readArgString(args.sortType)),
-        page_size: String(pageSize),
-        page_token: readArgString(args.pageToken),
-    });
+    const result = await runFeishuCliForConnection(config, context, connection, [
+        'im',
+        '+chat-messages-list',
+        '--as',
+        'user',
+        userId ? '--user-id' : '--chat-id',
+        userId || containerId,
+        '--start',
+        unixSecondsToIso(timeWindow.startTime),
+        '--end',
+        unixSecondsToIso(timeWindow.endTime),
+        '--order',
+        normalizeFeishuCliSortOrder(readArgString(args.sortType)),
+        '--page-size',
+        String(pageSize),
+        '--json',
+        ...optionalCliArg('--page-token', readArgString(args.pageToken)),
+    ]);
     return {
         source: 'feishu',
-        resource: 'im_messages',
+        resource: 'lark_cli_im_messages',
         fetchedAt: new Date().toISOString(),
         account: publicConnection(connection),
-        container: { id: containerId, type: containerIdType },
+        container: userId ? { id: userId, type: 'user' } : { id: containerId, type: 'chat' },
         timeWindow,
-        messages: (result.items || []).map(messageDigest),
-        hasMore: Boolean(result.has_more),
-        nextPageToken: result.page_token || null,
+        result,
         limitations: [
-            'This reads Feishu/Lark IM messages only.',
-            'A chat may be unavailable if app scopes, tenant availability, chat settings, or bot membership do not allow access.',
+            'Uses lark-cli im +chat-messages-list. For direct messages, provide userId/open_id from feishu_search_users.',
+            'A chat may be unavailable if app scopes, tenant availability, or enterprise policy do not allow access.',
         ],
     };
 }
 async function feishuRecentMessages(config, context, args) {
-    const chatLimit = clampNumber(args.chatLimit, 10, 1, 30);
-    const maxMessagesPerChat = clampNumber(args.maxMessagesPerChat, 10, 1, 30);
+    return feishuSearchMessages(config, context, {
+        ...args,
+        pageSize: args.maxMessagesPerChat || args.pageSize || 20,
+        pageLimit: args.pageLimit || 2,
+    });
+}
+async function feishuSearchMessages(config, context, args) {
+    const pageSize = clampNumber(args.pageSize, 20, 1, 50);
+    const pageLimit = clampNumber(args.pageLimit, 1, 1, 5);
+    const timeWindow = resolveFeishuIsoTimeWindow(args);
     const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
-    const timeWindow = resolveFeishuTimeWindow(args);
     const accounts = [];
     for (const connection of connections) {
-        const token = await getFreshFeishuAccessToken(config, context, connection);
-        const chatResult = await feishuFetch(config, token, 'im/v1/chats', {
-            page_size: String(chatLimit),
-        });
-        const chats = (chatResult.items || []).slice(0, chatLimit);
-        const scanned = [];
-        const errors = [];
-        for (const chat of chats) {
-            if (!chat.chat_id)
-                continue;
-            try {
-                const messages = await feishuFetch(config, token, 'im/v1/messages', {
-                    container_id_type: 'chat',
-                    container_id: chat.chat_id,
-                    start_time: timeWindow.startTime,
-                    end_time: timeWindow.endTime,
-                    sort_type: 'ByCreateTimeDesc',
-                    page_size: String(maxMessagesPerChat),
-                });
-                scanned.push({
-                    chat: chatDigest(chat),
-                    messages: (messages.items || []).map(messageDigest),
-                    hasMore: Boolean(messages.has_more),
-                    nextPageToken: messages.page_token || null,
-                });
-            }
-            catch (error) {
-                errors.push({
-                    chat: chatDigest(chat),
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
-        }
-        accounts.push({
-            account: publicConnection(connection),
-            timeWindow,
-            scannedChatCount: scanned.length,
-            unavailableChatCount: errors.length,
-            chats: scanned,
-            errors,
-        });
+        const result = await runFeishuCliForConnection(config, context, connection, [
+            'im',
+            '+messages-search',
+            '--as',
+            'user',
+            '--start',
+            timeWindow.startIso,
+            '--end',
+            timeWindow.endIso,
+            '--page-size',
+            String(pageSize),
+            '--json',
+            ...(pageLimit > 1 ? ['--page-all', '--page-limit', String(pageLimit)] : []),
+            ...optionalCliArg('--query', readArgString(args.query)),
+            ...optionalCliArg('--chat-type', normalizeFeishuChatType(readArgString(args.chatType))),
+            ...(args.isAtMe === true ? ['--is-at-me'] : []),
+        ]);
+        accounts.push({ account: publicConnection(connection), timeWindow, result });
     }
     return {
         source: 'feishu',
-        resource: 'recent_im_messages',
+        resource: 'lark_cli_message_search',
         fetchedAt: new Date().toISOString(),
         accounts,
         limitations: [
-            'Best-effort scan over the first visible chats returned by Feishu; it may not cover every chat the user can see in the native client.',
-            'Feishu Mail, Calendar, Docs, Wiki, and Drive are not included in this IM message scan.',
+            'Uses lark-cli im +messages-search with user identity.',
+            'Search results are limited by the user grant, app scopes, and enterprise policy.',
         ],
+    };
+}
+async function feishuSearchUsers(config, context, args) {
+    const query = readArgString(args.query);
+    const queries = readArgString(args.queries);
+    const userIds = readArgString(args.userIds) || readArgString(args.userId);
+    if (!query && !queries && !userIds)
+        throw new Error('query, queries, or userIds is required.');
+    const pageSize = clampNumber(args.pageSize, 20, 1, 30);
+    const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1 });
+    const result = await runFeishuCliForConnection(config, context, connection, [
+        'contact',
+        '+search-user',
+        '--as',
+        'user',
+        '--page-size',
+        String(pageSize),
+        '--json',
+        ...optionalCliArg('--query', query),
+        ...optionalCliArg('--queries', queries),
+        ...optionalCliArg('--user-ids', userIds),
+        ...(args.hasChatted === false || userIds ? [] : ['--has-chatted']),
+        ...(args.excludeExternalUsers === true ? ['--exclude-external-users'] : []),
+    ]);
+    return {
+        source: 'feishu',
+        resource: 'lark_cli_contact_search',
+        fetchedAt: new Date().toISOString(),
+        account: publicConnection(connection),
+        result,
+    };
+}
+async function feishuTodayCalendar(config, context, args) {
+    const timeWindow = resolveFeishuIsoTimeWindow(args, { defaultToday: true });
+    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
+    const accounts = [];
+    for (const connection of connections) {
+        const result = await runFeishuCliForConnection(config, context, connection, [
+            'calendar',
+            '+agenda',
+            '--as',
+            'user',
+            '--start',
+            timeWindow.startIso,
+            '--end',
+            timeWindow.endIso,
+            '--json',
+            ...optionalCliArg('--calendar-id', readArgString(args.calendarId)),
+        ]);
+        accounts.push({ account: publicConnection(connection), timeWindow, result });
+    }
+    return {
+        source: 'feishu',
+        resource: 'lark_cli_calendar_agenda',
+        fetchedAt: new Date().toISOString(),
+        accounts,
+    };
+}
+async function feishuSearchDocs(config, context, args) {
+    const query = readArgString(args.query);
+    if (!query)
+        throw new Error('query is required.');
+    const pageSize = clampNumber(args.pageSize, 10, 1, 20);
+    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
+    const accounts = [];
+    for (const connection of connections) {
+        const result = await runFeishuCliForConnection(config, context, connection, [
+            'docs',
+            '+search',
+            '--as',
+            'user',
+            '--query',
+            query,
+            '--page-size',
+            String(pageSize),
+            '--json',
+            ...optionalCliArg('--page-token', readArgString(args.pageToken)),
+        ]);
+        accounts.push({ account: publicConnection(connection), result });
+    }
+    return {
+        source: 'feishu',
+        resource: 'lark_cli_docs_search',
+        fetchedAt: new Date().toISOString(),
+        accounts,
     };
 }
 async function resolveGmailConnections(config, context, args, options) {
@@ -466,7 +645,7 @@ async function resolveFeishuConnections(config, context, args, options) {
         return connections;
     throw new Error('Multiple Feishu accounts are connected. Provide accountId or accountEmail.');
 }
-async function getFreshFeishuAccessToken(config, context, connection) {
+async function loadFeishuCliCredential(config, context, connection) {
     const credential = await loadPersonalCredential(config, { investorId: context.investorId, connectionId: connection.id });
     if (!credential)
         throw new Error(`Credential not found for Feishu account ${connection.displayName}.`);
@@ -475,46 +654,35 @@ async function getFreshFeishuAccessToken(config, context, connection) {
         encryptedPayload: credential.encryptedPayload,
         encryptedDataKey: credential.encryptedDataKey,
     });
-    const expiresAt = payload.expiresAt ? Date.parse(payload.expiresAt) : 0;
-    if (payload.accessToken && (!expiresAt || expiresAt > Date.now() + 60_000))
-        return payload.accessToken;
-    if (!payload.refreshToken)
-        throw new Error(`Feishu account ${connection.displayName} needs reconnect: no refresh token is available.`);
-    const refreshed = await refreshFeishuAccessToken(config, payload.refreshToken);
-    const nextPayload = {
-        ...payload,
-        accessToken: refreshed.access_token,
-        tokenType: refreshed.token_type || payload.tokenType,
-        scope: refreshed.scope || payload.scope,
-        expiresAt: refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null,
-        refreshToken: refreshed.refresh_token || payload.refreshToken,
-    };
+    if (payload.authMode !== 'lark_cli_user' && connection.connectionType !== 'lark_cli_user') {
+        throw new Error(`Feishu account ${connection.displayName} was bound with the legacy API connector. Rebind Feishu to use the new lark-cli connector.`);
+    }
+    const profileName = payload.cliProfileName || (typeof connection.metadata.cli_profile_name === 'string' ? connection.metadata.cli_profile_name : '');
+    if (!profileName)
+        throw new Error(`Feishu account ${connection.displayName} is missing its lark-cli profile. Rebind Feishu.`);
+    if (!payload.cliProfileSnapshot) {
+        throw new Error(`Feishu account ${connection.displayName} is missing its encrypted lark-cli profile snapshot. Rebind Feishu.`);
+    }
+    return { profileName, payload };
+}
+async function runFeishuCliForConnection(config, context, connection, args) {
+    const { profileName, payload } = await loadFeishuCliCredential(config, context, connection);
+    const { result, profileSnapshot } = await runFeishuCliWithSnapshot(config, profileName, payload.cliProfileSnapshot, args);
     await updatePersonalCredentialPayload(config, {
         investorId: context.investorId,
         connectionId: connection.id,
-        payload: nextPayload,
+        payload: {
+            ...payload,
+            provider: 'feishu',
+            authMode: 'lark_cli_user',
+            accountId: payload.accountId || connection.externalAccountId,
+            cliProfileName: profileName,
+            cliProfileSnapshot: profileSnapshot,
+            scope: payload.scope || connection.scopes.join(' '),
+            expiresAt: null,
+        },
     });
-    return nextPayload.accessToken;
-}
-async function refreshFeishuAccessToken(config, refreshToken) {
-    const clientId = process.env.FEISHU_APP_ID?.trim();
-    const clientSecret = process.env.FEISHU_APP_SECRET?.trim();
-    if (!clientId || !clientSecret)
-        throw new Error('FEISHU_APP_ID and FEISHU_APP_SECRET must be configured on personal-agent-server.');
-    const res = await externalFetch(config, 'https://open.feishu.cn/open-apis/authen/v2/oauth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: JSON.stringify({
-            grant_type: 'refresh_token',
-            client_id: clientId,
-            client_secret: clientSecret,
-            refresh_token: refreshToken,
-        }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || (typeof data.code === 'number' && data.code !== 0))
-        throw new Error(`Feishu token refresh failed: ${JSON.stringify(data).slice(0, 1000)}`);
-    return normalizeFeishuOAuthToken(data, 'refresh');
+    return result;
 }
 async function refreshGoogleAccessToken(config, refreshToken) {
     const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
@@ -565,89 +733,23 @@ async function gmailFetch(config, accessToken, path) {
         throw new Error(`Gmail API failed: ${JSON.stringify(data).slice(0, 1000)}`);
     return data;
 }
-async function feishuFetch(config, accessToken, path, params) {
-    const url = new URL(`https://open.feishu.cn/open-apis/${path.replace(/^\/+/, '')}`);
-    for (const [key, value] of Object.entries(params || {})) {
-        if (value)
-            url.searchParams.set(key, value);
-    }
-    const res = await externalFetch(config, url, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.code !== 0) {
-        throw new Error(`Feishu API failed (${path}): ${JSON.stringify(data).slice(0, 1000)}`);
-    }
-    return (data.data || {});
-}
-function chatDigest(chat) {
-    return {
-        chatId: chat.chat_id || '',
-        name: chat.name || '',
-        description: chat.description || '',
-        chatType: chat.chat_type || '',
-        chatMode: chat.chat_mode || '',
-        chatStatus: chat.chat_status || '',
-        chatTag: chat.chat_tag || '',
-        ownerId: chat.owner_id || '',
-        external: typeof chat.external === 'boolean' ? chat.external : null,
-    };
-}
-function messageDigest(message) {
-    const parsedContent = parseFeishuContent(message.body?.content);
-    return {
-        messageId: message.message_id || '',
-        rootId: message.root_id || null,
-        parentId: message.parent_id || null,
-        threadId: message.thread_id || null,
-        chatId: message.chat_id || null,
-        messageType: message.msg_type || '',
-        sender: message.sender || null,
-        createTime: normalizeFeishuApiTime(message.create_time),
-        updateTime: normalizeFeishuApiTime(message.update_time),
-        deleted: Boolean(message.deleted),
-        updated: Boolean(message.updated),
-        mentions: message.mentions || [],
-        contentText: truncate(extractFeishuContentText(parsedContent), 5000),
-        content: parsedContent,
-    };
-}
-function parseFeishuContent(raw) {
-    if (!raw)
-        return null;
-    try {
-        return JSON.parse(raw);
-    }
-    catch {
-        return raw;
-    }
-}
-function extractFeishuContentText(value) {
-    if (value === null || value === undefined)
-        return '';
-    if (typeof value === 'string')
-        return value;
-    if (typeof value === 'number' || typeof value === 'boolean')
-        return String(value);
-    if (Array.isArray(value))
-        return value.map(extractFeishuContentText).filter(Boolean).join(' ');
-    if (typeof value !== 'object')
-        return '';
-    const record = value;
-    const priority = ['text', 'title', 'content', 'href', 'name'];
-    const parts = [];
-    for (const key of priority) {
-        if (record[key] !== undefined)
-            parts.push(extractFeishuContentText(record[key]));
-    }
-    if (parts.some(Boolean))
-        return parts.filter(Boolean).join(' ');
-    return Object.values(record).map(extractFeishuContentText).filter(Boolean).join(' ');
-}
 function resolveFeishuTimeWindow(args) {
     const endTime = toFeishuSeconds(args.endTime, Date.now());
     const startTime = toFeishuSeconds(args.startTime, Date.now() - 24 * 60 * 60 * 1000);
     return { startTime, endTime };
+}
+function resolveFeishuIsoTimeWindow(args, options = {}) {
+    const now = new Date();
+    const defaultStart = options.defaultToday
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+        : Date.now() - 24 * 60 * 60 * 1000;
+    const defaultEnd = options.defaultToday
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, -1).getTime()
+        : Date.now();
+    return {
+        startIso: toIsoTime(args.startTime, defaultStart),
+        endIso: toIsoTime(args.endTime, defaultEnd),
+    };
 }
 function toFeishuSeconds(value, fallbackMs) {
     const fallback = Math.floor(fallbackMs / 1000);
@@ -667,53 +769,43 @@ function toFeishuSeconds(value, fallbackMs) {
     }
     return String(fallback);
 }
-function normalizeFeishuApiTime(value) {
-    if (!value)
-        return null;
+function toIsoTime(value, fallbackMs) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return new Date(value > 10_000_000_000 ? value : value * 1000).toISOString();
+    }
+    if (typeof value === 'string' && value.trim()) {
+        const trimmed = value.trim();
+        if (/^\d+$/.test(trimmed)) {
+            const number = Number(trimmed);
+            if (Number.isFinite(number))
+                return new Date(number > 10_000_000_000 ? number : number * 1000).toISOString();
+        }
+        const parsed = Date.parse(trimmed);
+        if (Number.isFinite(parsed))
+            return new Date(parsed).toISOString();
+    }
+    return new Date(fallbackMs).toISOString();
+}
+function unixSecondsToIso(value) {
     const number = Number(value);
     if (!Number.isFinite(number))
-        return value;
-    return new Date(number > 10_000_000_000 ? number : number * 1000).toISOString();
+        return new Date().toISOString();
+    return new Date(number * 1000).toISOString();
 }
-function normalizeFeishuContainerType(value) {
+function optionalCliArg(flag, value) {
+    return value ? [flag, value] : [];
+}
+function normalizeFeishuCliSortOrder(value) {
     const normalized = value.trim().toLowerCase();
-    if (normalized === 'thread')
-        return 'thread';
-    return 'chat';
+    if (normalized === 'asc' || normalized === 'bycreatetimeasc')
+        return 'asc';
+    return 'desc';
 }
-function normalizeFeishuSortType(value) {
-    return value === 'ByCreateTimeAsc' ? 'ByCreateTimeAsc' : 'ByCreateTimeDesc';
-}
-function normalizeFeishuOAuthToken(raw, operation) {
-    const body = raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)
-        ? raw.data
-        : raw;
-    const accessToken = readRecordString(body, 'access_token') || readRecordString(body, 'user_access_token');
-    if (!accessToken) {
-        throw new Error(`Feishu token ${operation} returned no access token. responseKeys=${Object.keys(raw).join(',')}; dataKeys=${Object.keys(body).join(',')}`);
-    }
-    return {
-        access_token: accessToken,
-        refresh_token: readRecordString(body, 'refresh_token') || undefined,
-        expires_in: readRecordNumber(body, 'expires_in') || readRecordNumber(body, 'expire') || undefined,
-        scope: readRecordString(body, 'scope') || undefined,
-        token_type: readRecordString(body, 'token_type') || undefined,
-    };
-}
-function readRecordString(record, key) {
-    const value = record[key];
-    return typeof value === 'string' && value.trim() ? value.trim() : '';
-}
-function readRecordNumber(record, key) {
-    const value = record[key];
-    if (typeof value === 'number' && Number.isFinite(value))
-        return value;
-    if (typeof value === 'string' && value.trim()) {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed))
-            return parsed;
-    }
-    return 0;
+function normalizeFeishuChatType(value) {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'p2p' || normalized === 'group')
+        return normalized;
+    return '';
 }
 function metadataMessageDigest(message) {
     const headers = headersMap(message.payload?.headers || []);
@@ -784,6 +876,7 @@ function publicConnection(connection) {
     return {
         connectionId: connection.id,
         provider: connection.provider,
+        connectionType: connection.connectionType,
         accountEmail: connection.externalAccountId,
         displayName: connection.displayName,
         scopes: connection.scopes,

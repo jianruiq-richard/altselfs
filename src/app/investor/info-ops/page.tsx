@@ -14,6 +14,8 @@ export default async function InfoOpsPage({
     integrationStatus?: string;
     integrationProvider?: string;
     integrationDetail?: string;
+    feishuAuthUrl?: string;
+    feishuUserCode?: string;
     assistant?: string;
   }>;
 }) {
@@ -121,6 +123,8 @@ export default async function InfoOpsPage({
         integrationStatus={query.integrationStatus}
         integrationProvider={query.integrationProvider}
         integrationDetail={query.integrationDetail}
+        feishuAuthUrl={query.feishuAuthUrl}
+        feishuUserCode={query.feishuUserCode}
       />
 
       <InvestorWechatSourcesPanel initialSources={initialWechatSources} />
