@@ -512,11 +512,9 @@ async function refreshFeishuAccessToken(config, refreshToken) {
         }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.code !== 0)
+    if (!res.ok || (typeof data.code === 'number' && data.code !== 0))
         throw new Error(`Feishu token refresh failed: ${JSON.stringify(data).slice(0, 1000)}`);
-    if (!data.data?.access_token)
-        throw new Error(`Feishu token refresh returned no access_token: ${JSON.stringify(data).slice(0, 1000)}`);
-    return data.data;
+    return normalizeFeishuOAuthToken(data, 'refresh');
 }
 async function refreshGoogleAccessToken(config, refreshToken) {
     const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
@@ -685,6 +683,37 @@ function normalizeFeishuContainerType(value) {
 }
 function normalizeFeishuSortType(value) {
     return value === 'ByCreateTimeAsc' ? 'ByCreateTimeAsc' : 'ByCreateTimeDesc';
+}
+function normalizeFeishuOAuthToken(raw, operation) {
+    const body = raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)
+        ? raw.data
+        : raw;
+    const accessToken = readRecordString(body, 'access_token') || readRecordString(body, 'user_access_token');
+    if (!accessToken) {
+        throw new Error(`Feishu token ${operation} returned no access token. responseKeys=${Object.keys(raw).join(',')}; dataKeys=${Object.keys(body).join(',')}`);
+    }
+    return {
+        access_token: accessToken,
+        refresh_token: readRecordString(body, 'refresh_token') || undefined,
+        expires_in: readRecordNumber(body, 'expires_in') || readRecordNumber(body, 'expire') || undefined,
+        scope: readRecordString(body, 'scope') || undefined,
+        token_type: readRecordString(body, 'token_type') || undefined,
+    };
+}
+function readRecordString(record, key) {
+    const value = record[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+function readRecordNumber(record, key) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value))
+        return value;
+    if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed))
+            return parsed;
+    }
+    return 0;
 }
 function metadataMessageDigest(message) {
     const headers = headersMap(message.payload?.headers || []);

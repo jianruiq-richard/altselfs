@@ -552,16 +552,9 @@ async function refreshFeishuAccessToken(config: ServerConfig, refreshToken: stri
       refresh_token: refreshToken,
     }),
   });
-  const data = await res.json().catch(() => ({})) as FeishuApiResponse<{
-    access_token: string;
-    refresh_token?: string;
-    expires_in?: number;
-    scope?: string;
-    token_type?: string;
-  }>;
-  if (!res.ok || data.code !== 0) throw new Error(`Feishu token refresh failed: ${JSON.stringify(data).slice(0, 1000)}`);
-  if (!data.data?.access_token) throw new Error(`Feishu token refresh returned no access_token: ${JSON.stringify(data).slice(0, 1000)}`);
-  return data.data;
+  const data = await res.json().catch(() => ({})) as FeishuApiResponse<Record<string, unknown>> & Record<string, unknown>;
+  if (!res.ok || (typeof data.code === 'number' && data.code !== 0)) throw new Error(`Feishu token refresh failed: ${JSON.stringify(data).slice(0, 1000)}`);
+  return normalizeFeishuOAuthToken(data, 'refresh');
 }
 
 async function refreshGoogleAccessToken(config: ServerConfig, refreshToken: string) {
@@ -722,6 +715,38 @@ function normalizeFeishuContainerType(value: string) {
 
 function normalizeFeishuSortType(value: string) {
   return value === 'ByCreateTimeAsc' ? 'ByCreateTimeAsc' : 'ByCreateTimeDesc';
+}
+
+function normalizeFeishuOAuthToken(raw: FeishuApiResponse<Record<string, unknown>> & Record<string, unknown>, operation: string) {
+  const body = raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)
+    ? raw.data as Record<string, unknown>
+    : raw;
+  const accessToken = readRecordString(body, 'access_token') || readRecordString(body, 'user_access_token');
+  if (!accessToken) {
+    throw new Error(`Feishu token ${operation} returned no access token. responseKeys=${Object.keys(raw).join(',')}; dataKeys=${Object.keys(body).join(',')}`);
+  }
+  return {
+    access_token: accessToken,
+    refresh_token: readRecordString(body, 'refresh_token') || undefined,
+    expires_in: readRecordNumber(body, 'expires_in') || readRecordNumber(body, 'expire') || undefined,
+    scope: readRecordString(body, 'scope') || undefined,
+    token_type: readRecordString(body, 'token_type') || undefined,
+  };
+}
+
+function readRecordString(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function readRecordNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
 }
 
 function metadataMessageDigest(message: GmailMessageFull) {

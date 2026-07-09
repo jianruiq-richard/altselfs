@@ -65,6 +65,14 @@ type GmailMessageDigest = {
 
 export type GmailRealtimeMessage = GmailMessageDigest;
 
+type FeishuOAuthToken = {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  refresh_token?: string;
+  scope?: string;
+};
+
 function getEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -256,17 +264,11 @@ export async function exchangeFeishuCode(origin: string, code: string) {
     }),
   });
   const data = await res.json();
-  if (!res.ok || data.code !== 0) {
+  if (!res.ok || (typeof data.code === 'number' && data.code !== 0)) {
     throw new Error(`Feishu token exchange failed: ${JSON.stringify(data)}`);
   }
 
-  return data.data as {
-    access_token: string;
-    token_type: string;
-    expires_in: number;
-    refresh_token?: string;
-    scope?: string;
-  };
+  return normalizeFeishuOAuthToken(data);
 }
 
 export async function exchangeFeishuPersonalCode(origin: string, code: string) {
@@ -283,17 +285,44 @@ export async function exchangeFeishuPersonalCode(origin: string, code: string) {
     }),
   });
   const data = await res.json();
-  if (!res.ok || data.code !== 0) {
+  if (!res.ok || (typeof data.code === 'number' && data.code !== 0)) {
     throw new Error(`Feishu token exchange failed: ${JSON.stringify(data)}`);
   }
 
-  return data.data as {
-    access_token: string;
-    token_type: string;
-    expires_in: number;
-    refresh_token?: string;
-    scope?: string;
+  return normalizeFeishuOAuthToken(data);
+}
+
+function normalizeFeishuOAuthToken(raw: unknown): FeishuOAuthToken {
+  const root = isPlainObject(raw) ? raw : {};
+  const body = isPlainObject(root.data) ? root.data : root;
+  const accessToken = readString(body.access_token) || readString(body.user_access_token);
+  if (!accessToken) {
+    throw new Error(`Feishu token exchange returned no access token. responseKeys=${Object.keys(root).join(',')}; dataKeys=${Object.keys(body).join(',')}`);
+  }
+  return {
+    access_token: accessToken,
+    token_type: readString(body.token_type) || 'Bearer',
+    expires_in: readNumber(body.expires_in) || readNumber(body.expire) || 7200,
+    refresh_token: readString(body.refresh_token) || undefined,
+    scope: readString(body.scope) || undefined,
   };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function readString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function readNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
 }
 
 export async function fetchGmailProfile(accessToken: string): Promise<GmailProfile> {
