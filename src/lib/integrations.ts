@@ -174,6 +174,17 @@ export function buildFeishuAuthUrl(origin: string, state: string): string {
   return `https://accounts.feishu.cn/open-apis/authen/v1/authorize?${params.toString()}`;
 }
 
+export function buildFeishuPersonalAuthUrl(origin: string, state: string): string {
+  const redirectUri = `${origin}/api/investor/personal-data/feishu/callback`;
+  const appId = getEnv('FEISHU_APP_ID');
+  const params = new URLSearchParams({
+    app_id: appId,
+    redirect_uri: redirectUri,
+    state,
+  });
+  return `https://accounts.feishu.cn/open-apis/authen/v1/authorize?${params.toString()}`;
+}
+
 export async function exchangeGoogleCode(origin: string, code: string) {
   const redirectUri = getOAuthRedirectUri('gmail', origin);
   const body = new URLSearchParams({
@@ -233,6 +244,33 @@ export async function refreshGoogleAccessToken(refreshToken: string) {
 
 export async function exchangeFeishuCode(origin: string, code: string) {
   const redirectUri = getOAuthRedirectUri('feishu', origin);
+  const res = await fetch('https://open.feishu.cn/open-apis/authen/v2/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      client_id: getEnv('FEISHU_APP_ID'),
+      client_secret: getEnv('FEISHU_APP_SECRET'),
+      code,
+      redirect_uri: redirectUri,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.code !== 0) {
+    throw new Error(`Feishu token exchange failed: ${JSON.stringify(data)}`);
+  }
+
+  return data.data as {
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+    refresh_token?: string;
+    scope?: string;
+  };
+}
+
+export async function exchangeFeishuPersonalCode(origin: string, code: string) {
+  const redirectUri = `${origin}/api/investor/personal-data/feishu/callback`;
   const res = await fetch('https://open.feishu.cn/open-apis/authen/v2/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
@@ -614,6 +652,7 @@ export async function fetchFeishuUserInfo(accessToken: string) {
     avatar_url?: string;
     open_id?: string;
     union_id?: string;
+    tenant_key?: string;
     email?: string;
   };
 }

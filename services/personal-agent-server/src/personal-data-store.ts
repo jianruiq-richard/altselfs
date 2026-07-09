@@ -36,6 +36,21 @@ export type GmailCredentialPayload = {
   accountEmail: string;
 };
 
+export type FeishuCredentialPayload = {
+  provider: 'feishu';
+  accessToken: string;
+  refreshToken?: string;
+  tokenType?: string;
+  scope?: string;
+  expiresAt?: string | null;
+  accountId: string;
+  openId?: string;
+  unionId?: string;
+  tenantKey?: string;
+};
+
+export type PersonalCredentialPayload = GmailCredentialPayload | FeishuCredentialPayload;
+
 export type PersonalCredentialRecord = {
   id: string;
   connectionId: string;
@@ -188,6 +203,124 @@ export async function upsertGmailOAuthConnection(config: ServerConfig, input: {
   return connections.find((connection) => connection.id === connectionId) || null;
 }
 
+export async function upsertFeishuOAuthConnection(config: ServerConfig, input: {
+  investorId: string;
+  userId: string;
+  accountId: string;
+  accountName?: string;
+  token: {
+    accessToken: string;
+    refreshToken?: string;
+    tokenType?: string;
+    scope?: string;
+    expiresIn?: number | null;
+  };
+  profile?: Record<string, unknown>;
+}) {
+  const pool = await getPersonalDataPool(config);
+  const capabilityId = await upsertCapability(pool, {
+    investorId: input.investorId,
+    userId: input.userId,
+    capabilityKey: 'feishu',
+    capabilityType: 'oauth_account',
+    displayName: '飞书',
+  });
+  const accountId = input.accountId.trim();
+  if (!accountId) throw new Error('Feishu accountId is required.');
+  const expiresAt = input.token.expiresIn && input.token.expiresIn > 0
+    ? new Date(Date.now() + input.token.expiresIn * 1000).toISOString()
+    : null;
+
+  const existing = await pool.query(
+    [
+      'select c.id, cr.encrypted_payload, cr.encrypted_data_key, cr.key_provider',
+      'from personal_external_connections c',
+      'left join personal_credentials cr on cr.connection_id = c.id and cr.status = $4',
+      'where c.investor_id = $1 and c.provider = $2 and c.external_account_id = $3',
+      'limit 1',
+    ].join(' '),
+    [input.investorId, 'feishu', accountId, 'active']
+  );
+  const connectionId = existing.rows[0]?.id ? String(existing.rows[0].id) : id('conn');
+  let refreshToken = input.token.refreshToken;
+  if (!refreshToken && existing.rows[0]?.encrypted_payload && existing.rows[0]?.encrypted_data_key && existing.rows[0]?.key_provider) {
+    const current = decryptCredentialPayload<FeishuCredentialPayload>({
+      keyProvider: String(existing.rows[0].key_provider),
+      encryptedPayload: String(existing.rows[0].encrypted_payload),
+      encryptedDataKey: String(existing.rows[0].encrypted_data_key),
+    });
+    refreshToken = current.refreshToken;
+  }
+
+  const metadata = input.profile || {};
+  const encrypted = encryptCredentialPayload({
+    provider: 'feishu',
+    accessToken: input.token.accessToken,
+    refreshToken,
+    tokenType: input.token.tokenType,
+    scope: input.token.scope,
+    expiresAt,
+    accountId,
+    openId: typeof metadata.open_id === 'string' ? metadata.open_id : undefined,
+    unionId: typeof metadata.union_id === 'string' ? metadata.union_id : undefined,
+    tenantKey: typeof metadata.tenant_key === 'string' ? metadata.tenant_key : undefined,
+  } satisfies FeishuCredentialPayload);
+
+  await pool.query(
+    [
+      'insert into personal_external_connections',
+      '(id, capability_id, investor_id, user_id, provider, connection_type, external_account_id, display_name, scopes, status, expires_at, metadata, created_at, updated_at)',
+      'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::timestamptz, $12::jsonb, now(), now())',
+      'on conflict (investor_id, provider, external_account_id) do update set',
+      'capability_id = excluded.capability_id, user_id = excluded.user_id, display_name = excluded.display_name, scopes = excluded.scopes,',
+      "status = 'connected', expires_at = excluded.expires_at, metadata = excluded.metadata, updated_at = now()",
+    ].join(' '),
+    [
+      connectionId,
+      capabilityId,
+      input.investorId,
+      input.userId,
+      'feishu',
+      'oauth_user',
+      accountId,
+      input.accountName || accountId,
+      parseScopes(input.token.scope),
+      'connected',
+      expiresAt,
+      JSON.stringify(metadata),
+    ]
+  );
+
+  await pool.query(
+    [
+      'insert into personal_credentials',
+      '(id, connection_id, investor_id, user_id, credential_type, encrypted_payload, encrypted_data_key, key_provider, key_version, expires_at, status, created_at, updated_at)',
+      'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, $11, now(), now())',
+      'on conflict (connection_id) do update set',
+      'investor_id = excluded.investor_id, user_id = excluded.user_id, credential_type = excluded.credential_type,',
+      'encrypted_payload = excluded.encrypted_payload, encrypted_data_key = excluded.encrypted_data_key,',
+      'key_provider = excluded.key_provider, key_version = excluded.key_version, expires_at = excluded.expires_at,',
+      "status = 'active', updated_at = now()",
+    ].join(' '),
+    [
+      id('cred'),
+      connectionId,
+      input.investorId,
+      input.userId,
+      'oauth_token',
+      encrypted.encryptedPayload,
+      encrypted.encryptedDataKey,
+      encrypted.keyProvider,
+      encrypted.keyVersion,
+      expiresAt,
+      'active',
+    ]
+  );
+
+  const connections = await listPersonalConnections(config, { investorId: input.investorId, provider: 'feishu' });
+  return connections.find((connection) => connection.id === connectionId) || null;
+}
+
 export async function disablePersonalConnection(config: ServerConfig, input: {
   investorId: string;
   connectionId: string;
@@ -244,7 +377,7 @@ export async function loadPersonalCredential(config: ServerConfig, input: {
 export async function updatePersonalCredentialPayload(config: ServerConfig, input: {
   investorId: string;
   connectionId: string;
-  payload: GmailCredentialPayload;
+  payload: PersonalCredentialPayload;
 }) {
   const encrypted = encryptCredentialPayload(input.payload);
   const pool = await getPersonalDataPool(config);

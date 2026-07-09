@@ -794,7 +794,7 @@ function buildCodexDeveloperInstructions(input) {
         `Selected agent profile from Hermes Router: ${input.selectedAgentProfileId || 'main'}.`,
     ];
     const personalDataToolInstruction = input.personalDataToolNames?.length
-        ? `- The following private personal-data tools are enabled for this user in this turn: ${input.personalDataToolNames.join(', ')}. When the user asks about Gmail, email, inbox, messages, or personal-channel content, call the relevant Gmail/personal-data tool before answering.`
+        ? `- The following private personal-data tools are enabled for this user in this turn: ${input.personalDataToolNames.join(', ')}. When the user asks about Gmail, Feishu/Lark IM, email, inbox, messages, team updates, or personal-channel content, call the relevant personal-data tool before answering. Feishu tools cover IM chats/messages only; do not claim access to Feishu Mail, Calendar, Docs, Wiki, or Drive unless a matching tool is available and called.`
         : '- No private personal-data tools are enabled for this user in this turn. Do not claim to have read Gmail, Feishu, or other private-channel accounts.';
     if (input.selectedAgentProfileId === 'codex-competitive-intelligence') {
         const enabledCompetitorTools = input.enabledCompetitorTools || [];

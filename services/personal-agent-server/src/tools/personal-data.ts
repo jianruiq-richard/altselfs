@@ -6,6 +6,7 @@ import {
   loadPersonalCredential,
   recordPersonalToolCallAudit,
   updatePersonalCredentialPayload,
+  type FeishuCredentialPayload,
   type GmailCredentialPayload,
   type PersonalConnection,
 } from '../personal-data-store.js';
@@ -23,6 +24,9 @@ const PERSONAL_TOOL_NAMES = new Set([
   'altselfs_gmail_search_messages',
   'altselfs_gmail_get_message',
   'altselfs_gmail_get_thread',
+  'altselfs_feishu_list_chats',
+  'altselfs_feishu_list_messages',
+  'altselfs_feishu_recent_messages',
 ]);
 
 export function isPersonalDataTool(toolName: string) {
@@ -35,8 +39,10 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
   const investorId = input.investorId?.trim();
   if (!investorId || !isCredentialVaultConfigured()) return [];
   let gmailConnections: PersonalConnection[] = [];
+  let feishuConnections: PersonalConnection[] = [];
   try {
     gmailConnections = await listPersonalConnections(config, { investorId, provider: 'gmail' });
+    feishuConnections = await listPersonalConnections(config, { investorId, provider: 'feishu' });
   } catch {
     return [];
   }
@@ -45,7 +51,7 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
       namespace: null,
       name: 'altselfs_connected_accounts_list',
       description:
-        'List the user-connected personal data accounts available to this turn, such as Gmail accounts. Use before private-channel research when you need to know what the user has authorized.',
+        'List the user-connected personal data accounts available to this turn, such as Gmail and Feishu accounts. Use before private-channel research when you need to know what the user has authorized.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -113,6 +119,69 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
       }
     );
   }
+  if (feishuConnections.length > 0) {
+    tools.push(
+      {
+        namespace: null,
+        name: 'altselfs_feishu_list_chats',
+        description:
+          'List Feishu/Lark IM chats visible through the user-authorized account and app scopes. Use before reading Feishu messages when a chat id is needed. This covers IM chats only, not Feishu Mail, Calendar, Docs, or Drive.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, uses the only connected Feishu account or the first few accounts.' },
+            accountEmail: { type: 'string', description: 'Optional Feishu account external id/email/open id. Alternative to accountId.' },
+            pageSize: { type: 'number', description: 'Max chats to return, default 20, capped at 50.' },
+            pageToken: { type: 'string', description: 'Optional Feishu pagination token.' },
+          },
+          additionalProperties: false,
+        },
+        deferLoading: false,
+      },
+      {
+        namespace: null,
+        name: 'altselfs_feishu_list_messages',
+        description:
+          'Read messages from one Feishu/Lark IM chat or thread that the user/app can access. Requires containerId (chat_id or thread_id). This does not read Feishu Mail, Calendar, Docs, or Drive.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            containerId: { type: 'string', description: 'Feishu chat_id or thread_id.' },
+            containerIdType: { type: 'string', description: 'chat or thread. Default chat.' },
+            startTime: { type: 'string', description: 'Optional start time as Unix seconds, milliseconds, or ISO string. Default 24 hours ago.' },
+            endTime: { type: 'string', description: 'Optional end time as Unix seconds, milliseconds, or ISO string. Default now.' },
+            sortType: { type: 'string', description: 'ByCreateTimeDesc or ByCreateTimeAsc. Default ByCreateTimeDesc.' },
+            pageSize: { type: 'number', description: 'Max messages to return, default 20, capped at 50.' },
+            pageToken: { type: 'string', description: 'Optional Feishu pagination token.' },
+            accountId: { type: 'string', description: 'Altselfs connection id. Required when multiple Feishu accounts are connected.' },
+            accountEmail: { type: 'string', description: 'Feishu account external id/email/open id. Alternative to accountId.' },
+          },
+          required: ['containerId'],
+          additionalProperties: false,
+        },
+        deferLoading: false,
+      },
+      {
+        namespace: null,
+        name: 'altselfs_feishu_recent_messages',
+        description:
+          'Best-effort scan of recent Feishu/Lark IM messages across visible chats for a connected account. Use for questions like today\'s Feishu messages, team updates, and pending follow-ups. Access may be partial when app scopes, chat settings, or bot membership limit a chat.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            startTime: { type: 'string', description: 'Optional start time as Unix seconds, milliseconds, or ISO string. Default 24 hours ago.' },
+            endTime: { type: 'string', description: 'Optional end time as Unix seconds, milliseconds, or ISO string. Default now.' },
+            chatLimit: { type: 'number', description: 'Max chats to scan per account, default 10, capped at 30.' },
+            maxMessagesPerChat: { type: 'number', description: 'Max messages per chat, default 10, capped at 30.' },
+            accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, scans up to 3 connected Feishu accounts.' },
+            accountEmail: { type: 'string', description: 'Optional Feishu account external id/email/open id. Alternative to accountId.' },
+          },
+          additionalProperties: false,
+        },
+        deferLoading: false,
+      }
+    );
+  }
   return tools;
 }
 
@@ -142,6 +211,21 @@ export async function runPersonalDataTool(
     if (toolName === 'altselfs_gmail_get_thread') {
       const result = await gmailGetThread(config, context, args);
       await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'gmail', result.account?.connectionId);
+      return JSON.stringify(result, null, 2);
+    }
+    if (toolName === 'altselfs_feishu_list_chats') {
+      const result = await feishuListChats(config, context, args);
+      await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
+      return JSON.stringify(result, null, 2);
+    }
+    if (toolName === 'altselfs_feishu_list_messages') {
+      const result = await feishuListMessages(config, context, args);
+      await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu', result.account?.connectionId);
+      return JSON.stringify(result, null, 2);
+    }
+    if (toolName === 'altselfs_feishu_recent_messages') {
+      const result = await feishuRecentMessages(config, context, args);
+      await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
       return JSON.stringify(result, null, 2);
     }
     return JSON.stringify({ source: 'personal-data-tools', error: `Unsupported personal data tool: ${toolName}` }, null, 2);
@@ -224,6 +308,128 @@ async function gmailGetThread(config: ServerConfig, context: PersonalToolContext
   };
 }
 
+async function feishuListChats(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+  const pageSize = clampNumber(args.pageSize, 20, 1, 50);
+  const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
+  const accounts = [];
+  for (const connection of connections) {
+    const token = await getFreshFeishuAccessToken(config, context, connection);
+    const result = await feishuFetch<FeishuChatList>(config, token, 'im/v1/chats', {
+      page_size: String(pageSize),
+      page_token: readArgString(args.pageToken),
+    });
+    accounts.push({
+      account: publicConnection(connection),
+      chats: (result.items || []).map(chatDigest),
+      hasMore: Boolean(result.has_more),
+      nextPageToken: result.page_token || null,
+    });
+  }
+  return {
+    source: 'feishu',
+    resource: 'im_chats',
+    fetchedAt: new Date().toISOString(),
+    accounts,
+    limitations: [
+      'Only Feishu/Lark IM chats visible to the authorized user and app scopes are returned.',
+      'Feishu Mail, Calendar, Docs, Wiki, and Drive require separate APIs and scopes.',
+    ],
+  };
+}
+
+async function feishuListMessages(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+  const containerId = readArgString(args.containerId) || readArgString(args.chatId) || readArgString(args.threadId);
+  if (!containerId) throw new Error('containerId is required.');
+  const containerIdType = normalizeFeishuContainerType(readArgString(args.containerIdType) || (readArgString(args.threadId) ? 'thread' : 'chat'));
+  const pageSize = clampNumber(args.pageSize, 20, 1, 50);
+  const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1 });
+  const token = await getFreshFeishuAccessToken(config, context, connection);
+  const timeWindow = resolveFeishuTimeWindow(args);
+  const result = await feishuFetch<FeishuMessageList>(config, token, 'im/v1/messages', {
+    container_id_type: containerIdType,
+    container_id: containerId,
+    start_time: timeWindow.startTime,
+    end_time: timeWindow.endTime,
+    sort_type: normalizeFeishuSortType(readArgString(args.sortType)),
+    page_size: String(pageSize),
+    page_token: readArgString(args.pageToken),
+  });
+  return {
+    source: 'feishu',
+    resource: 'im_messages',
+    fetchedAt: new Date().toISOString(),
+    account: publicConnection(connection),
+    container: { id: containerId, type: containerIdType },
+    timeWindow,
+    messages: (result.items || []).map(messageDigest),
+    hasMore: Boolean(result.has_more),
+    nextPageToken: result.page_token || null,
+    limitations: [
+      'This reads Feishu/Lark IM messages only.',
+      'A chat may be unavailable if app scopes, tenant availability, chat settings, or bot membership do not allow access.',
+    ],
+  };
+}
+
+async function feishuRecentMessages(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+  const chatLimit = clampNumber(args.chatLimit, 10, 1, 30);
+  const maxMessagesPerChat = clampNumber(args.maxMessagesPerChat, 10, 1, 30);
+  const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
+  const timeWindow = resolveFeishuTimeWindow(args);
+  const accounts = [];
+  for (const connection of connections) {
+    const token = await getFreshFeishuAccessToken(config, context, connection);
+    const chatResult = await feishuFetch<FeishuChatList>(config, token, 'im/v1/chats', {
+      page_size: String(chatLimit),
+    });
+    const chats = (chatResult.items || []).slice(0, chatLimit);
+    const scanned = [];
+    const errors = [];
+    for (const chat of chats) {
+      if (!chat.chat_id) continue;
+      try {
+        const messages = await feishuFetch<FeishuMessageList>(config, token, 'im/v1/messages', {
+          container_id_type: 'chat',
+          container_id: chat.chat_id,
+          start_time: timeWindow.startTime,
+          end_time: timeWindow.endTime,
+          sort_type: 'ByCreateTimeDesc',
+          page_size: String(maxMessagesPerChat),
+        });
+        scanned.push({
+          chat: chatDigest(chat),
+          messages: (messages.items || []).map(messageDigest),
+          hasMore: Boolean(messages.has_more),
+          nextPageToken: messages.page_token || null,
+        });
+      } catch (error) {
+        errors.push({
+          chat: chatDigest(chat),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    accounts.push({
+      account: publicConnection(connection),
+      timeWindow,
+      scannedChatCount: scanned.length,
+      unavailableChatCount: errors.length,
+      chats: scanned,
+      errors,
+    });
+  }
+  return {
+    source: 'feishu',
+    resource: 'recent_im_messages',
+    fetchedAt: new Date().toISOString(),
+    accounts,
+    limitations: [
+      'Best-effort scan over the first visible chats returned by Feishu; it may not cover every chat the user can see in the native client.',
+      'Feishu Mail, Calendar, Docs, Wiki, and Drive are not included in this IM message scan.',
+    ],
+  };
+}
+
 async function resolveGmailConnections(
   config: ServerConfig,
   context: PersonalToolContext,
@@ -276,6 +482,88 @@ async function getFreshGmailAccessToken(config: ServerConfig, context: PersonalT
   return nextPayload.accessToken;
 }
 
+async function resolveFeishuConnections(
+  config: ServerConfig,
+  context: PersonalToolContext,
+  args: Record<string, unknown>,
+  options: { allowAll: boolean; maxAll: number }
+) {
+  const connections = await listPersonalConnections(config, { investorId: context.investorId, provider: 'feishu' });
+  if (connections.length === 0) throw new Error('No connected Feishu account is available for this user.');
+  const accountId = readArgString(args.accountId) || readArgString(args.connectionId);
+  const accountEmail = (readArgString(args.accountEmail) || readArgString(args.email) || readArgString(args.account)).toLowerCase();
+  if (accountId) {
+    const matched = connections.find((item) => item.id === accountId);
+    if (!matched) throw new Error(`Feishu account not found for accountId=${accountId}.`);
+    return [matched];
+  }
+  if (accountEmail && accountEmail !== 'all') {
+    const matched = connections.find((item) =>
+      item.externalAccountId.toLowerCase() === accountEmail ||
+      item.displayName.toLowerCase() === accountEmail
+    );
+    if (!matched) throw new Error(`Feishu account not found for accountEmail=${accountEmail}.`);
+    return [matched];
+  }
+  if (options.allowAll) return connections.slice(0, options.maxAll);
+  if (connections.length === 1) return connections;
+  throw new Error('Multiple Feishu accounts are connected. Provide accountId or accountEmail.');
+}
+
+async function getFreshFeishuAccessToken(config: ServerConfig, context: PersonalToolContext, connection: PersonalConnection) {
+  const credential = await loadPersonalCredential(config, { investorId: context.investorId, connectionId: connection.id });
+  if (!credential) throw new Error(`Credential not found for Feishu account ${connection.displayName}.`);
+  const payload = decryptCredentialPayload<FeishuCredentialPayload>({
+    keyProvider: credential.keyProvider,
+    encryptedPayload: credential.encryptedPayload,
+    encryptedDataKey: credential.encryptedDataKey,
+  });
+  const expiresAt = payload.expiresAt ? Date.parse(payload.expiresAt) : 0;
+  if (payload.accessToken && (!expiresAt || expiresAt > Date.now() + 60_000)) return payload.accessToken;
+  if (!payload.refreshToken) throw new Error(`Feishu account ${connection.displayName} needs reconnect: no refresh token is available.`);
+  const refreshed = await refreshFeishuAccessToken(config, payload.refreshToken);
+  const nextPayload: FeishuCredentialPayload = {
+    ...payload,
+    accessToken: refreshed.access_token,
+    tokenType: refreshed.token_type || payload.tokenType,
+    scope: refreshed.scope || payload.scope,
+    expiresAt: refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null,
+    refreshToken: refreshed.refresh_token || payload.refreshToken,
+  };
+  await updatePersonalCredentialPayload(config, {
+    investorId: context.investorId,
+    connectionId: connection.id,
+    payload: nextPayload,
+  });
+  return nextPayload.accessToken;
+}
+
+async function refreshFeishuAccessToken(config: ServerConfig, refreshToken: string) {
+  const clientId = process.env.FEISHU_APP_ID?.trim();
+  const clientSecret = process.env.FEISHU_APP_SECRET?.trim();
+  if (!clientId || !clientSecret) throw new Error('FEISHU_APP_ID and FEISHU_APP_SECRET must be configured on personal-agent-server.');
+  const res = await externalFetch(config, 'https://open.feishu.cn/open-apis/authen/v2/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({
+      grant_type: 'refresh_token',
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+    }),
+  });
+  const data = await res.json().catch(() => ({})) as FeishuApiResponse<{
+    access_token: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+    token_type?: string;
+  }>;
+  if (!res.ok || data.code !== 0) throw new Error(`Feishu token refresh failed: ${JSON.stringify(data).slice(0, 1000)}`);
+  if (!data.data?.access_token) throw new Error(`Feishu token refresh returned no access_token: ${JSON.stringify(data).slice(0, 1000)}`);
+  return data.data;
+}
+
 async function refreshGoogleAccessToken(config: ServerConfig, refreshToken: string) {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
@@ -320,6 +608,120 @@ async function gmailFetch<T>(config: ServerConfig, accessToken: string, path: st
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Gmail API failed: ${JSON.stringify(data).slice(0, 1000)}`);
   return data as T;
+}
+
+async function feishuFetch<T>(config: ServerConfig, accessToken: string, path: string, params?: Record<string, string>) {
+  const url = new URL(`https://open.feishu.cn/open-apis/${path.replace(/^\/+/, '')}`);
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value) url.searchParams.set(key, value);
+  }
+  const res = await externalFetch(config, url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json().catch(() => ({})) as FeishuApiResponse<T>;
+  if (!res.ok || data.code !== 0) {
+    throw new Error(`Feishu API failed (${path}): ${JSON.stringify(data).slice(0, 1000)}`);
+  }
+  return (data.data || {}) as T;
+}
+
+function chatDigest(chat: FeishuChat) {
+  return {
+    chatId: chat.chat_id || '',
+    name: chat.name || '',
+    description: chat.description || '',
+    chatType: chat.chat_type || '',
+    chatMode: chat.chat_mode || '',
+    chatStatus: chat.chat_status || '',
+    chatTag: chat.chat_tag || '',
+    ownerId: chat.owner_id || '',
+    external: typeof chat.external === 'boolean' ? chat.external : null,
+  };
+}
+
+function messageDigest(message: FeishuMessage) {
+  const parsedContent = parseFeishuContent(message.body?.content);
+  return {
+    messageId: message.message_id || '',
+    rootId: message.root_id || null,
+    parentId: message.parent_id || null,
+    threadId: message.thread_id || null,
+    chatId: message.chat_id || null,
+    messageType: message.msg_type || '',
+    sender: message.sender || null,
+    createTime: normalizeFeishuApiTime(message.create_time),
+    updateTime: normalizeFeishuApiTime(message.update_time),
+    deleted: Boolean(message.deleted),
+    updated: Boolean(message.updated),
+    mentions: message.mentions || [],
+    contentText: truncate(extractFeishuContentText(parsedContent), 5000),
+    content: parsedContent,
+  };
+}
+
+function parseFeishuContent(raw?: string) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+}
+
+function extractFeishuContentText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(extractFeishuContentText).filter(Boolean).join(' ');
+  if (typeof value !== 'object') return '';
+  const record = value as Record<string, unknown>;
+  const priority = ['text', 'title', 'content', 'href', 'name'];
+  const parts = [];
+  for (const key of priority) {
+    if (record[key] !== undefined) parts.push(extractFeishuContentText(record[key]));
+  }
+  if (parts.some(Boolean)) return parts.filter(Boolean).join(' ');
+  return Object.values(record).map(extractFeishuContentText).filter(Boolean).join(' ');
+}
+
+function resolveFeishuTimeWindow(args: Record<string, unknown>) {
+  const endTime = toFeishuSeconds(args.endTime, Date.now());
+  const startTime = toFeishuSeconds(args.startTime, Date.now() - 24 * 60 * 60 * 1000);
+  return { startTime, endTime };
+}
+
+function toFeishuSeconds(value: unknown, fallbackMs: number) {
+  const fallback = Math.floor(fallbackMs / 1000);
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.floor(value > 10_000_000_000 ? value / 1000 : value));
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed)) {
+      const number = Number(trimmed);
+      if (Number.isFinite(number)) return String(Math.floor(number > 10_000_000_000 ? number / 1000 : number));
+    }
+    const parsed = Date.parse(trimmed);
+    if (Number.isFinite(parsed)) return String(Math.floor(parsed / 1000));
+  }
+  return String(fallback);
+}
+
+function normalizeFeishuApiTime(value?: string) {
+  if (!value) return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return value;
+  return new Date(number > 10_000_000_000 ? number : number * 1000).toISOString();
+}
+
+function normalizeFeishuContainerType(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'thread') return 'thread';
+  return 'chat';
+}
+
+function normalizeFeishuSortType(value: string) {
+  return value === 'ByCreateTimeAsc' ? 'ByCreateTimeAsc' : 'ByCreateTimeDesc';
 }
 
 function metadataMessageDigest(message: GmailMessageFull) {
@@ -421,6 +823,8 @@ function summarizeResult(result: unknown) {
   }
   if (isRecord(result.message)) return { messageId: result.message.id, threadId: result.message.threadId };
   if (isRecord(result.thread)) return { threadId: result.thread.id, messageCount: Array.isArray(result.thread.messages) ? result.thread.messages.length : 0 };
+  if (Array.isArray(result.messages)) return { messageCount: result.messages.length };
+  if (Array.isArray(result.chats)) return { chatCount: result.chats.length };
   return null;
 }
 
@@ -474,4 +878,46 @@ type GmailThreadFull = {
 };
 type GmailMessageList = {
   messages?: Array<{ id: string; threadId?: string }>;
+};
+
+type FeishuApiResponse<T> = {
+  code?: number;
+  msg?: string;
+  data?: T;
+};
+type FeishuChat = {
+  chat_id?: string;
+  name?: string;
+  description?: string;
+  chat_type?: string;
+  chat_mode?: string;
+  chat_status?: string;
+  chat_tag?: string;
+  owner_id?: string;
+  external?: boolean;
+};
+type FeishuChatList = {
+  items?: FeishuChat[];
+  has_more?: boolean;
+  page_token?: string;
+};
+type FeishuMessage = {
+  message_id?: string;
+  root_id?: string;
+  parent_id?: string;
+  thread_id?: string;
+  chat_id?: string;
+  msg_type?: string;
+  create_time?: string;
+  update_time?: string;
+  deleted?: boolean;
+  updated?: boolean;
+  sender?: Record<string, unknown>;
+  body?: { content?: string };
+  mentions?: unknown[];
+};
+type FeishuMessageList = {
+  items?: FeishuMessage[];
+  has_more?: boolean;
+  page_token?: string;
 };

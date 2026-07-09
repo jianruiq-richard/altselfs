@@ -13,6 +13,7 @@ import { runSandboxExecTool, type SandboxExecContext } from './tools/sandbox-exe
 import {
   disablePersonalConnection,
   listPersonalConnections,
+  upsertFeishuOAuthConnection,
   upsertGmailOAuthConnection,
 } from './personal-data-store.js';
 import {
@@ -89,23 +90,42 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
         const provider = typeof body.provider === 'string' ? body.provider.trim().toLowerCase() : '';
-        if (provider !== 'gmail') return json(res, 400, { error: `Unsupported personal data provider: ${provider}` });
         const token = isRecord(body.token) ? body.token : {};
-        const account = await upsertGmailOAuthConnection(config, {
-          investorId: readRequiredBodyString(body, 'investorId'),
-          userId: readRequiredBodyString(body, 'userId'),
-          accountEmail: readRequiredBodyString(body, 'accountEmail'),
-          accountName: typeof body.accountName === 'string' ? body.accountName : undefined,
-          token: {
-            accessToken: readRequiredBodyString(token, 'accessToken'),
-            refreshToken: typeof token.refreshToken === 'string' ? token.refreshToken : undefined,
-            tokenType: typeof token.tokenType === 'string' ? token.tokenType : undefined,
-            scope: typeof token.scope === 'string' ? token.scope : undefined,
-            expiresIn: typeof token.expiresIn === 'number' ? token.expiresIn : null,
-          },
-          profile: isRecord(body.profile) ? body.profile : undefined,
-        });
-        return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
+        if (provider === 'gmail') {
+          const account = await upsertGmailOAuthConnection(config, {
+            investorId: readRequiredBodyString(body, 'investorId'),
+            userId: readRequiredBodyString(body, 'userId'),
+            accountEmail: readRequiredBodyString(body, 'accountEmail'),
+            accountName: typeof body.accountName === 'string' ? body.accountName : undefined,
+            token: {
+              accessToken: readRequiredBodyString(token, 'accessToken'),
+              refreshToken: typeof token.refreshToken === 'string' ? token.refreshToken : undefined,
+              tokenType: typeof token.tokenType === 'string' ? token.tokenType : undefined,
+              scope: typeof token.scope === 'string' ? token.scope : undefined,
+              expiresIn: typeof token.expiresIn === 'number' ? token.expiresIn : null,
+            },
+            profile: isRecord(body.profile) ? body.profile : undefined,
+          });
+          return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
+        }
+        if (provider === 'feishu') {
+          const account = await upsertFeishuOAuthConnection(config, {
+            investorId: readRequiredBodyString(body, 'investorId'),
+            userId: readRequiredBodyString(body, 'userId'),
+            accountId: readRequiredBodyString(body, 'accountId'),
+            accountName: typeof body.accountName === 'string' ? body.accountName : undefined,
+            token: {
+              accessToken: readRequiredBodyString(token, 'accessToken'),
+              refreshToken: typeof token.refreshToken === 'string' ? token.refreshToken : undefined,
+              tokenType: typeof token.tokenType === 'string' ? token.tokenType : undefined,
+              scope: typeof token.scope === 'string' ? token.scope : undefined,
+              expiresIn: typeof token.expiresIn === 'number' ? token.expiresIn : null,
+            },
+            profile: isRecord(body.profile) ? body.profile : undefined,
+          });
+          return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
+        }
+        return json(res, 400, { error: `Unsupported personal data provider: ${provider}` });
       }
 
       if (req.method === 'DELETE' && url.pathname === '/internal/personal-data/connections') {

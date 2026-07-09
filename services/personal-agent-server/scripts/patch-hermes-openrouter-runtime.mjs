@@ -419,7 +419,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
         "name": "altselfs_connected_accounts_list",
         "description": (
             "List the user-connected personal data accounts available to this turn, "
-            "such as Gmail accounts. Use before private-channel research when you "
+            "such as Gmail and Feishu accounts. Use before private-channel research when you "
             "need to know what the user has authorized."
         ),
         "inputSchema": {
@@ -488,6 +488,75 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "accountEmail": {"type": "string", "description": "Gmail email. Alternative to accountId."},
             },
             "required": ["threadId"],
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_feishu_list_chats",
+        "description": (
+            "List Feishu/Lark IM chats visible through the user-authorized account "
+            "and app scopes. Use before reading Feishu messages when a chat id is "
+            "needed. This covers IM chats only, not Feishu Mail, Calendar, Docs, or Drive."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "accountId": {"type": "string", "description": "Optional Altselfs connection id. If omitted, uses the only connected Feishu account or the first few accounts."},
+                "accountEmail": {"type": "string", "description": "Optional Feishu account external id/email/open id. Alternative to accountId."},
+                "pageSize": {"type": "number", "description": "Max chats to return, default 20, capped at 50."},
+                "pageToken": {"type": "string", "description": "Optional Feishu pagination token."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_feishu_list_messages",
+        "description": (
+            "Read messages from one Feishu/Lark IM chat or thread that the user/app "
+            "can access. Requires containerId (chat_id or thread_id). This does not "
+            "read Feishu Mail, Calendar, Docs, or Drive."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "containerId": {"type": "string", "description": "Feishu chat_id or thread_id."},
+                "containerIdType": {"type": "string", "description": "chat or thread. Default chat."},
+                "startTime": {"type": "string", "description": "Optional start time as Unix seconds, milliseconds, or ISO string. Default 24 hours ago."},
+                "endTime": {"type": "string", "description": "Optional end time as Unix seconds, milliseconds, or ISO string. Default now."},
+                "sortType": {"type": "string", "description": "ByCreateTimeDesc or ByCreateTimeAsc. Default ByCreateTimeDesc."},
+                "pageSize": {"type": "number", "description": "Max messages to return, default 20, capped at 50."},
+                "pageToken": {"type": "string", "description": "Optional Feishu pagination token."},
+                "accountId": {"type": "string", "description": "Altselfs connection id. Required when multiple Feishu accounts are connected."},
+                "accountEmail": {"type": "string", "description": "Feishu account external id/email/open id. Alternative to accountId."},
+            },
+            "required": ["containerId"],
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_feishu_recent_messages",
+        "description": (
+            "Best-effort scan of recent Feishu/Lark IM messages across visible chats "
+            "for a connected account. Use for questions like today's Feishu messages, "
+            "team updates, and pending follow-ups. Access may be partial when app "
+            "scopes, chat settings, or bot membership limit a chat."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "startTime": {"type": "string", "description": "Optional start time as Unix seconds, milliseconds, or ISO string. Default 24 hours ago."},
+                "endTime": {"type": "string", "description": "Optional end time as Unix seconds, milliseconds, or ISO string. Default now."},
+                "chatLimit": {"type": "number", "description": "Max chats to scan per account, default 10, capped at 30."},
+                "maxMessagesPerChat": {"type": "number", "description": "Max messages per chat, default 10, capped at 30."},
+                "accountId": {"type": "string", "description": "Optional Altselfs connection id. If omitted, scans up to 3 connected Feishu accounts."},
+                "accountEmail": {"type": "string", "description": "Optional Feishu account external id/email/open id. Alternative to accountId."},
+            },
             "additionalProperties": False,
         },
         "deferLoading": False,
@@ -946,6 +1015,9 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
                 "altselfs_gmail_search_messages",
                 "altselfs_gmail_get_message",
                 "altselfs_gmail_get_thread",
+                "altselfs_feishu_list_chats",
+                "altselfs_feishu_list_messages",
+                "altselfs_feishu_recent_messages",
             }
         )
         if not is_web_search and not is_read_artifact and not is_sandbox_exec and not is_competitor and not is_personal_data:

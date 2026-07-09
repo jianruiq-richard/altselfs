@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DebugCollapsible } from '@/components/debug-collapsible';
 import { MarkdownMessage } from '@/components/markdown-message';
 
@@ -57,6 +57,10 @@ const providerLabels: Record<ProviderKey, string> = {
   domain_metrics_check: 'Domain Metrics Check',
 };
 
+function providerLabel(provider: ProviderKey) {
+  return providerLabels[provider];
+}
+
 const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
   similarweb_api1: '提供 Similarweb 类访问量、趋势、国家、设备、来源渠道、关键词和竞品发现信号。',
   semrush13: '提供较完整的域名情报，覆盖访问量、增长历史、搜索流量、渠道、关键词、竞品和外链摘要。',
@@ -83,6 +87,10 @@ const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
 
 function isCompetitiveDataSource(provider: ProviderKey): provider is (typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number] {
   return COMPETITIVE_DATA_SOURCE_SET.has(provider);
+}
+
+function isPersonalAccountProvider(provider: ProviderKey): provider is 'gmail' | 'feishu' {
+  return provider === 'gmail' || provider === 'feishu';
 }
 
 export default function InvestorIntegrationsPanel({
@@ -128,6 +136,8 @@ export default function InvestorIntegrationsPanel({
   const [coachMessage, setCoachMessage] = useState<Record<ProviderKey, string>>(() => recordForProviders(''));
   const [gmailAccounts, setGmailAccounts] = useState<PersonalAccount[]>([]);
   const [gmailAccountsLoading, setGmailAccountsLoading] = useState(false);
+  const [feishuAccounts, setFeishuAccounts] = useState<PersonalAccount[]>([]);
+  const [feishuAccountsLoading, setFeishuAccountsLoading] = useState(false);
   const assistantViewportRefs = useRef<Partial<Record<ProviderKey, HTMLDivElement | null>>>({});
 
   const banner = useMemo(() => {
@@ -139,28 +149,31 @@ export default function InvestorIntegrationsPanel({
     return `${providerLabel} 绑定失败：${integrationDetail || '未知错误'}`;
   }, [integrationDetail, integrationProvider, integrationStatus]);
 
-  const providerLabel = (provider: ProviderKey) => providerLabels[provider];
   const assistantEndpoint = (provider: ProviderKey) =>
     provider === 'xiaohongshu'
       ? '/api/investor/xiaohongshu/assistant'
       : `/api/investor/integrations/assistant/${provider}`;
 
-  const loadGmailAccounts = async () => {
-    setGmailAccountsLoading(true);
+  const loadPersonalAccounts = useCallback(async (provider: 'gmail' | 'feishu') => {
+    if (provider === 'gmail') setGmailAccountsLoading(true);
+    if (provider === 'feishu') setFeishuAccountsLoading(true);
     try {
-      const res = await fetch('/api/investor/personal-data/accounts?provider=gmail');
+      const res = await fetch(`/api/investor/personal-data/accounts?provider=${provider}`);
       const data = await res.json();
       if (!res.ok) return;
       const accounts = Array.isArray(data.accounts) ? data.accounts as PersonalAccount[] : [];
-      setGmailAccounts(accounts);
+      if (provider === 'gmail') setGmailAccounts(accounts);
+      if (provider === 'feishu') setFeishuAccounts(accounts);
       setCards((prev) =>
         prev.map((card) =>
-          card.provider === 'gmail'
+          card.provider === provider
             ? {
                 ...card,
                 connected: accounts.length > 0,
-                accountEmail: accounts.length === 1 ? accounts[0].accountEmail : null,
-                accountName: accounts.length > 1 ? `${accounts.length} 个 Gmail 账号` : accounts[0]?.displayName || null,
+                accountEmail: provider === 'gmail' && accounts.length === 1 ? accounts[0].accountEmail : null,
+                accountName: accounts.length > 1
+                  ? `${accounts.length} 个 ${providerLabel(provider)} 账号`
+                  : accounts[0]?.displayName || (provider === 'gmail' ? accounts[0]?.accountEmail : null) || null,
                 updatedAt: accounts[0]?.updatedAt || card.updatedAt,
               }
             : card
@@ -169,13 +182,22 @@ export default function InvestorIntegrationsPanel({
     } catch {
       // Keep the existing server-rendered status if personal-agent-server is temporarily unavailable.
     } finally {
-      setGmailAccountsLoading(false);
+      if (provider === 'gmail') setGmailAccountsLoading(false);
+      if (provider === 'feishu') setFeishuAccountsLoading(false);
     }
-  };
+  }, []);
+
+  const personalAccountsFor = (provider: ProviderKey) => (
+    provider === 'gmail' ? gmailAccounts : provider === 'feishu' ? feishuAccounts : []
+  );
+
+  const personalAccountsLoadingFor = (provider: ProviderKey) => (
+    provider === 'gmail' ? gmailAccountsLoading : provider === 'feishu' ? feishuAccountsLoading : false
+  );
 
   useEffect(() => {
     const loadThreads = async () => {
-      for (const provider of ['feishu', 'xiaohongshu'] as const) {
+      for (const provider of ['xiaohongshu'] as const) {
         try {
           const res = await fetch(assistantEndpoint(provider));
           const data = await res.json();
@@ -195,12 +217,13 @@ export default function InvestorIntegrationsPanel({
       }
     };
     void loadThreads();
-    void loadGmailAccounts();
-  }, []);
+    void loadPersonalAccounts('gmail');
+    void loadPersonalAccounts('feishu');
+  }, [loadPersonalAccounts]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      (['feishu', 'xiaohongshu'] as const).forEach((provider) => {
+      (['xiaohongshu'] as const).forEach((provider) => {
         const viewport = assistantViewportRefs.current[provider];
         if (viewport) viewport.scrollTop = viewport.scrollHeight;
       });
@@ -275,15 +298,16 @@ export default function InvestorIntegrationsPanel({
       }
       return;
     }
-    if (provider === 'gmail') {
-      window.location.href = '/api/investor/personal-data/gmail/connect';
+    if (isPersonalAccountProvider(provider)) {
+      window.location.href = `/api/investor/personal-data/${provider}/connect`;
       return;
     }
     window.location.href = `/api/investor/integrations/connect/${provider}`;
   };
 
-  const disconnectGmailAccount = async (connectionId: string) => {
-    setLoadingProvider('gmail');
+  const disconnectPersonalAccount = async (provider: ProviderKey, connectionId: string) => {
+    if (!isPersonalAccountProvider(provider)) return;
+    setLoadingProvider(provider);
     setError(null);
     try {
       const res = await fetch(`/api/investor/personal-data/accounts/${encodeURIComponent(connectionId)}`, {
@@ -291,10 +315,10 @@ export default function InvestorIntegrationsPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '解绑 Gmail 失败');
+        setError(data.error || `解绑 ${providerLabel(provider)} 失败`);
         return;
       }
-      await loadGmailAccounts();
+      await loadPersonalAccounts(provider);
     } catch {
       setError('网络错误，请稍后重试');
     } finally {
@@ -309,8 +333,8 @@ export default function InvestorIntegrationsPanel({
       const res =
         isCompetitiveDataSource(provider)
           ? await fetch(`/api/investor/competitive-data-source/${provider}`)
-          : provider === 'gmail'
-          ? await fetch('/api/investor/personal-data/accounts?provider=gmail')
+          : isPersonalAccountProvider(provider)
+          ? await fetch(`/api/investor/personal-data/accounts?provider=${provider}`)
           : provider === 'xiaohongshu'
           ? await fetch('/api/investor/xiaohongshu/assistant')
           : await fetch(`/api/investor/integrations/summary/${provider}`, {
@@ -329,24 +353,24 @@ export default function InvestorIntegrationsPanel({
                 connected:
                   isCompetitiveDataSource(provider)
                     ? Boolean(data.integration?.connected)
-                    : provider === 'gmail'
+                    : isPersonalAccountProvider(provider)
                       ? Array.isArray(data.accounts) && data.accounts.length > 0
                     : provider === 'xiaohongshu'
                       ? Boolean(data.integration?.connected)
                       : true,
-                accountEmail: provider === 'xiaohongshu' || provider === 'gmail' || isCompetitiveDataSource(provider) ? null : data.integration.accountEmail || null,
+                accountEmail: provider === 'xiaohongshu' || isPersonalAccountProvider(provider) || isCompetitiveDataSource(provider) ? null : data.integration.accountEmail || null,
                 accountName:
                   isCompetitiveDataSource(provider)
                     ? `${providerLabel(provider)} 员工`
-                    : provider === 'gmail'
-                    ? (Array.isArray(data.accounts) && data.accounts.length > 0 ? `${data.accounts.length} 个 Gmail 账号` : null)
+                    : isPersonalAccountProvider(provider)
+                    ? (Array.isArray(data.accounts) && data.accounts.length > 0 ? `${data.accounts.length} 个 ${providerLabel(provider)} 账号` : null)
                     : provider === 'xiaohongshu'
                     ? (data.integration?.connected ? '小红书助手' : null)
                     : data.integration.accountName || null,
                 updatedAt:
                   isCompetitiveDataSource(provider)
                     ? data.integration?.updatedAt || card.updatedAt
-                    : provider === 'gmail'
+                    : isPersonalAccountProvider(provider)
                       ? card.updatedAt
                     : provider === 'xiaohongshu'
                       ? data.thread?.messages?.length
@@ -356,15 +380,15 @@ export default function InvestorIntegrationsPanel({
                 latestSummary:
                   isCompetitiveDataSource(provider)
                     ? card.latestSummary
-                    : provider === 'gmail'
-                    ? 'Gmail 多账号绑定状态已刷新。'
+                    : isPersonalAccountProvider(provider)
+                    ? `${providerLabel(provider)} 多账号绑定状态已刷新。`
                     : provider === 'xiaohongshu'
                     ? data.thread?.messages?.length
                       ? String(data.thread.messages[data.thread.messages.length - 1]?.content || card.latestSummary || '')
                       : card.latestSummary
                     : data.latestSummary || null,
                 latestSummaryAt:
-                  provider === 'gmail'
+                  isPersonalAccountProvider(provider)
                     ? new Date().toISOString()
                     : provider === 'xiaohongshu'
                     ? data.thread?.messages?.length
@@ -377,8 +401,9 @@ export default function InvestorIntegrationsPanel({
             : card
         )
       );
-      if (provider === 'gmail' && Array.isArray(data.accounts)) {
-        setGmailAccounts(data.accounts as PersonalAccount[]);
+      if (isPersonalAccountProvider(provider) && Array.isArray(data.accounts)) {
+        if (provider === 'gmail') setGmailAccounts(data.accounts as PersonalAccount[]);
+        if (provider === 'feishu') setFeishuAccounts(data.accounts as PersonalAccount[]);
       }
     } catch {
       setError('网络错误，请稍后重试');
@@ -539,30 +564,35 @@ export default function InvestorIntegrationsPanel({
                 最近同步：{new Date(card.updatedAt).toLocaleString('zh-CN')}
               </p>
             )}
-            {card.provider === 'gmail' && (
+            {isPersonalAccountProvider(card.provider) && (
               <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-sky-900">已授权 Gmail 账号</p>
-                  {gmailAccountsLoading && <span className="text-xs text-sky-700">加载中...</span>}
+                  <p className="text-xs font-medium text-sky-900">已授权 {providerLabel(card.provider)} 账号</p>
+                  {personalAccountsLoadingFor(card.provider) && <span className="text-xs text-sky-700">加载中...</span>}
                 </div>
-                {gmailAccounts.length === 0 ? (
+                {personalAccountsFor(card.provider).length === 0 ? (
                   <p className="mt-2 text-sm text-slate-600">
-                    暂无新架构 Gmail 授权。绑定后主 AI 助手会按需调用 Gmail 搜索、读取邮件和线程工具。
+                    {card.provider === 'gmail'
+                      ? '暂无 Gmail 授权。绑定后主 AI 助手会按需调用 Gmail 搜索、读取邮件和线程工具。'
+                      : '暂无飞书授权。绑定后主 AI 助手会按需调用飞书 IM 会话和消息工具。'}
                   </p>
                 ) : (
                   <div className="mt-2 space-y-2">
-                    {gmailAccounts.map((account) => (
+                    {personalAccountsFor(card.provider).map((account) => (
                       <div key={account.connectionId} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 border border-sky-100">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-slate-900">{account.accountEmail}</p>
+                          <p className="truncate text-sm font-medium text-slate-900">{account.displayName || account.accountEmail}</p>
+                          {account.displayName !== account.accountEmail && (
+                            <p className="truncate text-xs text-slate-500">{account.accountEmail}</p>
+                          )}
                           <p className="text-xs text-slate-500">
                             {account.status === 'connected' ? '已绑定' : account.status} · {new Date(account.updatedAt).toLocaleString('zh-CN')}
                           </p>
                         </div>
                         <button
                           type="button"
-                          disabled={loadingProvider === 'gmail'}
-                          onClick={() => void disconnectGmailAccount(account.connectionId)}
+                          disabled={loadingProvider === card.provider}
+                          onClick={() => void disconnectPersonalAccount(card.provider, account.connectionId)}
                           className="shrink-0 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                         >
                           解绑
@@ -589,8 +619,8 @@ export default function InvestorIntegrationsPanel({
                       ? `停用 ${providerLabel(card.provider)}`
                       : `启用 ${providerLabel(card.provider)}`
                   : card.connected
-                    ? card.provider === 'gmail'
-                      ? '绑定更多 Gmail'
+                    ? isPersonalAccountProvider(card.provider)
+                      ? `绑定更多 ${providerLabel(card.provider)}`
                       : '重新绑定'
                     : `绑定${providerLabel(card.provider)}`}
               </button>
@@ -602,7 +632,7 @@ export default function InvestorIntegrationsPanel({
               >
                 {loadingProvider === card.provider
                   ? '刷新中...'
-                  : card.provider === 'gmail' || card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider)
+                  : isPersonalAccountProvider(card.provider) || card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider)
                     ? '刷新状态'
                     : '刷新摘要'}
               </button>
@@ -616,6 +646,8 @@ export default function InvestorIntegrationsPanel({
                     ? competitiveDataSourceScopes[card.provider]
                     : card.provider === 'gmail'
                     ? 'Gmail 账号会作为主 AI 助手的原生工具使用；用户提问需要邮件信息时，Codex 会按需调用已授权账号。'
+                    : card.provider === 'feishu'
+                    ? '飞书账号会作为主 AI 助手的原生工具使用；用户提问需要飞书 IM 消息时，Codex 会按需调用已授权账号。飞书邮箱、日历、文档需要后续单独接入。'
                     : card.provider === 'xiaohongshu'
                     ? '暂无摘要，可直接对话触发 skill 抓取。'
                     : '暂无摘要，绑定后点击“刷新摘要”生成。')}
@@ -627,7 +659,7 @@ export default function InvestorIntegrationsPanel({
               )}
             </div>
 
-            {!isCompetitiveDataSource(card.provider) && card.provider !== 'gmail' && (
+            {!isCompetitiveDataSource(card.provider) && !isPersonalAccountProvider(card.provider) && (
             <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
               <p className="text-xs text-slate-500 mb-2">AI员工对话</p>
               <div
@@ -681,7 +713,7 @@ export default function InvestorIntegrationsPanel({
             </div>
             )}
 
-            {!isCompetitiveDataSource(card.provider) && card.provider !== 'gmail' && (
+            {!isCompetitiveDataSource(card.provider) && !isPersonalAccountProvider(card.provider) && (
             <div className="mt-3">
               <DebugCollapsible title="高级设置（AI员工调教）">
                 <div className="mt-2">
