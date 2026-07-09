@@ -8,7 +8,7 @@ import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompeti
 import { isPersonalDataTool, runPersonalDataTool } from './tools/personal-data.js';
 import { runSandboxExecTool } from './tools/sandbox-exec.js';
 import { disablePersonalConnection, listPersonalConnections, upsertFeishuCliConnection, upsertFeishuOAuthConnection, upsertGmailOAuthConnection, updateFeishuConnectionFeaturePackages, } from './personal-data-store.js';
-import { completeFeishuCliAuthorization, DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, startFeishuCliAuthorization, } from './feishu-cli.js';
+import { completeFeishuCliAuthorization, continueFeishuCliAuthorization, DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, startFeishuCliAuthorization, } from './feishu-cli.js';
 import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
@@ -129,8 +129,10 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 if (!isRecord(body))
                     return json(res, 400, { error: 'JSON body must be an object' });
                 const completed = await completeFeishuCliAuthorization(config, {
-                    profileName: readRequiredBodyString(body, 'profileName'),
-                    deviceCode: readRequiredBodyString(body, 'deviceCode'),
+                    investorId: readRequiredBodyString(body, 'investorId'),
+                    sessionId: typeof body.sessionId === 'string' ? body.sessionId.trim() : undefined,
+                    profileName: typeof body.profileName === 'string' ? body.profileName : undefined,
+                    deviceCode: typeof body.deviceCode === 'string' ? body.deviceCode : undefined,
                 });
                 const account = await upsertFeishuCliConnection(config, {
                     investorId: readRequiredBodyString(body, 'investorId'),
@@ -140,9 +142,37 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     profileName: completed.profileName,
                     profileSnapshot: completed.profileSnapshot,
                     scopes: completed.scopes,
-                    featurePackages: Array.isArray(body.featurePackages) ? body.featurePackages : undefined,
+                    featurePackages: completed.requestedFeaturePackages || (Array.isArray(body.featurePackages) ? body.featurePackages : undefined),
                 });
                 return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/personal-data/feishu-cli/continue') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const advanced = await continueFeishuCliAuthorization(config, {
+                    investorId: readRequiredBodyString(body, 'investorId'),
+                    sessionId: readRequiredBodyString(body, 'sessionId'),
+                });
+                if (isRecord(advanced.completed)) {
+                    const completed = advanced.completed;
+                    const account = await upsertFeishuCliConnection(config, {
+                        investorId: readRequiredBodyString(body, 'investorId'),
+                        userId: readRequiredBodyString(body, 'userId'),
+                        accountId: completed.accountId,
+                        accountName: completed.displayName,
+                        profileName: completed.profileName,
+                        profileSnapshot: completed.profileSnapshot,
+                        scopes: completed.scopes,
+                        featurePackages: completed.requestedFeaturePackages || (Array.isArray(body.featurePackages) ? body.featurePackages : undefined),
+                    });
+                    return json(res, 200, { ok: true, phase: 'connected', account: account ? publicPersonalConnection(account) : null });
+                }
+                return json(res, 200, { ok: true, ...advanced });
             }
             if (req.method === 'PATCH' && url.pathname === '/internal/personal-data/feishu-cli/feature-packages') {
                 if (!config)

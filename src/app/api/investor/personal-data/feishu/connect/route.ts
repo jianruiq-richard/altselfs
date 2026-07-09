@@ -5,11 +5,11 @@ import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
 
 type FeishuCliStartResponse = {
   ok?: boolean;
-  authUrl?: string;
-  deviceCode?: string;
+  phase?: string;
+  sessionId?: string;
+  setupUrl?: string | null;
   profileName?: string;
   expiresAt?: string | null;
-  userCode?: string | null;
   requestedFeaturePackages?: string[];
 };
 
@@ -46,27 +46,27 @@ export async function GET(req: NextRequest) {
         featurePackages,
       }),
     });
-    if (!started.authUrl || !started.deviceCode || !started.profileName) {
-      throw new Error('personal-agent-server did not return Feishu CLI auth session.');
+    if (!started.sessionId || !started.setupUrl || !started.profileName) {
+      throw new Error('personal-agent-server did not return Feishu CLI setup session.');
     }
     const url = new URL('/investor/info-ops', req.url);
     url.searchParams.set('integrationProvider', 'feishu');
     url.searchParams.set('integrationStatus', 'pending');
-    url.searchParams.set('integrationDetail', '请打开飞书授权链接完成授权，然后点击“完成绑定”。');
-    url.searchParams.set('feishuAuthUrl', started.authUrl);
-    if (started.userCode) url.searchParams.set('feishuUserCode', started.userCode);
+    url.searchParams.set('integrationDetail', '请先打开飞书 CLI 应用配置链接，完成后回到这里继续账号授权。');
+    url.searchParams.set('feishuPhase', 'app_setup');
+    url.searchParams.set('feishuSetupUrl', started.setupUrl);
     const res = NextResponse.redirect(url);
     res.cookies.set('oauth_state_personal_feishu_cli', encodeCookiePayload({
       state,
+      sessionId: started.sessionId,
       profileName: started.profileName,
-      deviceCode: started.deviceCode,
       expiresAt: started.expiresAt || null,
       featurePackages: started.requestedFeaturePackages || featurePackages,
     }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 15,
+      maxAge: 60 * 30,
       path: '/',
     });
     return res;

@@ -12,49 +12,126 @@ const FEISHU_CLI_FEATURE_PACKAGE_CONFIG = {
     meetings: { domains: ['vc', 'minutes', 'note'], scopes: [] },
 };
 const URL_RE = /^https?:\/\//i;
+const URL_SEARCH_RE = /https?:\/\/[^\s"'<>）)]+/i;
 const SNAPSHOT_FORMAT = 'lark-cli-profile-snapshot-v1';
 const SNAPSHOT_MAX_FILES = 300;
 const SNAPSHOT_MAX_FILE_BYTES = 1024 * 1024;
 const SNAPSHOT_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const SNAPSHOT_EXCLUDED_NAMES = new Set(['.DS_Store', '.npm', 'node_modules']);
+const FEISHU_CLI_BIND_SESSION_TTL_MS = 30 * 60 * 1000;
+const FEISHU_CLI_SETUP_URL_WAIT_MS = 15_000;
+const FEISHU_CLI_SESSION_OUTPUT_MAX = 16_000;
+const feishuCliBindSessions = new Map();
 export async function startFeishuCliAuthorization(config, input) {
+    sweepExpiredFeishuCliBindSessions(config);
     const profileName = makeFeishuCliProfileName(input.investorId);
     const featurePackages = normalizeFeishuCliFeaturePackages(input.featurePackages, DEFAULT_FEISHU_CLI_FEATURE_PACKAGES);
     const authRequest = buildFeishuCliAuthRequest(config, featurePackages);
-    return withTemporaryFeishuCliHome(config, profileName, async (cliHome) => {
-        await ensureFeishuCliProfile(config, profileName, cliHome);
-        const args = ['auth', 'login', '--no-wait', '--json', '--recommend'];
-        if (authRequest.domains.length > 0)
-            args.push('--domain', authRequest.domains.join(','));
-        if (authRequest.scopes.length > 0)
-            args.push('--scope', authRequest.scopes.join(' '));
-        if (config.feishuCliAuthExcludeScopes.length > 0)
-            args.push('--exclude', config.feishuCliAuthExcludeScopes.join(' '));
-        const data = await runLarkCliJson(config, args, { profileName, cliHome });
-        const authUrl = findFirstString(data, ['verification_uri_complete', 'verification_url', 'auth_url', 'url'], URL_RE);
-        const deviceCode = findFirstString(data, ['device_code', 'deviceCode']);
-        const userCode = findFirstString(data, ['user_code', 'userCode']);
-        const expiresIn = findFirstNumber(data, ['expires_in', 'expiresIn']);
-        if (!authUrl || !deviceCode) {
-            throw new Error(`lark-cli did not return authorization URL/device code: ${JSON.stringify(data).slice(0, 1000)}`);
+    const sessionId = id('feishu');
+    const cliHome = path.join(path.resolve(config.larkCliHomeRoot), 'bind-sessions', `${normalizeProfileName(profileName)}_${sessionId.replace(/[^a-zA-Z0-9_-]/g, '')}`);
+    await fs.mkdir(cliHome, { recursive: true, mode: 0o700 });
+    const expiresAt = new Date(Date.now() + FEISHU_CLI_BIND_SESSION_TTL_MS).toISOString();
+    const session = {
+        sessionId,
+        investorId: input.investorId,
+        userId: input.userId,
+        profileName,
+        featurePackages,
+        authRequest,
+        cliHome,
+        phase: 'app_setup',
+        createdAt: new Date().toISOString(),
+        expiresAt,
+        setupUrl: '',
+        setupOutput: '',
+        setupProcess: null,
+        setupClosed: false,
+        setupExitCode: null,
+        setupError: '',
+        authUrl: '',
+        deviceCode: '',
+        userCode: null,
+        authExpiresAt: null,
+        cleanupTimer: setTimeout(() => {
+            void destroyFeishuCliBindSession(config, sessionId, 'expired');
+        }, FEISHU_CLI_BIND_SESSION_TTL_MS + 30_000),
+    };
+    feishuCliBindSessions.set(sessionId, session);
+    try {
+        startFeishuCliConfigInitProcess(config, session);
+        await waitForFeishuCliSetupUrl(session, FEISHU_CLI_SETUP_URL_WAIT_MS);
+        return publicFeishuCliBindSession(session);
+    }
+    catch (error) {
+        await destroyFeishuCliBindSession(config, sessionId, 'failed');
+        throw error;
+    }
+}
+export async function continueFeishuCliAuthorization(config, input) {
+    const session = getFeishuCliBindSession(input.sessionId, input.investorId);
+    if (!session)
+        throw new Error('飞书绑定会话不存在或已过期，请重新开始绑定。');
+    if (isFeishuCliBindSessionExpired(session)) {
+        await destroyFeishuCliBindSession(config, session.sessionId, 'expired');
+        throw new Error('飞书绑定会话已过期，请重新开始绑定。');
+    }
+    if (session.phase === 'app_setup') {
+        if (!session.setupClosed)
+            return publicFeishuCliBindSession(session);
+        if (session.setupExitCode !== 0) {
+            session.phase = 'failed';
+            throw new Error(`lark-cli config init failed: ${truncate(session.setupError || session.setupOutput || `exit ${session.setupExitCode}`, 1500)}`);
         }
-        return {
-            profileName,
-            authUrl,
-            deviceCode,
-            userCode: userCode || null,
-            expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null,
-            requestedFeaturePackages: featurePackages,
-            requestedDomains: authRequest.domains,
-            requestedScopes: authRequest.scopes,
-        };
-    });
+        session.phase = 'app_configured';
+    }
+    if (session.phase === 'app_configured') {
+        const authStatus = await runLarkCliJson(config, ['auth', 'status', '--json', '--verify'], {
+            profileName: session.profileName,
+            cliHome: session.cliHome,
+            allowFailure: true,
+        });
+        if (hasFeishuCliUserIdentity(authStatus)) {
+            session.completed = await captureCompletedFeishuCliAuthorization(config, session);
+            session.phase = 'completed';
+            const completed = { ...publicFeishuCliBindSession(session), completed: session.completed };
+            await destroyFeishuCliBindSession(config, session.sessionId, 'completed');
+            return completed;
+        }
+        await startFeishuCliUserAuth(config, session);
+    }
+    return publicFeishuCliBindSession(session);
 }
 export async function completeFeishuCliAuthorization(config, input) {
-    const profileName = normalizeProfileName(input.profileName);
+    if (input.sessionId) {
+        const session = getFeishuCliBindSession(input.sessionId, input.investorId);
+        if (!session)
+            throw new Error('飞书绑定会话不存在或已过期，请重新开始绑定。');
+        if (isFeishuCliBindSessionExpired(session)) {
+            await destroyFeishuCliBindSession(config, session.sessionId, 'expired');
+            throw new Error('飞书绑定会话已过期，请重新开始绑定。');
+        }
+        if (session.phase === 'app_setup' || session.phase === 'app_configured') {
+            throw new Error('请先完成飞书 CLI 应用配置，并继续到账号授权步骤。');
+        }
+        if (session.phase === 'completed' && session.completed)
+            return session.completed;
+        if (session.phase !== 'user_auth' || !session.deviceCode) {
+            throw new Error('飞书账号授权步骤尚未开始，请重新开始绑定。');
+        }
+        await runLarkCliJson(config, ['auth', 'login', '--device-code', session.deviceCode, '--json'], {
+            profileName: session.profileName,
+            cliHome: session.cliHome,
+        });
+        const completed = await captureCompletedFeishuCliAuthorization(config, session);
+        session.completed = completed;
+        session.phase = 'completed';
+        await destroyFeishuCliBindSession(config, session.sessionId, 'completed');
+        return completed;
+    }
+    const profileName = normalizeProfileName(input.profileName || '');
     if (!profileName)
         throw new Error('profileName is required.');
-    const deviceCode = input.deviceCode.trim();
+    const deviceCode = (input.deviceCode || '').trim();
     if (!deviceCode)
         throw new Error('deviceCode is required.');
     return withTemporaryFeishuCliHome(config, profileName, async (cliHome) => {
@@ -79,6 +156,7 @@ export async function completeFeishuCliAuthorization(config, input) {
             profileSnapshot,
             whoami,
             authStatus,
+            requestedFeaturePackages: undefined,
         };
     });
 }
@@ -200,6 +278,215 @@ function buildFeishuCliAuthRequest(config, featurePackages) {
         domains: Array.from(domains),
         scopes: Array.from(scopes),
     };
+}
+function startFeishuCliConfigInitProcess(config, session) {
+    const args = [
+        'config',
+        'init',
+        '--new',
+        '--name',
+        session.profileName,
+        '--brand',
+        'feishu',
+        '--lang',
+        'zh_cn',
+        '--force-init',
+    ];
+    const child = spawn(config.larkCliBin, args, {
+        cwd: session.cliHome,
+        env: buildLarkCliEnv(config, session.cliHome),
+        stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    session.setupProcess = child;
+    child.stdin.end();
+    const append = (chunk) => {
+        session.setupOutput = truncateSessionOutput(`${session.setupOutput}${chunk.toString('utf8')}`);
+        if (!session.setupUrl) {
+            const found = extractFirstUrl(session.setupOutput);
+            if (found)
+                session.setupUrl = found;
+        }
+    };
+    child.stdout.on('data', (chunk) => append(Buffer.from(chunk)));
+    child.stderr.on('data', (chunk) => append(Buffer.from(chunk)));
+    child.on('error', (error) => {
+        session.setupClosed = true;
+        session.setupExitCode = -1;
+        session.setupError = error instanceof Error ? error.message : String(error);
+        session.phase = 'failed';
+    });
+    child.on('close', (code) => {
+        session.setupClosed = true;
+        session.setupExitCode = code || 0;
+        session.setupProcess = null;
+        if (session.setupExitCode !== 0) {
+            session.phase = 'failed';
+            session.setupError = session.setupOutput;
+        }
+    });
+}
+async function startFeishuCliUserAuth(config, session) {
+    const args = ['auth', 'login', '--no-wait', '--json', '--recommend'];
+    if (session.authRequest.domains.length > 0)
+        args.push('--domain', session.authRequest.domains.join(','));
+    if (session.authRequest.scopes.length > 0)
+        args.push('--scope', session.authRequest.scopes.join(' '));
+    if (config.feishuCliAuthExcludeScopes.length > 0)
+        args.push('--exclude', config.feishuCliAuthExcludeScopes.join(' '));
+    const data = await runLarkCliJson(config, args, {
+        profileName: session.profileName,
+        cliHome: session.cliHome,
+    });
+    const authUrl = findFirstString(data, ['verification_uri_complete', 'verification_url', 'auth_url', 'url'], URL_RE);
+    const deviceCode = findFirstString(data, ['device_code', 'deviceCode']);
+    const userCode = findFirstString(data, ['user_code', 'userCode']);
+    const expiresIn = findFirstNumber(data, ['expires_in', 'expiresIn']);
+    if (!authUrl || !deviceCode) {
+        throw new Error(`lark-cli did not return authorization URL/device code: ${JSON.stringify(data).slice(0, 1000)}`);
+    }
+    session.phase = 'user_auth';
+    session.authUrl = authUrl;
+    session.deviceCode = deviceCode;
+    session.userCode = userCode || null;
+    session.authExpiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null;
+}
+async function captureCompletedFeishuCliAuthorization(config, session) {
+    const [whoami, authStatus] = await Promise.all([
+        runLarkCliJson(config, ['whoami', '--json'], {
+            profileName: session.profileName,
+            cliHome: session.cliHome,
+            allowFailure: true,
+        }),
+        runLarkCliJson(config, ['auth', 'status', '--json', '--verify'], {
+            profileName: session.profileName,
+            cliHome: session.cliHome,
+            allowFailure: true,
+        }),
+    ]);
+    const profileSnapshot = await captureFeishuCliProfileSnapshot(config, session.profileName, { cliHome: session.cliHome });
+    const accountId = findFirstString(whoami, ['open_id', 'openId', 'union_id', 'unionId', 'user_id', 'userId', 'id']) ||
+        findFirstString(authStatus, ['open_id', 'openId', 'union_id', 'unionId', 'user_id', 'userId', 'id']) ||
+        session.profileName;
+    const displayName = findFirstString(whoami, ['name', 'display_name', 'displayName', 'localized_name', 'localizedName', 'email']) ||
+        findFirstString(authStatus, ['name', 'display_name', 'displayName', 'email']) ||
+        '飞书用户';
+    return {
+        profileName: session.profileName,
+        accountId,
+        displayName,
+        scopes: findStringArray(authStatus, ['scopes', 'scope']) || findStringArray(whoami, ['scopes', 'scope']) || [],
+        profileSnapshot,
+        whoami,
+        authStatus,
+        requestedFeaturePackages: [...session.featurePackages],
+    };
+}
+function publicFeishuCliBindSession(session) {
+    return {
+        sessionId: session.sessionId,
+        phase: session.phase,
+        profileName: session.profileName,
+        setupUrl: session.setupUrl || null,
+        authUrl: session.authUrl || null,
+        userCode: session.userCode || null,
+        expiresAt: session.expiresAt,
+        authExpiresAt: session.authExpiresAt,
+        requestedFeaturePackages: [...session.featurePackages],
+        requestedDomains: [...session.authRequest.domains],
+        requestedScopes: [...session.authRequest.scopes],
+        setupComplete: session.setupClosed && session.setupExitCode === 0,
+    };
+}
+function getFeishuCliBindSession(sessionId, investorId) {
+    const session = feishuCliBindSessions.get(sessionId.trim());
+    if (!session)
+        return null;
+    if (investorId && session.investorId !== investorId)
+        return null;
+    return session;
+}
+function isFeishuCliBindSessionExpired(session) {
+    return Date.parse(session.expiresAt) <= Date.now();
+}
+function sweepExpiredFeishuCliBindSessions(config) {
+    for (const session of feishuCliBindSessions.values()) {
+        if (isFeishuCliBindSessionExpired(session)) {
+            void destroyFeishuCliBindSession(config, session.sessionId, 'expired');
+        }
+    }
+}
+async function destroyFeishuCliBindSession(config, sessionId, _reason) {
+    const session = feishuCliBindSessions.get(sessionId);
+    if (!session)
+        return;
+    feishuCliBindSessions.delete(sessionId);
+    clearTimeout(session.cleanupTimer);
+    if (session.setupProcess && !session.setupClosed) {
+        session.setupProcess.kill('SIGTERM');
+    }
+    const root = path.resolve(config.larkCliHomeRoot);
+    const cliHome = path.resolve(session.cliHome);
+    if (cliHome.startsWith(`${root}${path.sep}`)) {
+        await fs.rm(cliHome, { recursive: true, force: true }).catch(() => null);
+    }
+}
+function waitForFeishuCliSetupUrl(session, timeoutMs) {
+    const startedAt = Date.now();
+    return new Promise((resolve, reject) => {
+        const interval = setInterval(() => {
+            if (session.setupUrl) {
+                clearInterval(interval);
+                resolve();
+                return;
+            }
+            if (session.setupClosed) {
+                clearInterval(interval);
+                reject(new Error(`lark-cli config init exited before returning setup URL: ${truncate(session.setupError || session.setupOutput || `exit ${session.setupExitCode}`, 1500)}`));
+                return;
+            }
+            if (Date.now() - startedAt > timeoutMs) {
+                clearInterval(interval);
+                reject(new Error('lark-cli config init did not return setup URL in time.'));
+            }
+        }, 250);
+    });
+}
+function extractFirstUrl(value) {
+    const cleaned = stripAnsi(value);
+    const match = URL_SEARCH_RE.exec(cleaned);
+    return match?.[0] ? match[0].replace(/[.,;，。；]+$/, '') : '';
+}
+function stripAnsi(value) {
+    return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+}
+function truncateSessionOutput(value) {
+    return value.length > FEISHU_CLI_SESSION_OUTPUT_MAX
+        ? value.slice(value.length - FEISHU_CLI_SESSION_OUTPUT_MAX)
+        : value;
+}
+function hasFeishuCliUserIdentity(value) {
+    const queue = [value];
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (Array.isArray(current)) {
+            for (const item of current)
+                queue.push(item);
+            continue;
+        }
+        if (!isRecord(current))
+            continue;
+        for (const [key, entry] of Object.entries(current)) {
+            if (key.toLowerCase() === 'user' && isRecord(entry)) {
+                const available = entry.available;
+                const status = typeof entry.status === 'string' ? entry.status.toLowerCase() : '';
+                if (available === true || status === 'ready' || status === 'ok' || status === 'authenticated')
+                    return true;
+            }
+            if (isRecord(entry) || Array.isArray(entry))
+                queue.push(entry);
+        }
+    }
+    return false;
 }
 async function ensureFeishuCliProfile(config, profileName, cliHome) {
     const appId = process.env.FEISHU_APP_ID?.trim();

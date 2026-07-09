@@ -14,6 +14,8 @@ export default async function InfoOpsPage({
     integrationStatus?: string;
     integrationProvider?: string;
     integrationDetail?: string;
+    feishuPhase?: string;
+    feishuSetupUrl?: string;
     feishuAuthUrl?: string;
     feishuUserCode?: string;
     assistant?: string;
@@ -123,6 +125,8 @@ export default async function InfoOpsPage({
         integrationStatus={query.integrationStatus}
         integrationProvider={query.integrationProvider}
         integrationDetail={query.integrationDetail}
+        feishuPhase={query.feishuPhase}
+        feishuSetupUrl={query.feishuSetupUrl}
         feishuAuthUrl={query.feishuAuthUrl}
         feishuUserCode={query.feishuUserCode}
       />

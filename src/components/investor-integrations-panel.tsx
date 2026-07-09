@@ -137,6 +137,8 @@ export default function InvestorIntegrationsPanel({
   integrationStatus,
   integrationProvider,
   integrationDetail,
+  feishuPhase,
+  feishuSetupUrl,
   feishuAuthUrl,
   feishuUserCode,
 }: {
@@ -144,6 +146,8 @@ export default function InvestorIntegrationsPanel({
   integrationStatus?: string;
   integrationProvider?: string;
   integrationDetail?: string;
+  feishuPhase?: string;
+  feishuSetupUrl?: string;
   feishuAuthUrl?: string;
   feishuUserCode?: string;
 }) {
@@ -152,6 +156,10 @@ export default function InvestorIntegrationsPanel({
   const [error, setError] = useState<string | null>(null);
   const [feishuCliCompleting, setFeishuCliCompleting] = useState(false);
   const [feishuCliMessage, setFeishuCliMessage] = useState('');
+  const [feishuCliPhase, setFeishuCliPhase] = useState(feishuPhase || (feishuAuthUrl ? 'user_auth' : feishuSetupUrl ? 'app_setup' : ''));
+  const [feishuCliSetupUrl, setFeishuCliSetupUrl] = useState(feishuSetupUrl || '');
+  const [feishuCliAuthUrl, setFeishuCliAuthUrl] = useState(feishuAuthUrl || '');
+  const [feishuCliUserCode, setFeishuCliUserCode] = useState(feishuUserCode || '');
   const [assistantInputs, setAssistantInputs] = useState<Record<ProviderKey, string>>(() => recordForProviders(''));
   const [assistantLoading, setAssistantLoading] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));
   const [assistantChats, setAssistantChats] = useState<Record<ProviderKey, AssistantMessage[]>>({
@@ -435,6 +443,45 @@ export default function InvestorIntegrationsPanel({
     }
   };
 
+  const continueFeishuCliSetup = async () => {
+    setFeishuCliCompleting(true);
+    setFeishuCliMessage('');
+    setError(null);
+    try {
+      const res = await fetch('/api/investor/personal-data/feishu/complete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'continue' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFeishuCliMessage(data.error || '飞书 CLI 应用配置还没有完成，请完成后再继续。');
+        return;
+      }
+      if (data.phase === 'connected' || data.account) {
+        setFeishuCliPhase('connected');
+        setFeishuCliMessage('飞书绑定成功，已切换到 lark-cli 增强连接。');
+        await loadPersonalAccounts('feishu');
+        return;
+      }
+      if (data.phase === 'user_auth' && data.authUrl) {
+        setFeishuCliPhase('user_auth');
+        setFeishuCliAuthUrl(String(data.authUrl));
+        setFeishuCliUserCode(typeof data.userCode === 'string' ? data.userCode : '');
+        setFeishuCliMessage('飞书 CLI 应用配置完成，请继续授权飞书账号。');
+        return;
+      }
+      setFeishuCliPhase(data.phase || 'app_setup');
+      if (data.setupUrl) setFeishuCliSetupUrl(String(data.setupUrl));
+      setFeishuCliMessage('仍在等待飞书 CLI 应用配置完成，请完成页面操作后再试。');
+    } catch {
+      setFeishuCliMessage('网络错误，请稍后重试。');
+    } finally {
+      setFeishuCliCompleting(false);
+    }
+  };
+
   const completeFeishuCliBinding = async () => {
     setFeishuCliCompleting(true);
     setFeishuCliMessage('');
@@ -443,12 +490,15 @@ export default function InvestorIntegrationsPanel({
       const res = await fetch('/api/investor/personal-data/feishu/complete', {
         method: 'POST',
         credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete' }),
       });
       const data = await res.json();
       if (!res.ok) {
         setFeishuCliMessage(data.error || '飞书绑定完成失败，请确认已在飞书页面完成授权。');
         return;
       }
+      setFeishuCliPhase('connected');
       setFeishuCliMessage('飞书绑定成功，已切换到 lark-cli 增强连接。');
       await loadPersonalAccounts('feishu');
     } catch {
@@ -673,30 +723,66 @@ export default function InvestorIntegrationsPanel({
           {banner}
         </p>
       )}
-      {integrationProvider === 'feishu' && integrationStatus === 'pending' && feishuAuthUrl ? (
+      {integrationProvider === 'feishu' && integrationStatus === 'pending' && (feishuCliSetupUrl || feishuCliAuthUrl) ? (
         <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-slate-700">
           <p className="font-medium text-sky-950">飞书增强授权</p>
-          <p className="mt-1">
-            先打开飞书授权链接完成授权，再回到这里点击完成绑定。
-            {feishuUserCode ? ` 页面提示时输入验证码：${feishuUserCode}` : ''}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <a
-              href={feishuAuthUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
-            >
-              打开飞书授权
-            </a>
-            <button
-              type="button"
-              onClick={() => void completeFeishuCliBinding()}
-              disabled={feishuCliCompleting}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-            >
-              {feishuCliCompleting ? '绑定中...' : '我已授权，完成绑定'}
-            </button>
+          <div className="mt-2 space-y-3">
+            <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
+              <p className="text-xs font-semibold text-slate-900">第 1 步：配置你自己的飞书 CLI 应用</p>
+              <p className="mt-1 text-xs text-slate-600">
+                打开链接后按飞书页面完成应用创建/配置。完成后回到这里继续账号授权。
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {feishuCliSetupUrl && (
+                  <a
+                    href={feishuCliSetupUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
+                  >
+                    打开应用配置
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void continueFeishuCliSetup()}
+                  disabled={feishuCliCompleting || feishuCliPhase === 'user_auth' || feishuCliPhase === 'connected'}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {feishuCliCompleting && feishuCliPhase !== 'user_auth' ? '检查中...' : '我已完成应用配置'}
+                </button>
+              </div>
+            </div>
+
+            {(feishuCliPhase === 'user_auth' || feishuCliAuthUrl) && (
+              <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
+                <p className="text-xs font-semibold text-slate-900">第 2 步：授权你的飞书账号</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  打开账号授权链接，确认权限后回到这里完成绑定。
+                  {feishuCliUserCode ? ` 页面提示时输入验证码：${feishuCliUserCode}` : ''}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {feishuCliAuthUrl && (
+                    <a
+                      href={feishuCliAuthUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
+                    >
+                      打开账号授权
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void completeFeishuCliBinding()}
+                    disabled={feishuCliCompleting}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {feishuCliCompleting ? '绑定中...' : '我已授权，完成绑定'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           {feishuCliMessage && (
             <p className={`mt-2 ${feishuCliMessage.includes('成功') ? 'text-emerald-700' : 'text-red-600'}`}>
