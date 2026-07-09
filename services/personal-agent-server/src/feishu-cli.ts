@@ -301,11 +301,14 @@ function buildLarkCliEnv(config: ServerConfig, cliHome: string) {
     CI: '1',
     NO_UPDATE_NOTIFIER: '1',
   };
-  if (config.outboundProxyUrl) {
-    env.HTTP_PROXY = config.outboundProxyUrl;
-    env.HTTPS_PROXY = config.outboundProxyUrl;
-    env.http_proxy = config.outboundProxyUrl;
-    env.https_proxy = config.outboundProxyUrl;
+  for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']) {
+    delete env[key];
+  }
+  if (config.larkCliProxyUrl) {
+    env.HTTP_PROXY = config.larkCliProxyUrl;
+    env.HTTPS_PROXY = config.larkCliProxyUrl;
+    env.http_proxy = config.larkCliProxyUrl;
+    env.https_proxy = config.larkCliProxyUrl;
   }
   return env;
 }

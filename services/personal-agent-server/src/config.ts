@@ -38,6 +38,7 @@ export type ServerConfig = {
   larkCliBin: string;
   larkCliHomeRoot: string;
   larkCliTimeoutMs: number;
+  larkCliProxyUrl?: string;
   feishuCliAuthDomains: string[];
   feishuCliAuthExtraScopes: string[];
   disableLocalEnvironmentForGeneral: boolean;
@@ -405,6 +406,7 @@ export function loadConfig(): ServerConfig {
     larkCliBin: readEnv('LARK_CLI_BIN', 'lark-cli'),
     larkCliHomeRoot: path.resolve(readEnv('LARK_CLI_HOME_ROOT', '/data/altselfs-agent/lark-cli-runtime')),
     larkCliTimeoutMs: readIntEnv('LARK_CLI_TIMEOUT_MS', 60_000),
+    larkCliProxyUrl: process.env.LARK_CLI_PROXY_URL?.trim() || undefined,
     feishuCliAuthDomains: readCsvEnv('FEISHU_CLI_AUTH_DOMAINS', ['im', 'contact', 'calendar', 'docs', 'drive']),
     feishuCliAuthExtraScopes: readCsvEnv('FEISHU_CLI_AUTH_EXTRA_SCOPES', ['search:message']),
     disableLocalEnvironmentForGeneral: readBoolEnv('CODEX_GENERAL_DISABLE_LOCAL_ENVIRONMENT', true),
