@@ -73,6 +73,15 @@ type FeishuOAuthToken = {
   scope?: string;
 };
 
+const DEFAULT_FEISHU_PERSONAL_SCOPES = [
+  'auth:user.id:read',
+  'im:message.p2p_msg:get_as_user',
+  'im:message.group_msg:get_as_user',
+  'im:message:readonly',
+  'im:chat:readonly',
+  'im:chat.group_info:readonly',
+];
+
 function getEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -188,9 +197,14 @@ export function buildFeishuPersonalAuthUrl(origin: string, state: string): strin
   const params = new URLSearchParams({
     app_id: appId,
     redirect_uri: redirectUri,
+    scope: getFeishuPersonalOAuthScope(),
     state,
   });
   return `https://accounts.feishu.cn/open-apis/authen/v1/authorize?${params.toString()}`;
+}
+
+function getFeishuPersonalOAuthScope() {
+  return process.env.FEISHU_PERSONAL_OAUTH_SCOPES?.trim() || DEFAULT_FEISHU_PERSONAL_SCOPES.join(' ');
 }
 
 export async function exchangeGoogleCode(origin: string, code: string) {
