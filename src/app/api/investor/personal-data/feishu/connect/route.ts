@@ -10,10 +10,24 @@ type FeishuCliStartResponse = {
   profileName?: string;
   expiresAt?: string | null;
   userCode?: string | null;
+  requestedFeaturePackages?: string[];
 };
+
+const FEISHU_FEATURE_PACKAGES = ['messages', 'contacts', 'calendar', 'docs', 'meetings'] as const;
+const DEFAULT_FEISHU_FEATURE_PACKAGES = ['messages', 'contacts', 'calendar', 'docs'];
 
 function encodeCookiePayload(value: Record<string, unknown>) {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
+}
+
+function readFeaturePackages(req: NextRequest) {
+  const raw = req.nextUrl.searchParams.get('packages') || '';
+  const allowed = new Set<string>(FEISHU_FEATURE_PACKAGES);
+  const packages = raw
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item, index, items) => allowed.has(item) && items.indexOf(item) === index);
+  return packages.length > 0 ? packages : DEFAULT_FEISHU_FEATURE_PACKAGES;
 }
 
 export async function GET(req: NextRequest) {
@@ -21,6 +35,7 @@ export async function GET(req: NextRequest) {
   if (!investor) return NextResponse.redirect(new URL('/sign-in', req.url));
 
   const state = randomUUID();
+  const featurePackages = readFeaturePackages(req);
   try {
     const started = await personalAgentInternalFetch<FeishuCliStartResponse>('/internal/personal-data/feishu-cli/start', {
       method: 'POST',
@@ -28,6 +43,7 @@ export async function GET(req: NextRequest) {
       body: JSON.stringify({
         investorId: investor.id,
         userId: investor.email || investor.id,
+        featurePackages,
       }),
     });
     if (!started.authUrl || !started.deviceCode || !started.profileName) {
@@ -45,6 +61,7 @@ export async function GET(req: NextRequest) {
       profileName: started.profileName,
       deviceCode: started.deviceCode,
       expiresAt: started.expiresAt || null,
+      featurePackages: started.requestedFeaturePackages || featurePackages,
     }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

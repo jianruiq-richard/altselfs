@@ -1,7 +1,7 @@
 import { decryptCredentialPayload, isCredentialVaultConfigured } from '../credential-vault.js';
 import { externalFetch } from '../outbound-fetch.js';
 import { listPersonalConnections, loadPersonalCredential, recordPersonalToolCallAudit, updatePersonalCredentialPayload, } from '../personal-data-store.js';
-import { runFeishuCliWithSnapshot, } from '../feishu-cli.js';
+import { DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, runFeishuCliWithSnapshot, } from '../feishu-cli.js';
 import { isRecord, truncate } from '../util.js';
 const PERSONAL_TOOL_NAMES = new Set([
     'altselfs_connected_accounts_list',
@@ -259,7 +259,33 @@ export async function createPersonalDataDynamicTools(config, input) {
             deferLoading: false,
         });
     }
-    return tools;
+    const enabledToolNames = new Set(['altselfs_connected_accounts_list']);
+    if (gmailConnections.length > 0) {
+        for (const name of ['altselfs_gmail_search_messages', 'altselfs_gmail_get_message', 'altselfs_gmail_get_thread']) {
+            enabledToolNames.add(name);
+        }
+    }
+    if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'messages'))) {
+        for (const name of [
+            'altselfs_feishu_search_messages',
+            'altselfs_feishu_list_chats',
+            'altselfs_feishu_list_messages',
+            'altselfs_feishu_recent_messages',
+        ]) {
+            enabledToolNames.add(name);
+        }
+    }
+    if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'contacts'))) {
+        enabledToolNames.add('altselfs_feishu_search_users');
+    }
+    if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'calendar'))) {
+        enabledToolNames.add('altselfs_feishu_today_calendar');
+    }
+    if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'docs'))) {
+        enabledToolNames.add('altselfs_feishu_search_docs');
+        enabledToolNames.add('altselfs_feishu_fetch_doc');
+    }
+    return tools.filter((tool) => !isRecord(tool) || typeof tool.name !== 'string' || enabledToolNames.has(tool.name));
 }
 export async function runPersonalDataTool(toolName, argumentsValue, config, context) {
     const args = isRecord(argumentsValue) ? argumentsValue : {};
@@ -404,7 +430,7 @@ async function gmailGetThread(config, context, args) {
 }
 async function feishuListChats(config, context, args) {
     const pageSize = clampNumber(args.pageSize, 20, 1, 100);
-    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
+    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3, requiredPackage: 'messages' });
     const accounts = [];
     for (const connection of connections) {
         const result = await runFeishuCliForConnection(config, context, connection, [
@@ -443,7 +469,7 @@ async function feishuListMessages(config, context, args) {
     if (!containerId && !userId)
         throw new Error('containerId/chatId or userId is required.');
     const pageSize = clampNumber(args.pageSize, 20, 1, 50);
-    const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1 });
+    const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1, requiredPackage: 'messages' });
     const timeWindow = resolveFeishuTimeWindow(args);
     const result = await runFeishuCliForConnection(config, context, connection, [
         'im',
@@ -488,7 +514,7 @@ async function feishuSearchMessages(config, context, args) {
     const pageSize = clampNumber(args.pageSize, 20, 1, 50);
     const pageLimit = clampNumber(args.pageLimit, 1, 1, 5);
     const timeWindow = resolveFeishuIsoTimeWindow(args);
-    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
+    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3, requiredPackage: 'messages' });
     const accounts = [];
     for (const connection of connections) {
         const result = await runFeishuCliForConnection(config, context, connection, [
@@ -528,7 +554,7 @@ async function feishuSearchUsers(config, context, args) {
     if (!query && !queries && !userIds)
         throw new Error('query, queries, or userIds is required.');
     const pageSize = clampNumber(args.pageSize, 20, 1, 30);
-    const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1 });
+    const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1, requiredPackage: 'contacts' });
     const result = await runFeishuCliForConnection(config, context, connection, [
         'contact',
         '+search-user',
@@ -553,7 +579,7 @@ async function feishuSearchUsers(config, context, args) {
 }
 async function feishuTodayCalendar(config, context, args) {
     const timeWindow = resolveFeishuIsoTimeWindow(args, { defaultToday: true });
-    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
+    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3, requiredPackage: 'calendar' });
     const accounts = [];
     for (const connection of connections) {
         const result = await runFeishuCliForConnection(config, context, connection, [
@@ -580,7 +606,7 @@ async function feishuTodayCalendar(config, context, args) {
 async function feishuSearchDocs(config, context, args) {
     const query = readArgString(args.query);
     const pageSize = clampNumber(args.pageSize, 10, 1, 20);
-    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
+    const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3, requiredPackage: 'docs' });
     const accounts = [];
     for (const connection of connections) {
         const result = await runFeishuCliForConnection(config, context, connection, [
@@ -622,7 +648,7 @@ async function feishuFetchDoc(config, context, args) {
     const doc = readArgString(args.doc) || readArgString(args.url) || readArgString(args.token);
     if (!doc)
         throw new Error('doc is required.');
-    const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1 });
+    const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1, requiredPackage: 'docs' });
     const result = await runFeishuCliForConnection(config, context, connection, [
         'docs',
         '+fetch',
@@ -710,22 +736,31 @@ async function getFreshGmailAccessToken(config, context, connection) {
     return nextPayload.accessToken;
 }
 async function resolveFeishuConnections(config, context, args, options) {
-    const connections = await listPersonalConnections(config, { investorId: context.investorId, provider: 'feishu' });
+    const allConnections = await listPersonalConnections(config, { investorId: context.investorId, provider: 'feishu' });
+    const connections = options.requiredPackage
+        ? allConnections.filter((connection) => hasFeishuFeaturePackage(connection, options.requiredPackage))
+        : allConnections;
     if (connections.length === 0)
         throw new Error('No connected Feishu account is available for this user.');
     const accountId = readArgString(args.accountId) || readArgString(args.connectionId);
     const accountEmail = (readArgString(args.accountEmail) || readArgString(args.email) || readArgString(args.account)).toLowerCase();
     if (accountId) {
-        const matched = connections.find((item) => item.id === accountId);
+        const matched = allConnections.find((item) => item.id === accountId);
         if (!matched)
             throw new Error(`Feishu account not found for accountId=${accountId}.`);
+        if (options.requiredPackage && !hasFeishuFeaturePackage(matched, options.requiredPackage)) {
+            throw new Error(`Feishu account ${matched.displayName} has not enabled the ${options.requiredPackage} feature package.`);
+        }
         return [matched];
     }
     if (accountEmail && accountEmail !== 'all') {
-        const matched = connections.find((item) => item.externalAccountId.toLowerCase() === accountEmail ||
+        const matched = allConnections.find((item) => item.externalAccountId.toLowerCase() === accountEmail ||
             item.displayName.toLowerCase() === accountEmail);
         if (!matched)
             throw new Error(`Feishu account not found for accountEmail=${accountEmail}.`);
+        if (options.requiredPackage && !hasFeishuFeaturePackage(matched, options.requiredPackage)) {
+            throw new Error(`Feishu account ${matched.displayName} has not enabled the ${options.requiredPackage} feature package.`);
+        }
         return [matched];
     }
     if (options.allowAll)
@@ -733,6 +768,15 @@ async function resolveFeishuConnections(config, context, args, options) {
     if (connections.length === 1)
         return connections;
     throw new Error('Multiple Feishu accounts are connected. Provide accountId or accountEmail.');
+}
+function hasFeishuFeaturePackage(connection, featurePackage) {
+    if (connection.provider !== 'feishu' || connection.connectionType !== 'lark_cli_user')
+        return false;
+    const metadata = connection.metadata || {};
+    if (Object.prototype.hasOwnProperty.call(metadata, 'feature_packages')) {
+        return normalizeFeishuCliFeaturePackages(metadata.feature_packages, []).includes(featurePackage);
+    }
+    return DEFAULT_FEISHU_CLI_FEATURE_PACKAGES.includes(featurePackage);
 }
 async function loadFeishuCliCredential(config, context, connection) {
     const credential = await loadPersonalCredential(config, { investorId: context.investorId, connectionId: connection.id });
@@ -1001,6 +1045,13 @@ function publicConnection(connection) {
         accountEmail: connection.externalAccountId,
         displayName: connection.displayName,
         scopes: connection.scopes,
+        featurePackages: connection.provider === 'feishu'
+            ? (Object.prototype.hasOwnProperty.call(connection.metadata || {}, 'feature_packages')
+                ? normalizeFeishuCliFeaturePackages(connection.metadata.feature_packages, [])
+                : connection.connectionType === 'lark_cli_user'
+                    ? DEFAULT_FEISHU_CLI_FEATURE_PACKAGES
+                    : [])
+            : undefined,
         status: connection.status,
         updatedAt: connection.updatedAt,
     };

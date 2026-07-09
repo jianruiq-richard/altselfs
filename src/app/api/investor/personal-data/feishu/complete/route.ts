@@ -7,6 +7,7 @@ type PendingFeishuCliAuth = {
   profileName?: string;
   deviceCode?: string;
   expiresAt?: string | null;
+  featurePackages?: string[];
 };
 
 function decodeCookiePayload(value: string): PendingFeishuCliAuth | null {
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
   const profileName = typeof pending?.profileName === 'string' ? pending.profileName : '';
   const deviceCode = typeof pending?.deviceCode === 'string' ? pending.deviceCode : '';
   const expiresAt = typeof pending?.expiresAt === 'string' ? pending.expiresAt : '';
+  const featurePackages = Array.isArray(pending?.featurePackages) ? pending.featurePackages : [];
   if (!profileName || !deviceCode) {
     return NextResponse.json({ error: '飞书授权会话不存在或已过期，请重新绑定。' }, { status: 400 });
   }
@@ -42,6 +44,7 @@ export async function POST(req: NextRequest) {
         userId: investor.email || investor.id,
         profileName,
         deviceCode,
+        featurePackages,
       }),
     });
     const res = NextResponse.json({ ok: true, ...completed });

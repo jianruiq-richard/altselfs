@@ -1,4 +1,5 @@
 import { decryptCredentialPayload, encryptCredentialPayload } from './credential-vault.js';
+import { normalizeFeishuCliFeaturePackages } from './feishu-cli.js';
 import { id } from './util.js';
 let sharedPool = null;
 let sharedUrl = '';
@@ -223,11 +224,13 @@ export async function upsertFeishuCliConnection(config, input) {
         'limit 1',
     ].join(' '), [input.investorId, 'feishu', accountId]);
     const connectionId = existing.rows[0]?.id ? String(existing.rows[0].id) : id('conn');
+    const featurePackages = normalizeFeishuCliFeaturePackages(input.featurePackages, []);
     const metadata = {
         auth_mode: 'lark_cli_user',
         cli_profile_name: profileName,
         credential_source: 'encrypted_rds_snapshot',
         snapshot_captured_at: input.profileSnapshot.capturedAt,
+        feature_packages: featurePackages,
     };
     const encrypted = encryptCredentialPayload({
         provider: 'feishu',
@@ -235,6 +238,7 @@ export async function upsertFeishuCliConnection(config, input) {
         accountId,
         cliProfileName: profileName,
         cliProfileSnapshot: input.profileSnapshot,
+        featurePackages,
         scope: (input.scopes || []).join(' '),
         expiresAt: null,
     });
@@ -282,6 +286,49 @@ export async function upsertFeishuCliConnection(config, input) {
     ]);
     const connections = await listPersonalConnections(config, { investorId: input.investorId, provider: 'feishu' });
     return connections.find((connection) => connection.id === connectionId) || null;
+}
+export async function updateFeishuConnectionFeaturePackages(config, input) {
+    const pool = await getPersonalDataPool(config);
+    const featurePackages = normalizeFeishuCliFeaturePackages(input.featurePackages, []);
+    const current = await pool.query([
+        'select c.id, c.provider, c.metadata, cr.encrypted_payload, cr.encrypted_data_key, cr.key_provider',
+        'from personal_external_connections c',
+        'left join personal_credentials cr on cr.connection_id = c.id and cr.status = $3',
+        'where c.investor_id = $1 and c.id = $2',
+        'limit 1',
+    ].join(' '), [input.investorId, input.connectionId, 'active']);
+    const row = current.rows[0];
+    if (!row)
+        return null;
+    if (String(row.provider) !== 'feishu')
+        throw new Error('Only Feishu connections support feature package updates.');
+    const metadata = typeof row.metadata === 'object' && row.metadata && !Array.isArray(row.metadata)
+        ? { ...row.metadata }
+        : {};
+    metadata.feature_packages = featurePackages;
+    await pool.query([
+        'update personal_external_connections',
+        'set metadata = $3::jsonb, updated_at = now()',
+        'where investor_id = $1 and id = $2',
+    ].join(' '), [input.investorId, input.connectionId, JSON.stringify(metadata)]);
+    if (row.encrypted_payload && row.encrypted_data_key && row.key_provider) {
+        const payload = decryptCredentialPayload({
+            keyProvider: String(row.key_provider),
+            encryptedPayload: String(row.encrypted_payload),
+            encryptedDataKey: String(row.encrypted_data_key),
+        });
+        await updatePersonalCredentialPayload(config, {
+            investorId: input.investorId,
+            connectionId: input.connectionId,
+            payload: {
+                ...payload,
+                provider: 'feishu',
+                featurePackages,
+            },
+        });
+    }
+    const connections = await listPersonalConnections(config, { investorId: input.investorId, provider: 'feishu' });
+    return connections.find((connection) => connection.id === input.connectionId) || null;
 }
 export async function disablePersonalConnection(config, input) {
     const pool = await getPersonalDataPool(config);

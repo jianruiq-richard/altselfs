@@ -35,9 +35,12 @@ type PersonalAccount = {
   connectionType?: string;
   accountEmail: string;
   displayName: string;
+  featurePackages?: string[];
   status: string;
   updatedAt: string;
 };
+
+type FeishuFeaturePackage = 'messages' | 'contacts' | 'calendar' | 'docs' | 'meetings';
 
 const COMPETITIVE_DATA_SOURCE_PROVIDERS = [
   'similarweb_api1',
@@ -47,6 +50,16 @@ const COMPETITIVE_DATA_SOURCE_PROVIDERS = [
 ] as const satisfies readonly ProviderKey[];
 
 const COMPETITIVE_DATA_SOURCE_SET = new Set<ProviderKey>(COMPETITIVE_DATA_SOURCE_PROVIDERS);
+
+const FEISHU_FEATURE_PACKAGES = [
+  { key: 'messages', label: '消息', description: 'IM 搜索、群聊/单聊消息读取' },
+  { key: 'contacts', label: '联系人', description: '按姓名搜索用户、辅助定位单聊' },
+  { key: 'calendar', label: '日历', description: '读取今日/时间段日程' },
+  { key: 'docs', label: '文档', description: '搜索和读取云文档、云空间文件' },
+  { key: 'meetings', label: '会议', description: '预留会议/妙记/纪要授权，工具接通后可用' },
+] as const satisfies readonly { key: FeishuFeaturePackage; label: string; description: string }[];
+
+const DEFAULT_FEISHU_FEATURE_PACKAGES: FeishuFeaturePackage[] = ['messages', 'contacts', 'calendar', 'docs'];
 
 const providerLabels: Record<ProviderKey, string> = {
   gmail: 'Gmail',
@@ -92,6 +105,31 @@ function isCompetitiveDataSource(provider: ProviderKey): provider is (typeof COM
 
 function isPersonalAccountProvider(provider: ProviderKey): provider is 'gmail' | 'feishu' {
   return provider === 'gmail' || provider === 'feishu';
+}
+
+function normalizeFeishuFeaturePackages(value: unknown, fallback: FeishuFeaturePackage[] = []) {
+  if (!Array.isArray(value)) return [...fallback];
+  const allowed = new Set<string>(FEISHU_FEATURE_PACKAGES.map((item) => item.key));
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim().toLowerCase() : ''))
+    .filter((item, index, items) => allowed.has(item) && items.indexOf(item) === index) as FeishuFeaturePackage[];
+}
+
+function sameFeaturePackages(left: FeishuFeaturePackage[], right: FeishuFeaturePackage[]) {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
+}
+
+function hasAddedFeaturePackages(current: FeishuFeaturePackage[], next: FeishuFeaturePackage[]) {
+  const currentSet = new Set(current);
+  return next.some((item) => !currentSet.has(item));
+}
+
+function togglePackage(packages: FeishuFeaturePackage[], featurePackage: FeishuFeaturePackage) {
+  return packages.includes(featurePackage)
+    ? packages.filter((item) => item !== featurePackage)
+    : [...packages, featurePackage];
 }
 
 export default function InvestorIntegrationsPanel({
@@ -145,6 +183,10 @@ export default function InvestorIntegrationsPanel({
   const [gmailAccountsLoading, setGmailAccountsLoading] = useState(false);
   const [feishuAccounts, setFeishuAccounts] = useState<PersonalAccount[]>([]);
   const [feishuAccountsLoading, setFeishuAccountsLoading] = useState(false);
+  const [feishuBindPackages, setFeishuBindPackages] = useState<FeishuFeaturePackage[]>(DEFAULT_FEISHU_FEATURE_PACKAGES);
+  const [feishuPackageDrafts, setFeishuPackageDrafts] = useState<Record<string, FeishuFeaturePackage[]>>({});
+  const [feishuPackageSaving, setFeishuPackageSaving] = useState<Record<string, boolean>>({});
+  const [feishuPackageMessages, setFeishuPackageMessages] = useState<Record<string, string>>({});
   const assistantViewportRefs = useRef<Partial<Record<ProviderKey, HTMLDivElement | null>>>({});
 
   const banner = useMemo(() => {
@@ -173,7 +215,18 @@ export default function InvestorIntegrationsPanel({
       if (!res.ok) return;
       const accounts = Array.isArray(data.accounts) ? data.accounts as PersonalAccount[] : [];
       if (provider === 'gmail') setGmailAccounts(accounts);
-      if (provider === 'feishu') setFeishuAccounts(accounts);
+      if (provider === 'feishu') {
+        setFeishuAccounts(accounts);
+        setFeishuPackageDrafts((prev) => {
+          const next = { ...prev };
+          for (const account of accounts) {
+            if (!next[account.connectionId]) {
+              next[account.connectionId] = normalizeFeishuFeaturePackages(account.featurePackages, DEFAULT_FEISHU_FEATURE_PACKAGES);
+            }
+          }
+          return next;
+        });
+      }
       setCards((prev) =>
         prev.map((card) =>
           card.provider === provider
@@ -309,7 +362,14 @@ export default function InvestorIntegrationsPanel({
       return;
     }
     if (isPersonalAccountProvider(provider)) {
-      window.location.href = `/api/investor/personal-data/${provider}/connect`;
+      if (provider === 'feishu' && feishuBindPackages.length === 0) {
+        setError('至少选择一个飞书功能包后再绑定。');
+        return;
+      }
+      const packagesQuery = provider === 'feishu'
+        ? `?packages=${encodeURIComponent(feishuBindPackages.join(','))}`
+        : '';
+      window.location.href = `/api/investor/personal-data/${provider}/connect${packagesQuery}`;
       return;
     }
     window.location.href = `/api/investor/integrations/connect/${provider}`;
@@ -333,6 +393,45 @@ export default function InvestorIntegrationsPanel({
       setError('网络错误，请稍后重试');
     } finally {
       setLoadingProvider(null);
+    }
+  };
+
+  const saveFeishuFeaturePackages = async (account: PersonalAccount) => {
+    const current = normalizeFeishuFeaturePackages(account.featurePackages, DEFAULT_FEISHU_FEATURE_PACKAGES);
+    const next = normalizeFeishuFeaturePackages(feishuPackageDrafts[account.connectionId], []);
+    setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: '' }));
+    if (sameFeaturePackages(current, next)) {
+      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: '功能包没有变化。' }));
+      return;
+    }
+
+    if (hasAddedFeaturePackages(current, next)) {
+      setFeishuPackageMessages((prev) => ({
+        ...prev,
+        [account.connectionId]: '新增功能包需要重新授权，请在飞书授权页选择同一个账号。',
+      }));
+      window.location.href = `/api/investor/personal-data/feishu/connect?packages=${encodeURIComponent(next.join(','))}`;
+      return;
+    }
+
+    setFeishuPackageSaving((prev) => ({ ...prev, [account.connectionId]: true }));
+    try {
+      const res = await fetch(`/api/investor/personal-data/accounts/${encodeURIComponent(account.connectionId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ featurePackages: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: data.error || '保存功能包失败。' }));
+        return;
+      }
+      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: '已保存，Codex 可调用工具范围已更新。' }));
+      await loadPersonalAccounts('feishu');
+    } catch {
+      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: '网络错误，请稍后重试。' }));
+    } finally {
+      setFeishuPackageSaving((prev) => ({ ...prev, [account.connectionId]: false }));
     }
   };
 
@@ -436,7 +535,17 @@ export default function InvestorIntegrationsPanel({
       );
       if (isPersonalAccountProvider(provider) && Array.isArray(data.accounts)) {
         if (provider === 'gmail') setGmailAccounts(data.accounts as PersonalAccount[]);
-        if (provider === 'feishu') setFeishuAccounts(data.accounts as PersonalAccount[]);
+        if (provider === 'feishu') {
+          const accounts = data.accounts as PersonalAccount[];
+          setFeishuAccounts(accounts);
+          setFeishuPackageDrafts((prev) => {
+            const next = { ...prev };
+            for (const account of accounts) {
+              next[account.connectionId] = normalizeFeishuFeaturePackages(account.featurePackages, DEFAULT_FEISHU_FEATURE_PACKAGES);
+            }
+            return next;
+          });
+        }
       }
     } catch {
       setError('网络错误，请稍后重试');
@@ -629,6 +738,30 @@ export default function InvestorIntegrationsPanel({
                 最近同步：{new Date(card.updatedAt).toLocaleString('zh-CN')}
               </p>
             )}
+            {card.provider === 'feishu' && (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-xs font-medium text-slate-700">绑定新飞书账号时启用的功能包</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {FEISHU_FEATURE_PACKAGES.map((item) => (
+                    <label key={item.key} className="flex items-start gap-2 rounded-md border border-slate-200 px-2 py-2 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={feishuBindPackages.includes(item.key)}
+                        onChange={() => setFeishuBindPackages((prev) => togglePackage(prev, item.key))}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <span className="block font-medium text-slate-900">{item.label}</span>
+                        <span className="block text-slate-500">{item.description}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  绑定后也可以在账号下调整；新增功能包需要重新授权，取消功能包会立即停止向 Codex 暴露对应工具。
+                </p>
+              </div>
+            )}
             {isPersonalAccountProvider(card.provider) && (
               <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -643,30 +776,90 @@ export default function InvestorIntegrationsPanel({
                   </p>
                 ) : (
                   <div className="mt-2 space-y-2">
-                    {personalAccountsFor(card.provider).map((account) => (
-                      <div key={account.connectionId} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 border border-sky-100">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-slate-900">{account.displayName || account.accountEmail}</p>
-                          {account.displayName !== account.accountEmail && (
-                            <p className="truncate text-xs text-slate-500">{account.accountEmail}</p>
+                    {personalAccountsFor(card.provider).map((account) => {
+                      const currentPackages = normalizeFeishuFeaturePackages(account.featurePackages, DEFAULT_FEISHU_FEATURE_PACKAGES);
+                      const draftPackages = normalizeFeishuFeaturePackages(
+                        feishuPackageDrafts[account.connectionId],
+                        currentPackages
+                      );
+                      const packageChanged = !sameFeaturePackages(currentPackages, draftPackages);
+                      const packageAdded = hasAddedFeaturePackages(currentPackages, draftPackages);
+                      return (
+                        <div key={account.connectionId} className="rounded-md bg-white px-3 py-2 border border-sky-100">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-slate-900">{account.displayName || account.accountEmail}</p>
+                              {account.displayName !== account.accountEmail && (
+                                <p className="truncate text-xs text-slate-500">{account.accountEmail}</p>
+                              )}
+                              <p className="text-xs text-slate-500">
+                                {account.status === 'connected' ? '已绑定' : account.status}
+                                {card.provider === 'feishu' && account.connectionType === 'lark_cli_user' ? ' · CLI增强' : ''}
+                                {' · '}
+                                {new Date(account.updatedAt).toLocaleString('zh-CN')}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={loadingProvider === card.provider}
+                              onClick={() => void disconnectPersonalAccount(card.provider, account.connectionId)}
+                              className="shrink-0 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                            >
+                              解绑
+                            </button>
+                          </div>
+
+                          {card.provider === 'feishu' && (
+                            <div className="mt-3 border-t border-slate-100 pt-3">
+                              <p className="text-xs font-medium text-slate-700">该账号启用的功能包</p>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                {FEISHU_FEATURE_PACKAGES.map((item) => (
+                                  <label key={item.key} className="flex items-start gap-2 rounded-md border border-slate-200 px-2 py-2 text-xs text-slate-700">
+                                    <input
+                                      type="checkbox"
+                                      checked={draftPackages.includes(item.key)}
+                                      onChange={() =>
+                                        setFeishuPackageDrafts((prev) => ({
+                                          ...prev,
+                                          [account.connectionId]: togglePackage(draftPackages, item.key),
+                                        }))
+                                      }
+                                      className="mt-0.5"
+                                    />
+                                    <span>
+                                      <span className="block font-medium text-slate-900">{item.label}</span>
+                                      <span className="block text-slate-500">{item.description}</span>
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={!packageChanged || Boolean(feishuPackageSaving[account.connectionId])}
+                                  onClick={() => void saveFeishuFeaturePackages(account)}
+                                  className="rounded border border-sky-300 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-50"
+                                >
+                                  {feishuPackageSaving[account.connectionId]
+                                    ? '保存中...'
+                                    : packageAdded
+                                      ? '重新授权新增功能包'
+                                      : '保存功能包'}
+                                </button>
+                                {packageAdded && (
+                                  <span className="text-xs text-amber-700">新增功能包需要重新授权同一个飞书账号。</span>
+                                )}
+                              </div>
+                              {feishuPackageMessages[account.connectionId] && (
+                                <p className={`mt-2 text-xs ${feishuPackageMessages[account.connectionId].includes('失败') || feishuPackageMessages[account.connectionId].includes('错误') ? 'text-red-600' : 'text-emerald-700'}`}>
+                                  {feishuPackageMessages[account.connectionId]}
+                                </p>
+                              )}
+                            </div>
                           )}
-                          <p className="text-xs text-slate-500">
-                            {account.status === 'connected' ? '已绑定' : account.status}
-                            {card.provider === 'feishu' && account.connectionType === 'lark_cli_user' ? ' · CLI增强' : ''}
-                            {' · '}
-                            {new Date(account.updatedAt).toLocaleString('zh-CN')}
-                          </p>
                         </div>
-                        <button
-                          type="button"
-                          disabled={loadingProvider === card.provider}
-                          onClick={() => void disconnectPersonalAccount(card.provider, account.connectionId)}
-                          className="shrink-0 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                        >
-                          解绑
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

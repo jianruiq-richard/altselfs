@@ -7,8 +7,8 @@ import { runWebSearchTool } from './tools/web-search.js';
 import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
 import { isPersonalDataTool, runPersonalDataTool } from './tools/personal-data.js';
 import { runSandboxExecTool } from './tools/sandbox-exec.js';
-import { disablePersonalConnection, listPersonalConnections, upsertFeishuCliConnection, upsertFeishuOAuthConnection, upsertGmailOAuthConnection, } from './personal-data-store.js';
-import { completeFeishuCliAuthorization, startFeishuCliAuthorization, } from './feishu-cli.js';
+import { disablePersonalConnection, listPersonalConnections, upsertFeishuCliConnection, upsertFeishuOAuthConnection, upsertGmailOAuthConnection, updateFeishuConnectionFeaturePackages, } from './personal-data-store.js';
+import { completeFeishuCliAuthorization, DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, startFeishuCliAuthorization, } from './feishu-cli.js';
 import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
@@ -116,6 +116,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 const started = await startFeishuCliAuthorization(config, {
                     investorId: readRequiredBodyString(body, 'investorId'),
                     userId: readRequiredBodyString(body, 'userId'),
+                    featurePackages: Array.isArray(body.featurePackages) ? body.featurePackages : undefined,
                 });
                 return json(res, 200, { ok: true, ...started });
             }
@@ -139,8 +140,24 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     profileName: completed.profileName,
                     profileSnapshot: completed.profileSnapshot,
                     scopes: completed.scopes,
+                    featurePackages: Array.isArray(body.featurePackages) ? body.featurePackages : undefined,
                 });
                 return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
+            }
+            if (req.method === 'PATCH' && url.pathname === '/internal/personal-data/feishu-cli/feature-packages') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const account = await updateFeishuConnectionFeaturePackages(config, {
+                    investorId: readRequiredBodyString(body, 'investorId'),
+                    connectionId: readRequiredBodyString(body, 'connectionId'),
+                    featurePackages: Array.isArray(body.featurePackages) ? body.featurePackages : [],
+                });
+                return json(res, account ? 200 : 404, account ? { ok: true, account: publicPersonalConnection(account) } : { error: 'Connection not found' });
             }
             if (req.method === 'DELETE' && url.pathname === '/internal/personal-data/connections') {
                 if (!config)
@@ -995,6 +1012,11 @@ function publicPersonalConnection(connection) {
         accountEmail: connection.externalAccountId,
         displayName: connection.displayName,
         scopes: connection.scopes,
+        featurePackages: connection.provider === 'feishu'
+            ? (Object.prototype.hasOwnProperty.call(connection.metadata || {}, 'feature_packages')
+                ? normalizeFeishuCliFeaturePackages(connection.metadata?.feature_packages, [])
+                : normalizeFeishuCliFeaturePackages(connection.metadata?.feature_packages, connection.connectionType === 'lark_cli_user' ? DEFAULT_FEISHU_CLI_FEATURE_PACKAGES : []))
+            : undefined,
         status: connection.status,
         updatedAt: connection.updatedAt,
     };

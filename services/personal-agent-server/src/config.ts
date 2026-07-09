@@ -41,6 +41,7 @@ export type ServerConfig = {
   larkCliProxyUrl?: string;
   feishuCliAuthDomains: string[];
   feishuCliAuthExtraScopes: string[];
+  feishuCliAuthExcludeScopes: string[];
   disableLocalEnvironmentForGeneral: boolean;
   hermesSourceRuntimeEnabled: boolean;
   hermesSourceRoot: string;
@@ -407,8 +408,9 @@ export function loadConfig(): ServerConfig {
     larkCliHomeRoot: path.resolve(readEnv('LARK_CLI_HOME_ROOT', '/data/altselfs-agent/lark-cli-runtime')),
     larkCliTimeoutMs: readIntEnv('LARK_CLI_TIMEOUT_MS', 60_000),
     larkCliProxyUrl: process.env.LARK_CLI_PROXY_URL?.trim() || undefined,
-    feishuCliAuthDomains: readCsvEnv('FEISHU_CLI_AUTH_DOMAINS', ['im', 'contact', 'calendar', 'docs', 'drive']),
-    feishuCliAuthExtraScopes: readCsvEnv('FEISHU_CLI_AUTH_EXTRA_SCOPES', ['search:message']),
+    feishuCliAuthDomains: readCsvEnv('FEISHU_CLI_AUTH_DOMAINS', []),
+    feishuCliAuthExtraScopes: readCsvEnv('FEISHU_CLI_AUTH_EXTRA_SCOPES', []),
+    feishuCliAuthExcludeScopes: readCsvEnv('FEISHU_CLI_AUTH_EXCLUDE_SCOPES', []),
     disableLocalEnvironmentForGeneral: readBoolEnv('CODEX_GENERAL_DISABLE_LOCAL_ENVIRONMENT', true),
     hermesSourceRuntimeEnabled: readBoolEnv('HERMES_SOURCE_RUNTIME_ENABLED', false),
     hermesSourceRoot: path.resolve(readEnv('HERMES_SOURCE_ROOT', '/Users/richardjian/work/agent-sources/hermes-agent')),

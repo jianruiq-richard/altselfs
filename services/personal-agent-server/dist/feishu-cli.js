@@ -2,6 +2,15 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { isRecord, id, truncate } from './util.js';
+export const FEISHU_CLI_FEATURE_PACKAGES = ['messages', 'contacts', 'calendar', 'docs', 'meetings'];
+export const DEFAULT_FEISHU_CLI_FEATURE_PACKAGES = ['messages', 'contacts', 'calendar', 'docs'];
+const FEISHU_CLI_FEATURE_PACKAGE_CONFIG = {
+    messages: { domains: ['im'], scopes: ['search:message'] },
+    contacts: { domains: ['contact'], scopes: [] },
+    calendar: { domains: ['calendar'], scopes: [] },
+    docs: { domains: ['docs', 'drive'], scopes: [] },
+    meetings: { domains: ['vc', 'minutes', 'note'], scopes: [] },
+};
 const URL_RE = /^https?:\/\//i;
 const SNAPSHOT_FORMAT = 'lark-cli-profile-snapshot-v1';
 const SNAPSHOT_MAX_FILES = 300;
@@ -10,13 +19,17 @@ const SNAPSHOT_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 const SNAPSHOT_EXCLUDED_NAMES = new Set(['.DS_Store', '.npm', 'node_modules']);
 export async function startFeishuCliAuthorization(config, input) {
     const profileName = makeFeishuCliProfileName(input.investorId);
+    const featurePackages = normalizeFeishuCliFeaturePackages(input.featurePackages, DEFAULT_FEISHU_CLI_FEATURE_PACKAGES);
+    const authRequest = buildFeishuCliAuthRequest(config, featurePackages);
     return withTemporaryFeishuCliHome(config, profileName, async (cliHome) => {
         await ensureFeishuCliProfile(config, profileName, cliHome);
         const args = ['auth', 'login', '--no-wait', '--json', '--recommend'];
-        if (config.feishuCliAuthDomains.length > 0)
-            args.push('--domain', config.feishuCliAuthDomains.join(','));
-        if (config.feishuCliAuthExtraScopes.length > 0)
-            args.push('--scope', config.feishuCliAuthExtraScopes.join(' '));
+        if (authRequest.domains.length > 0)
+            args.push('--domain', authRequest.domains.join(','));
+        if (authRequest.scopes.length > 0)
+            args.push('--scope', authRequest.scopes.join(' '));
+        if (config.feishuCliAuthExcludeScopes.length > 0)
+            args.push('--exclude', config.feishuCliAuthExcludeScopes.join(' '));
         const data = await runLarkCliJson(config, args, { profileName, cliHome });
         const authUrl = findFirstString(data, ['verification_uri_complete', 'verification_url', 'auth_url', 'url'], URL_RE);
         const deviceCode = findFirstString(data, ['device_code', 'deviceCode']);
@@ -31,8 +44,9 @@ export async function startFeishuCliAuthorization(config, input) {
             deviceCode,
             userCode: userCode || null,
             expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null,
-            requestedDomains: config.feishuCliAuthDomains,
-            requestedScopes: config.feishuCliAuthExtraScopes,
+            requestedFeaturePackages: featurePackages,
+            requestedDomains: authRequest.domains,
+            requestedScopes: authRequest.scopes,
         };
     });
 }
@@ -148,6 +162,44 @@ export function makeFeishuCliProfileName(investorId) {
 }
 export function normalizeProfileName(value) {
     return value.trim().replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 64);
+}
+export function normalizeFeishuCliFeaturePackages(value, fallback = []) {
+    const rawItems = Array.isArray(value)
+        ? value
+        : typeof value === 'string'
+            ? value.split(',')
+            : [];
+    const allowed = new Set(FEISHU_CLI_FEATURE_PACKAGES);
+    const seen = new Set();
+    for (const item of rawItems) {
+        const normalized = typeof item === 'string' ? item.trim().toLowerCase() : '';
+        if (!allowed.has(normalized) || seen.has(normalized))
+            continue;
+        seen.add(normalized);
+    }
+    const packages = Array.from(seen);
+    return packages.length > 0 || rawItems.length > 0 ? packages : [...fallback];
+}
+function buildFeishuCliAuthRequest(config, featurePackages) {
+    const domains = new Set();
+    const scopes = new Set();
+    for (const featurePackage of featurePackages) {
+        const packageConfig = FEISHU_CLI_FEATURE_PACKAGE_CONFIG[featurePackage];
+        for (const domain of packageConfig.domains)
+            domains.add(domain);
+        for (const scope of packageConfig.scopes)
+            scopes.add(scope);
+    }
+    if (featurePackages.length === 0) {
+        for (const domain of config.feishuCliAuthDomains)
+            domains.add(domain);
+        for (const scope of config.feishuCliAuthExtraScopes)
+            scopes.add(scope);
+    }
+    return {
+        domains: Array.from(domains),
+        scopes: Array.from(scopes),
+    };
 }
 async function ensureFeishuCliProfile(config, profileName, cliHome) {
     const appId = process.env.FEISHU_APP_ID?.trim();
