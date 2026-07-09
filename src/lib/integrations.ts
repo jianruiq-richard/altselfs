@@ -79,7 +79,6 @@ const DEFAULT_FEISHU_PERSONAL_SCOPES = [
   'im:message.group_msg:get_as_user',
   'im:message:readonly',
   'im:chat:readonly',
-  'im:chat.group_info:readonly',
 ];
 
 function getEnv(name: string): string {
