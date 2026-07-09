@@ -34,6 +34,7 @@ const PERSONAL_TOOL_NAMES = new Set([
   'altselfs_feishu_search_users',
   'altselfs_feishu_today_calendar',
   'altselfs_feishu_search_docs',
+  'altselfs_feishu_fetch_doc',
 ]);
 
 export function isPersonalDataTool(toolName: string) {
@@ -252,17 +253,52 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
         namespace: null,
         name: 'altselfs_feishu_search_docs',
         description:
-          'Search Feishu/Lark docs, wiki, and spreadsheet files visible to the authorized user with lark-cli. Use when the question refers to Feishu docs, plans, specs, or knowledge base content.',
+          'Search or browse Feishu/Lark docs, wiki, spreadsheet, and Drive files visible to the authorized user with lark-cli. Use for questions like "what Feishu docs do I have", document discovery, plans, specs, and knowledge base content.',
         inputSchema: {
           type: 'object',
           properties: {
-            query: { type: 'string', description: 'Document search keyword.' },
+            query: { type: 'string', description: 'Optional document search keyword. Leave empty to browse by filters such as recently opened/edited, mine, or docTypes.' },
             pageSize: { type: 'number', description: 'Page size, default 10, capped at 20.' },
             pageToken: { type: 'string', description: 'Optional pagination token.' },
+            docTypes: { type: 'string', description: 'Optional comma-separated types: doc,sheet,bitable,mindnote,file,wiki,docx,folder,catalog,slides,shortcut.' },
+            mine: { type: 'boolean', description: 'Restrict to docs owned by the authorized user.' },
+            createdByMe: { type: 'boolean', description: 'Restrict to docs originally created by the authorized user.' },
+            onlyTitle: { type: 'boolean', description: 'Match titles only.' },
+            sort: { type: 'string', description: 'Optional sort: default, edit_time, edit_time_asc, open_time, create_time.' },
+            openedSince: { type: 'string', description: 'Optional start of my-opened time window, e.g. 7d, 1m, 2026-04-01, RFC3339, or Unix seconds.' },
+            editedSince: { type: 'string', description: 'Optional start of my-edited time window, e.g. 7d, 1m, 2026-04-01, RFC3339, or Unix seconds.' },
+            createdSince: { type: 'string', description: 'Optional start of document-created time window, e.g. 7d, 1m, 2026-04-01, RFC3339, or Unix seconds.' },
+            folderTokens: { type: 'string', description: 'Optional comma-separated folder tokens. Cannot be combined with spaceIds.' },
+            spaceIds: { type: 'string', description: 'Optional comma-separated wiki space IDs. Cannot be combined with folderTokens.' },
             accountId: { type: 'string', description: 'Optional Altselfs connection id.' },
             accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
           },
-          required: ['query'],
+          additionalProperties: false,
+        },
+        deferLoading: false,
+      },
+      {
+        namespace: null,
+        name: 'altselfs_feishu_fetch_doc',
+        description:
+          'Read Feishu/Lark document or wiki content visible to the authorized user with lark-cli docs +fetch. Use after search_docs returns a document URL/token, or when the user provides a Feishu document URL/token.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            doc: { type: 'string', description: 'Feishu/Lark document URL or token. Supports docx and wiki URLs/tokens.' },
+            docFormat: { type: 'string', description: 'Output format: xml, markdown, or im-markdown. Default markdown for summaries.' },
+            detail: { type: 'string', description: 'Detail level: simple, with-ids, or full. Default simple.' },
+            scope: { type: 'string', description: 'Read scope: full, outline, keyword, section, or range. Default full.' },
+            keyword: { type: 'string', description: 'Keyword for scope=keyword. Use | for OR branches.' },
+            startBlockId: { type: 'string', description: 'Block id for section/range start.' },
+            endBlockId: { type: 'string', description: 'Block id for range end, or -1 through document end.' },
+            maxDepth: { type: 'number', description: 'Outline heading depth or subtree depth. Default chosen by lark-cli.' },
+            contextBefore: { type: 'number', description: 'Sibling top-level blocks before scoped matches.' },
+            contextAfter: { type: 'number', description: 'Sibling top-level blocks after scoped matches.' },
+            accountId: { type: 'string', description: 'Optional Altselfs connection id.' },
+            accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
+          },
+          required: ['doc'],
           additionalProperties: false,
         },
         deferLoading: false,
@@ -332,6 +368,11 @@ export async function runPersonalDataTool(
     }
     if (toolName === 'altselfs_feishu_search_docs') {
       const result = await feishuSearchDocs(config, context, args);
+      await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
+      return JSON.stringify(result, null, 2);
+    }
+    if (toolName === 'altselfs_feishu_fetch_doc') {
+      const result = await feishuFetchDoc(config, context, args);
       await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
       return JSON.stringify(result, null, 2);
     }
@@ -596,30 +637,81 @@ async function feishuTodayCalendar(config: ServerConfig, context: PersonalToolCo
 
 async function feishuSearchDocs(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
   const query = readArgString(args.query);
-  if (!query) throw new Error('query is required.');
   const pageSize = clampNumber(args.pageSize, 10, 1, 20);
   const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3 });
   const accounts = [];
   for (const connection of connections) {
     const result = await runFeishuCliForConnection(config, context, connection, [
-      'docs',
+      'drive',
       '+search',
       '--as',
       'user',
-      '--query',
-      query,
       '--page-size',
       String(pageSize),
       '--json',
+      ...optionalCliArg('--query', truncateCliArg(query, 30)),
       ...optionalCliArg('--page-token', readArgString(args.pageToken)),
+      ...optionalCliArg('--doc-types', readArgString(args.docTypes)),
+      ...(args.mine === true ? ['--mine'] : []),
+      ...(args.createdByMe === true ? ['--created-by-me'] : []),
+      ...(args.onlyTitle === true ? ['--only-title'] : []),
+      ...optionalCliArg('--sort', normalizeFeishuDocSearchSort(readArgString(args.sort))),
+      ...optionalCliArg('--opened-since', readArgString(args.openedSince)),
+      ...optionalCliArg('--edited-since', readArgString(args.editedSince)),
+      ...optionalCliArg('--created-since', readArgString(args.createdSince)),
+      ...optionalCliArg('--folder-tokens', readArgString(args.folderTokens)),
+      ...optionalCliArg('--space-ids', readArgString(args.spaceIds)),
     ]);
     accounts.push({ account: publicConnection(connection), result });
   }
   return {
     source: 'feishu',
-    resource: 'lark_cli_docs_search',
+    resource: 'lark_cli_drive_search',
     fetchedAt: new Date().toISOString(),
     accounts,
+    limitations: [
+      'Uses lark-cli drive +search with user identity.',
+      'Search/browse results are limited by the user grant, app scopes, enterprise policy, and Feishu search indexing.',
+      'Use altselfs_feishu_fetch_doc with a returned URL/token when document body content is needed.',
+    ],
+  };
+}
+
+async function feishuFetchDoc(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+  const doc = readArgString(args.doc) || readArgString(args.url) || readArgString(args.token);
+  if (!doc) throw new Error('doc is required.');
+  const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1 });
+  const result = await runFeishuCliForConnection(config, context, connection, [
+    'docs',
+    '+fetch',
+    '--as',
+    'user',
+    '--doc',
+    doc,
+    '--doc-format',
+    normalizeFeishuDocFormat(readArgString(args.docFormat)),
+    '--detail',
+    normalizeFeishuDocDetail(readArgString(args.detail)),
+    '--json',
+    ...optionalCliArg('--scope', normalizeFeishuDocFetchScope(readArgString(args.scope))),
+    ...optionalCliArg('--keyword', readArgString(args.keyword)),
+    ...optionalCliArg('--start-block-id', readArgString(args.startBlockId)),
+    ...optionalCliArg('--end-block-id', readArgString(args.endBlockId)),
+    ...optionalNumericCliArg('--max-depth', args.maxDepth),
+    ...optionalNumericCliArg('--context-before', args.contextBefore),
+    ...optionalNumericCliArg('--context-after', args.contextAfter),
+  ]);
+  return {
+    source: 'feishu',
+    resource: 'lark_cli_doc_fetch',
+    fetchedAt: new Date().toISOString(),
+    account: publicConnection(connection),
+    document: { input: doc },
+    result,
+    limitations: [
+      'Uses lark-cli docs +fetch with user identity.',
+      'Embedded sheets, bitables, and media may require additional dedicated tools to fetch their internal content.',
+    ],
   };
 }
 
@@ -856,6 +948,15 @@ function optionalCliArg(flag: string, value: string) {
   return value ? [flag, value] : [];
 }
 
+function optionalNumericCliArg(flag: string, value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return [];
+  return [flag, String(Math.round(value))];
+}
+
+function truncateCliArg(value: string, maxChars: number) {
+  return Array.from(value).slice(0, maxChars).join('');
+}
+
 function normalizeFeishuCliSortOrder(value: string) {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'asc' || normalized === 'bycreatetimeasc') return 'asc';
@@ -865,6 +966,30 @@ function normalizeFeishuCliSortOrder(value: string) {
 function normalizeFeishuChatType(value: string) {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'p2p' || normalized === 'group') return normalized;
+  return '';
+}
+
+function normalizeFeishuDocSearchSort(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (['default', 'edit_time', 'edit_time_asc', 'open_time', 'create_time'].includes(normalized)) return normalized;
+  return '';
+}
+
+function normalizeFeishuDocFormat(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'xml' || normalized === 'markdown' || normalized === 'im-markdown') return normalized;
+  return 'markdown';
+}
+
+function normalizeFeishuDocDetail(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'simple' || normalized === 'with-ids' || normalized === 'full') return normalized;
+  return 'simple';
+}
+
+function normalizeFeishuDocFetchScope(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (['full', 'outline', 'range', 'keyword', 'section'].includes(normalized)) return normalized;
   return '';
 }
 

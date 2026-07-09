@@ -561,6 +561,136 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
         },
         "deferLoading": False,
     },
+    {
+        "namespace": None,
+        "name": "altselfs_feishu_search_messages",
+        "description": (
+            "Search Feishu/Lark IM messages across chats with the user-authorized "
+            "lark-cli profile. Prefer this for questions about a person, keyword, "
+            "today's messages, mentions, or follow-ups because it does not require "
+            "a prior chat list."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Keyword to search, e.g. a person name, project, customer, or topic. Optional for time-window scans if Feishu allows it."},
+                "startTime": {"type": "string", "description": "Optional start time as ISO string, Unix seconds, or milliseconds. Default 24 hours ago."},
+                "endTime": {"type": "string", "description": "Optional end time as ISO string, Unix seconds, or milliseconds. Default now."},
+                "chatType": {"type": "string", "description": "Optional chat type filter: p2p or group."},
+                "isAtMe": {"type": "boolean", "description": "Only messages that mention the authorized user."},
+                "pageSize": {"type": "number", "description": "Page size, default 20, capped at 50."},
+                "pageLimit": {"type": "number", "description": "Auto-pagination page limit, default 1, capped at 5."},
+                "accountId": {"type": "string", "description": "Optional Altselfs connection id. If omitted, searches up to 3 connected Feishu accounts."},
+                "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_feishu_search_users",
+        "description": (
+            "Search Feishu/Lark contacts by name/email/open id with the user-authorized "
+            "lark-cli profile. Use before reading a direct conversation by person name; "
+            "results may include p2p_chat_id/open_id."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Person name, email, or keyword."},
+                "queries": {"type": "string", "description": "Optional comma-separated multi-name search."},
+                "userIds": {"type": "string", "description": "Optional comma-separated open_ids; use me for current user."},
+                "hasChatted": {"type": "boolean", "description": "Restrict to users the authorized user has chatted with. Default true when query is provided."},
+                "excludeExternalUsers": {"type": "boolean", "description": "Exclude external cross-tenant users."},
+                "pageSize": {"type": "number", "description": "Rows per request, default 20, capped at 30."},
+                "accountId": {"type": "string", "description": "Optional Altselfs connection id."},
+                "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_feishu_today_calendar",
+        "description": (
+            "Read the authorized user's Feishu/Lark calendar agenda for a date window "
+            "with lark-cli. Use for today's meetings, schedule, and time commitments."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "startTime": {"type": "string", "description": "Optional start time as ISO string, Unix seconds, or milliseconds. Default start of today."},
+                "endTime": {"type": "string", "description": "Optional end time as ISO string, Unix seconds, or milliseconds. Default end of start day."},
+                "calendarId": {"type": "string", "description": "Optional calendar id, default primary."},
+                "accountId": {"type": "string", "description": "Optional Altselfs connection id."},
+                "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_feishu_search_docs",
+        "description": (
+            "Search or browse Feishu/Lark docs, wiki, spreadsheet, and Drive files visible "
+            "to the authorized user with lark-cli. Use for questions like what Feishu docs "
+            "the user has, document discovery, plans, specs, and knowledge base content."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Optional document search keyword. Leave empty to browse by filters such as recently opened/edited, mine, or docTypes."},
+                "pageSize": {"type": "number", "description": "Page size, default 10, capped at 20."},
+                "pageToken": {"type": "string", "description": "Optional pagination token."},
+                "docTypes": {"type": "string", "description": "Optional comma-separated types: doc,sheet,bitable,mindnote,file,wiki,docx,folder,catalog,slides,shortcut."},
+                "mine": {"type": "boolean", "description": "Restrict to docs owned by the authorized user."},
+                "createdByMe": {"type": "boolean", "description": "Restrict to docs originally created by the authorized user."},
+                "onlyTitle": {"type": "boolean", "description": "Match titles only."},
+                "sort": {"type": "string", "description": "Optional sort: default, edit_time, edit_time_asc, open_time, create_time."},
+                "openedSince": {"type": "string", "description": "Optional start of my-opened time window, e.g. 7d, 1m, 2026-04-01, RFC3339, or Unix seconds."},
+                "editedSince": {"type": "string", "description": "Optional start of my-edited time window, e.g. 7d, 1m, 2026-04-01, RFC3339, or Unix seconds."},
+                "createdSince": {"type": "string", "description": "Optional start of document-created time window, e.g. 7d, 1m, 2026-04-01, RFC3339, or Unix seconds."},
+                "folderTokens": {"type": "string", "description": "Optional comma-separated folder tokens. Cannot be combined with spaceIds."},
+                "spaceIds": {"type": "string", "description": "Optional comma-separated wiki space IDs. Cannot be combined with folderTokens."},
+                "accountId": {"type": "string", "description": "Optional Altselfs connection id."},
+                "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
+        "name": "altselfs_feishu_fetch_doc",
+        "description": (
+            "Read Feishu/Lark document or wiki content visible to the authorized user "
+            "with lark-cli docs +fetch. Use after search_docs returns a document URL/token, "
+            "or when the user provides a Feishu document URL/token."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "doc": {"type": "string", "description": "Feishu/Lark document URL or token. Supports docx and wiki URLs/tokens."},
+                "docFormat": {"type": "string", "description": "Output format: xml, markdown, or im-markdown. Default markdown for summaries."},
+                "detail": {"type": "string", "description": "Detail level: simple, with-ids, or full. Default simple."},
+                "scope": {"type": "string", "description": "Read scope: full, outline, keyword, section, or range. Default full."},
+                "keyword": {"type": "string", "description": "Keyword for scope=keyword. Use | for OR branches."},
+                "startBlockId": {"type": "string", "description": "Block id for section/range start."},
+                "endBlockId": {"type": "string", "description": "Block id for range end, or -1 through document end."},
+                "maxDepth": {"type": "number", "description": "Outline heading depth or subtree depth. Default chosen by lark-cli."},
+                "contextBefore": {"type": "number", "description": "Sibling top-level blocks before scoped matches."},
+                "contextAfter": {"type": "number", "description": "Sibling top-level blocks after scoped matches."},
+                "accountId": {"type": "string", "description": "Optional Altselfs connection id."},
+                "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
+            },
+            "required": ["doc"],
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
 ]
 
 
@@ -798,7 +928,11 @@ _STDERR_TAIL_LINES = 12
 `;
 const helpersEndAnchor = `# Permission profile mapping mirrors the docstring in PR proposal:`;
 
-if (codexAppServerSession.includes(dynamicToolHelpersMarker) && codexAppServerSession.includes("_call_altselfs_personal_data_tool_bridge")) {
+if (
+  codexAppServerSession.includes(dynamicToolHelpersMarker) &&
+  codexAppServerSession.includes("_call_altselfs_personal_data_tool_bridge") &&
+  codexAppServerSession.includes("altselfs_feishu_fetch_doc")
+) {
   console.log("Hermes Codex dynamic tool helper patch already applied.");
   console.log(codexAppServerSessionPath);
 } else if (codexAppServerSession.includes(dynamicToolHelpersMarker)) {
@@ -1018,6 +1152,11 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
                 "altselfs_feishu_list_chats",
                 "altselfs_feishu_list_messages",
                 "altselfs_feishu_recent_messages",
+                "altselfs_feishu_search_messages",
+                "altselfs_feishu_search_users",
+                "altselfs_feishu_today_calendar",
+                "altselfs_feishu_search_docs",
+                "altselfs_feishu_fetch_doc",
             }
         )
         if not is_web_search and not is_read_artifact and not is_sandbox_exec and not is_competitor and not is_personal_data:
@@ -1066,7 +1205,11 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
 const dynamicToolMethodAnchor = `    def _decide_exec_approval(self, params: dict) -> str:
 `;
 
-if (codexAppServerSession.includes(dynamicToolMethodMarker) && codexAppServerSession.includes("is_personal_data = (")) {
+if (
+  codexAppServerSession.includes(dynamicToolMethodMarker) &&
+  codexAppServerSession.includes("is_personal_data = (") &&
+  codexAppServerSession.includes("altselfs_feishu_fetch_doc")
+) {
   console.log("Hermes Codex dynamic tool handler patch already applied.");
   console.log(codexAppServerSessionPath);
 } else if (codexAppServerSession.includes(dynamicToolMethodMarker)) {
