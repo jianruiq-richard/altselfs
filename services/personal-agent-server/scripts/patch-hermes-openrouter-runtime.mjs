@@ -509,7 +509,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "args": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Arguments after lark-cli, e.g. [\"drive\",\"+search\",\"--as\",\"user\",\"--query\",\"商业数据\",\"--json\"], [\"skills\",\"read\",\"lark-doc\",\"references/lark-doc-fetch.md\"], or [\"api\",\"GET\",\"/open-apis/drive/v1/files\"]. Do not include the lark-cli binary name.",
+                    "description": "Arguments after lark-cli. Examples: drive +search --as user --query 商业数据 --json; skills read lark-doc references/lark-doc-fetch.md; api GET /open-apis/drive/v1/files. Do not include the lark-cli binary name.",
                 },
                 "timeoutMs": {"type": "number", "description": "Optional timeout in milliseconds, default lark-cli timeout, capped at 120000."},
                 "accountId": {"type": "string", "description": "Optional Altselfs connection id. Required when multiple Feishu accounts are connected."},
