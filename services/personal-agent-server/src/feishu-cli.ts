@@ -25,7 +25,7 @@ const FEISHU_CLI_FEATURE_PACKAGE_CONFIG: Record<FeishuCliFeaturePackage, { domai
   messages: { domains: ['im'], scopes: ['search:message'] },
   contacts: { domains: ['contact'], scopes: [] },
   calendar: { domains: ['calendar'], scopes: ['calendar:calendar.event:read'] },
-  docs: { domains: ['docs', 'drive'], scopes: [] },
+  docs: { domains: ['docs', 'drive'], scopes: ['search:docs:read'] },
   meetings: { domains: ['vc', 'minutes', 'note'], scopes: [] },
 };
 
@@ -276,6 +276,27 @@ export async function runFeishuCliWithSnapshot(
   return withTemporaryFeishuCliHome(config, normalized, async (cliHome) => {
     await restoreFeishuCliProfileSnapshot(config, normalized, snapshot, { cliHome });
     const result = await runLarkCliJson(config, args, {
+      profileName: normalized,
+      cliHome,
+      timeoutMs: options.timeoutMs,
+    });
+    const profileSnapshot = await captureFeishuCliProfileSnapshot(config, normalized, { cliHome });
+    return { result, profileSnapshot };
+  });
+}
+
+export async function runFeishuCliRawWithSnapshot(
+  config: ServerConfig,
+  profileName: string,
+  snapshot: LarkCliProfileSnapshot,
+  args: string[],
+  options: { timeoutMs?: number } = {}
+) {
+  const normalized = normalizeProfileName(profileName);
+  if (!normalized) throw new Error('Feishu CLI profile is missing. Reconnect the Feishu account.');
+  return withTemporaryFeishuCliHome(config, normalized, async (cliHome) => {
+    await restoreFeishuCliProfileSnapshot(config, normalized, snapshot, { cliHome });
+    const result = await runLarkCli(config, ['--profile', normalized, ...args], {
       profileName: normalized,
       cliHome,
       timeoutMs: options.timeoutMs,

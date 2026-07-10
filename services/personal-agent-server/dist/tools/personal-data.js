@@ -1,7 +1,7 @@
 import { decryptCredentialPayload, isCredentialVaultConfigured } from '../credential-vault.js';
 import { externalFetch } from '../outbound-fetch.js';
 import { listPersonalConnections, loadPersonalCredential, recordPersonalToolCallAudit, updatePersonalCredentialPayload, } from '../personal-data-store.js';
-import { DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, runFeishuCliWithSnapshot, } from '../feishu-cli.js';
+import { DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, runFeishuCliRawWithSnapshot, runFeishuCliWithSnapshot, } from '../feishu-cli.js';
 import { isRecord, truncate } from '../util.js';
 const PERSONAL_TOOL_NAMES = new Set([
     'altselfs_connected_accounts_list',
@@ -16,7 +16,12 @@ const PERSONAL_TOOL_NAMES = new Set([
     'altselfs_feishu_today_calendar',
     'altselfs_feishu_search_docs',
     'altselfs_feishu_fetch_doc',
+    'altselfs_feishu_lark_cli',
 ]);
+const LARK_CLI_OUTPUT_MAX_CHARS = 60_000;
+const LARK_CLI_ARGS_MAX_ITEMS = 64;
+const LARK_CLI_ARG_MAX_CHARS = 2_000;
+const LARK_CLI_ARGS_TOTAL_MAX_CHARS = 12_000;
 export function isPersonalDataTool(toolName) {
     return PERSONAL_TOOL_NAMES.has(toolName);
 }
@@ -100,6 +105,26 @@ export async function createPersonalDataDynamicTools(config, input) {
     }
     if (feishuConnections.length > 0) {
         tools.push({
+            namespace: null,
+            name: 'altselfs_feishu_lark_cli',
+            description: 'Run the original lark-cli with the user-authorized Feishu/Lark account. Prefer this native CLI tool for Feishu tasks not covered by a specialized shortcut: inspect help, read embedded skills, inspect schemas, search/read docs, work with calendar, IM, Drive, contacts, or call raw lark-cli api commands. The backend restores the encrypted user profile from RDS before execution and saves the updated profile snapshot after execution.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    args: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Arguments after lark-cli, e.g. ["drive","+search","--as","user","--query","商业数据","--json"], ["skills","read","lark-doc","references/lark-doc-fetch.md"], or ["api","GET","/open-apis/drive/v1/files"]. Do not include the lark-cli binary name.',
+                    },
+                    timeoutMs: { type: 'number', description: 'Optional timeout in milliseconds, default lark-cli timeout, capped at 120000.' },
+                    accountId: { type: 'string', description: 'Optional Altselfs connection id. Required when multiple Feishu accounts are connected.' },
+                    accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
+                },
+                required: ['args'],
+                additionalProperties: false,
+            },
+            deferLoading: false,
+        }, {
             namespace: null,
             name: 'altselfs_feishu_search_messages',
             description: 'Search Feishu/Lark IM messages across chats with the user-authorized lark-cli profile. Prefer this for questions about a person, keyword, today\'s messages, mentions, or follow-ups because it does not require a prior chat list.',
@@ -285,6 +310,9 @@ export async function createPersonalDataDynamicTools(config, input) {
         enabledToolNames.add('altselfs_feishu_search_docs');
         enabledToolNames.add('altselfs_feishu_fetch_doc');
     }
+    if (feishuConnections.some((connection) => connection.connectionType === 'lark_cli_user')) {
+        enabledToolNames.add('altselfs_feishu_lark_cli');
+    }
     return tools.filter((tool) => !isRecord(tool) || typeof tool.name !== 'string' || enabledToolNames.has(tool.name));
 }
 export async function runPersonalDataTool(toolName, argumentsValue, config, context) {
@@ -348,6 +376,11 @@ export async function runPersonalDataTool(toolName, argumentsValue, config, cont
         if (toolName === 'altselfs_feishu_fetch_doc') {
             const result = await feishuFetchDoc(config, context, args);
             await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu');
+            return JSON.stringify(result, null, 2);
+        }
+        if (toolName === 'altselfs_feishu_lark_cli') {
+            const result = await feishuLarkCli(config, context, args);
+            await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu', result.account?.connectionId);
             return JSON.stringify(result, null, 2);
         }
         return JSON.stringify({ source: 'personal-data-tools', error: `Unsupported personal data tool: ${toolName}` }, null, 2);
@@ -682,6 +715,34 @@ async function feishuFetchDoc(config, context, args) {
         ],
     };
 }
+async function feishuLarkCli(config, context, args) {
+    const cliArgs = readStringArrayArg(args.args);
+    validateLarkCliArgs(cliArgs);
+    const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1 });
+    const result = await runFeishuCliRawForConnection(config, context, connection, cliArgs, {
+        timeoutMs: clampNumber(args.timeoutMs, config.larkCliTimeoutMs, 1_000, 120_000),
+    });
+    const stdout = truncate(result.stdout, LARK_CLI_OUTPUT_MAX_CHARS);
+    const stderr = truncate(result.stderr, 12_000);
+    return {
+        source: 'feishu',
+        resource: 'lark_cli_raw',
+        fetchedAt: new Date().toISOString(),
+        account: publicConnection(connection),
+        command: ['lark-cli', ...cliArgs],
+        result: {
+            code: result.code,
+            stdout,
+            stderr,
+            stdoutTruncated: stdout.length < result.stdout.length,
+            stderrTruncated: stderr.length < result.stderr.length,
+        },
+        limitations: [
+            'Runs the original lark-cli with the selected user profile restored from encrypted RDS credentials.',
+            'The command still requires the Feishu app/user grant to include the relevant scopes.',
+        ],
+    };
+}
 async function resolveGmailConnections(config, context, args, options) {
     const connections = await listPersonalConnections(config, { investorId: context.investorId, provider: 'gmail' });
     if (connections.length === 0)
@@ -801,6 +862,25 @@ async function loadFeishuCliCredential(config, context, connection) {
 async function runFeishuCliForConnection(config, context, connection, args) {
     const { profileName, payload } = await loadFeishuCliCredential(config, context, connection);
     const { result, profileSnapshot } = await runFeishuCliWithSnapshot(config, profileName, payload.cliProfileSnapshot, args);
+    await updatePersonalCredentialPayload(config, {
+        investorId: context.investorId,
+        connectionId: connection.id,
+        payload: {
+            ...payload,
+            provider: 'feishu',
+            authMode: 'lark_cli_user',
+            accountId: payload.accountId || connection.externalAccountId,
+            cliProfileName: profileName,
+            cliProfileSnapshot: profileSnapshot,
+            scope: payload.scope || connection.scopes.join(' '),
+            expiresAt: null,
+        },
+    });
+    return result;
+}
+async function runFeishuCliRawForConnection(config, context, connection, args, options = {}) {
+    const { profileName, payload } = await loadFeishuCliCredential(config, context, connection);
+    const { result, profileSnapshot } = await runFeishuCliRawWithSnapshot(config, profileName, payload.cliProfileSnapshot, args, options);
     await updatePersonalCredentialPayload(config, {
         investorId: context.investorId,
         connectionId: connection.id,
@@ -1064,6 +1144,36 @@ function clampNumber(value, fallback, min, max) {
 }
 function readArgString(value) {
     return typeof value === 'string' ? value.trim() : '';
+}
+function readStringArrayArg(value) {
+    if (!Array.isArray(value))
+        throw new Error('args must be an array of lark-cli argument strings.');
+    if (value.length === 0)
+        throw new Error('args cannot be empty.');
+    if (value.length > LARK_CLI_ARGS_MAX_ITEMS)
+        throw new Error(`args has too many items; max ${LARK_CLI_ARGS_MAX_ITEMS}.`);
+    const result = [];
+    let totalLength = 0;
+    for (const item of value) {
+        if (typeof item !== 'string')
+            throw new Error('args must contain only strings.');
+        const trimmed = item.trim();
+        if (!trimmed)
+            throw new Error('args cannot contain empty strings.');
+        if (trimmed.length > LARK_CLI_ARG_MAX_CHARS)
+            throw new Error(`lark-cli argument is too long; max ${LARK_CLI_ARG_MAX_CHARS} chars.`);
+        totalLength += trimmed.length;
+        if (totalLength > LARK_CLI_ARGS_TOTAL_MAX_CHARS)
+            throw new Error(`lark-cli arguments are too long; max ${LARK_CLI_ARGS_TOTAL_MAX_CHARS} total chars.`);
+        result.push(trimmed);
+    }
+    return result;
+}
+function validateLarkCliArgs(args) {
+    if (args[0] === 'lark-cli')
+        throw new Error('Pass only arguments after lark-cli; do not include the lark-cli binary name.');
+    if (args[0].startsWith('-'))
+        throw new Error('Start with a lark-cli command such as skills, schema, drive, docs, calendar, im, api, auth, config, or profile.');
 }
 function redactArgs(args) {
     return Object.fromEntries(Object.entries(args).filter(([key]) => !/token|secret|authorization/i.test(key)));

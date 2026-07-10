@@ -494,6 +494,34 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
     },
     {
         "namespace": None,
+        "name": "altselfs_feishu_lark_cli",
+        "description": (
+            "Run the original lark-cli with the user-authorized Feishu/Lark account. "
+            "Prefer this native CLI tool for Feishu tasks not covered by a specialized "
+            "shortcut: inspect help, read embedded skills, inspect schemas, search/read "
+            "docs, work with calendar, IM, Drive, contacts, or call raw lark-cli api "
+            "commands. The backend restores the encrypted user profile from RDS before "
+            "execution and saves the updated profile snapshot after execution."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Arguments after lark-cli, e.g. [\"drive\",\"+search\",\"--as\",\"user\",\"--query\",\"商业数据\",\"--json\"], [\"skills\",\"read\",\"lark-doc\",\"references/lark-doc-fetch.md\"], or [\"api\",\"GET\",\"/open-apis/drive/v1/files\"]. Do not include the lark-cli binary name.",
+                },
+                "timeoutMs": {"type": "number", "description": "Optional timeout in milliseconds, default lark-cli timeout, capped at 120000."},
+                "accountId": {"type": "string", "description": "Optional Altselfs connection id. Required when multiple Feishu accounts are connected."},
+                "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
+            },
+            "required": ["args"],
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
         "name": "altselfs_feishu_list_chats",
         "description": (
             "List Feishu/Lark IM chats visible through the user-authorized account "
@@ -931,7 +959,7 @@ const helpersEndAnchor = `# Permission profile mapping mirrors the docstring in 
 if (
   codexAppServerSession.includes(dynamicToolHelpersMarker) &&
   codexAppServerSession.includes("_call_altselfs_personal_data_tool_bridge") &&
-  codexAppServerSession.includes("altselfs_feishu_fetch_doc")
+  codexAppServerSession.includes("altselfs_feishu_lark_cli")
 ) {
   console.log("Hermes Codex dynamic tool helper patch already applied.");
   console.log(codexAppServerSessionPath);
@@ -1149,6 +1177,7 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
                 "altselfs_gmail_search_messages",
                 "altselfs_gmail_get_message",
                 "altselfs_gmail_get_thread",
+                "altselfs_feishu_lark_cli",
                 "altselfs_feishu_list_chats",
                 "altselfs_feishu_list_messages",
                 "altselfs_feishu_recent_messages",
@@ -1208,7 +1237,7 @@ const dynamicToolMethodAnchor = `    def _decide_exec_approval(self, params: dic
 if (
   codexAppServerSession.includes(dynamicToolMethodMarker) &&
   codexAppServerSession.includes("is_personal_data = (") &&
-  codexAppServerSession.includes("altselfs_feishu_fetch_doc")
+  codexAppServerSession.includes("altselfs_feishu_lark_cli")
 ) {
   console.log("Hermes Codex dynamic tool handler patch already applied.");
   console.log(codexAppServerSessionPath);

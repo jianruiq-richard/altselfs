@@ -797,7 +797,8 @@ function buildCodexDeveloperInstructions(input) {
         ? [
             `- The following private personal-data tools are enabled for this user in this turn: ${input.personalDataToolNames.join(', ')}.`,
             '- When the user asks about Gmail, Feishu/Lark IM, email, inbox, messages, team updates, calendar, docs, wiki, Drive files, or personal-channel content, call the relevant personal-data tool before answering.',
-            '- Feishu/Lark document access is available only through the enabled Feishu document tools: use search_docs to discover/browse files and fetch_doc to read a specific document URL/token. Do not claim access to Feishu Mail or any unsupported Feishu surface unless a matching tool is available and called.',
+            '- Feishu/Lark native CLI access may be available through altselfs_feishu_lark_cli. Use it to inspect lark-cli help/schema/skills and run original lark-cli workflows when a specialized Feishu wrapper is too narrow.',
+            '- Feishu/Lark document access is available through the enabled Feishu tools: use search_docs/fetch_doc for common flows, or altselfs_feishu_lark_cli for original lark-cli workflows such as skills read, drive +search, docs +fetch, schema inspection, or raw api commands. Do not claim access to Feishu Mail or unsupported Feishu surfaces unless a matching tool is available and called.',
         ].join(' ')
         : '- No private personal-data tools are enabled for this user in this turn. Do not claim to have read Gmail, Feishu, or other private-channel accounts.';
     if (input.selectedAgentProfileId === 'codex-competitive-intelligence') {
