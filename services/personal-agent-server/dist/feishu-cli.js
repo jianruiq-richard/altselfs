@@ -6,7 +6,7 @@ export const FEISHU_CLI_FEATURE_PACKAGES = ['messages', 'contacts', 'calendar', 
 export const DEFAULT_FEISHU_CLI_FEATURE_PACKAGES = ['messages', 'contacts', 'calendar', 'docs'];
 const FEISHU_CLI_FEATURE_PACKAGE_CONFIG = {
     messages: { domains: ['im'], scopes: ['search:message'] },
-    contacts: { domains: ['contact'], scopes: [] },
+    contacts: { domains: ['contact'], scopes: ['contact:user.basic_profile:readonly'] },
     calendar: { domains: ['calendar'], scopes: ['calendar:calendar.event:read'] },
     docs: { domains: ['docs', 'drive'], scopes: ['search:docs:read'] },
     meetings: { domains: ['vc', 'minutes', 'note'], scopes: [] },
