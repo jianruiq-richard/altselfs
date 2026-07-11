@@ -55,8 +55,9 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 const investorId = url.searchParams.get('investorId')?.trim() || '';
                 if (!investorId)
                     return json(res, 400, { error: 'investorId is required' });
+                const userId = url.searchParams.get('userId')?.trim() || undefined;
                 const provider = url.searchParams.get('provider')?.trim().toLowerCase() || undefined;
-                const accounts = await listPersonalConnections(config, { investorId, provider });
+                const accounts = await listPersonalConnections(config, { investorId, userId, provider });
                 return json(res, 200, { accounts: accounts.map(publicPersonalConnection) });
             }
             if (req.method === 'POST' && url.pathname === '/internal/personal-data/oauth-connection') {
@@ -184,6 +185,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     return json(res, 400, { error: 'JSON body must be an object' });
                 const account = await updateFeishuConnectionFeaturePackages(config, {
                     investorId: readRequiredBodyString(body, 'investorId'),
+                    userId: typeof body.userId === 'string' ? body.userId.trim() : undefined,
                     connectionId: readRequiredBodyString(body, 'connectionId'),
                     featurePackages: Array.isArray(body.featurePackages) ? body.featurePackages : [],
                 });
@@ -199,6 +201,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     return json(res, 400, { error: 'JSON body must be an object' });
                 const ok = await disablePersonalConnection(config, {
                     investorId: readRequiredBodyString(body, 'investorId'),
+                    userId: typeof body.userId === 'string' ? body.userId.trim() : undefined,
                     connectionId: readRequiredBodyString(body, 'connectionId'),
                 });
                 return json(res, ok ? 200 : 404, ok ? { ok: true } : { error: 'Connection not found' });

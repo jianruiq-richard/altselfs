@@ -293,7 +293,7 @@ export class CodexAgentRuntime {
             tools.push(...createRapidApiCompetitorDynamicTools(enabledCompetitorSources));
         }
         const investorId = typeof input.metadata?.investorId === 'string' ? input.metadata.investorId : undefined;
-        tools.push(...await createPersonalDataDynamicTools(this.config, { investorId }));
+        tools.push(...await createPersonalDataDynamicTools(this.config, { investorId, userId: input.userId }));
         return tools;
     }
     async handleServerRequest(client, request, emit, sandboxExecContext, personalToolContext) {

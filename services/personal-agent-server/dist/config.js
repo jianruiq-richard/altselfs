@@ -273,8 +273,8 @@ export function loadConfig() {
     const hermesModel = readEnv('HERMES_MODEL', 'deepseek/deepseek-v3.2');
     const openRouterApiKeyEnv = readEnv('OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY');
     const hasOpenRouterKey = Boolean(process.env[openRouterApiKeyEnv]?.trim());
-    const codexModelProvider = process.env.CODEX_MODEL_PROVIDER?.trim() || (hasOpenRouterKey ? 'openrouter' : undefined);
-    const codexModel = process.env.CODEX_MODEL?.trim() || (codexModelProvider === 'openrouter' ? hermesModel : undefined);
+    const codexModel = process.env.CODEX_MODEL?.trim() || 'gpt-5.5';
+    const codexModelProvider = process.env.CODEX_MODEL_PROVIDER?.trim() || (codexModel === 'gpt-5.5' ? 'openai' : hasOpenRouterKey ? 'openrouter' : undefined);
     return {
         port: readIntEnv('PORT', 8787),
         env: readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development'),

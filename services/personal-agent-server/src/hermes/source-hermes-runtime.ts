@@ -169,7 +169,7 @@ export class HermesSourceRuntime {
       typeof request.metadata?.selectedAgentProfileId === 'string' && request.metadata.selectedAgentProfileId.trim()
         ? request.metadata.selectedAgentProfileId.trim()
         : '';
-    const personalDataToolNames = await getPersonalDataToolNames(this.config, investorId);
+    const personalDataToolNames = await getPersonalDataToolNames(this.config, investorId, request.userId);
     const profileLoadStartedAtMs = Date.now();
     const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(
       request.userId,
@@ -843,9 +843,9 @@ function getEnabledCompetitorToolNames(metadata: Record<string, unknown> | undef
   return Array.from(new Set(names));
 }
 
-async function getPersonalDataToolNames(config: ServerConfig, investorId: string) {
+async function getPersonalDataToolNames(config: ServerConfig, investorId: string, userId?: string) {
   try {
-    const tools = await createPersonalDataDynamicTools(config, { investorId });
+    const tools = await createPersonalDataDynamicTools(config, { investorId, userId });
     return tools
       .map((tool) => isRecord(tool) && typeof tool.name === 'string' ? tool.name : '')
       .filter(Boolean);

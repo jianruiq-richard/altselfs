@@ -191,6 +191,14 @@ export default function InvestorIntegrationsPanel({
   const [gmailAccountsLoading, setGmailAccountsLoading] = useState(false);
   const [feishuAccounts, setFeishuAccounts] = useState<PersonalAccount[]>([]);
   const [feishuAccountsLoading, setFeishuAccountsLoading] = useState(false);
+  const [personalAccountsChecked, setPersonalAccountsChecked] = useState<Record<'gmail' | 'feishu', boolean>>({
+    gmail: false,
+    feishu: false,
+  });
+  const [personalAccountsError, setPersonalAccountsError] = useState<Record<'gmail' | 'feishu', string>>({
+    gmail: '',
+    feishu: '',
+  });
   const [feishuBindPackages, setFeishuBindPackages] = useState<FeishuFeaturePackage[]>(DEFAULT_FEISHU_FEATURE_PACKAGES);
   const [feishuPackageDrafts, setFeishuPackageDrafts] = useState<Record<string, FeishuFeaturePackage[]>>({});
   const [feishuPackageSaving, setFeishuPackageSaving] = useState<Record<string, boolean>>({});
@@ -217,10 +225,17 @@ export default function InvestorIntegrationsPanel({
   const loadPersonalAccounts = useCallback(async (provider: 'gmail' | 'feishu') => {
     if (provider === 'gmail') setGmailAccountsLoading(true);
     if (provider === 'feishu') setFeishuAccountsLoading(true);
+    setPersonalAccountsError((prev) => ({ ...prev, [provider]: '' }));
     try {
       const res = await fetch(`/api/investor/personal-data/accounts?provider=${provider}`);
       const data = await res.json();
-      if (!res.ok) return;
+      if (!res.ok) {
+        setPersonalAccountsError((prev) => ({
+          ...prev,
+          [provider]: data.error || `${providerLabel(provider)} 授权状态检查失败。`,
+        }));
+        return;
+      }
       const accounts = Array.isArray(data.accounts) ? data.accounts as PersonalAccount[] : [];
       if (provider === 'gmail') setGmailAccounts(accounts);
       if (provider === 'feishu') {
@@ -251,8 +266,12 @@ export default function InvestorIntegrationsPanel({
         )
       );
     } catch {
-      // Keep the existing server-rendered status if personal-agent-server is temporarily unavailable.
+      setPersonalAccountsError((prev) => ({
+        ...prev,
+        [provider]: `${providerLabel(provider)} 授权状态检查失败。`,
+      }));
     } finally {
+      setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
       if (provider === 'gmail') setGmailAccountsLoading(false);
       if (provider === 'feishu') setFeishuAccountsLoading(false);
     }
@@ -264,6 +283,14 @@ export default function InvestorIntegrationsPanel({
 
   const personalAccountsLoadingFor = (provider: ProviderKey) => (
     provider === 'gmail' ? gmailAccountsLoading : provider === 'feishu' ? feishuAccountsLoading : false
+  );
+
+  const personalAccountsCheckedFor = (provider: ProviderKey) => (
+    provider === 'gmail' ? personalAccountsChecked.gmail : provider === 'feishu' ? personalAccountsChecked.feishu : true
+  );
+
+  const personalAccountsErrorFor = (provider: ProviderKey) => (
+    provider === 'gmail' ? personalAccountsError.gmail : provider === 'feishu' ? personalAccountsError.feishu : ''
   );
 
   useEffect(() => {
@@ -399,6 +426,13 @@ export default function InvestorIntegrationsPanel({
       await loadPersonalAccounts(provider);
     } catch {
       setError('网络错误，请稍后重试');
+      if (isPersonalAccountProvider(provider)) {
+        setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
+        setPersonalAccountsError((prev) => ({
+          ...prev,
+          [provider]: `${providerLabel(provider)} 授权状态检查失败。`,
+        }));
+      }
     } finally {
       setLoadingProvider(null);
     }
@@ -524,7 +558,15 @@ export default function InvestorIntegrationsPanel({
             });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '刷新摘要失败');
+        const detail = data.error || '刷新摘要失败';
+        setError(detail);
+        if (isPersonalAccountProvider(provider)) {
+          setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
+          setPersonalAccountsError((prev) => ({
+            ...prev,
+            [provider]: String(detail),
+          }));
+        }
         return;
       }
       setCards((prev) =>
@@ -584,6 +626,8 @@ export default function InvestorIntegrationsPanel({
         )
       );
       if (isPersonalAccountProvider(provider) && Array.isArray(data.accounts)) {
+        setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
+        setPersonalAccountsError((prev) => ({ ...prev, [provider]: '' }));
         if (provider === 'gmail') setGmailAccounts(data.accounts as PersonalAccount[]);
         if (provider === 'feishu') {
           const accounts = data.accounts as PersonalAccount[];
@@ -794,23 +838,41 @@ export default function InvestorIntegrationsPanel({
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
       <div className="grid md:grid-cols-2 gap-4 mt-5">
-        {cards.map((card) => (
+        {cards.map((card) => {
+          const personalChecking = isPersonalAccountProvider(card.provider) && !personalAccountsCheckedFor(card.provider);
+          const personalLoadError = isPersonalAccountProvider(card.provider) ? personalAccountsErrorFor(card.provider) : '';
+          const displayConnected = !personalChecking && !personalLoadError && card.connected;
+          return (
           <div key={card.provider} className="rounded-lg border border-slate-200 p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold text-slate-900">{providerLabel(card.provider)}</h3>
               <span
                 className={`px-2 py-1 text-xs rounded-full ${
-                  card.connected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  personalChecking
+                    ? 'bg-slate-100 text-slate-700'
+                    : personalLoadError
+                      ? 'bg-red-100 text-red-700'
+                      : displayConnected
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
                 }`}
               >
-          {card.connected
-            ? (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? '已启用' : '已绑定')
-            : (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? '未启用' : '未绑定')}
+          {personalChecking
+            ? '检查中'
+            : personalLoadError
+              ? '检查失败'
+              : displayConnected
+                ? (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? '已启用' : '已绑定')
+                : (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? '未启用' : '未绑定')}
                 </span>
               </div>
 
             <p className="text-sm text-slate-600 mt-2">
-              {isCompetitiveDataSource(card.provider)
+              {personalChecking
+                ? `正在检查 ${providerLabel(card.provider)} 授权状态...`
+                : personalLoadError
+                  ? `${providerLabel(card.provider)} 授权状态检查失败，请刷新状态。`
+                  : isCompetitiveDataSource(card.provider)
                 ? competitiveDataSourceDescriptions[card.provider]
                 : card.accountEmail || card.accountName || '尚未绑定账号'}
             </p>
@@ -854,7 +916,15 @@ export default function InvestorIntegrationsPanel({
                   <p className="text-xs font-medium text-sky-900">已授权 {providerLabel(card.provider)} 账号</p>
                   {personalAccountsLoadingFor(card.provider) && <span className="text-xs text-sky-700">加载中...</span>}
                 </div>
-                {personalAccountsFor(card.provider).length === 0 ? (
+                {personalChecking ? (
+                  <p className="mt-2 text-sm text-slate-600">
+                    正在加载 {providerLabel(card.provider)} 授权状态...
+                  </p>
+                ) : personalLoadError ? (
+                  <p className="mt-2 text-sm text-red-600">
+                    {personalLoadError}
+                  </p>
+                ) : personalAccountsFor(card.provider).length === 0 ? (
                   <p className="mt-2 text-sm text-slate-600">
                     {card.provider === 'gmail'
                       ? '暂无 Gmail 授权。绑定后主 AI 助手会按需调用 Gmail 搜索、读取邮件和线程工具。'
@@ -954,18 +1024,21 @@ export default function InvestorIntegrationsPanel({
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
+                disabled={personalChecking}
                 onClick={() => void connect(card.provider)}
-                className="bg-sky-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-sky-700 transition-colors"
+                className="bg-sky-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-sky-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {card.provider === 'xiaohongshu'
-                  ? card.connected
+                {personalChecking
+                  ? '检查中...'
+                  : card.provider === 'xiaohongshu'
+                  ? displayConnected
                     ? '已启用小红书助手'
                     : '启用小红书助手'
                   : isCompetitiveDataSource(card.provider)
-                    ? card.connected
+                    ? displayConnected
                       ? `停用 ${providerLabel(card.provider)}`
                       : `启用 ${providerLabel(card.provider)}`
-                  : card.connected
+                  : displayConnected
                     ? isPersonalAccountProvider(card.provider)
                       ? `绑定更多 ${providerLabel(card.provider)}`
                       : '重新绑定'
@@ -973,7 +1046,7 @@ export default function InvestorIntegrationsPanel({
               </button>
               <button
                 type="button"
-                disabled={loadingProvider === card.provider}
+                disabled={loadingProvider === card.provider || personalChecking}
                 onClick={() => refreshSummary(card.provider)}
                 className="bg-white text-slate-800 px-3 py-2 rounded-lg text-sm border border-slate-300 hover:bg-slate-100 disabled:opacity-50"
               >
@@ -1124,7 +1197,8 @@ export default function InvestorIntegrationsPanel({
             </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

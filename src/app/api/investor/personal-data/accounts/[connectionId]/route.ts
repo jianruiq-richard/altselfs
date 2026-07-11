@@ -27,6 +27,7 @@ export async function PATCH(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         investorId: investor.id,
+        userId: investor.email || investor.id,
         connectionId,
         featurePackages: normalizeFeaturePackages(body.featurePackages),
       }),
@@ -52,7 +53,7 @@ export async function DELETE(
     const data = await personalAgentInternalFetch('/internal/personal-data/connections', {
       method: 'DELETE',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ investorId: investor.id, connectionId }),
+      body: JSON.stringify({ investorId: investor.id, userId: investor.email || investor.id, connectionId }),
     });
     return NextResponse.json(data);
   } catch (error) {

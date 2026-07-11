@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
 
   const provider = req.nextUrl.searchParams.get('provider')?.trim();
   const query = new URLSearchParams({ investorId: investor.id });
+  if (investor.email) query.set('userId', investor.email);
   if (provider) query.set('provider', provider);
 
   try {

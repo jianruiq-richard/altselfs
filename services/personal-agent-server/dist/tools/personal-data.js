@@ -27,13 +27,14 @@ export function isPersonalDataTool(toolName) {
 }
 export async function createPersonalDataDynamicTools(config, input) {
     const investorId = input.investorId?.trim();
+    const userId = input.userId?.trim();
     if (!investorId || !isCredentialVaultConfigured())
         return [];
     let gmailConnections = [];
     let feishuConnections = [];
     try {
-        gmailConnections = await listPersonalConnections(config, { investorId, provider: 'gmail' });
-        feishuConnections = await listPersonalConnections(config, { investorId, provider: 'feishu' });
+        gmailConnections = await listPersonalConnections(config, { investorId, userId, provider: 'gmail' });
+        feishuConnections = await listPersonalConnections(config, { investorId, userId, provider: 'feishu' });
     }
     catch {
         return [];
@@ -398,7 +399,7 @@ export async function runPersonalDataTool(toolName, argumentsValue, config, cont
 }
 async function connectedAccountsList(config, context, args) {
     const provider = typeof args.provider === 'string' && args.provider.trim() ? args.provider.trim().toLowerCase() : undefined;
-    const connections = await listPersonalConnections(config, { investorId: context.investorId, provider });
+    const connections = await listPersonalConnections(config, { investorId: context.investorId, userId: context.userId, provider });
     return {
         source: 'personal-data-connections',
         fetchedAt: new Date().toISOString(),
@@ -744,7 +745,7 @@ async function feishuLarkCli(config, context, args) {
     };
 }
 async function resolveGmailConnections(config, context, args, options) {
-    const connections = await listPersonalConnections(config, { investorId: context.investorId, provider: 'gmail' });
+    const connections = await listPersonalConnections(config, { investorId: context.investorId, userId: context.userId, provider: 'gmail' });
     if (connections.length === 0)
         throw new Error('No connected Gmail account is available for this user.');
     const accountId = readArgString(args.accountId) || readArgString(args.connectionId);
@@ -768,7 +769,7 @@ async function resolveGmailConnections(config, context, args, options) {
     throw new Error('Multiple Gmail accounts are connected. Provide accountId or accountEmail.');
 }
 async function getFreshGmailAccessToken(config, context, connection) {
-    const credential = await loadPersonalCredential(config, { investorId: context.investorId, connectionId: connection.id });
+    const credential = await loadPersonalCredential(config, { investorId: connection.investorId, connectionId: connection.id });
     if (!credential)
         throw new Error(`Credential not found for Gmail account ${connection.externalAccountId}.`);
     const payload = decryptCredentialPayload({
@@ -790,14 +791,14 @@ async function getFreshGmailAccessToken(config, context, connection) {
         expiresAt: refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null,
     };
     await updatePersonalCredentialPayload(config, {
-        investorId: context.investorId,
+        investorId: connection.investorId,
         connectionId: connection.id,
         payload: nextPayload,
     });
     return nextPayload.accessToken;
 }
 async function resolveFeishuConnections(config, context, args, options) {
-    const allConnections = await listPersonalConnections(config, { investorId: context.investorId, provider: 'feishu' });
+    const allConnections = await listPersonalConnections(config, { investorId: context.investorId, userId: context.userId, provider: 'feishu' });
     const connections = options.requiredPackage
         ? allConnections.filter((connection) => hasFeishuFeaturePackage(connection, options.requiredPackage))
         : allConnections;
@@ -840,7 +841,7 @@ function hasFeishuFeaturePackage(connection, featurePackage) {
     return DEFAULT_FEISHU_CLI_FEATURE_PACKAGES.includes(featurePackage);
 }
 async function loadFeishuCliCredential(config, context, connection) {
-    const credential = await loadPersonalCredential(config, { investorId: context.investorId, connectionId: connection.id });
+    const credential = await loadPersonalCredential(config, { investorId: connection.investorId, connectionId: connection.id });
     if (!credential)
         throw new Error(`Credential not found for Feishu account ${connection.displayName}.`);
     const payload = decryptCredentialPayload({
