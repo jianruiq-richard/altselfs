@@ -143,21 +143,23 @@ type CodexModelOption = {
   detail: string;
 };
 
+const DEFAULT_CODEX_MODEL: CodexModelOption['value'] = 'gpt-5.5';
+
 const codexModelOptions: CodexModelOption[] = [
-  {
-    value: 'deepseek/deepseek-v3.2',
-    label: 'DeepSeek 3.2',
-    detail: 'OpenRouter',
-  },
   {
     value: 'gpt-5.5',
     label: 'ChatGPT 5.5',
     detail: 'OpenAI + web.run',
   },
+  {
+    value: 'deepseek/deepseek-v3.2',
+    label: 'DeepSeek 3.2',
+    detail: 'OpenRouter',
+  },
 ];
 
 function normalizeCodexModelOption(value: unknown): CodexModelOption['value'] {
-  return codexModelOptions.find((option) => option.value === value)?.value || 'deepseek/deepseek-v3.2';
+  return codexModelOptions.find((option) => option.value === value)?.value || DEFAULT_CODEX_MODEL;
 }
 
 const suggestedQuestions = [
@@ -1175,7 +1177,7 @@ export default function InvestorAgentChatPage() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stoppingRun, setStoppingRun] = useState(false);
   const [recoveringRunState, setRecoveringRunState] = useState(false);
-  const [codexModel, setCodexModel] = useState<CodexModelOption['value']>('deepseek/deepseek-v3.2');
+  const [codexModel, setCodexModel] = useState<CodexModelOption['value']>(DEFAULT_CODEX_MODEL);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const liveStreamRunIdRef = useRef<string | null>(null);
@@ -1197,7 +1199,10 @@ export default function InvestorAgentChatPage() {
         ? '查看上次过程和错误'
         : '查看上次执行过程'
         : '等待本轮 planner';
-  const selectedCodexModel = codexModelOptions.find((option) => option.value === codexModel) || codexModelOptions[0];
+  const selectedCodexModel =
+    codexModelOptions.find((option) => option.value === codexModel) ||
+    codexModelOptions.find((option) => option.value === DEFAULT_CODEX_MODEL) ||
+    codexModelOptions[0];
 
   useEffect(() => {
     const stored = window.localStorage.getItem(CODEX_MODEL_STORAGE_KEY);

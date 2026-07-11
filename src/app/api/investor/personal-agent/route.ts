@@ -19,6 +19,7 @@ const PERSONAL_AGENT_TYPE = 'PERSONAL';
 const DEFAULT_MULTIMODAL_MAX_FILES = 6;
 const DEFAULT_MULTIMODAL_MAX_FILE_BYTES = 20 * 1024 * 1024;
 const PERSONAL_AGENT_FETCH_TIMEOUT_MS = 15_000;
+const DEFAULT_CODEX_AGENT_MODEL = 'gpt-5.5';
 
 type ClientMessage = {
   id?: string;
@@ -65,12 +66,12 @@ type ParsedPostBody = {
   userMessage: string;
   displayUserMessage: string;
   clientRequestId?: string | null;
-  codexModel: 'deepseek/deepseek-v3.2' | 'gpt-5.5';
+  codexModel: 'deepseek/deepseek-v3.2' | typeof DEFAULT_CODEX_AGENT_MODEL;
   attachments: UploadedAttachment[];
 };
 
 function normalizeCodexModel(value: unknown): ParsedPostBody['codexModel'] {
-  if (typeof value !== 'string') return 'deepseek/deepseek-v3.2';
+  if (typeof value !== 'string') return DEFAULT_CODEX_AGENT_MODEL;
   const normalized = value.trim().toLowerCase();
   if (normalized === 'gpt-5.5' || normalized === 'chatgpt-5.5') return 'gpt-5.5';
   if (
@@ -80,7 +81,7 @@ function normalizeCodexModel(value: unknown): ParsedPostBody['codexModel'] {
   ) {
     return 'deepseek/deepseek-v3.2';
   }
-  return 'deepseek/deepseek-v3.2';
+  return DEFAULT_CODEX_AGENT_MODEL;
 }
 
 function normalizeClientRequestId(value: unknown) {
