@@ -1,8 +1,8 @@
 {
   "buildCommand": "prisma generate && next build",
-  "regions": ["hkg1"],
   "env": {
-    "PRISMA_GENERATE_DATAPROXY": "true"
+    "PRISMA_GENERATE_DATAPROXY": "true",
+    "VERCEL_UNDICI": "1"
   },
   "functions": {
     "src/app/api/**/*.ts": {
