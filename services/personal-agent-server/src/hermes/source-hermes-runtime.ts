@@ -28,6 +28,7 @@ import {
   type RuntimePaths,
   writeSandboxState,
 } from '../sandbox-runtime.js';
+import { acquireSharedOpenAiAuthLock, type SharedOpenAiAuthLock } from '../codex/openai-auth-lock.js';
 import type { AgentEvent, SourceAgentRunResult, TurnStartRequest } from '../types.js';
 import { id, isRecord, nowIso, safeJson, truncate } from '../util.js';
 
@@ -246,7 +247,23 @@ export class HermesSourceRuntime {
       startedAtMs,
       emit,
     });
+    let codexOpenAiAuthLock: SharedOpenAiAuthLock | undefined;
     try {
+      if (codexModelSelection.provider === 'openai') {
+        const lockStartedAtMs = Date.now();
+        codexOpenAiAuthLock = await acquireSharedOpenAiAuthLock({
+          codexHome,
+          sourcePath: this.config.codexOpenAiAuthJsonPath,
+        });
+        if (codexOpenAiAuthLock) {
+          await emit('codex.openai_auth.lock_acquired', {
+            authPath: codexOpenAiAuthLock.authPath,
+            sourcePath: codexOpenAiAuthLock.sourcePath,
+            durationMs: Date.now() - lockStartedAtMs,
+            sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
+          });
+        }
+      }
       result = await this.spawnHermes(args, {
         runId,
         userId: request.userId,
@@ -307,6 +324,25 @@ export class HermesSourceRuntime {
         metadata: { phase: 'error' },
       });
       throw error;
+    } finally {
+      if (codexOpenAiAuthLock) {
+        const releaseStartedAtMs = Date.now();
+        try {
+          await codexOpenAiAuthLock.release();
+          await emit('codex.openai_auth.lock_released', {
+            authPath: codexOpenAiAuthLock.authPath,
+            sourcePath: codexOpenAiAuthLock.sourcePath,
+            durationMs: Date.now() - releaseStartedAtMs,
+            sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
+          });
+        } catch (error) {
+          await emit('codex.openai_auth.lock_release_failed', {
+            authPath: codexOpenAiAuthLock.authPath,
+            sourcePath: codexOpenAiAuthLock.sourcePath,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
     await rolloutBridge.stop();
     const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join('\n');
@@ -460,7 +496,6 @@ export class HermesSourceRuntime {
     );
 
     await this.writeCodexConfig(paths, codexModelSelection);
-    if (codexModelSelection.provider === 'openai') await this.ensureOpenAiAuth(paths.codexHome);
   }
 
   private async writeCodexConfig(paths: RuntimePaths, selection: CodexModelSelection) {
@@ -522,15 +557,6 @@ export class HermesSourceRuntime {
       ].join('\n'),
       'utf8'
     );
-  }
-
-  private async ensureOpenAiAuth(codexHome: string) {
-    const authPath = path.join(codexHome, 'auth.json');
-    if (await pathExists(authPath)) return;
-    const source = this.config.codexOpenAiAuthJsonPath;
-    if (!source) return;
-    await fs.copyFile(source, authPath);
-    await fs.chmod(authPath, 0o600).catch(() => undefined);
   }
 
   private async calculateSandboxDiskBytes(paths: RuntimePaths) {
@@ -1046,15 +1072,6 @@ function codexModelMetadataLines(metadata: CodexModelMetadata) {
     lines.push(`model_supports_reasoning_summaries = ${metadata.supportsReasoningSummaries ? 'true' : 'false'}`);
   }
   return lines;
-}
-
-async function pathExists(file: string) {
-  try {
-    await fs.access(file);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function combineProfileBlocks(...blocks: string[]) {

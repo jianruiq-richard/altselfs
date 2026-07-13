@@ -22,6 +22,7 @@ import {
   isPersonalDataTool,
   runPersonalDataTool,
 } from '../tools/personal-data.js';
+import { acquireSharedOpenAiAuthLock, type SharedOpenAiAuthLock } from './openai-auth-lock.js';
 import type { ChildAgentRunInput, ChildAgentRunResult, ChildAgentRuntime, AgentEvent } from '../types.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
 
@@ -53,21 +54,30 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     const modelSelection = this.resolveModelSelection(selectedModel);
     const codexHome = await this.ensureCodexHome(input.userId, modelSelection);
     const workspace = await this.ensureWorkspace(input.userId, input.threadId);
-    const client = new CodexJsonRpcClient({
-      codexBin: this.config.codexBin,
-      codexHome,
-      env: this.buildCodexProcessEnv(modelSelection),
-    });
 
     let finalText = '';
     let assistantBuffer = '';
     let codexThreadId = '';
     let policyViolationMessage: string | null = null;
     let usedExternalSearch = false;
+    let client: CodexJsonRpcClient | undefined;
+    let codexOpenAiAuthLock: SharedOpenAiAuthLock | undefined;
     const nonLocalProfile = this.isNonLocalCodexProfile(input.profileId);
     const localEnvironmentDisabled = nonLocalProfile && this.config.disableLocalEnvironmentForGeneral;
 
     try {
+      if (modelSelection.provider === 'openai') {
+        codexOpenAiAuthLock = await acquireSharedOpenAiAuthLock({
+          codexHome,
+          sourcePath: this.config.codexOpenAiAuthJsonPath,
+        });
+      }
+      client = new CodexJsonRpcClient({
+        codexBin: this.config.codexBin,
+        codexHome,
+        env: this.buildCodexProcessEnv(modelSelection),
+      });
+      const activeClient = client;
       await emit({
         type: 'codex.session.starting',
         timestamp: nowIso(),
@@ -82,9 +92,9 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
           codexModelProvider: modelSelection.provider,
         },
       });
-      await client.initialize();
+      await activeClient.initialize();
       const dynamicTools = nonLocalProfile ? await this.buildDynamicTools(input, modelSelection) : undefined;
-      const thread = await client.request(
+      const thread = await activeClient.request(
         'thread/start',
         {
           cwd: workspace,
@@ -114,13 +124,13 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         threadId: input.threadId,
         runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : undefined,
       };
-      client.on('serverRequest', (request: Record<string, unknown>) => {
-        this.handleServerRequest(client, request, emit, sandboxExecContext, personalToolContext).then((handled) => {
+      activeClient.on('serverRequest', (request: Record<string, unknown>) => {
+        this.handleServerRequest(activeClient, request, emit, sandboxExecContext, personalToolContext).then((handled) => {
           if (handled === 'web_search') usedExternalSearch = true;
         });
       });
 
-      client.on('notification', (notification: Record<string, unknown>) => {
+      activeClient.on('notification', (notification: Record<string, unknown>) => {
         if (localEnvironmentDisabled && this.isProhibitedLocalToolNotification(notification)) {
           policyViolationMessage = `${input.profileId || 'codex-general'} is not allowed to use local command, file, patch, or image tools`;
           void emit({
@@ -128,7 +138,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
             timestamp: nowIso(),
             payload: safeJson({ notification, policy: policyViolationMessage }),
           });
-          client.close();
+          activeClient.close();
           return;
         }
         if (this.isNativeWebSearchNotification(notification)) usedExternalSearch = true;
@@ -155,7 +165,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         input.message,
       ].join('\n');
       const turnInput = this.buildTurnInput(prompt, input.metadata);
-      const turn = await client.request(
+      const turn = await activeClient.request(
         'turn/start',
         {
           threadId: codexThreadId,
@@ -165,7 +175,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         15_000
       );
       await emit({ type: 'codex.turn.started', timestamp: nowIso(), payload: { raw: turn } });
-      await this.waitForTurnCompletion(client, emit);
+      await this.waitForTurnCompletion(activeClient, emit);
       if (policyViolationMessage) throw new Error(policyViolationMessage);
       if (this.requiresCurrentExternalInfo(input.message) && !usedExternalSearch) {
         await emit({
@@ -188,16 +198,31 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       await emit({
         type: 'codex.error',
         timestamp: nowIso(),
-        payload: { error: message, stderr: client.stderrTail(20) },
+        payload: { error: message, stderr: client?.stderrTail(20) || [] },
       });
       return {
         route: 'codex',
         reply: `Codex app-server 执行失败：${message}`,
         events,
-        raw: { codexThreadId, stderr: client.stderrTail(20) },
+        raw: { codexThreadId, stderr: client?.stderrTail(20) || [] },
       };
     } finally {
-      client.close();
+      client?.close();
+      if (codexOpenAiAuthLock) {
+        try {
+          await codexOpenAiAuthLock.release();
+        } catch (error) {
+          await emit({
+            type: 'codex.openai_auth.lock_release_failed',
+            timestamp: nowIso(),
+            payload: {
+              authPath: codexOpenAiAuthLock.authPath,
+              sourcePath: codexOpenAiAuthLock.sourcePath,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        }
+      }
     }
   }
 
@@ -205,7 +230,6 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     const dir = path.join(this.config.codexHomeRoot, sanitizePathSegment(userId));
     await fs.mkdir(dir, { recursive: true });
     await this.writeCodexConfig(dir, selection);
-    if (selection.provider === 'openai') await this.ensureOpenAiAuth(dir);
     return dir;
   }
 
@@ -250,15 +274,6 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       '"X-OpenRouter-Title" = ' + tomlString(this.config.openRouterAppTitle),
     ].filter(Boolean).join('\n') + '\n';
     await fs.writeFile(configPath, content, 'utf8');
-  }
-
-  private async ensureOpenAiAuth(codexHome: string) {
-    const authPath = path.join(codexHome, 'auth.json');
-    if (await pathExists(authPath)) return;
-    const source = this.config.codexOpenAiAuthJsonPath;
-    if (!source) return;
-    await fs.copyFile(source, authPath);
-    await fs.chmod(authPath, 0o600).catch(() => undefined);
   }
 
   private async writeCodexModelCatalog(codexHome: string, selectedModel?: string) {
@@ -658,15 +673,6 @@ function mergeNoProxy(existing: string) {
   );
   for (const item of ['localhost', '127.0.0.1']) values.add(item);
   return [...values].join(',');
-}
-
-async function pathExists(file: string) {
-  try {
-    await fs.access(file);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function tomlString(value: string) {
