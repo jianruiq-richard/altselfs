@@ -132,12 +132,12 @@ function togglePackage(packages: FeishuFeaturePackage[], featurePackage: FeishuF
     : [...packages, featurePackage];
 }
 
-function openFeishuAuthPlaceholder(message = '正在准备飞书账号授权...') {
+function openFeishuAuthPlaceholder(message = '正在准备飞书账号授权...', options: { disownOpener?: boolean } = {}) {
   if (typeof window === 'undefined') return null;
   const popup = window.open('', '_blank');
   if (!popup) return null;
   try {
-    popup.opener = null;
+    if (options.disownOpener) popup.opener = null;
     popup.document.title = '飞书账号授权';
     popup.document.body.style.cssText = 'font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; padding: 24px; color: #0f172a;';
     popup.document.body.textContent = message;
@@ -160,6 +160,7 @@ function openFeishuAuthUrl(popup: Window | null, authUrl: string) {
   if (popup && !popup.closed) {
     try {
       popup.location.href = authUrl;
+      popup.focus();
       return true;
     } catch {
       // Fall back to opening a new tab below.
@@ -531,8 +532,10 @@ export default function InvestorIntegrationsPanel({
       return;
     }
     clearFeishuCliPoll();
-    const setupPopup = openFeishuAuthPlaceholder('正在打开飞书 CLI 应用配置...');
+    const setupPopup = openFeishuAuthPlaceholder('正在打开飞书 CLI 应用配置...', { disownOpener: true });
+    const authPopup = openFeishuAuthPlaceholder('等待飞书应用配置完成，随后会自动进入账号授权...');
     if (!setupPopup) {
+      closePreparedPopup(authPopup);
       setFeishuCliMessage('浏览器拦截了弹窗，请允许弹窗后重试，或手动打开应用配置链接。');
       return;
     }
@@ -542,10 +545,22 @@ export default function InvestorIntegrationsPanel({
       setFeishuCliMessage('打开飞书 CLI 应用配置失败，请手动打开链接。');
       return;
     }
-    feishuCliPopupRef.current = setupPopup;
+    if (authPopup) {
+      try {
+        authPopup.blur();
+        setupPopup.focus();
+      } catch {
+        // Focus behavior is browser-controlled.
+      }
+    }
+    feishuCliPopupRef.current = authPopup;
     setFeishuCliPhase('app_setup');
-    setFeishuCliMessage('飞书 CLI 应用配置页已打开，完成配置后会自动进入账号授权。');
-    startFeishuCliSetupPolling(setupPopup);
+    setFeishuCliMessage(
+      authPopup
+        ? '飞书 CLI 应用配置页已打开，账号授权页已预备。完成配置后会自动进入账号授权。'
+        : '飞书 CLI 应用配置页已打开；浏览器拦截了账号授权预备窗口，完成配置后如未自动弹出请手动重新打开。'
+    );
+    startFeishuCliSetupPolling(authPopup);
   };
 
   const startFeishuCliSetupPolling = (popup: Window | null) => {
@@ -928,7 +943,7 @@ export default function InvestorIntegrationsPanel({
             <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
               <p className="text-xs font-semibold text-slate-900">第 1 步：配置你自己的飞书 CLI 应用</p>
               <p className="mt-1 text-xs text-slate-600">
-                打开后按飞书页面完成应用创建/配置；本页会自动检测，完成后同一个弹窗会进入账号授权。
+                打开后按飞书页面完成应用创建/配置；本页会自动检测，并把预备好的授权窗口切到账号授权。
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {feishuCliSetupUrl && (
@@ -956,7 +971,7 @@ export default function InvestorIntegrationsPanel({
               <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
                 <p className="text-xs font-semibold text-slate-900">第 2 步：授权你的飞书账号</p>
                 <p className="mt-1 text-xs text-slate-600">
-                  账号授权页会自动打开；确认授权后本页会自动完成绑定。如果弹窗被拦截，可以手动重新打开。
+                  账号授权窗口会自动切换；确认授权后本页会自动完成绑定。如果弹窗被拦截，可以手动重新打开。
                   {feishuCliUserCode ? ` 页面提示时输入验证码：${feishuCliUserCode}` : ''}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
