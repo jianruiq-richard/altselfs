@@ -132,6 +132,43 @@ function togglePackage(packages: FeishuFeaturePackage[], featurePackage: FeishuF
     : [...packages, featurePackage];
 }
 
+function openFeishuAuthPlaceholder(message = '正在准备飞书账号授权...') {
+  if (typeof window === 'undefined') return null;
+  const popup = window.open('', '_blank');
+  if (!popup) return null;
+  try {
+    popup.opener = null;
+    popup.document.title = '飞书账号授权';
+    popup.document.body.style.cssText = 'font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; padding: 24px; color: #0f172a;';
+    popup.document.body.textContent = message;
+  } catch {
+    // Some browsers restrict touching popup contents; navigation below still works.
+  }
+  return popup;
+}
+
+function closePreparedPopup(popup: Window | null) {
+  if (!popup || popup.closed) return;
+  try {
+    popup.close();
+  } catch {
+    // Ignore browser popup lifecycle differences.
+  }
+}
+
+function openFeishuAuthUrl(popup: Window | null, authUrl: string) {
+  if (popup && !popup.closed) {
+    try {
+      popup.location.href = authUrl;
+      return true;
+    } catch {
+      // Fall back to opening a new tab below.
+    }
+  }
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.open(authUrl, '_blank', 'noreferrer'));
+}
+
 export default function InvestorIntegrationsPanel({
   initialCards,
   integrationStatus,
@@ -204,6 +241,15 @@ export default function InvestorIntegrationsPanel({
   const [feishuPackageSaving, setFeishuPackageSaving] = useState<Record<string, boolean>>({});
   const [feishuPackageMessages, setFeishuPackageMessages] = useState<Record<string, string>>({});
   const assistantViewportRefs = useRef<Partial<Record<ProviderKey, HTMLDivElement | null>>>({});
+  const feishuCliPopupRef = useRef<Window | null>(null);
+  const feishuCliPollRef = useRef<number | null>(null);
+  const feishuCliAutoRequestRef = useRef(false);
+
+  const clearFeishuCliPoll = useCallback(() => {
+    if (feishuCliPollRef.current === null) return;
+    window.clearInterval(feishuCliPollRef.current);
+    feishuCliPollRef.current = null;
+  }, []);
 
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
@@ -328,6 +374,8 @@ export default function InvestorIntegrationsPanel({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [assistantChats, assistantLoading]);
+
+  useEffect(() => () => clearFeishuCliPoll(), [clearFeishuCliPoll]);
 
   const connect = async (provider: ProviderKey) => {
     if (isCompetitiveDataSource(provider)) {
@@ -477,9 +525,69 @@ export default function InvestorIntegrationsPanel({
     }
   };
 
-  const continueFeishuCliSetup = async () => {
-    setFeishuCliCompleting(true);
-    setFeishuCliMessage('');
+  const openFeishuSetupAndPoll = () => {
+    if (!feishuCliSetupUrl) {
+      setFeishuCliMessage('飞书 CLI 应用配置链接不存在，请重新绑定。');
+      return;
+    }
+    clearFeishuCliPoll();
+    const setupPopup = openFeishuAuthPlaceholder('正在打开飞书 CLI 应用配置...');
+    if (!setupPopup) {
+      setFeishuCliMessage('浏览器拦截了弹窗，请允许弹窗后重试，或手动打开应用配置链接。');
+      return;
+    }
+    try {
+      setupPopup.location.href = feishuCliSetupUrl;
+    } catch {
+      setFeishuCliMessage('打开飞书 CLI 应用配置失败，请手动打开链接。');
+      return;
+    }
+    feishuCliPopupRef.current = setupPopup;
+    setFeishuCliPhase('app_setup');
+    setFeishuCliMessage('飞书 CLI 应用配置页已打开，完成配置后会自动进入账号授权。');
+    startFeishuCliSetupPolling(setupPopup);
+  };
+
+  const startFeishuCliSetupPolling = (popup: Window | null) => {
+    clearFeishuCliPoll();
+    let attempts = 0;
+    feishuCliPollRef.current = window.setInterval(() => {
+      attempts += 1;
+      if (attempts > 120) {
+        clearFeishuCliPoll();
+        setFeishuCliMessage('飞书 CLI 应用配置等待超时。你可以手动检查状态，或重新开始绑定。');
+        return;
+      }
+      void continueFeishuCliSetup({ auto: true, popup });
+    }, 3000);
+  };
+
+  const startFeishuCliCompletionPolling = (popup: Window | null) => {
+    clearFeishuCliPoll();
+    let attempts = 0;
+    feishuCliPollRef.current = window.setInterval(() => {
+      attempts += 1;
+      if (attempts > 120) {
+        clearFeishuCliPoll();
+        setFeishuCliMessage('飞书账号授权等待超时。如果你已经在飞书完成授权，可以点击手动完成绑定。');
+        return;
+      }
+      void completeFeishuCliBinding({ auto: true, popup });
+    }, 3000);
+  };
+
+  const continueFeishuCliSetup = async (options: { auto?: boolean; popup?: Window | null } = {}) => {
+    const authPopup =
+      options.popup ||
+      feishuCliPopupRef.current ||
+      (!options.auto && feishuCliPhase !== 'user_auth' && !feishuCliAuthUrl ? openFeishuAuthPlaceholder() : null);
+    if (authPopup) feishuCliPopupRef.current = authPopup;
+    if (feishuCliAutoRequestRef.current) return;
+    feishuCliAutoRequestRef.current = true;
+    if (!options.auto) {
+      setFeishuCliCompleting(true);
+      setFeishuCliMessage('');
+    }
     setError(null);
     try {
       const res = await fetch('/api/investor/personal-data/feishu/complete', {
@@ -490,35 +598,62 @@ export default function InvestorIntegrationsPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setFeishuCliMessage(data.error || '飞书 CLI 应用配置还没有完成，请完成后再继续。');
+        if (!options.auto) {
+          closePreparedPopup(authPopup);
+          setFeishuCliMessage(data.error || '飞书 CLI 应用配置还没有完成，请完成后再继续。');
+        }
         return;
       }
       if (data.phase === 'connected' || data.account) {
+        clearFeishuCliPoll();
+        closePreparedPopup(authPopup);
+        feishuCliPopupRef.current = null;
         setFeishuCliPhase('connected');
         setFeishuCliMessage('飞书绑定成功，已切换到 lark-cli 增强连接。');
         await loadPersonalAccounts('feishu');
         return;
       }
       if (data.phase === 'user_auth' && data.authUrl) {
+        const authUrl = String(data.authUrl);
+        const opened = openFeishuAuthUrl(authPopup, authUrl);
         setFeishuCliPhase('user_auth');
-        setFeishuCliAuthUrl(String(data.authUrl));
+        setFeishuCliAuthUrl(authUrl);
         setFeishuCliUserCode(typeof data.userCode === 'string' ? data.userCode : '');
-        setFeishuCliMessage('飞书 CLI 应用配置完成，请继续授权飞书账号。');
+        setFeishuCliMessage(
+          opened
+            ? '飞书 CLI 应用配置完成，已打开账号授权页。确认授权后会自动完成绑定。'
+            : '飞书 CLI 应用配置完成，请点击打开账号授权。'
+        );
+        if (opened) {
+          startFeishuCliCompletionPolling(authPopup);
+        }
         return;
       }
       setFeishuCliPhase(data.phase || 'app_setup');
       if (data.setupUrl) setFeishuCliSetupUrl(String(data.setupUrl));
-      setFeishuCliMessage('仍在等待飞书 CLI 应用配置完成，请完成页面操作后再试。');
+      if (!options.auto) {
+        closePreparedPopup(authPopup);
+        setFeishuCliMessage('仍在等待飞书 CLI 应用配置完成，请完成页面操作后再试。');
+      }
     } catch {
-      setFeishuCliMessage('网络错误，请稍后重试。');
+      if (!options.auto) {
+        closePreparedPopup(authPopup);
+        setFeishuCliMessage('网络错误，请稍后重试。');
+      }
     } finally {
-      setFeishuCliCompleting(false);
+      feishuCliAutoRequestRef.current = false;
+      if (!options.auto) setFeishuCliCompleting(false);
     }
   };
 
-  const completeFeishuCliBinding = async () => {
-    setFeishuCliCompleting(true);
-    setFeishuCliMessage('');
+  const completeFeishuCliBinding = async (options: { auto?: boolean; popup?: Window | null } = {}) => {
+    if (feishuCliAutoRequestRef.current) return;
+    feishuCliAutoRequestRef.current = true;
+    if (!options.auto) {
+      clearFeishuCliPoll();
+      setFeishuCliCompleting(true);
+      setFeishuCliMessage('');
+    }
     setError(null);
     try {
       const res = await fetch('/api/investor/personal-data/feishu/complete', {
@@ -529,16 +664,28 @@ export default function InvestorIntegrationsPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setFeishuCliMessage(data.error || '飞书绑定完成失败，请确认已在飞书页面完成授权。');
+        if (options.auto) {
+          setFeishuCliMessage('等待你在飞书账号授权页确认授权...');
+        } else {
+          setFeishuCliMessage(data.error || '飞书绑定完成失败，请确认已在飞书页面完成授权。');
+        }
         return;
       }
+      clearFeishuCliPoll();
+      closePreparedPopup(options.popup || feishuCliPopupRef.current);
+      feishuCliPopupRef.current = null;
       setFeishuCliPhase('connected');
       setFeishuCliMessage('飞书绑定成功，已切换到 lark-cli 增强连接。');
       await loadPersonalAccounts('feishu');
     } catch {
-      setFeishuCliMessage('网络错误，请稍后重试。');
+      if (options.auto) {
+        setFeishuCliMessage('等待你在飞书账号授权页确认授权...');
+      } else {
+        setFeishuCliMessage('网络错误，请稍后重试。');
+      }
     } finally {
-      setFeishuCliCompleting(false);
+      feishuCliAutoRequestRef.current = false;
+      if (!options.auto) setFeishuCliCompleting(false);
     }
   };
 
@@ -751,6 +898,13 @@ export default function InvestorIntegrationsPanel({
     }
   };
 
+  const feishuCliMessageIsError =
+    feishuCliMessage.includes('失败') ||
+    feishuCliMessage.includes('错误') ||
+    feishuCliMessage.includes('过期') ||
+    feishuCliMessage.includes('超时') ||
+    feishuCliMessage.includes('不存在');
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 mb-8 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -774,18 +928,18 @@ export default function InvestorIntegrationsPanel({
             <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
               <p className="text-xs font-semibold text-slate-900">第 1 步：配置你自己的飞书 CLI 应用</p>
               <p className="mt-1 text-xs text-slate-600">
-                打开链接后按飞书页面完成应用创建/配置。完成后回到这里继续账号授权。
+                打开后按飞书页面完成应用创建/配置；本页会自动检测，完成后同一个弹窗会进入账号授权。
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {feishuCliSetupUrl && (
-                  <a
-                    href={feishuCliSetupUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={openFeishuSetupAndPoll}
+                    disabled={feishuCliCompleting || feishuCliPhase === 'user_auth' || feishuCliPhase === 'connected'}
                     className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
                   >
-                    打开应用配置
-                  </a>
+                    打开应用配置并自动继续
+                  </button>
                 )}
                 <button
                   type="button"
@@ -793,7 +947,7 @@ export default function InvestorIntegrationsPanel({
                   disabled={feishuCliCompleting || feishuCliPhase === 'user_auth' || feishuCliPhase === 'connected'}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
                 >
-                  {feishuCliCompleting && feishuCliPhase !== 'user_auth' ? '检查中...' : '我已完成应用配置'}
+                  {feishuCliCompleting && feishuCliPhase !== 'user_auth' ? '检查中...' : '手动检查状态'}
                 </button>
               </div>
             </div>
@@ -802,7 +956,7 @@ export default function InvestorIntegrationsPanel({
               <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
                 <p className="text-xs font-semibold text-slate-900">第 2 步：授权你的飞书账号</p>
                 <p className="mt-1 text-xs text-slate-600">
-                  打开账号授权链接，确认权限后回到这里完成绑定。
+                  账号授权页会自动打开；确认授权后本页会自动完成绑定。如果弹窗被拦截，可以手动重新打开。
                   {feishuCliUserCode ? ` 页面提示时输入验证码：${feishuCliUserCode}` : ''}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -813,7 +967,7 @@ export default function InvestorIntegrationsPanel({
                       rel="noreferrer"
                       className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
                     >
-                      打开账号授权
+                      重新打开账号授权
                     </a>
                   )}
                   <button
@@ -822,14 +976,14 @@ export default function InvestorIntegrationsPanel({
                     disabled={feishuCliCompleting}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
                   >
-                    {feishuCliCompleting ? '绑定中...' : '我已授权，完成绑定'}
+                    {feishuCliCompleting ? '绑定中...' : '手动完成绑定'}
                   </button>
                 </div>
               </div>
             )}
           </div>
           {feishuCliMessage && (
-            <p className={`mt-2 ${feishuCliMessage.includes('成功') ? 'text-emerald-700' : 'text-red-600'}`}>
+            <p className={`mt-2 ${feishuCliMessageIsError ? 'text-red-600' : 'text-emerald-700'}`}>
               {feishuCliMessage}
             </p>
           )}
