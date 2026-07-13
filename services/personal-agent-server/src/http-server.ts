@@ -184,6 +184,12 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           investorId: readRequiredBodyString(body, 'investorId'),
           sessionId: readRequiredBodyString(body, 'sessionId'),
         }) as Record<string, unknown>;
+        console.info('[feishu-cli] continue', {
+          phase: typeof advanced.phase === 'string' ? advanced.phase : null,
+          setupComplete: advanced.setupComplete === true,
+          hasAuthUrl: typeof advanced.authUrl === 'string' && advanced.authUrl.length > 0,
+          hasCompleted: isRecord(advanced.completed),
+        });
         if (isRecord(advanced.completed)) {
           const completed = advanced.completed as {
             accountId: string;

@@ -154,7 +154,16 @@ export async function continueFeishuCliAuthorization(config: ServerConfig, input
   }
 
   if (session.phase === 'app_setup') {
-    if (!session.setupClosed) return publicFeishuCliBindSession(session);
+    if (!session.setupClosed) {
+      const profileConfigured = await isFeishuCliAppProfileConfigured(config, session);
+      if (!profileConfigured) return publicFeishuCliBindSession(session);
+      session.setupClosed = true;
+      session.setupExitCode = 0;
+      if (session.setupProcess) {
+        session.setupProcess.kill('SIGTERM');
+        session.setupProcess = null;
+      }
+    }
     if (session.setupExitCode !== 0) {
       session.phase = 'failed';
       throw new Error(`lark-cli config init failed: ${truncate(session.setupError || session.setupOutput || `exit ${session.setupExitCode}`, 1500)}`);
@@ -475,6 +484,20 @@ async function startFeishuCliUserAuth(config: ServerConfig, session: FeishuCliBi
   session.authExpiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null;
 }
 
+async function isFeishuCliAppProfileConfigured(config: ServerConfig, session: FeishuCliBindSession) {
+  const authStatus = await runLarkCliJson(config, ['auth', 'status', '--json', '--verify'], {
+    profileName: session.profileName,
+    cliHome: session.cliHome,
+    allowFailure: true,
+    timeoutMs: 10_000,
+  }).catch(() => null);
+  if (isFeishuCliProfileMissing(authStatus)) return false;
+  const profileSnapshot = await captureFeishuCliProfileSnapshot(config, session.profileName, {
+    cliHome: session.cliHome,
+  }).catch(() => null);
+  return Boolean(profileSnapshot?.files.length);
+}
+
 async function captureCompletedFeishuCliAuthorization(
   config: ServerConfig,
   session: Pick<FeishuCliBindSession, 'profileName' | 'cliHome' | 'featurePackages'>
@@ -624,6 +647,18 @@ function hasFeishuCliUserIdentity(value: unknown) {
     }
   }
   return false;
+}
+
+function isFeishuCliProfileMissing(value: unknown) {
+  const text = JSON.stringify(value || {}).toLowerCase();
+  return (
+    (text.includes('profile') || text.includes('配置')) &&
+    (text.includes('not found') ||
+      text.includes('not exist') ||
+      text.includes('missing') ||
+      text.includes('不存在') ||
+      text.includes('未找到'))
+  );
 }
 
 async function ensureFeishuCliProfile(config: ServerConfig, profileName: string, cliHome?: string) {
