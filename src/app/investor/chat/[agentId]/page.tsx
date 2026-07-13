@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, CheckCircle2, ChevronDown, LoaderCircle, MessageSquare, Paperclip, Plus, Square, X } from 'lucide-react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
   EXECUTIVE_UPDATE_BRIEFING_PROMPT,
@@ -136,6 +136,14 @@ type PersonalAgentStreamRecoveryResult = 'active' | 'recovered' | 'saved' | 'fai
 
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 const CODEX_MODEL_STORAGE_KEY = 'altselfs:personal-agent-codex-model';
+const AUTH_EXPIRED_MESSAGE = '登录已过期，请重新登录。';
+
+function buildSignInRedirectUrl() {
+  if (typeof window === 'undefined') return '/sign-in';
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const params = new URLSearchParams({ redirect_url: currentPath || '/investor/chat/100' });
+  return `/sign-in?${params.toString()}`;
+}
 
 type CodexModelOption = {
   value: 'deepseek/deepseek-v3.2' | 'gpt-5.5';
@@ -1144,6 +1152,7 @@ function StreamingAssistantMessage({ content }: { content: string }) {
 
 export default function InvestorAgentChatPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const agentId = params.agentId as string;
   const isExecutive = agentId === '100';
@@ -1187,6 +1196,11 @@ export default function InvestorAgentChatPage() {
   const suppressNextAutoScrollRef = useRef(false);
   const codexEventIndexRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleSessionExpired = useCallback(() => {
+    setError(AUTH_EXPIRED_MESSAGE);
+    router.replace(buildSignInRedirectUrl());
+  }, [router]);
 
   const title = useMemo(() => (isExecutive ? '个人 Hermes Agent' : 'AI 助手'), [isExecutive]);
   const showExecutiveControls = false;
@@ -1278,6 +1292,10 @@ export default function InvestorAgentChatPage() {
         clearStoredActiveRunId(runId);
       } catch (err) {
         if (isRecord(err) && err.status === 404) clearStoredActiveRunId(runId);
+        if (isRecord(err) && err.status === 401) {
+          handleSessionExpired();
+          return;
+        }
         setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
       } finally {
         activeRunIdRef.current = null;
@@ -1286,7 +1304,7 @@ export default function InvestorAgentChatPage() {
         setStoppingRun(false);
       }
     },
-    [applyTerminalRun]
+    [applyTerminalRun, handleSessionExpired]
   );
 
   const stopExecutiveRun = useCallback(async () => {
@@ -1302,6 +1320,10 @@ export default function InvestorAgentChatPage() {
       });
       const data = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
       if (!res.ok) {
+        if (res.status === 401) {
+          handleSessionExpired();
+          return;
+        }
         setError(typeof data.error === 'string' ? data.error : '停止任务失败');
         return;
       }
@@ -1316,7 +1338,7 @@ export default function InvestorAgentChatPage() {
     } finally {
       setStoppingRun(false);
     }
-  }, [activeRunId, stoppingRun]);
+  }, [activeRunId, handleSessionExpired, stoppingRun]);
 
   const stopPersonalAgentRun = useCallback(async () => {
     const runId = activeRunIdRef.current || activeRunId;
@@ -1332,6 +1354,10 @@ export default function InvestorAgentChatPage() {
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
+        if (res.status === 401) {
+          handleSessionExpired();
+          return;
+        }
         setError(typeof data.error === 'string' ? data.error : '停止任务失败');
         return;
       }
@@ -1350,7 +1376,7 @@ export default function InvestorAgentChatPage() {
     } finally {
       setStoppingRun(false);
     }
-  }, [activeRunId, stoppingRun, threadId]);
+  }, [activeRunId, handleSessionExpired, stoppingRun, threadId]);
 
   const refreshPersonalAgentStatus = useCallback(async (
     targetThreadId?: string | null
@@ -1365,7 +1391,10 @@ export default function InvestorAgentChatPage() {
         credentials: 'same-origin',
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!res.ok) return 'unavailable';
+      if (!res.ok) {
+        if (res.status === 401) handleSessionExpired();
+        return 'unavailable';
+      }
       const recoveredThreadId = typeof data.threadId === 'string' ? data.threadId : '';
       if (recoveredThreadId) setThreadId(recoveredThreadId);
       if (Array.isArray(data.sessions)) {
@@ -1492,7 +1521,7 @@ export default function InvestorAgentChatPage() {
       // Status recovery is best-effort; the normal send flow still reports errors.
       return 'unavailable';
     }
-  }, []);
+  }, [handleSessionExpired]);
 
   const resetPersonalAgentRunState = useCallback(() => {
     activeRunIdRef.current = null;
@@ -1521,6 +1550,10 @@ export default function InvestorAgentChatPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          handleSessionExpired();
+          return;
+        }
         setError(data.error || '加载失败');
         return;
       }
@@ -1545,7 +1578,7 @@ export default function InvestorAgentChatPage() {
       setLoading(false);
       setRecoveringRunState(false);
     }
-  }, [isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, showExecutiveControls]);
+  }, [handleSessionExpired, isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, showExecutiveControls]);
 
   useEffect(() => {
     if (!threadId || !activeRunId) return;
@@ -1572,6 +1605,10 @@ export default function InvestorAgentChatPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          handleSessionExpired();
+          return;
+        }
         setError(data.error || '创建新会话失败');
         return;
       }
@@ -1591,7 +1628,7 @@ export default function InvestorAgentChatPage() {
       setCreatingSession(false);
       setRecoveringRunState(false);
     }
-  }, [creatingSession, recoveringRunState, resetPersonalAgentRunState, sending]);
+  }, [creatingSession, handleSessionExpired, recoveringRunState, resetPersonalAgentRunState, sending]);
 
   const switchSession = useCallback(async (targetThreadId: string) => {
     if (!targetThreadId || targetThreadId === threadId || sending || recoveringRunState) return;
@@ -1636,6 +1673,10 @@ export default function InvestorAgentChatPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          handleSessionExpired();
+          return;
+        }
         setError(data.error || '加载更早消息失败');
         return;
       }
@@ -1662,7 +1703,7 @@ export default function InvestorAgentChatPage() {
       loadingOlderMessagesRef.current = false;
       setLoadingOlderMessages(false);
     }
-  }, [hasMoreMessages, messages, threadId]);
+  }, [handleSessionExpired, hasMoreMessages, messages, threadId]);
 
   const handleMessagesScroll = useCallback(() => {
     const viewport = messagesViewportRef.current;
@@ -1703,7 +1744,10 @@ export default function InvestorAgentChatPage() {
       credentials: 'same-origin',
     });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) return [];
+    if (!res.ok) {
+      if (res.status === 401) handleSessionExpired();
+      return [];
+    }
     const syncedThreadId = typeof data.threadId === 'string' ? data.threadId : '';
     if (syncedThreadId) setThreadId(syncedThreadId);
     if (Array.isArray(data.sessions)) {
@@ -1715,7 +1759,7 @@ export default function InvestorAgentChatPage() {
     const syncedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
     if (syncedMessages.length > 0) setMessages(syncedMessages);
     return syncedMessages;
-  }, []);
+  }, [handleSessionExpired]);
 
   const hasSyncedCurrentUserTurn = useCallback(async (
     expectedUserContent: string,
@@ -1757,6 +1801,10 @@ export default function InvestorAgentChatPage() {
         });
         const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         if (!res.ok) {
+          if (res.status === 401) {
+            handleSessionExpired();
+            return 'failed';
+          }
           await sleep(1000 + attempt * 500);
           continue;
         }
@@ -1813,7 +1861,7 @@ export default function InvestorAgentChatPage() {
     const hasCurrentTurn = await hasSyncedCurrentUserTurn(expectedUserContent, targetThreadId || threadId);
     if (hasCurrentTurn) return 'saved';
     return 'failed';
-  }, [hasSyncedCurrentUserTurn, refreshPersonalAgentStatus, threadId]);
+  }, [handleSessionExpired, hasSyncedCurrentUserTurn, refreshPersonalAgentStatus, threadId]);
 
   const handleSend = async (textFromSuggestion?: string) => {
     const content = (textFromSuggestion || input).trim();
@@ -1906,6 +1954,13 @@ export default function InvestorAgentChatPage() {
         hasMore?: boolean;
       };
       if (!res.ok) {
+        if (res.status === 401) {
+          setMessages(nextMessages);
+          setInput(content);
+          setAttachments(requestAttachments);
+          handleSessionExpired();
+          return;
+        }
         setError(typeof data.error === 'string' ? data.error : '发送失败');
         setMessages(nextMessages);
         setInput(content);
@@ -2003,6 +2058,10 @@ export default function InvestorAgentChatPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          handleSessionExpired();
+          return;
+        }
         setPromptMessage(data.error || '保存 system prompt 失败');
         return;
       }

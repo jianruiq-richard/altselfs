@@ -13,15 +13,30 @@ function buildFallbackUrl(path: string, headersList: Headers): string {
   return `${protocol}://${host}${path}`;
 }
 
+function normalizeRedirectPath(value: unknown): string {
+  if (typeof value !== 'string') return '/dashboard';
+  const path = value.trim();
+  if (!path || !path.startsWith('/') || path.startsWith('//')) return '/dashboard';
+  if (path.startsWith('/sign-in') || path.startsWith('/sign-up')) return '/dashboard';
+  return path;
+}
+
+function buildMethodHref(method: 'phone' | 'email', redirectTarget: string) {
+  const params = new URLSearchParams({ method });
+  if (redirectTarget !== '/dashboard') params.set('redirect_url', redirectTarget);
+  return `/sign-in?${params.toString()}`;
+}
+
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ method?: string }>;
+  searchParams: Promise<{ method?: string; redirect_url?: string; redirectUrl?: string; next?: string }>;
 }) {
   const params = await searchParams;
   const method = params.method === 'email' ? 'email' : 'phone';
+  const redirectTarget = normalizeRedirectPath(params.redirect_url || params.redirectUrl || params.next);
   const headersList = await headers();
-  const fallbackUrl = buildFallbackUrl(`/sign-in?method=${method}`, headersList);
+  const fallbackUrl = buildFallbackUrl(buildMethodHref(method, redirectTarget), headersList);
   const isEmbeddedBrowser = isOauthBlockedEmbeddedBrowser(headersList.get('user-agent'));
 
   return (
@@ -60,7 +75,7 @@ export default async function Page({
               </div>
               <div className="mb-4 grid grid-cols-2 gap-2">
                 <Link
-                  href="/sign-in?method=phone"
+                  href={buildMethodHref('phone', redirectTarget)}
                   className={`rounded-lg border py-2.5 text-center text-sm font-medium transition-colors ${
                     method === 'phone'
                       ? 'border-[#7a451f] bg-[#7a451f] text-white'
@@ -70,7 +85,7 @@ export default async function Page({
                   手机号 / 密码
                 </Link>
                 <Link
-                  href="/sign-in?method=email"
+                  href={buildMethodHref('email', redirectTarget)}
                   className={`rounded-lg border py-2.5 text-center text-sm font-medium transition-colors ${
                     method === 'email'
                       ? 'border-[#7a451f] bg-[#7a451f] text-white'
@@ -81,7 +96,7 @@ export default async function Page({
                 </Link>
               </div>
               {method === 'phone' ? (
-                <PhonePasswordAuthForm mode="sign-in" />
+                <PhonePasswordAuthForm mode="sign-in" redirectUrl={redirectTarget} />
               ) : (
                 <EmbeddedBrowserAuthGuard
                   fallbackUrl={fallbackUrl}
@@ -89,8 +104,8 @@ export default async function Page({
                   mode="sign-in"
                 >
                   <SignIn
-                    forceRedirectUrl="/dashboard"
-                    fallbackRedirectUrl="/dashboard"
+                    forceRedirectUrl={redirectTarget}
+                    fallbackRedirectUrl={redirectTarget}
                     signUpUrl="/sign-up"
                     appearance={clerkAuthAppearance}
                   />

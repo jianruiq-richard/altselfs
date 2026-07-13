@@ -6,6 +6,7 @@ import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 
 type PhonePasswordAuthFormProps = {
   mode: "sign-in" | "sign-up";
+  redirectUrl?: string;
 };
 
 const COUNTRY_CODES = [
@@ -51,7 +52,7 @@ function getErrorMessage(error: unknown): string {
   return "操作失败，请稍后重试。";
 }
 
-export function PhonePasswordAuthForm({ mode }: PhonePasswordAuthFormProps) {
+export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: PhonePasswordAuthFormProps) {
   const router = useRouter();
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
@@ -94,7 +95,7 @@ export function PhonePasswordAuthForm({ mode }: PhonePasswordAuthFormProps) {
 
         if (result.status === "complete" && result.createdSessionId) {
           await setSignInActive?.({ session: result.createdSessionId });
-          router.push("/dashboard");
+          router.push(redirectUrl);
           return;
         }
 
@@ -109,7 +110,7 @@ export function PhonePasswordAuthForm({ mode }: PhonePasswordAuthFormProps) {
 
       if (result.status === "complete" && result.createdSessionId) {
         await setSignUpActive?.({ session: result.createdSessionId });
-        router.push("/dashboard");
+        router.push(redirectUrl);
         return;
       }
 

@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Home, Users, Settings, Sparkles, Briefcase, UserCircle, Mail, MessageSquare, LogOut } from 'lucide-react';
 import { SignOutButton, useUser } from '@clerk/nextjs';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type NavItem = {
   key: string;
@@ -13,6 +13,13 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
   activePrefixes?: string[];
 };
+
+function buildSignInRedirectUrl() {
+  if (typeof window === 'undefined') return '/sign-in';
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const params = new URLSearchParams({ redirect_url: currentPath || '/dashboard' });
+  return `/sign-in?${params.toString()}`;
+}
 
 export function FigmaShell({
   homeHref = '/dashboard',
@@ -30,8 +37,14 @@ export function FigmaShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { user } = useUser();
+  const router = useRouter();
+  const { isLoaded, isSignedIn, user } = useUser();
   const [mobileUserMenuOpen, setMobileUserMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isLoaded || isSignedIn) return;
+    router.replace(buildSignInRedirectUrl());
+  }, [isLoaded, isSignedIn, router]);
 
   const navItems = useMemo<NavItem[]>(
     () => [
@@ -74,6 +87,17 @@ export function FigmaShell({
     }
     return winner?.key || null;
   }, [navItems, pathname]);
+
+  if (!isLoaded || !isSignedIn) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#f6efe7] px-6 text-center text-stone-700">
+        <div>
+          <p className="text-base font-medium text-stone-950">{isLoaded ? '登录已过期' : '正在确认登录状态'}</p>
+          <p className="mt-2 text-sm text-stone-500">{isLoaded ? '正在跳转到登录页...' : '请稍候...'}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f6efe7] text-stone-950 md:flex md:h-screen md:overflow-hidden">
