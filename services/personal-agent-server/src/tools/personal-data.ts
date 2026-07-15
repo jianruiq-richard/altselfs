@@ -8,6 +8,9 @@ import {
   updatePersonalCredentialPayload,
   type FeishuCredentialPayload,
   type GmailCredentialPayload,
+  type MetaCredentialPayload,
+  type MetaInstagramAsset,
+  type MetaPageAsset,
   type PersonalConnection,
 } from '../personal-data-store.js';
 import {
@@ -40,6 +43,9 @@ const PERSONAL_TOOL_NAMES = new Set([
   'altselfs_feishu_search_docs',
   'altselfs_feishu_fetch_doc',
   'altselfs_feishu_lark_cli',
+  'altselfs_meta_accounts_list',
+  'altselfs_instagram_list_media',
+  'altselfs_facebook_page_posts',
 ]);
 
 const LARK_CLI_OUTPUT_MAX_CHARS = 60_000;
@@ -60,9 +66,11 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
   if (!investorId || !isCredentialVaultConfigured()) return [];
   let gmailConnections: PersonalConnection[] = [];
   let feishuConnections: PersonalConnection[] = [];
+  let metaConnections: PersonalConnection[] = [];
   try {
     gmailConnections = await listPersonalConnections(config, { investorId, userId, provider: 'gmail' });
     feishuConnections = await listPersonalConnections(config, { investorId, userId, provider: 'feishu' });
+    metaConnections = await listPersonalConnections(config, { investorId, userId, provider: 'meta' });
   } catch {
     return [];
   }
@@ -71,7 +79,7 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
       namespace: null,
       name: 'altselfs_connected_accounts_list',
       description:
-        'List the user-connected personal data accounts available to this turn, such as Gmail and Feishu accounts. Use before private-channel research when you need to know what the user has authorized.',
+        'List the user-connected personal data accounts available to this turn, such as Gmail, Feishu, Instagram/Facebook Meta accounts. Use before private-channel research when you need to know what the user has authorized.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -339,6 +347,62 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
       }
     );
   }
+  if (metaConnections.length > 0) {
+    tools.push(
+      {
+        namespace: null,
+        name: 'altselfs_meta_accounts_list',
+        description:
+          'List Facebook Pages and linked Instagram Professional accounts authorized through Meta/Facebook Login. Use before Instagram/Facebook tasks to understand which Page/IG assets are available.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, lists all connected Meta accounts.' },
+            accountEmail: { type: 'string', description: 'Optional Meta account id/display name. Alternative to accountId.' },
+          },
+          additionalProperties: false,
+        },
+        deferLoading: false,
+      },
+      {
+        namespace: null,
+        name: 'altselfs_instagram_list_media',
+        description:
+          'Read recent media from linked Instagram Professional accounts authorized through Meta/Facebook Login. This does not read personal Instagram DMs or ordinary personal-profile feeds.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            accountId: { type: 'string', description: 'Optional Altselfs Meta connection id.' },
+            accountEmail: { type: 'string', description: 'Optional Meta display name/external id. Alternative to accountId.' },
+            igUserId: { type: 'string', description: 'Optional Instagram professional user id.' },
+            username: { type: 'string', description: 'Optional Instagram username.' },
+            pageId: { type: 'string', description: 'Optional linked Facebook Page id.' },
+            limit: { type: 'number', description: 'Media items per Instagram account, default 10, capped at 25.' },
+          },
+          additionalProperties: false,
+        },
+        deferLoading: false,
+      },
+      {
+        namespace: null,
+        name: 'altselfs_facebook_page_posts',
+        description:
+          'Read recent posts from Facebook Pages authorized through Meta/Facebook Login. Use for Page publishing history and public-facing activity, not personal Facebook profile feeds.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            accountId: { type: 'string', description: 'Optional Altselfs Meta connection id.' },
+            accountEmail: { type: 'string', description: 'Optional Meta display name/external id. Alternative to accountId.' },
+            pageId: { type: 'string', description: 'Optional Facebook Page id.' },
+            pageName: { type: 'string', description: 'Optional Facebook Page name substring.' },
+            limit: { type: 'number', description: 'Posts per Page, default 10, capped at 25.' },
+          },
+          additionalProperties: false,
+        },
+        deferLoading: false,
+      }
+    );
+  }
   const enabledToolNames = new Set(['altselfs_connected_accounts_list']);
   if (gmailConnections.length > 0) {
     for (const name of ['altselfs_gmail_search_messages', 'altselfs_gmail_get_message', 'altselfs_gmail_get_thread']) {
@@ -367,6 +431,11 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
   }
   if (feishuConnections.some((connection) => connection.connectionType === 'lark_cli_user')) {
     enabledToolNames.add('altselfs_feishu_lark_cli');
+  }
+  if (metaConnections.length > 0) {
+    enabledToolNames.add('altselfs_meta_accounts_list');
+    enabledToolNames.add('altselfs_instagram_list_media');
+    enabledToolNames.add('altselfs_facebook_page_posts');
   }
   return tools.filter((tool) => !isRecord(tool) || typeof tool.name !== 'string' || enabledToolNames.has(tool.name));
 }
@@ -442,6 +511,21 @@ export async function runPersonalDataTool(
     if (toolName === 'altselfs_feishu_lark_cli') {
       const result = await feishuLarkCli(config, context, args);
       await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'feishu', result.account?.connectionId);
+      return JSON.stringify(result, null, 2);
+    }
+    if (toolName === 'altselfs_meta_accounts_list') {
+      const result = await metaAccountsList(config, context, args);
+      await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'meta');
+      return JSON.stringify(result, null, 2);
+    }
+    if (toolName === 'altselfs_instagram_list_media') {
+      const result = await instagramListMedia(config, context, args);
+      await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'meta');
+      return JSON.stringify(result, null, 2);
+    }
+    if (toolName === 'altselfs_facebook_page_posts') {
+      const result = await facebookPagePosts(config, context, args);
+      await audit(config, context, toolName, redactArgs(args), summarizeResult(result), 'SUCCESS', 'meta');
       return JSON.stringify(result, null, 2);
     }
     return JSON.stringify({ source: 'personal-data-tools', error: `Unsupported personal data tool: ${toolName}` }, null, 2);
@@ -521,6 +605,113 @@ async function gmailGetThread(config: ServerConfig, context: PersonalToolContext
       messages: (thread.messages || []).slice(0, maxMessages).map(fullMessageDigest),
       omittedMessages: Math.max(0, (thread.messages || []).length - maxMessages),
     },
+  };
+}
+
+async function metaAccountsList(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+  const connections = await resolveMetaConnections(config, context, args, { allowAll: true, maxAll: 5 });
+  const accounts = [];
+  for (const connection of connections) {
+    const payload = await loadMetaCredentialPayload(config, connection);
+    accounts.push({
+      account: publicConnection(connection),
+      profile: sanitizeMetaProfile(payload.profile || {}, payload),
+      pages: payload.pages.map((page) => sanitizeMetaPage(page)),
+      instagramAccounts: payload.instagramAccounts.map((account) => sanitizeMetaInstagram(account)),
+    });
+  }
+  return {
+    source: 'meta',
+    resource: 'facebook_login_assets',
+    fetchedAt: new Date().toISOString(),
+    accounts,
+    limitations: metaLimitations(),
+  };
+}
+
+async function instagramListMedia(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+  const limit = clampNumber(args.limit, 10, 1, 25);
+  const connections = await resolveMetaConnections(config, context, args, { allowAll: true, maxAll: 3 });
+  const accounts = [];
+  for (const connection of connections) {
+    const payload = await loadMetaCredentialPayload(config, connection);
+    assertMetaTokenUsable(payload, connection);
+    const instagramAccounts = selectInstagramAssets(payload, args);
+    const results = [];
+    for (const selected of instagramAccounts.slice(0, 5)) {
+      const token = selected.page?.accessToken || payload.accessToken;
+      const profile = await metaGraphFetch<Record<string, unknown>>(config, token, `${selected.instagram.id}`, {
+        fields: 'id,username,name,profile_picture_url',
+      }).catch((error) => ({
+        id: selected.instagram.id,
+        username: selected.instagram.username,
+        name: selected.instagram.name,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      const media = await metaGraphFetch<{ data?: Array<Record<string, unknown>> }>(config, token, `${selected.instagram.id}/media`, {
+        fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp',
+        limit: String(limit),
+      });
+      results.push({
+        instagramAccount: sanitizeMetaInstagram(selected.instagram),
+        linkedPage: selected.page ? sanitizeMetaPage(selected.page) : null,
+        profile,
+        media: (media.data || []).map((item) => ({
+          id: readObjectString(item, 'id'),
+          caption: truncate(readObjectString(item, 'caption'), 500),
+          mediaType: readObjectString(item, 'media_type'),
+          mediaUrl: readObjectString(item, 'media_url'),
+          thumbnailUrl: readObjectString(item, 'thumbnail_url'),
+          permalink: readObjectString(item, 'permalink'),
+          timestamp: readObjectString(item, 'timestamp'),
+        })),
+      });
+    }
+    accounts.push({ account: publicConnection(connection), results });
+  }
+  return {
+    source: 'meta',
+    resource: 'instagram_media',
+    fetchedAt: new Date().toISOString(),
+    accounts,
+    limitations: metaLimitations(),
+  };
+}
+
+async function facebookPagePosts(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+  const limit = clampNumber(args.limit, 10, 1, 25);
+  const connections = await resolveMetaConnections(config, context, args, { allowAll: true, maxAll: 3 });
+  const accounts = [];
+  for (const connection of connections) {
+    const payload = await loadMetaCredentialPayload(config, connection);
+    assertMetaTokenUsable(payload, connection);
+    const pages = selectMetaPages(payload, args);
+    const results = [];
+    for (const page of pages.slice(0, 5)) {
+      const token = page.accessToken || payload.accessToken;
+      const response = await metaGraphFetch<{ data?: Array<Record<string, unknown>> }>(config, token, `${page.id}/posts`, {
+        fields: 'id,message,created_time,permalink_url,full_picture',
+        limit: String(limit),
+      });
+      results.push({
+        page: sanitizeMetaPage(page),
+        posts: (response.data || []).map((item) => ({
+          id: readObjectString(item, 'id'),
+          message: truncate(readObjectString(item, 'message'), 800),
+          createdTime: readObjectString(item, 'created_time'),
+          permalinkUrl: readObjectString(item, 'permalink_url'),
+          fullPicture: readObjectString(item, 'full_picture'),
+        })),
+      });
+    }
+    accounts.push({ account: publicConnection(connection), results });
+  }
+  return {
+    source: 'meta',
+    resource: 'facebook_page_posts',
+    fetchedAt: new Date().toISOString(),
+    accounts,
+    limitations: metaLimitations(),
   };
 }
 
@@ -862,6 +1053,114 @@ async function getFreshGmailAccessToken(config: ServerConfig, context: PersonalT
     payload: nextPayload,
   });
   return nextPayload.accessToken;
+}
+
+async function resolveMetaConnections(
+  config: ServerConfig,
+  context: PersonalToolContext,
+  args: Record<string, unknown>,
+  options: { allowAll: boolean; maxAll: number }
+) {
+  const connections = await listPersonalConnections(config, { investorId: context.investorId, userId: context.userId, provider: 'meta' });
+  if (connections.length === 0) throw new Error('No connected Instagram/Facebook Meta account is available for this user.');
+  const accountId = readArgString(args.accountId) || readArgString(args.connectionId);
+  const accountEmail = (readArgString(args.accountEmail) || readArgString(args.email) || readArgString(args.account)).toLowerCase();
+  if (accountId) {
+    const matched = connections.find((item) => item.id === accountId);
+    if (!matched) throw new Error(`Meta account not found for accountId=${accountId}.`);
+    return [matched];
+  }
+  if (accountEmail && accountEmail !== 'all') {
+    const matched = connections.find((item) =>
+      item.externalAccountId.toLowerCase() === accountEmail ||
+      item.displayName.toLowerCase() === accountEmail
+    );
+    if (!matched) throw new Error(`Meta account not found for accountEmail=${accountEmail}.`);
+    return [matched];
+  }
+  if (options.allowAll) return connections.slice(0, options.maxAll);
+  if (connections.length === 1) return connections;
+  throw new Error('Multiple Meta accounts are connected. Provide accountId or accountEmail.');
+}
+
+async function loadMetaCredentialPayload(config: ServerConfig, connection: PersonalConnection) {
+  const credential = await loadPersonalCredential(config, { investorId: connection.investorId, connectionId: connection.id });
+  if (!credential) throw new Error(`Credential not found for Meta account ${connection.displayName}.`);
+  const payload = decryptCredentialPayload<MetaCredentialPayload>({
+    keyProvider: credential.keyProvider,
+    encryptedPayload: credential.encryptedPayload,
+    encryptedDataKey: credential.encryptedDataKey,
+  });
+  if (payload.provider !== 'meta') throw new Error(`Credential provider mismatch for Meta account ${connection.displayName}.`);
+  return payload;
+}
+
+function assertMetaTokenUsable(payload: MetaCredentialPayload, connection: PersonalConnection) {
+  const expiresAt = payload.expiresAt ? Date.parse(payload.expiresAt) : 0;
+  if (expiresAt && expiresAt <= Date.now() + 60_000) {
+    throw new Error(`Meta account ${connection.displayName} needs reconnect: Facebook Login access token is expired.`);
+  }
+  if (!payload.accessToken) throw new Error(`Meta account ${connection.displayName} needs reconnect: no access token is available.`);
+}
+
+function selectMetaPages(payload: MetaCredentialPayload, args: Record<string, unknown>) {
+  const pageId = readArgString(args.pageId);
+  const pageName = readArgString(args.pageName).toLowerCase();
+  let pages = payload.pages || [];
+  if (pageId) pages = pages.filter((page) => page.id === pageId);
+  if (pageName) pages = pages.filter((page) => (page.name || '').toLowerCase().includes(pageName));
+  if (pages.length === 0) {
+    throw new Error(pageId || pageName ? 'No authorized Facebook Page matches the requested filter.' : 'No authorized Facebook Pages are available.');
+  }
+  return pages;
+}
+
+function selectInstagramAssets(payload: MetaCredentialPayload, args: Record<string, unknown>) {
+  const igUserId = readArgString(args.igUserId) || readArgString(args.instagramUserId);
+  const username = readArgString(args.username).toLowerCase().replace(/^@/, '');
+  const pageId = readArgString(args.pageId);
+  const selected: Array<{ instagram: MetaInstagramAsset; page?: MetaPageAsset }> = [];
+  for (const page of payload.pages || []) {
+    const instagram = page.instagramAccount;
+    if (!instagram) continue;
+    if (igUserId && instagram.id !== igUserId) continue;
+    if (username && (instagram.username || '').toLowerCase() !== username) continue;
+    if (pageId && page.id !== pageId) continue;
+    selected.push({ instagram, page });
+  }
+  if (!igUserId && !username && !pageId) {
+    const knownIds = new Set(selected.map((item) => item.instagram.id));
+    for (const instagram of payload.instagramAccounts || []) {
+      if (!knownIds.has(instagram.id)) {
+        selected.push({ instagram });
+        knownIds.add(instagram.id);
+      }
+    }
+  }
+  if (selected.length === 0) {
+    throw new Error('No linked Instagram Professional account matches the requested filter.');
+  }
+  return selected;
+}
+
+async function metaGraphFetch<T>(
+  config: ServerConfig,
+  accessToken: string,
+  path: string,
+  params: Record<string, string>
+): Promise<T> {
+  const version = (process.env.META_GRAPH_API_VERSION || 'v21.0').trim().replace(/^\/+|\/+$/g, '');
+  const normalizedPath = path.replace(/^\/+/, '');
+  const url = new URL(`https://graph.facebook.com/${version}/${normalizedPath}`);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) url.searchParams.set(key, value);
+  });
+  const res = await externalFetch(config, url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  }, { networkPolicy: 'direct' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`Meta Graph API failed (${normalizedPath}): ${JSON.stringify(data).slice(0, 1200)}`);
+  return data as T;
 }
 
 async function resolveFeishuConnections(
@@ -1215,9 +1514,57 @@ function publicConnection(connection: PersonalConnection) {
             ? DEFAULT_FEISHU_CLI_FEATURE_PACKAGES
             : [])
       : undefined,
+    metadata: connection.provider === 'meta' ? {
+      pageCount: typeof connection.metadata.page_count === 'number' ? connection.metadata.page_count : 0,
+      instagramAccountCount: typeof connection.metadata.instagram_account_count === 'number' ? connection.metadata.instagram_account_count : 0,
+      pages: Array.isArray(connection.metadata.pages) ? connection.metadata.pages.slice(0, 20) : [],
+      instagramAccounts: Array.isArray(connection.metadata.instagram_accounts) ? connection.metadata.instagram_accounts.slice(0, 20) : [],
+    } : undefined,
     status: connection.status,
     updatedAt: connection.updatedAt,
   };
+}
+
+function sanitizeMetaProfile(profile: Record<string, unknown>, payload: MetaCredentialPayload) {
+  return {
+    id: payload.accountId,
+    name: readObjectString(profile, 'name') || null,
+    email: payload.accountEmail || readObjectString(profile, 'email') || null,
+  };
+}
+
+function sanitizeMetaPage(page: MetaPageAsset) {
+  return {
+    id: page.id,
+    name: page.name || null,
+    category: page.category || null,
+    tasks: page.tasks || [],
+    instagramAccount: page.instagramAccount ? sanitizeMetaInstagram(page.instagramAccount) : null,
+  };
+}
+
+function sanitizeMetaInstagram(account: MetaInstagramAsset) {
+  return {
+    id: account.id,
+    username: account.username || null,
+    name: account.name || null,
+    profilePictureUrl: account.profilePictureUrl || null,
+    pageId: account.pageId || null,
+    pageName: account.pageName || null,
+  };
+}
+
+function readObjectString(value: Record<string, unknown>, key: string) {
+  const current = value[key];
+  return typeof current === 'string' && current.trim() ? current.trim() : '';
+}
+
+function metaLimitations() {
+  return [
+    'This connector uses Meta/Facebook Login. It only exposes authorized Facebook Pages and linked Instagram Professional accounts returned by Meta Graph API.',
+    'Ordinary personal Instagram/Facebook profile feeds and private DMs are not available through this first connector.',
+    'Fields can be missing when the Meta app lacks approved permissions, the asset is not linked to a Page, or the user does not manage the Page.',
+  ];
 }
 
 function clampNumber(value: unknown, fallback: number, min: number, max: number) {

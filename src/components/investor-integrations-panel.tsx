@@ -7,11 +7,14 @@ import { MarkdownMessage } from '@/components/markdown-message';
 type ProviderKey =
   | 'gmail'
   | 'feishu'
+  | 'meta'
   | 'xiaohongshu'
   | 'similarweb_api1'
   | 'semrush13'
   | 'semrush8'
   | 'domain_metrics_check';
+
+type PersonalProviderKey = 'gmail' | 'feishu' | 'meta';
 
 type IntegrationCard = {
   provider: ProviderKey;
@@ -36,6 +39,12 @@ type PersonalAccount = {
   accountEmail: string;
   displayName: string;
   featurePackages?: string[];
+  metadata?: {
+    pageCount?: number;
+    instagramAccountCount?: number;
+    pages?: Array<Record<string, unknown>>;
+    instagramAccounts?: Array<Record<string, unknown>>;
+  };
   status: string;
   updatedAt: string;
 };
@@ -64,6 +73,7 @@ const DEFAULT_FEISHU_FEATURE_PACKAGES: FeishuFeaturePackage[] = ['messages', 'co
 const providerLabels: Record<ProviderKey, string> = {
   gmail: 'Gmail',
   feishu: '飞书',
+  meta: 'Instagram / Facebook',
   xiaohongshu: '小红书',
   similarweb_api1: 'Similarweb API1',
   semrush13: 'Semrush13',
@@ -92,6 +102,7 @@ const competitiveDataSourceScopes: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVID
 const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
   gmail: value,
   feishu: value,
+  meta: value,
   xiaohongshu: value,
   similarweb_api1: value,
   semrush13: value,
@@ -103,8 +114,8 @@ function isCompetitiveDataSource(provider: ProviderKey): provider is (typeof COM
   return COMPETITIVE_DATA_SOURCE_SET.has(provider);
 }
 
-function isPersonalAccountProvider(provider: ProviderKey): provider is 'gmail' | 'feishu' {
-  return provider === 'gmail' || provider === 'feishu';
+function isPersonalAccountProvider(provider: ProviderKey): provider is PersonalProviderKey {
+  return provider === 'gmail' || provider === 'feishu' || provider === 'meta';
 }
 
 function normalizeFeishuFeaturePackages(value: unknown, fallback: FeishuFeaturePackage[] = []) {
@@ -203,6 +214,7 @@ export default function InvestorIntegrationsPanel({
   const [assistantChats, setAssistantChats] = useState<Record<ProviderKey, AssistantMessage[]>>({
     gmail: [],
     feishu: [],
+    meta: [],
     xiaohongshu: [],
     similarweb_api1: [],
     semrush13: [],
@@ -212,6 +224,7 @@ export default function InvestorIntegrationsPanel({
   const [assistantThreadIds, setAssistantThreadIds] = useState<Record<ProviderKey, string | null>>({
     gmail: null,
     feishu: null,
+    meta: null,
     xiaohongshu: null,
     similarweb_api1: null,
     semrush13: null,
@@ -229,13 +242,17 @@ export default function InvestorIntegrationsPanel({
   const [gmailAccountsLoading, setGmailAccountsLoading] = useState(false);
   const [feishuAccounts, setFeishuAccounts] = useState<PersonalAccount[]>([]);
   const [feishuAccountsLoading, setFeishuAccountsLoading] = useState(false);
-  const [personalAccountsChecked, setPersonalAccountsChecked] = useState<Record<'gmail' | 'feishu', boolean>>({
+  const [metaAccounts, setMetaAccounts] = useState<PersonalAccount[]>([]);
+  const [metaAccountsLoading, setMetaAccountsLoading] = useState(false);
+  const [personalAccountsChecked, setPersonalAccountsChecked] = useState<Record<PersonalProviderKey, boolean>>({
     gmail: false,
     feishu: false,
+    meta: false,
   });
-  const [personalAccountsError, setPersonalAccountsError] = useState<Record<'gmail' | 'feishu', string>>({
+  const [personalAccountsError, setPersonalAccountsError] = useState<Record<PersonalProviderKey, string>>({
     gmail: '',
     feishu: '',
+    meta: '',
   });
   const [feishuBindPackages, setFeishuBindPackages] = useState<FeishuFeaturePackage[]>(DEFAULT_FEISHU_FEATURE_PACKAGES);
   const [feishuPackageDrafts, setFeishuPackageDrafts] = useState<Record<string, FeishuFeaturePackage[]>>({});
@@ -269,9 +286,10 @@ export default function InvestorIntegrationsPanel({
       ? '/api/investor/xiaohongshu/assistant'
       : `/api/investor/integrations/assistant/${provider}`;
 
-  const loadPersonalAccounts = useCallback(async (provider: 'gmail' | 'feishu') => {
+  const loadPersonalAccounts = useCallback(async (provider: PersonalProviderKey) => {
     if (provider === 'gmail') setGmailAccountsLoading(true);
     if (provider === 'feishu') setFeishuAccountsLoading(true);
+    if (provider === 'meta') setMetaAccountsLoading(true);
     setPersonalAccountsError((prev) => ({ ...prev, [provider]: '' }));
     try {
       const res = await fetch(`/api/investor/personal-data/accounts?provider=${provider}`);
@@ -285,6 +303,7 @@ export default function InvestorIntegrationsPanel({
       }
       const accounts = Array.isArray(data.accounts) ? data.accounts as PersonalAccount[] : [];
       if (provider === 'gmail') setGmailAccounts(accounts);
+      if (provider === 'meta') setMetaAccounts(accounts);
       if (provider === 'feishu') {
         setFeishuAccounts(accounts);
         setFeishuPackageDrafts((prev) => {
@@ -321,23 +340,24 @@ export default function InvestorIntegrationsPanel({
       setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
       if (provider === 'gmail') setGmailAccountsLoading(false);
       if (provider === 'feishu') setFeishuAccountsLoading(false);
+      if (provider === 'meta') setMetaAccountsLoading(false);
     }
   }, []);
 
   const personalAccountsFor = (provider: ProviderKey) => (
-    provider === 'gmail' ? gmailAccounts : provider === 'feishu' ? feishuAccounts : []
+    provider === 'gmail' ? gmailAccounts : provider === 'feishu' ? feishuAccounts : provider === 'meta' ? metaAccounts : []
   );
 
   const personalAccountsLoadingFor = (provider: ProviderKey) => (
-    provider === 'gmail' ? gmailAccountsLoading : provider === 'feishu' ? feishuAccountsLoading : false
+    provider === 'gmail' ? gmailAccountsLoading : provider === 'feishu' ? feishuAccountsLoading : provider === 'meta' ? metaAccountsLoading : false
   );
 
   const personalAccountsCheckedFor = (provider: ProviderKey) => (
-    provider === 'gmail' ? personalAccountsChecked.gmail : provider === 'feishu' ? personalAccountsChecked.feishu : true
+    provider === 'gmail' ? personalAccountsChecked.gmail : provider === 'feishu' ? personalAccountsChecked.feishu : provider === 'meta' ? personalAccountsChecked.meta : true
   );
 
   const personalAccountsErrorFor = (provider: ProviderKey) => (
-    provider === 'gmail' ? personalAccountsError.gmail : provider === 'feishu' ? personalAccountsError.feishu : ''
+    provider === 'gmail' ? personalAccountsError.gmail : provider === 'feishu' ? personalAccountsError.feishu : provider === 'meta' ? personalAccountsError.meta : ''
   );
 
   useEffect(() => {
@@ -364,6 +384,7 @@ export default function InvestorIntegrationsPanel({
     void loadThreads();
     void loadPersonalAccounts('gmail');
     void loadPersonalAccounts('feishu');
+    void loadPersonalAccounts('meta');
   }, [loadPersonalAccounts]);
 
   useEffect(() => {
@@ -791,6 +812,7 @@ export default function InvestorIntegrationsPanel({
         setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
         setPersonalAccountsError((prev) => ({ ...prev, [provider]: '' }));
         if (provider === 'gmail') setGmailAccounts(data.accounts as PersonalAccount[]);
+        if (provider === 'meta') setMetaAccounts(data.accounts as PersonalAccount[]);
         if (provider === 'feishu') {
           const accounts = data.accounts as PersonalAccount[];
           setFeishuAccounts(accounts);
@@ -926,7 +948,7 @@ export default function InvestorIntegrationsPanel({
         <div>
           <h2 className="text-lg font-semibold text-slate-900">外部消息助手</h2>
           <p className="text-sm text-slate-600 mt-1">
-            先绑定 Gmail / 飞书账号，再由数字分身生成你的被动消息摘要。
+            先绑定 Gmail / 飞书 / Instagram / Facebook 账号，再由数字分身按需调用个人数据工具。
           </p>
         </div>
       </div>
@@ -1097,7 +1119,9 @@ export default function InvestorIntegrationsPanel({
                   <p className="mt-2 text-sm text-slate-600">
                     {card.provider === 'gmail'
                       ? '暂无 Gmail 授权。绑定后主 AI 助手会按需调用 Gmail 搜索、读取邮件和线程工具。'
-                      : '暂无飞书授权。绑定后主 AI 助手会按需调用飞书消息搜索、联系人、日历和文档搜索工具。'}
+                      : card.provider === 'feishu'
+                        ? '暂无飞书授权。绑定后主 AI 助手会按需调用飞书消息搜索、联系人、日历和文档搜索工具。'
+                        : '暂无 Instagram / Facebook 授权。绑定后主 AI 助手会按需读取授权 Page、关联 Instagram 专业账号、近期媒体和 Page 帖子。'}
                   </p>
                 ) : (
                   <div className="mt-2 space-y-2">
@@ -1123,6 +1147,11 @@ export default function InvestorIntegrationsPanel({
                                 {' · '}
                                 {new Date(account.updatedAt).toLocaleString('zh-CN')}
                               </p>
+                              {card.provider === 'meta' && account.metadata && (
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Page {account.metadata.pageCount || 0} 个 · Instagram 专业账号 {account.metadata.instagramAccountCount || 0} 个
+                                </p>
+                              )}
                             </div>
                             <button
                               type="button"
@@ -1182,6 +1211,31 @@ export default function InvestorIntegrationsPanel({
                               )}
                             </div>
                           )}
+
+                          {card.provider === 'meta' && account.metadata && (
+                            <div className="mt-3 border-t border-slate-100 pt-3">
+                              <p className="text-xs font-medium text-slate-700">授权资产</p>
+                              <div className="mt-2 grid gap-2">
+                                {(account.metadata.instagramAccounts || []).slice(0, 5).map((item, index) => (
+                                  <div key={`ig-${account.connectionId}-${index}`} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+                                    Instagram：{String(item.username || item.name || item.id || '未命名账号')}
+                                    {item.pageName ? ` · Page：${String(item.pageName)}` : ''}
+                                  </div>
+                                ))}
+                                {(account.metadata.pages || []).slice(0, 5).map((item, index) => (
+                                  <div key={`page-${account.connectionId}-${index}`} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+                                    Facebook Page：{String(item.name || item.id || '未命名 Page')}
+                                    {item.category ? ` · ${String(item.category)}` : ''}
+                                  </div>
+                                ))}
+                                {(account.metadata.instagramAccounts || []).length === 0 && (account.metadata.pages || []).length === 0 && (
+                                  <p className="text-xs text-slate-500">
+                                    当前授权没有返回 Page 或 Instagram 专业账号。请确认 Facebook 账号管理了 Page，且 Page 已关联 Instagram Business/Creator 账号。
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1237,6 +1291,8 @@ export default function InvestorIntegrationsPanel({
                     ? 'Gmail 账号会作为主 AI 助手的原生工具使用；用户提问需要邮件信息时，Codex 会按需调用已授权账号。'
                     : card.provider === 'feishu'
                     ? '飞书账号会作为主 AI 助手的 lark-cli 增强工具使用；用户提问需要飞书消息、联系人、日历或文档信息时，Codex 会按需调用已授权账号。'
+                    : card.provider === 'meta'
+                    ? 'Instagram / Facebook 账号会作为主 AI 助手的 Meta Graph 工具使用；用户提问需要运营账号、媒体、Page 帖子时，Codex 会按需调用已授权资产。'
                     : card.provider === 'xiaohongshu'
                     ? '暂无摘要，可直接对话触发 skill 抓取。'
                     : '暂无摘要，绑定后点击“刷新摘要”生成。')}

@@ -73,6 +73,34 @@ type FeishuOAuthToken = {
   scope?: string;
 };
 
+type MetaOAuthToken = {
+  access_token: string;
+  token_type?: string;
+  expires_in?: number;
+};
+
+export type MetaProfile = {
+  id: string;
+  name?: string;
+  email?: string;
+};
+
+export type MetaInstagramAccount = {
+  id: string;
+  username?: string;
+  name?: string;
+  profile_picture_url?: string;
+};
+
+export type MetaPageAccount = {
+  id: string;
+  name?: string;
+  category?: string;
+  access_token?: string;
+  tasks?: string[];
+  instagram_business_account?: MetaInstagramAccount;
+};
+
 const DEFAULT_FEISHU_PERSONAL_SCOPES = [
   'auth:user.id:read',
   'im:message.p2p_msg:get_as_user',
@@ -80,6 +108,14 @@ const DEFAULT_FEISHU_PERSONAL_SCOPES = [
   'im:message:readonly',
   'im:chat:readonly',
 ];
+
+const DEFAULT_META_PERSONAL_SCOPES = [
+  'public_profile',
+  'email',
+  'pages_show_list',
+  'pages_read_engagement',
+  'instagram_basic',
+].join(',');
 
 function getEnv(name: string): string {
   const value = process.env[name];
@@ -204,6 +240,108 @@ export function buildFeishuPersonalAuthUrl(origin: string, state: string): strin
 
 function getFeishuPersonalOAuthScope() {
   return process.env.FEISHU_PERSONAL_OAUTH_SCOPES?.trim() || DEFAULT_FEISHU_PERSONAL_SCOPES.join(' ');
+}
+
+function getMetaAppId() {
+  return process.env.META_APP_ID?.trim() || process.env.FACEBOOK_APP_ID?.trim() || getEnv('META_APP_ID');
+}
+
+function getMetaAppSecret() {
+  return process.env.META_APP_SECRET?.trim() || process.env.FACEBOOK_APP_SECRET?.trim() || getEnv('META_APP_SECRET');
+}
+
+function getMetaGraphVersion() {
+  return (process.env.META_GRAPH_API_VERSION || 'v21.0').trim().replace(/^\/+|\/+$/g, '');
+}
+
+function getMetaOAuthScope() {
+  return (process.env.META_OAUTH_SCOPES || DEFAULT_META_PERSONAL_SCOPES)
+    .split(/[\s,]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean)
+    .join(',');
+}
+
+export function getMetaPersonalOAuthScope() {
+  return getMetaOAuthScope();
+}
+
+export function buildMetaPersonalAuthUrl(origin: string, state: string): string {
+  const redirectUri = `${origin}/api/investor/personal-data/meta/callback`;
+  const params = new URLSearchParams({
+    client_id: getMetaAppId(),
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: getMetaOAuthScope(),
+    auth_type: 'rerequest',
+    state,
+  });
+  return `https://www.facebook.com/${getMetaGraphVersion()}/dialog/oauth?${params.toString()}`;
+}
+
+export async function exchangeMetaPersonalCode(origin: string, code: string): Promise<MetaOAuthToken> {
+  const redirectUri = `${origin}/api/investor/personal-data/meta/callback`;
+  const appId = getMetaAppId();
+  const appSecret = getMetaAppSecret();
+  const shortToken = await metaTokenFetch({
+    client_id: appId,
+    client_secret: appSecret,
+    redirect_uri: redirectUri,
+    code,
+  });
+
+  try {
+    return await metaTokenFetch({
+      grant_type: 'fb_exchange_token',
+      client_id: appId,
+      client_secret: appSecret,
+      fb_exchange_token: shortToken.access_token,
+    });
+  } catch {
+    return shortToken;
+  }
+}
+
+export async function fetchMetaProfileAndAssets(accessToken: string) {
+  const profile = await metaGraphFetch<MetaProfile>(accessToken, 'me', {
+    fields: 'id,name,email',
+  });
+  const pagesResponse = await metaGraphFetch<{ data?: MetaPageAccount[] }>(accessToken, 'me/accounts', {
+    fields: 'id,name,category,tasks,access_token,instagram_business_account{id,username,name,profile_picture_url}',
+    limit: '100',
+  });
+  const pages = Array.isArray(pagesResponse.data) ? pagesResponse.data : [];
+  const instagramAccounts = pages
+    .map((page) => page.instagram_business_account)
+    .filter(Boolean) as MetaInstagramAccount[];
+
+  return { profile, pages, instagramAccounts };
+}
+
+async function metaTokenFetch(params: Record<string, string>) {
+  const url = new URL(`https://graph.facebook.com/${getMetaGraphVersion()}/oauth/access_token`);
+  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+  const res = await fetch(url, { cache: 'no-store' });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Meta token exchange failed: ${JSON.stringify(data)}`);
+  }
+  return data as MetaOAuthToken;
+}
+
+async function metaGraphFetch<T>(accessToken: string, path: string, params: Record<string, string>): Promise<T> {
+  const normalizedPath = path.replace(/^\/+/, '');
+  const url = new URL(`https://graph.facebook.com/${getMetaGraphVersion()}/${normalizedPath}`);
+  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Meta Graph API failed (${normalizedPath}): ${JSON.stringify(data)}`);
+  }
+  return data as T;
 }
 
 export async function exchangeGoogleCode(origin: string, code: string) {

@@ -16,6 +16,7 @@ import {
   upsertFeishuCliConnection,
   upsertFeishuOAuthConnection,
   upsertGmailOAuthConnection,
+  upsertMetaOAuthConnection,
   updateFeishuConnectionFeaturePackages,
 } from './personal-data-store.js';
 import {
@@ -132,6 +133,25 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
               expiresIn: typeof token.expiresIn === 'number' ? token.expiresIn : null,
             },
             profile: isRecord(body.profile) ? body.profile : undefined,
+          });
+          return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
+        }
+        if (provider === 'meta') {
+          const account = await upsertMetaOAuthConnection(config, {
+            investorId: readRequiredBodyString(body, 'investorId'),
+            userId: readRequiredBodyString(body, 'userId'),
+            accountId: readRequiredBodyString(body, 'accountId'),
+            accountName: typeof body.accountName === 'string' ? body.accountName : undefined,
+            accountEmail: typeof body.accountEmail === 'string' ? body.accountEmail : undefined,
+            token: {
+              accessToken: readRequiredBodyString(token, 'accessToken'),
+              tokenType: typeof token.tokenType === 'string' ? token.tokenType : undefined,
+              scope: typeof token.scope === 'string' ? token.scope : undefined,
+              expiresIn: typeof token.expiresIn === 'number' ? token.expiresIn : null,
+            },
+            profile: isRecord(body.profile) ? body.profile : undefined,
+            pages: Array.isArray(body.pages) ? body.pages : [],
+            instagramAccounts: Array.isArray(body.instagramAccounts) ? body.instagramAccounts : [],
           });
           return json(res, 200, { ok: true, account: account ? publicPersonalConnection(account) : null });
         }
@@ -1102,8 +1122,18 @@ function publicPersonalConnection(connection: {
               connection.connectionType === 'lark_cli_user' ? DEFAULT_FEISHU_CLI_FEATURE_PACKAGES : []
             ))
       : undefined,
+    metadata: connection.provider === 'meta' ? publicMetaConnectionMetadata(connection.metadata || {}) : undefined,
     status: connection.status,
     updatedAt: connection.updatedAt,
+  };
+}
+
+function publicMetaConnectionMetadata(metadata: Record<string, unknown>) {
+  return {
+    pageCount: typeof metadata.page_count === 'number' ? metadata.page_count : 0,
+    instagramAccountCount: typeof metadata.instagram_account_count === 'number' ? metadata.instagram_account_count : 0,
+    pages: Array.isArray(metadata.pages) ? metadata.pages.slice(0, 20) : [],
+    instagramAccounts: Array.isArray(metadata.instagram_accounts) ? metadata.instagram_accounts.slice(0, 20) : [],
   };
 }
 

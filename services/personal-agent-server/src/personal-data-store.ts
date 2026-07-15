@@ -54,7 +54,38 @@ export type FeishuCredentialPayload = {
   tenantKey?: string;
 };
 
-export type PersonalCredentialPayload = GmailCredentialPayload | FeishuCredentialPayload;
+export type MetaInstagramAsset = {
+  id: string;
+  username?: string;
+  name?: string;
+  profilePictureUrl?: string;
+  pageId?: string;
+  pageName?: string;
+};
+
+export type MetaPageAsset = {
+  id: string;
+  name?: string;
+  category?: string;
+  accessToken?: string;
+  tasks?: string[];
+  instagramAccount?: MetaInstagramAsset;
+};
+
+export type MetaCredentialPayload = {
+  provider: 'meta';
+  accessToken: string;
+  tokenType?: string;
+  scope?: string;
+  expiresAt?: string | null;
+  accountId: string;
+  accountEmail?: string;
+  profile?: Record<string, unknown>;
+  pages: MetaPageAsset[];
+  instagramAccounts: MetaInstagramAsset[];
+};
+
+export type PersonalCredentialPayload = GmailCredentialPayload | FeishuCredentialPayload | MetaCredentialPayload;
 
 export type PersonalCredentialRecord = {
   id: string;
@@ -209,6 +240,125 @@ export async function upsertGmailOAuthConnection(config: ServerConfig, input: {
   );
 
   const connections = await listPersonalConnections(config, { investorId: input.investorId, provider: 'gmail' });
+  return connections.find((connection) => connection.id === connectionId) || null;
+}
+
+export async function upsertMetaOAuthConnection(config: ServerConfig, input: {
+  investorId: string;
+  userId: string;
+  accountId: string;
+  accountName?: string;
+  accountEmail?: string;
+  token: {
+    accessToken: string;
+    tokenType?: string;
+    scope?: string;
+    expiresIn?: number | null;
+  };
+  profile?: Record<string, unknown>;
+  pages?: unknown[];
+  instagramAccounts?: unknown[];
+}) {
+  const pool = await getPersonalDataPool(config);
+  const capabilityId = await upsertCapability(pool, {
+    investorId: input.investorId,
+    userId: input.userId,
+    capabilityKey: 'meta',
+    capabilityType: 'oauth_account',
+    displayName: 'Instagram / Facebook',
+  });
+  const accountId = input.accountId.trim();
+  if (!accountId) throw new Error('Meta accountId is required.');
+  const accountEmail = input.accountEmail?.trim().toLowerCase() || undefined;
+  const expiresAt = input.token.expiresIn && input.token.expiresIn > 0
+    ? new Date(Date.now() + input.token.expiresIn * 1000).toISOString()
+    : null;
+  const pages = normalizeMetaPages(input.pages || []);
+  const instagramAccounts = normalizeMetaInstagramAccounts(input.instagramAccounts || [], pages);
+  const metadata = {
+    profile: sanitizeRecord(input.profile || {}),
+    account_email: accountEmail || null,
+    page_count: pages.length,
+    instagram_account_count: instagramAccounts.length,
+    pages: pages.map((page) => sanitizeMetaPage(page)),
+    instagram_accounts: instagramAccounts.map((account) => sanitizeMetaInstagramAccount(account)),
+  };
+
+  const existing = await pool.query(
+    [
+      'select id',
+      'from personal_external_connections',
+      'where investor_id = $1 and provider = $2 and external_account_id = $3',
+      'limit 1',
+    ].join(' '),
+    [input.investorId, 'meta', accountId]
+  );
+  const connectionId = existing.rows[0]?.id ? String(existing.rows[0].id) : id('conn');
+  const encrypted = encryptCredentialPayload({
+    provider: 'meta',
+    accessToken: input.token.accessToken,
+    tokenType: input.token.tokenType,
+    scope: input.token.scope,
+    expiresAt,
+    accountId,
+    accountEmail,
+    profile: input.profile || {},
+    pages,
+    instagramAccounts,
+  } satisfies MetaCredentialPayload);
+
+  await pool.query(
+    [
+      'insert into personal_external_connections',
+      '(id, capability_id, investor_id, user_id, provider, connection_type, external_account_id, display_name, scopes, status, expires_at, metadata, created_at, updated_at)',
+      'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::timestamptz, $12::jsonb, now(), now())',
+      'on conflict (investor_id, provider, external_account_id) do update set',
+      'capability_id = excluded.capability_id, user_id = excluded.user_id, display_name = excluded.display_name, scopes = excluded.scopes,',
+      "status = 'connected', expires_at = excluded.expires_at, metadata = excluded.metadata, updated_at = now()",
+    ].join(' '),
+    [
+      connectionId,
+      capabilityId,
+      input.investorId,
+      input.userId,
+      'meta',
+      'facebook_login',
+      accountId,
+      input.accountName || accountEmail || accountId,
+      parseScopes(input.token.scope),
+      'connected',
+      expiresAt,
+      JSON.stringify(metadata),
+    ]
+  );
+
+  await pool.query(
+    [
+      'insert into personal_credentials',
+      '(id, connection_id, investor_id, user_id, credential_type, encrypted_payload, encrypted_data_key, key_provider, key_version, expires_at, status, created_at, updated_at)',
+      'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, $11, now(), now())',
+      'on conflict (connection_id) do update set',
+      'investor_id = excluded.investor_id, user_id = excluded.user_id, credential_type = excluded.credential_type,',
+      'encrypted_payload = excluded.encrypted_payload, encrypted_data_key = excluded.encrypted_data_key,',
+      'key_provider = excluded.key_provider, key_version = excluded.key_version, expires_at = excluded.expires_at,',
+      "status = 'active', updated_at = now()",
+    ].join(' '),
+    [
+      id('cred'),
+      connectionId,
+      input.investorId,
+      input.userId,
+      'oauth_token',
+      encrypted.encryptedPayload,
+      encrypted.encryptedDataKey,
+      encrypted.keyProvider,
+      encrypted.keyVersion,
+      expiresAt,
+      'active',
+    ]
+  );
+
+  const connections = await listPersonalConnections(config, { investorId: input.investorId, provider: 'meta' });
   return connections.find((connection) => connection.id === connectionId) || null;
 }
 
@@ -746,8 +896,92 @@ async function createPersonalDataSchema(pool: PgPool) {
   await pool.query('create index if not exists personal_tool_call_audits_run_created_idx on personal_tool_call_audits(run_id, created_at desc)');
 }
 
+function normalizeMetaPages(value: unknown[]) {
+  return value.map((item) => normalizeMetaPage(item)).filter(Boolean) as MetaPageAsset[];
+}
+
+function normalizeMetaPage(value: unknown): MetaPageAsset | null {
+  if (!isPlainRecord(value)) return null;
+  const idValue = readRecordString(value, 'id');
+  if (!idValue) return null;
+  const instagram = normalizeMetaInstagramAccount(value.instagram_business_account, {
+    pageId: idValue,
+    pageName: readRecordString(value, 'name') || undefined,
+  });
+  return {
+    id: idValue,
+    name: readRecordString(value, 'name') || undefined,
+    category: readRecordString(value, 'category') || undefined,
+    accessToken: readRecordString(value, 'access_token') || readRecordString(value, 'accessToken') || undefined,
+    tasks: Array.isArray(value.tasks) ? value.tasks.map(String).filter(Boolean) : undefined,
+    instagramAccount: instagram || undefined,
+  };
+}
+
+function normalizeMetaInstagramAccounts(value: unknown[], pages: MetaPageAsset[]) {
+  const accounts = value.map((item) => normalizeMetaInstagramAccount(item, undefined)).filter(Boolean) as MetaInstagramAsset[];
+  const seen = new Set(accounts.map((account) => account.id));
+  for (const page of pages) {
+    if (page.instagramAccount && !seen.has(page.instagramAccount.id)) {
+      accounts.push(page.instagramAccount);
+      seen.add(page.instagramAccount.id);
+    }
+  }
+  return accounts;
+}
+
+function normalizeMetaInstagramAccount(value: unknown, page?: { pageId?: string; pageName?: string }): MetaInstagramAsset | null {
+  if (!isPlainRecord(value)) return null;
+  const idValue = readRecordString(value, 'id');
+  if (!idValue) return null;
+  return {
+    id: idValue,
+    username: readRecordString(value, 'username') || undefined,
+    name: readRecordString(value, 'name') || undefined,
+    profilePictureUrl: readRecordString(value, 'profile_picture_url') || readRecordString(value, 'profilePictureUrl') || undefined,
+    pageId: readRecordString(value, 'page_id') || readRecordString(value, 'pageId') || page?.pageId,
+    pageName: readRecordString(value, 'page_name') || readRecordString(value, 'pageName') || page?.pageName,
+  };
+}
+
+function sanitizeMetaPage(page: MetaPageAsset) {
+  return {
+    id: page.id,
+    name: page.name || null,
+    category: page.category || null,
+    tasks: page.tasks || [],
+    instagramAccount: page.instagramAccount ? sanitizeMetaInstagramAccount(page.instagramAccount) : null,
+  };
+}
+
+function sanitizeMetaInstagramAccount(account: MetaInstagramAsset) {
+  return {
+    id: account.id,
+    username: account.username || null,
+    name: account.name || null,
+    profilePictureUrl: account.profilePictureUrl || null,
+    pageId: account.pageId || null,
+    pageName: account.pageName || null,
+  };
+}
+
+function sanitizeRecord(value: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => !/token|secret|authorization/i.test(key))
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function readRecordString(value: Record<string, unknown>, key: string) {
+  const current = value[key];
+  return typeof current === 'string' && current.trim() ? current.trim() : '';
+}
+
 function parseScopes(scope?: string) {
-  return (scope || '').split(/\s+/).map((item) => item.trim()).filter(Boolean);
+  return (scope || '').split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
 }
 
 function rowToConnection(row: Record<string, unknown>): PersonalConnection {

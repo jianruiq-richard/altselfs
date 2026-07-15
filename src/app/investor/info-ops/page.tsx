@@ -78,6 +78,7 @@ export default async function InfoOpsPage({
   const providerDbMap = {
     gmail: 'GMAIL',
     feishu: 'FEISHU',
+    meta: 'META',
     xiaohongshu: 'XIAOHONGSHU',
     similarweb_api1: 'SIMILARWEB_API1',
     semrush13: 'SEMRUSH13',
@@ -105,13 +106,14 @@ export default async function InfoOpsPage({
   const assistantHint: Record<string, string> = {
     gmail: '当前建议先配置 Gmail 助手并刷新摘要。',
     feishu: '当前建议先配置 飞书 助手并刷新摘要。',
+    meta: '当前建议先绑定 Instagram / Facebook 运营账号，再让主 AI 助手按需读取授权资产。',
     wechat: '当前建议先录入公众号，再使用公众号助手对话。',
     xiaohongshu: '当前建议先接入小红书数据源，再启用小红书助手。',
     semrush: '启用竞品数据源员工后，主 AI 助手会在竞品情报问题中自动使用对应工具。',
   };
 
   return (
-    <FigmaShell homeHref="/dashboard" title="信息处理运营部门管理" subtitle="统一管理公众号、小红书、Gmail、飞书助手与录入流程">
+    <FigmaShell homeHref="/dashboard" title="信息处理运营部门管理" subtitle="统一管理公众号、小红书、Gmail、飞书、Instagram / Facebook 助手与录入流程">
       <div className="mb-6 flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-4">
         <p className="text-sm text-gray-600">{assistantHint[query.assistant || ''] || '在这里完成信息处理运营部门的全部配置与调试。'}</p>
         <Link href="/dashboard" className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
