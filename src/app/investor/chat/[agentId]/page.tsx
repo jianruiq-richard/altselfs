@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, CheckCircle2, ChevronDown, LoaderCircle, MessageSquare, Paperclip, Plus, Square, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, LoaderCircle, MessageSquare, Paperclip, Plug, Plus, Settings2, Square, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -133,6 +133,32 @@ type CompletedCodexActivity = {
 
 type PersonalAgentStatusRecoveryResult = 'active' | 'success' | 'terminal' | 'idle' | 'unavailable';
 type PersonalAgentStreamRecoveryResult = 'active' | 'recovered' | 'saved' | 'failed';
+
+type ConnectorItem = {
+  key: string;
+  type: 'app' | 'data_source';
+  label: string;
+  description: string;
+  connected: boolean;
+  enabledByDefault: boolean;
+  connectionIds: string[];
+  accounts: Array<{
+    connectionId: string;
+    provider: string;
+    accountEmail: string;
+    displayName: string;
+    status: string;
+    updatedAt: string;
+  }>;
+  platformConfigured?: boolean;
+  connectHref?: string;
+  manageHref?: string;
+};
+
+type ConnectorScopePayload = {
+  enabledConnectorKeys: string[];
+  enabledConnectionIds: string[];
+};
 
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 const CODEX_MODEL_STORAGE_KEY = 'altselfs:personal-agent-codex-model';
@@ -1187,6 +1213,10 @@ export default function InvestorAgentChatPage() {
   const [stoppingRun, setStoppingRun] = useState(false);
   const [recoveringRunState, setRecoveringRunState] = useState(false);
   const [codexModel, setCodexModel] = useState<CodexModelOption['value']>(DEFAULT_CODEX_MODEL);
+  const [connectors, setConnectors] = useState<ConnectorItem[]>([]);
+  const [connectorsLoading, setConnectorsLoading] = useState(false);
+  const [connectorsError, setConnectorsError] = useState<string | null>(null);
+  const [selectedConnectorKeys, setSelectedConnectorKeys] = useState<string[]>([]);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const liveStreamRunIdRef = useRef<string | null>(null);
@@ -1196,6 +1226,7 @@ export default function InvestorAgentChatPage() {
   const suppressNextAutoScrollRef = useRef(false);
   const codexEventIndexRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const connectorSelectionInitializedRef = useRef(false);
 
   const handleSessionExpired = useCallback(() => {
     setError(AUTH_EXPIRED_MESSAGE);
@@ -1226,6 +1257,57 @@ export default function InvestorAgentChatPage() {
   useEffect(() => {
     window.localStorage.setItem(CODEX_MODEL_STORAGE_KEY, codexModel);
   }, [codexModel]);
+
+  useEffect(() => {
+    if (!isExecutive) return;
+    let cancelled = false;
+    setConnectorsLoading(true);
+    setConnectorsError(null);
+    fetch('/api/investor/connectors', {
+      cache: 'no-store',
+      credentials: 'same-origin',
+    })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as { connectors?: ConnectorItem[]; error?: string };
+        if (!res.ok) throw new Error(data.error || '连接器列表加载失败');
+        return Array.isArray(data.connectors) ? data.connectors : [];
+      })
+      .then((items) => {
+        if (cancelled) return;
+        setConnectors(items);
+        if (!connectorSelectionInitializedRef.current) {
+          setSelectedConnectorKeys(items.filter((item) => item.connected && item.enabledByDefault).map((item) => item.key));
+          connectorSelectionInitializedRef.current = true;
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setConnectorsError(err instanceof Error ? err.message : '连接器列表加载失败');
+      })
+      .finally(() => {
+        if (!cancelled) setConnectorsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isExecutive]);
+
+  const activeConnectors = useMemo(
+    () => connectors.filter((connector) => connector.connected && selectedConnectorKeys.includes(connector.key)),
+    [connectors, selectedConnectorKeys]
+  );
+  const connectorScope = useMemo<ConnectorScopePayload>(() => ({
+    enabledConnectorKeys: activeConnectors.map((connector) => connector.key),
+    enabledConnectionIds: activeConnectors.flatMap((connector) => connector.connectionIds || []),
+  }), [activeConnectors]);
+
+  const toggleConnector = useCallback((key: string) => {
+    setSelectedConnectorKeys((current) => (
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key]
+    ));
+  }, []);
   const applyAgentConfig = useCallback((agentConfig: AgentConfig | null | undefined) => {
     if (!agentConfig) return;
     const systemPrompt = String(agentConfig.systemPrompt || '');
@@ -1905,6 +1987,7 @@ export default function InvestorAgentChatPage() {
           formData.append('displayMessage', displayContent);
           formData.append('codexModel', codexModel);
           formData.append('clientRequestId', clientRequestId);
+          formData.append('connectorScope', JSON.stringify(connectorScope));
           requestAttachments.forEach((attachment) => {
             formData.append('attachments', attachment.file, attachment.name);
           });
@@ -1916,6 +1999,7 @@ export default function InvestorAgentChatPage() {
             displayMessage: displayContent,
             codexModel,
             clientRequestId,
+            connectorScope,
           })
       );
 
@@ -2454,6 +2538,67 @@ export default function InvestorAgentChatPage() {
             }}
             className="mx-auto flex max-w-3xl flex-col gap-3"
           >
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-600">
+                  <Plug className="h-3.5 w-3.5 shrink-0" />
+                  <span>本轮连接器</span>
+                  <span className="text-slate-400">
+                    {connectorsLoading ? '加载中' : `${activeConnectors.length}/${connectors.filter((connector) => connector.connected).length} 已启用`}
+                  </span>
+                </div>
+                <Link
+                  href="/investor/info-ops"
+                  className="inline-flex items-center gap-1 self-start text-xs font-medium text-blue-700 hover:underline sm:self-auto"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  管理连接器
+                </Link>
+              </div>
+              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                {connectors.length > 0 ? (
+                  connectors.map((connector) => {
+                    const selected = connector.connected && selectedConnectorKeys.includes(connector.key);
+                    const disabled = sending || recoveringRunState || !connector.connected;
+                    const accountLabel = connector.accounts.length > 0
+                      ? connector.accounts.map((account) => account.displayName || account.accountEmail).filter(Boolean).join('、')
+                      : connector.platformConfigured === false
+                        ? '平台密钥未配置'
+                        : connector.connected
+                          ? '已连接'
+                          : '未连接';
+                    return (
+                      <button
+                        key={connector.key}
+                        type="button"
+                        onClick={() => {
+                          if (connector.connected) toggleConnector(connector.key);
+                        }}
+                        disabled={disabled}
+                        title={`${connector.label}：${connector.description}${accountLabel ? `\n${accountLabel}` : ''}`}
+                        className={[
+                          'inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border px-2.5 text-xs transition disabled:cursor-not-allowed',
+                          selected
+                            ? 'border-blue-300 bg-blue-50 text-blue-800'
+                            : connector.connected
+                              ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-60'
+                              : 'border-slate-200 bg-white text-slate-400 opacity-75',
+                        ].join(' ')}
+                      >
+                        <span className={`h-2 w-2 rounded-full ${selected ? 'bg-blue-600' : connector.connected ? 'bg-slate-300' : 'bg-slate-200'}`} />
+                        <span className="max-w-36 truncate">{connector.label}</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <span className="text-xs text-slate-400">
+                    {connectorsError || (connectorsLoading ? '正在读取可用连接器...' : '暂无可用连接器')}
+                  </span>
+                )}
+              </div>
+              {connectorsError ? <p className="mt-1 text-xs text-amber-700">{connectorsError}</p> : null}
+            </div>
+
             {attachments.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {attachments.map((attachment) => (

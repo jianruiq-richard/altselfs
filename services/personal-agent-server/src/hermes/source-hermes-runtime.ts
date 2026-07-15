@@ -170,7 +170,8 @@ export class HermesSourceRuntime {
       typeof request.metadata?.selectedAgentProfileId === 'string' && request.metadata.selectedAgentProfileId.trim()
         ? request.metadata.selectedAgentProfileId.trim()
         : '';
-    const personalDataToolNames = await getPersonalDataToolNames(this.config, investorId, request.userId);
+    const connectorScope = getConnectorScope(request.metadata);
+    const personalDataToolNames = await getPersonalDataToolNames(this.config, investorId, request.userId, connectorScope);
     const profileLoadStartedAtMs = Date.now();
     const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(
       request.userId,
@@ -271,7 +272,7 @@ export class HermesSourceRuntime {
         threadId: request.threadId || 'default',
         currentUserMessage,
         selectedAgentProfileId,
-        enabledCompetitorTools: getEnabledCompetitorToolNames(request.metadata),
+        enabledCompetitorTools: getEnabledCompetitorToolNames(request.metadata, connectorScope.enabledConnectorKeys),
         personalDataToolNames,
         hermesHome,
         codexHome,
@@ -855,23 +856,58 @@ const COMPETITOR_INFO_SOURCE_TO_TOOL: Record<string, string> = {
   domain_metrics_check: 'altselfs_domain_metrics_check',
 };
 
-function getEnabledCompetitorToolNames(metadata: Record<string, unknown> | undefined) {
+function getEnabledCompetitorToolNames(metadata: Record<string, unknown> | undefined, enabledConnectorKeys?: string[]) {
   const value = metadata?.enabledInfoSources;
   if (!Array.isArray(value)) return [];
+  const allowed = enabledConnectorKeys ? new Set(enabledConnectorKeys) : null;
   const names = value
     .map((item) => {
       if (typeof item === 'string') return item.toLowerCase();
       if (!isRecord(item)) return null;
       return typeof item.provider === 'string' ? item.provider.toLowerCase() : null;
     })
+    .filter((provider) => !allowed || (provider ? allowed.has(provider) : false))
     .map((provider) => (provider ? COMPETITOR_INFO_SOURCE_TO_TOOL[provider] : null))
     .filter((item): item is string => Boolean(item));
   return Array.from(new Set(names));
 }
 
-async function getPersonalDataToolNames(config: ServerConfig, investorId: string, userId?: string) {
+function getConnectorScope(metadata: Record<string, unknown> | undefined) {
+  const scope = isRecord(metadata?.connectorScope) ? metadata.connectorScope : null;
+  const enabledConnectorKeys = normalizeOptionalStringArray(scope?.enabledConnectorKeys, true);
+  const enabledConnectionIds = normalizeOptionalStringArray(scope?.enabledConnectionIds, false);
+  const personalProviderKeys = enabledConnectorKeys
+    ? enabledConnectorKeys.filter((key) => key === 'gmail' || key === 'feishu' || key === 'meta')
+    : undefined;
+  return { enabledConnectorKeys, enabledConnectionIds, personalProviderKeys };
+}
+
+function normalizeOptionalStringArray(value: unknown, lowercase: boolean) {
+  if (!Array.isArray(value)) return undefined;
+  return Array.from(new Set(
+    value
+      .map((item) => {
+        if (typeof item !== 'string') return '';
+        const trimmed = item.trim();
+        return lowercase ? trimmed.toLowerCase() : trimmed;
+      })
+      .filter(Boolean)
+  ));
+}
+
+async function getPersonalDataToolNames(
+  config: ServerConfig,
+  investorId: string,
+  userId?: string,
+  connectorScope?: ReturnType<typeof getConnectorScope>
+) {
   try {
-    const tools = await createPersonalDataDynamicTools(config, { investorId, userId });
+    const tools = await createPersonalDataDynamicTools(config, {
+      investorId,
+      userId,
+      enabledProviders: connectorScope?.personalProviderKeys,
+      enabledConnectionIds: connectorScope?.enabledConnectionIds,
+    });
     return tools
       .map((tool) => isRecord(tool) && typeof tool.name === 'string' ? tool.name : '')
       .filter(Boolean);

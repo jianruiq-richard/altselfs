@@ -60,20 +60,39 @@ export function isPersonalDataTool(toolName: string) {
 export async function createPersonalDataDynamicTools(config: ServerConfig, input: {
   investorId?: string;
   userId?: string;
+  enabledProviders?: string[];
+  enabledConnectionIds?: string[];
 }) {
   const investorId = input.investorId?.trim();
   const userId = input.userId?.trim();
   if (!investorId || !isCredentialVaultConfigured()) return [];
+  const providerFilter = Array.isArray(input.enabledProviders)
+    ? new Set(input.enabledProviders.map((provider) => provider.trim().toLowerCase()).filter(Boolean))
+    : null;
+  const connectionFilter = Array.isArray(input.enabledConnectionIds)
+    ? new Set(input.enabledConnectionIds.map((connectionId) => connectionId.trim()).filter(Boolean))
+    : null;
+  const providerEnabled = (provider: string) => !providerFilter || providerFilter.has(provider);
+  const filterConnections = (connections: PersonalConnection[]) => (
+    connectionFilter ? connections.filter((connection) => connectionFilter.has(connection.id)) : connections
+  );
   let gmailConnections: PersonalConnection[] = [];
   let feishuConnections: PersonalConnection[] = [];
   let metaConnections: PersonalConnection[] = [];
   try {
-    gmailConnections = await listPersonalConnections(config, { investorId, userId, provider: 'gmail' });
-    feishuConnections = await listPersonalConnections(config, { investorId, userId, provider: 'feishu' });
-    metaConnections = await listPersonalConnections(config, { investorId, userId, provider: 'meta' });
+    if (providerEnabled('gmail')) {
+      gmailConnections = filterConnections(await listPersonalConnections(config, { investorId, userId, provider: 'gmail' }));
+    }
+    if (providerEnabled('feishu')) {
+      feishuConnections = filterConnections(await listPersonalConnections(config, { investorId, userId, provider: 'feishu' }));
+    }
+    if (providerEnabled('meta')) {
+      metaConnections = filterConnections(await listPersonalConnections(config, { investorId, userId, provider: 'meta' }));
+    }
   } catch {
     return [];
   }
+  if (gmailConnections.length === 0 && feishuConnections.length === 0 && metaConnections.length === 0) return [];
   const tools: unknown[] = [
     {
       namespace: null,
@@ -403,7 +422,7 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
       }
     );
   }
-  const enabledToolNames = new Set(['altselfs_connected_accounts_list']);
+  const enabledToolNames = new Set(providerFilter ? [] : ['altselfs_connected_accounts_list']);
   if (gmailConnections.length > 0) {
     for (const name of ['altselfs_gmail_search_messages', 'altselfs_gmail_get_message', 'altselfs_gmail_get_thread']) {
       enabledToolNames.add(name);

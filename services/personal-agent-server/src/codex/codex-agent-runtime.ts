@@ -341,11 +341,21 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     const tools: unknown[] = selection.provider === 'openai' ? [] : [createWebSearchDynamicTool()];
     if (this.config.sandboxExecEnabled) tools.push(createSandboxExecDynamicTool());
     if (input.profileId === 'codex-competitive-intelligence') {
-      const enabledCompetitorSources = getEnabledInfoSourceNames(input.metadata);
+      const connectorScope = getConnectorScope(input.metadata);
+      const enabledCompetitorSources = filterByConnectorScope(
+        getEnabledInfoSourceNames(input.metadata),
+        connectorScope.enabledConnectorKeys
+      );
       tools.push(...createRapidApiCompetitorDynamicTools(enabledCompetitorSources));
     }
     const investorId = typeof input.metadata?.investorId === 'string' ? input.metadata.investorId : undefined;
-    tools.push(...await createPersonalDataDynamicTools(this.config, { investorId, userId: input.userId }));
+    const connectorScope = getConnectorScope(input.metadata);
+    tools.push(...await createPersonalDataDynamicTools(this.config, {
+      investorId,
+      userId: input.userId,
+      enabledProviders: connectorScope.personalProviderKeys,
+      enabledConnectionIds: connectorScope.enabledConnectionIds,
+    }));
     return tools;
   }
 
@@ -641,6 +651,39 @@ function getEnabledInfoSourceNames(metadata: Record<string, unknown> | undefined
       return typeof item.provider === 'string' ? item.provider.toLowerCase() : null;
     })
       .filter((item): item is string => Boolean(item));
+}
+
+function getConnectorScope(metadata: Record<string, unknown> | undefined) {
+  const scope = isRecord(metadata?.connectorScope) ? metadata.connectorScope : null;
+  const enabledConnectorKeys = normalizeOptionalStringArray(scope?.enabledConnectorKeys, true);
+  const enabledConnectionIds = normalizeOptionalStringArray(scope?.enabledConnectionIds, false);
+  const personalProviderKeys = enabledConnectorKeys
+    ? enabledConnectorKeys.filter((key) => key === 'gmail' || key === 'feishu' || key === 'meta')
+    : undefined;
+  return {
+    enabledConnectorKeys,
+    enabledConnectionIds,
+    personalProviderKeys,
+  };
+}
+
+function normalizeOptionalStringArray(value: unknown, lowercase: boolean) {
+  if (!Array.isArray(value)) return undefined;
+  return Array.from(new Set(
+    value
+      .map((item) => {
+        if (typeof item !== 'string') return '';
+        const trimmed = item.trim();
+        return lowercase ? trimmed.toLowerCase() : trimmed;
+      })
+      .filter(Boolean)
+  ));
+}
+
+function filterByConnectorScope(values: string[], enabledConnectorKeys?: string[]) {
+  if (!enabledConnectorKeys) return values;
+  const allowed = new Set(enabledConnectorKeys);
+  return values.filter((value) => allowed.has(value));
 }
 
 function normalizeCodexModel(model?: string) {

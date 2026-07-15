@@ -60,6 +60,11 @@ type UploadedAttachment = {
   kind: AttachmentKind;
 };
 
+type ConnectorScope = {
+  enabledConnectorKeys?: string[];
+  enabledConnectionIds?: string[];
+};
+
 type ParsedPostBody = {
   threadId?: string | null;
   messages: ClientMessage[];
@@ -68,6 +73,7 @@ type ParsedPostBody = {
   clientRequestId?: string | null;
   codexModel: 'deepseek/deepseek-v3.2' | typeof DEFAULT_CODEX_AGENT_MODEL;
   attachments: UploadedAttachment[];
+  connectorScope: ConnectorScope | null;
 };
 
 function normalizeCodexModel(value: unknown): ParsedPostBody['codexModel'] {
@@ -88,6 +94,38 @@ function normalizeClientRequestId(value: unknown) {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return /^[a-zA-Z0-9._:-]{8,160}$/.test(trimmed) ? trimmed : null;
+}
+
+function normalizeStringArray(value: unknown, options: { lowercase: boolean }) {
+  if (!Array.isArray(value)) return undefined;
+  return Array.from(new Set(
+    value
+      .map((item) => {
+        if (typeof item !== 'string') return '';
+        const trimmed = item.trim();
+        return options.lowercase ? trimmed.toLowerCase() : trimmed;
+      })
+      .filter(Boolean)
+  ));
+}
+
+function normalizeConnectorScope(value: unknown): ConnectorScope | null {
+  if (!isRecord(value)) return null;
+  const enabledConnectorKeys = normalizeStringArray(value.enabledConnectorKeys, { lowercase: true });
+  const enabledConnectionIds = normalizeStringArray(value.enabledConnectionIds, { lowercase: false });
+  return {
+    ...(enabledConnectorKeys ? { enabledConnectorKeys } : {}),
+    ...(enabledConnectionIds ? { enabledConnectionIds } : {}),
+  };
+}
+
+function parseConnectorScopeJson(value: string) {
+  if (!value) return null;
+  try {
+    return normalizeConnectorScope(JSON.parse(value) as unknown);
+  } catch {
+    throw Object.assign(new Error('connectorScope 字段不是有效的 JSON。'), { status: 400 });
+  }
 }
 
 function getPersonalAgentServerUrl() {
@@ -258,6 +296,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       messages?: unknown;
       codexModel?: unknown;
       clientRequestId?: unknown;
+      connectorScope?: unknown;
     };
     const messages = normalizeMessages(body.messages);
     const explicitMessage = typeof body.message === 'string' ? body.message.trim() : '';
@@ -271,6 +310,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       clientRequestId: normalizeClientRequestId(body.clientRequestId),
       codexModel: normalizeCodexModel(body.codexModel),
       attachments: [],
+      connectorScope: normalizeConnectorScope(body.connectorScope),
     };
   }
 
@@ -315,6 +355,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     clientRequestId: normalizeClientRequestId(getStringFormValue(form.get('clientRequestId'))),
     codexModel: normalizeCodexModel(getStringFormValue(form.get('codexModel'))),
     attachments,
+    connectorScope: parseConnectorScopeJson(getStringFormValue(form.get('connectorScope'))),
   };
 }
 
@@ -519,6 +560,15 @@ async function getEnabledInfoSources(investorId: string) {
   }));
 }
 
+function applyConnectorScopeToInfoSources(
+  enabledInfoSources: Awaited<ReturnType<typeof getEnabledInfoSources>>,
+  connectorScope: ConnectorScope | null
+) {
+  if (!connectorScope?.enabledConnectorKeys) return enabledInfoSources;
+  const allowed = new Set(connectorScope.enabledConnectorKeys);
+  return enabledInfoSources.filter((source) => allowed.has(source.provider));
+}
+
 export async function GET(req: NextRequest) {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -671,7 +721,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: detail }, { status });
   }
 
-  const { messages, userMessage, displayUserMessage, attachments, codexModel } = parsedBody;
+  const { messages, userMessage, displayUserMessage, attachments, codexModel, connectorScope } = parsedBody;
   if (!userMessage && attachments.length === 0) return NextResponse.json({ error: '消息不能为空' }, { status: 400 });
 
   const thread = await ensureThread({
@@ -683,6 +733,7 @@ export async function POST(req: NextRequest) {
   const persistedUserContent = displayUserMessage || userMessage;
   const userMessageMeta = {
     ...(parsedBody.clientRequestId ? { clientRequestId: parsedBody.clientRequestId } : {}),
+    ...(connectorScope ? { connectorScope } : {}),
     ...(attachments.length > 0
       ? {
           attachments: getAttachmentMetadata(attachments),
@@ -711,7 +762,7 @@ export async function POST(req: NextRequest) {
     content: persistedUserContent,
     meta: Object.keys(userMessageMeta).length > 0 ? userMessageMeta : undefined,
   });
-  const enabledInfoSources = await getEnabledInfoSources(investor.id);
+  const enabledInfoSources = applyConnectorScopeToInfoSources(await getEnabledInfoSources(investor.id), connectorScope);
 
   const payload = {
     userId: investor.email || investor.id,
@@ -728,6 +779,7 @@ export async function POST(req: NextRequest) {
       attachments: getAttachmentMetadata(attachments),
       workspaceAttachments: getAttachmentPayloads(attachments),
       enabledInfoSources,
+      ...(connectorScope ? { connectorScope } : {}),
       codexModel,
       runId: stableRunIdFromMessageId(userThreadMessage.id),
     },
