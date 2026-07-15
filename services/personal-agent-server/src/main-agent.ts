@@ -1,7 +1,7 @@
 import { AgentRegistry } from './agent-registry.js';
-import { buildMemoryContext, inferExplicitMemoryWrite, type MemoryStore } from './memory-store.js';
+import { buildMemoryContext, type MemoryStore } from './memory-store.js';
 import { id, nowIso } from './util.js';
-import type { AgentRoute, TurnStartRequest, TurnStartResponse, AgentEvent, ChildAgentRunInput, RouterDecision, SourceAgentRuntime } from './types.js';
+import type { AgentRoute, TurnStartRequest, TurnStartResponse, AgentEvent, ChildAgentRunInput, RouterDecision, SourceAgentRuntime, MemoryWriteSuggestion } from './types.js';
 import type { HermesRouter } from './hermes-router.js';
 
 export class PersonalMainAgent {
@@ -23,18 +23,7 @@ export class PersonalMainAgent {
       await request.onEvent?.(event);
     };
     const currentUserMessage = readCurrentUserMessage(request);
-
-    const explicitMemory = inferExplicitMemoryWrite(currentUserMessage);
-    const memoryWrites = [];
-    if (explicitMemory) {
-      const entry = await this.memoryStore.suggestWrite(request.userId, explicitMemory);
-      memoryWrites.push(explicitMemory);
-      await emit({
-        type: 'memory.suggested',
-        timestamp: nowIso(),
-        payload: { entry },
-      });
-    }
+    const memoryWrites: MemoryWriteSuggestion[] = [];
 
     const availableProfiles = this.registry.listAvailableProfiles(expandAllowedProfiles(request.allowedAgents));
     await emit({
@@ -205,7 +194,6 @@ function selectBoundaryOverrideProfile(
 }
 
 function isHermesMainOnlyMessage(message: string) {
-  if (inferExplicitMemoryWrite(message)) return true;
   if (/^(instruction|hi|hello|instruction|instruction|instruction|instruction|instruction|ok|instruction)[.!?!,., \s]*$/i.test(message.trim())) return true;
   if (/instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction/.test(message)) return true;
   return false;
@@ -218,7 +206,7 @@ function isCompetitiveIntelligenceMessage(message: string) {
 function buildMainAgentReply(params: {
   message: string;
   memorySnapshotText: string;
-  memoryWrites: unknown[];
+  memoryWrites: MemoryWriteSuggestion[];
   decision: RouterDecision;
 }) {
   if (params.decision.needsClarification && params.decision.clarificationQuestion) {

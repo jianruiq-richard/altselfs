@@ -173,17 +173,6 @@ export class HermesSourceRuntime {
     const connectorScope = getConnectorScope(request.metadata);
     const personalDatatoolNames = await getPersonalDatatoolNames(this.config, investorId, request.userId, connectorScope);
     const profileLoadStartedAtMs = Date.now();
-    const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(
-      request.userId,
-      currentUserMessage,
-      request.threadId
-    );
-    if (rememberedProfile) {
-      await emit('hermes.profile.updated', {
-        profileStorePath: this.config.profileStorePath,
-        entry: rememberedProfile,
-      });
-    }
     const profileSnapshot = await this.profileStore.getSnapshot(request.userId);
     const hermesUserProfile = await readHermesUserProfile(hermesHome);
     const combinedProfile = combineProfileBlocks(profileSnapshot.rendered, hermesUserProfile);

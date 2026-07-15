@@ -62,18 +62,6 @@ export class PostgresUserProfileStore implements UserProfileStore {
     };
   }
 
-  async rememberExplicitUserProfile(userId: string, message: string, threadId?: string) {
-    const content = extractExplicitProfileContent(message);
-    if (!content) return null;
-    return this.saveProfileEntry(
-      userId,
-      content,
-      threadId,
-      'The user explicitly asked to remember this long-term preference or profile detail',
-      0.98
-    );
-  }
-
   async saveReviewedUserProfile(userId: string, content: string, threadId?: string, reason?: string) {
     const normalized = content.trim();
     if (!normalized) return null;
@@ -267,17 +255,6 @@ function rowToMemoryReviewJob(row: Record<string, unknown>): MemoryReviewJob {
     startedAt: row.started_at ? dateishToIso(row.started_at) : undefined,
     completedAt: row.completed_at ? dateishToIso(row.completed_at) : undefined,
   };
-}
-
-function extractExplicitProfileContent(message: string) {
-  const match = message.match(
-    /(?:^|[.!?\n]\s*)(?:please\s+)?(?:remember|save|store|note)\s+(?:that\s+)?(?<content>[\s\S]+)/iu
-  );
-  let content = match?.groups?.content?.trim();
-  if (!content) return '';
-  content = content.replace(/(?:reason|rationale|source)[:：].*$/is, '').trim();
-  content = content.replace(/^(?:that|this|my preference is|my profile is)[:：\s]*/iu, '').trim();
-  return content;
 }
 
 function dateishToIso(value: unknown) {

@@ -191,7 +191,10 @@ export class MemoryReviewWorker {
     const apiKey = process.env[this.config.hermesOpenRouterApiKeyEnv]?.trim();
     const result = apiKey
       ? await this.reviewWithOpenRouter(job, apiKey)
-      : fallbackReviewWithoutModel(job, `${this.config.hermesOpenRouterApiKeyEnv} is missing`);
+      : {
+          memories: [],
+          skipReason: `${this.config.hermesOpenRouterApiKeyEnv} is missing; skipped LLM memory review.`,
+        };
     let savedCount = 0;
     for (const memory of result.memories) {
       const saved = await this.profileStore.saveReviewedUserProfile(
@@ -205,7 +208,7 @@ export class MemoryReviewWorker {
     return {
       stdout: JSON.stringify(
         {
-          mode: apiKey ? 'llm' : 'fallback',
+          mode: apiKey ? 'llm' : 'skipped',
           savedCount,
           skipReason: result.skipReason,
           memories: result.memories,
@@ -331,30 +334,4 @@ function extractCompletionContent(rawCompletion: unknown) {
   const message = first.message;
   if (!isRecord(message)) return '';
   return typeof message.content === 'string' ? message.content : '';
-}
-
-function fallbackReviewWithoutModel(job: MemoryReviewJob, reason: string): MemoryReviewResult {
-  const explicit = extractExplicitMemoryRequest(job.userMessage);
-  if (!explicit) return { memories: [], skipReason: reason };
-  return {
-    memories: [
-      {
-        content: explicit,
-        reason: 'The user explicitly asked to remember this long-term preference or profile detail',
-        confidence: 0.98,
-      },
-    ],
-    skipReason: null,
-  };
-}
-
-function extractExplicitMemoryRequest(message: string) {
-  const match = message.match(
-    /(?:^|[.!?\n]\s*)(?:please\s+)?(?:remember|save|store|note)\s+(?:that\s+)?(?<content>[\s\S]+)/iu
-  );
-  let content = match?.groups?.content?.trim();
-  if (!content) return '';
-  content = content.replace(/(?:reason|rationale|source)[:：].*$/is, '').trim();
-  content = content.replace(/^(?:that|this|my preference is|my profile is)[:：\s]*/iu, '').trim();
-  return content;
 }

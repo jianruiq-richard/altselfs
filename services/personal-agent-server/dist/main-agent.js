@@ -1,4 +1,4 @@
-import { buildMemoryContext, inferExplicitMemoryWrite } from './memory-store.js';
+import { buildMemoryContext } from './memory-store.js';
 import { id, nowIso } from './util.js';
 export class PersonalMainAgent {
     registry;
@@ -21,17 +21,7 @@ export class PersonalMainAgent {
             await request.onEvent?.(event);
         };
         const currentUserMessage = readCurrentUserMessage(request);
-        const explicitMemory = inferExplicitMemoryWrite(currentUserMessage);
         const memoryWrites = [];
-        if (explicitMemory) {
-            const entry = await this.memoryStore.suggestWrite(request.userId, explicitMemory);
-            memoryWrites.push(explicitMemory);
-            await emit({
-                type: 'memory.suggested',
-                timestamp: nowIso(),
-                payload: { entry },
-            });
-        }
         const availableProfiles = this.registry.listAvailableProfiles(expandAllowedProfiles(request.allowedAgents));
         await emit({
             type: 'main.agent_profiles.loaded',
@@ -189,8 +179,6 @@ function selectBoundaryOverrideProfile(message, availableProfiles) {
     return availableProfiles.find((profile) => profile.id === 'codex-general');
 }
 function isHermesMainOnlyMessage(message) {
-    if (inferExplicitMemoryWrite(message))
-        return true;
     if (/^(instruction|hi|hello|instruction|instruction|instruction|instruction|instruction|ok|instruction)[.!?!,., \s]*$/i.test(message.trim()))
         return true;
     if (/instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction/.test(message))

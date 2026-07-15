@@ -15,12 +15,6 @@ export class LocalProfileStore {
             rendered: renderProfile(entries),
         };
     }
-    async rememberExplicitUserProfile(userId, message, threadId) {
-        const content = extractExplicitProfileContent(message);
-        if (!content)
-            return null;
-        return this.saveProfileEntry(userId, content, threadId, 'The user explicitly asked to remember this long-term preference or profile detail');
-    }
     async saveReviewedUserProfile(userId, content, threadId, reason) {
         const normalized = content.trim();
         if (!normalized)
@@ -71,15 +65,6 @@ export class LocalProfileStore {
 }
 function renderProfile(entries) {
     return entries.map((entry) => `- ${entry.content}`).join('\n');
-}
-function extractExplicitProfileContent(message) {
-    const match = message.match(/(?:^|[.!?\n]\s*)(?:please\s+)?(?:remember|save|store|note)\s+(?:that\s+)?(?<content>[\s\S]+)/iu);
-    let content = match?.groups?.content?.trim();
-    if (!content)
-        return '';
-    content = content.replace(/(?:reason|rationale|source)[:：].*$/is, '').trim();
-    content = content.replace(/^(?:that|this|my preference is|my profile is)[:：\s]*/iu, '').trim();
-    return content;
 }
 function normalizeContent(value) {
     return value.replace(/\s+/g, ' ').trim().toLowerCase();

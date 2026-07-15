@@ -20,7 +20,6 @@ export type UserProfileSnapshot = {
 
 export interface UserProfileStore {
   getSnapshot(userId: string): Promise<UserProfileSnapshot>;
-  rememberExplicitUserProfile(userId: string, message: string, threadId?: string): Promise<UserProfileEntry | null>;
   saveReviewedUserProfile(
     userId: string,
     content: string,
@@ -44,12 +43,6 @@ export class LocalProfileStore implements UserProfileStore {
       entries,
       rendered: renderProfile(entries),
     };
-  }
-
-  async rememberExplicitUserProfile(userId: string, message: string, threadId?: string) {
-    const content = extractExplicitProfileContent(message);
-    if (!content) return null;
-    return this.saveProfileEntry(userId, content, threadId, 'The user explicitly asked to remember this long-term preference or profile detail');
   }
 
   async saveReviewedUserProfile(userId: string, content: string, threadId?: string, reason?: string) {
@@ -103,17 +96,6 @@ export class LocalProfileStore implements UserProfileStore {
 
 function renderProfile(entries: UserProfileEntry[]) {
   return entries.map((entry) => `- ${entry.content}`).join('\n');
-}
-
-function extractExplicitProfileContent(message: string) {
-  const match = message.match(
-    /(?:^|[.!?\n]\s*)(?:please\s+)?(?:remember|save|store|note)\s+(?:that\s+)?(?<content>[\s\S]+)/iu
-  );
-  let content = match?.groups?.content?.trim();
-  if (!content) return '';
-  content = content.replace(/(?:reason|rationale|source)[:：].*$/is, '').trim();
-  content = content.replace(/^(?:that|this|my preference is|my profile is)[:：\s]*/iu, '').trim();
-  return content;
 }
 
 function normalizeContent(value: string) {

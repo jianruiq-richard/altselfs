@@ -52,21 +52,3 @@ export function buildMemoryContext(snapshot) {
         '- New memory writes from this turn should be suggested after the turn and take effect next session.',
     ].join('\n');
 }
-export function inferExplicitMemoryWrite(message) {
-    const match = message.match(/(?:^|[.!?\n]\s*)(?:please\s+)?(?:remember|save|store|note)\s+(?:that\s+)?(?<content>[\s\S]+)/iu);
-    const content = match?.groups?.content?.trim();
-    if (!content)
-        return null;
-    return {
-        action: 'add',
-        scope: classifyMemoryScope(content),
-        content,
-        reason: 'Explicit user memory request',
-        confidence: 0.98,
-    };
-}
-function classifyMemoryScope(content) {
-    if (/\b(i|me|my|mine|prefer|preference|remember)\b/i.test(content))
-        return 'user';
-    return 'agent';
-}
