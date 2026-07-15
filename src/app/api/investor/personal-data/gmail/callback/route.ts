@@ -13,18 +13,18 @@ function redirectWithResult(req: NextRequest, status: string, detail?: string) {
 
 function friendlyError(detail: string) {
   const normalized = detail.toLowerCase();
-  if (normalized.includes('redirect_uri_mismatch')) return 'Gmail 回调地址不匹配，请检查 Google OAuth redirect URI。';
-  if (normalized.includes('invalid_grant')) return 'Gmail 授权码无效或已过期，请重新绑定。';
-  if (normalized.includes('credential vault')) return '后端密钥保险箱未配置，请先配置 ECS secret。';
-  if (normalized.includes('ops_agent_token')) return '后端 internal API 授权未配置。';
+  if (normalized.includes('redirect_uri_mismatch')) return 'Gmail message, message Google OAuth redirect URI.';
+  if (normalized.includes('invalid_grant')) return 'Gmail message, messageReconnect.';
+  if (normalized.includes('credential vault')) return 'message, message ECS secret.';
+  if (normalized.includes('ops_agent_token')) return 'message internal API message.';
   if (
     normalized.includes('und_err_connect_timeout') ||
     normalized.includes('connect timeout') ||
     normalized.includes('fetch failed')
   ) {
-    return 'Gmail 授权成功，但连接后端保存授权信息超时，请稍后重试或联系管理员检查 personal-agent-server 网络。';
+    return 'Gmail message, messageSavemessage, message personal-agent-server message.';
   }
-  return 'Gmail 绑定失败，请稍后重试或联系管理员。';
+  return 'Gmail connection failed, message.';
 }
 
 export async function GET(req: NextRequest) {
@@ -36,9 +36,9 @@ export async function GET(req: NextRequest) {
   const error = req.nextUrl.searchParams.get('error');
   const stateCookie = req.cookies.get('oauth_state_personal_gmail')?.value;
 
-  if (error) return redirectWithResult(req, 'error', `授权失败：${error}`);
-  if (!state || !stateCookie || state !== stateCookie) return redirectWithResult(req, 'error', '授权状态校验失败，请重试');
-  if (!code) return redirectWithResult(req, 'error', '缺少授权码');
+  if (error) return redirectWithResult(req, 'error', `messagefailed: ${error}`);
+  if (!state || !stateCookie || state !== stateCookie) return redirectWithResult(req, 'error', 'messagefailed, message');
+  if (!code) return redirectWithResult(req, 'error', 'message');
 
   try {
     const token = await exchangeGoogleReadonlyCode(req.nextUrl.origin, code);

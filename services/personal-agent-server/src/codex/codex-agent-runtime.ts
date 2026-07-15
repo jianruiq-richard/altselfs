@@ -4,23 +4,23 @@ import { CodexJsonRpcClient } from './json-rpc-client.js';
 import { projectCodexNotification } from './event-projector.js';
 import { buildMemoryContext } from '../memory-store.js';
 import { isRecord, nowIso, safeJson, truncate } from '../util.js';
-import { createWebSearchDynamicTool, runWebSearchTool } from '../tools/web-search.js';
+import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-search.js';
 import {
-  createRapidApiCompetitorDynamicTools,
-  getRapidApiCompetitorToolNamesForProviders,
-  isRapidApiCompetitorTool,
-  runRapidApiCompetitorTool,
+  createRapidApiCompetitorDynamictools,
+  getRapidApiCompetitortoolNamesForProviders,
+  isRapidApiCompetitortool,
+  runRapidApiCompetitortool,
 } from '../tools/rapidapi-competitor.js';
 import {
-  createSandboxExecDynamicTool,
-  isSandboxExecTool,
-  runSandboxExecTool,
+  createSandboxExecDynamictool,
+  isSandboxExectool,
+  runSandboxExectool,
   type SandboxExecContext,
 } from '../tools/sandbox-exec.js';
 import {
-  createPersonalDataDynamicTools,
-  isPersonalDataTool,
-  runPersonalDataTool,
+  createPersonalDataDynamictools,
+  isPersonalDatatool,
+  runPersonalDatatool,
 } from '../tools/personal-data.js';
 import { acquireSharedOpenAiAuthLock, type SharedOpenAiAuthLock } from './openai-auth-lock.js';
 import type { ChildAgentRunInput, ChildAgentRunResult, ChildAgentRuntime, AgentEvent } from '../types.js';
@@ -40,7 +40,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
   constructor(private config: ServerConfig) {}
 
   canHandle(input: ChildAgentRunInput) {
-    return /代码|修改|修复|部署|git|文件|脚本|终端|shell|build|lint|测试|canvas|API|数据库|Prisma|Next/i.test(input.message);
+    return /instruction|instruction|instruction|instruction|git|instruction|instruction|instruction|shell|build|lint|instruction|canvas|API|instruction|Prisma|Next/i.test(input.message);
   }
 
   async run(input: ChildAgentRunInput): Promise<ChildAgentRunResult> {
@@ -93,13 +93,13 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         },
       });
       await activeClient.initialize();
-      const dynamicTools = nonLocalProfile ? await this.buildDynamicTools(input, modelSelection) : undefined;
+      const dynamictools = nonLocalProfile ? await this.buildDynamictools(input, modelSelection) : undefined;
       const thread = await activeClient.request(
         'thread/start',
         {
           cwd: workspace,
           ...(localEnvironmentDisabled ? { environments: [] } : {}),
-          ...(nonLocalProfile ? { dynamicTools } : {}),
+          ...(nonLocalProfile ? { dynamictools } : {}),
           ...(modelSelection.model ? { model: modelSelection.model } : {}),
           ...(modelSelection.provider ? { modelProvider: modelSelection.provider } : {}),
           developerInstructions: this.buildDeveloperInstructions(input.profileId, input.metadata, modelSelection),
@@ -116,7 +116,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : undefined,
         workspace,
       };
-      const personalToolContext = {
+      const personaltoolContext = {
         userId: input.userId,
         investorId: typeof input.metadata?.investorId === 'string' && input.metadata.investorId.trim()
           ? input.metadata.investorId.trim()
@@ -125,13 +125,13 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : undefined,
       };
       activeClient.on('serverRequest', (request: Record<string, unknown>) => {
-        this.handleServerRequest(activeClient, request, emit, sandboxExecContext, personalToolContext).then((handled) => {
+        this.handleServerRequest(activeClient, request, emit, sandboxExecContext, personaltoolContext).then((handled) => {
           if (handled === 'web_search') usedExternalSearch = true;
         });
       });
 
       activeClient.on('notification', (notification: Record<string, unknown>) => {
-        if (localEnvironmentDisabled && this.isProhibitedLocalToolNotification(notification)) {
+        if (localEnvironmentDisabled && this.isProhibitedLocaltoolNotification(notification)) {
           policyViolationMessage = `${input.profileId || 'codex-general'} is not allowed to use local command, file, patch, or image tools`;
           void emit({
             type: 'codex.policy_violation',
@@ -202,7 +202,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       });
       return {
         route: 'codex',
-        reply: `Codex app-server 执行失败：${message}`,
+        reply: `Codex app-server Execution failed: ${message}`,
         events,
         raw: { codexThreadId, stderr: client?.stderrTail(20) || [] },
       };
@@ -325,7 +325,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       }
       input.push({
         type: 'text',
-        text: `[附件 ${attachment.name} 是 ${attachment.kind}/${attachment.type}，Codex app-server 不支持把这种文件作为 turn input 直接传入。]`,
+        text: `[instruction ${attachment.name} instruction ${attachment.kind}/${attachment.type}, Codex app-server instruction turn input instruction.]`,
       });
     }
     return input;
@@ -337,20 +337,20 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     return dir;
   }
 
-  private async buildDynamicTools(input: ChildAgentRunInput, selection: CodexModelSelection) {
-    const tools: unknown[] = selection.provider === 'openai' ? [] : [createWebSearchDynamicTool()];
-    if (this.config.sandboxExecEnabled) tools.push(createSandboxExecDynamicTool());
+  private async buildDynamictools(input: ChildAgentRunInput, selection: CodexModelSelection) {
+    const tools: unknown[] = selection.provider === 'openai' ? [] : [createWebSearchDynamictool()];
+    if (this.config.sandboxExecEnabled) tools.push(createSandboxExecDynamictool());
     if (input.profileId === 'codex-competitive-intelligence') {
       const connectorScope = getConnectorScope(input.metadata);
       const enabledCompetitorSources = filterByConnectorScope(
         getEnabledInfoSourceNames(input.metadata),
         connectorScope.enabledConnectorKeys
       );
-      tools.push(...createRapidApiCompetitorDynamicTools(enabledCompetitorSources));
+      tools.push(...createRapidApiCompetitorDynamictools(enabledCompetitorSources));
     }
     const investorId = typeof input.metadata?.investorId === 'string' ? input.metadata.investorId : undefined;
     const connectorScope = getConnectorScope(input.metadata);
-    tools.push(...await createPersonalDataDynamicTools(this.config, {
+    tools.push(...await createPersonalDataDynamictools(this.config, {
       investorId,
       userId: input.userId,
       enabledProviders: connectorScope.personalProviderKeys,
@@ -364,7 +364,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     request: Record<string, unknown>,
     emit: (event: AgentEvent) => Promise<void>,
     sandboxExecContext: SandboxExecContext,
-    personalToolContext: { userId: string; investorId: string; threadId?: string; runId?: string }
+    personaltoolContext: { userId: string; investorId: string; threadId?: string; runId?: string }
   ): Promise<'web_search' | 'handled'> {
     const method = String(request.method || '');
     const requestId = request.id;
@@ -374,31 +374,31 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       const namespace = typeof params.namespace === 'string' ? params.namespace : '';
       const tool = typeof params.tool === 'string' ? params.tool : '';
       if ((!namespace && tool === 'altselfs_web_search') || (namespace === 'altselfs' && tool === 'web_search')) {
-        const resultText = await runWebSearchTool(params.arguments, this.config);
+        const resultText = await runWebSearchtool(params.arguments, this.config);
         client.respond(requestId, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: true,
         });
         return 'web_search';
       }
-      if (!namespace && isRapidApiCompetitorTool(tool)) {
-        const resultText = await runRapidApiCompetitorTool(tool, params.arguments, this.config);
+      if (!namespace && isRapidApiCompetitortool(tool)) {
+        const resultText = await runRapidApiCompetitortool(tool, params.arguments, this.config);
         client.respond(requestId, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: true,
         });
         return 'handled';
       }
-      if (!namespace && isPersonalDataTool(tool)) {
-        const resultText = await runPersonalDataTool(tool, params.arguments, this.config, personalToolContext);
+      if (!namespace && isPersonalDatatool(tool)) {
+        const resultText = await runPersonalDatatool(tool, params.arguments, this.config, personaltoolContext);
         client.respond(requestId, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: !resultText.includes('"error"'),
         });
         return 'handled';
       }
-      if ((!namespace && isSandboxExecTool(tool)) || (namespace === 'altselfs' && tool === 'sandbox_exec')) {
-        const resultText = await runSandboxExecTool(params.arguments, this.config, sandboxExecContext);
+      if ((!namespace && isSandboxExectool(tool)) || (namespace === 'altselfs' && tool === 'sandbox_exec')) {
+        const resultText = await runSandboxExectool(params.arguments, this.config, sandboxExecContext);
         client.respond(requestId, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: !resultText.includes('"error"'),
@@ -428,7 +428,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     metadata?: Record<string, unknown>,
     selection?: CodexModelSelection
   ) {
-    const currentTime = new Intl.DateTimeFormat('zh-CN', {
+    const currentTime = new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Shanghai',
       dateStyle: 'full',
       timeStyle: 'long',
@@ -446,9 +446,9 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
 
     if (profileId === 'codex-competitive-intelligence') {
       const enabledCompetitorSources = getEnabledInfoSourceNames(metadata);
-      const enabledToolNames = getRapidApiCompetitorToolNamesForProviders(enabledCompetitorSources);
-      const competitorToolInstruction = enabledToolNames.length > 0
-        ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledToolNames.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
+      const enabledtoolNames = getRapidApiCompetitortoolNamesForProviders(enabledCompetitorSources);
+      const competitortoolInstruction = enabledtoolNames.length > 0
+        ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledtoolNames.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
         : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data; use public web fallback only when appropriate and state the limitation.';
       const publicWebFallbackInstruction = selection?.provider === 'openai'
         ? '- Treat native web.run as the public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.'
@@ -466,7 +466,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
           : '- Sandboxed command execution is not enabled in this environment. Do not run shell commands, scripts, package managers, or local code.',
         '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.',
         '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.',
-        competitorToolInstruction,
+        competitortoolInstruction,
         '- Treat these RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used in the answer.',
         '- Similarweb, Google, YouTube, X/Twitter, Facebook, WeChat, Xiaohongshu, Gmail, and Feishu may be used only when actually available/enabled in the turn.',
         publicWebFallbackInstruction,
@@ -498,7 +498,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       '- Use conversation and reasoning for tasks that do not need external data.',
       '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',
       generalPublicWebInstruction,
-      '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.',
+      '- In Altselfs context, OPC usually means One Person Company / instruction unless the user explicitly says OPC UA or industrial automation.',
       '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.',
       '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
     ].join('\n');
@@ -513,10 +513,10 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
   }
 
   private requiresCurrentExternalInfo(message: string) {
-    return /联网|搜索|搜集|今日|今天|最新|新闻|资讯|行业|市场|动态|current|latest|today|news|web/i.test(message);
+    return /instruction|instruction|instruction|Today|instruction|instruction|instruction|instruction|instruction|instruction|instruction|current|latest|today|news|web/i.test(message);
   }
 
-  private isProhibitedLocalToolNotification(notification: Record<string, unknown>) {
+  private isProhibitedLocaltoolNotification(notification: Record<string, unknown>) {
     const method = String(notification.method || '').toLowerCase();
     if (
       method.includes('commandexecution') ||

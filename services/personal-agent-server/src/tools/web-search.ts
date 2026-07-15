@@ -10,7 +10,7 @@ export type WebSearchResult = {
   publishedDate?: string;
 };
 
-export function createWebSearchDynamicTool() {
+export function createWebSearchDynamictool() {
   return {
     namespace: null,
     name: 'altselfs_web_search',
@@ -29,7 +29,7 @@ export function createWebSearchDynamicTool() {
   };
 }
 
-export async function runWebSearchTool(argumentsValue: unknown, config: ServerConfig) {
+export async function runWebSearchtool(argumentsValue: unknown, config: ServerConfig) {
   const args = isRecord(argumentsValue) ? argumentsValue : {};
   const query = typeof args.query === 'string' ? args.query.trim() : '';
   const recency = typeof args.recency === 'string' ? args.recency.trim() : undefined;
@@ -175,7 +175,7 @@ async function bingSearch(query: string, recency: string | undefined, config: Se
   const endpoint = new URL(config.bingSearchEndpoint);
   endpoint.searchParams.set('q', query);
   endpoint.searchParams.set('count', '8');
-  endpoint.searchParams.set('mkt', 'zh-CN');
+  endpoint.searchParams.set('mkt', 'en-US');
   const freshness = bingFreshness(recency);
   if (freshness) endpoint.searchParams.set('freshness', freshness);
   const response = await fetchJsonWithTimeout(endpoint.toString(), {

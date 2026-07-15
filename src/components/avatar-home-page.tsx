@@ -31,7 +31,7 @@ function defaultTwinName(input: {
   phone?: string | null;
 }) {
   const base = deriveTwinDisplayBase(input);
-  return base ? `${base} 的数字分身` : '我的数字分身';
+  return base ? `${base} content` : 'My Digital Twin';
 }
 
 function pickVisitorEmoji(seed: string) {
@@ -45,22 +45,22 @@ function buildMockConversations(baseAvatarId: string): ReceivedConversationItem[
   const now = Date.now();
   const samples: Array<{ name: string; title: string; summary: string; message: string }> = [
     {
-      name: '张伟',
-      title: '产品经理',
-      message: '想了解一下你在 AI 投资中的评估标准',
-      summary: '访客重点询问了投资判断维度，系统展示了你在赛道、团队和执行力方面的筛选逻辑。',
+      name: 'content',
+      title: 'content',
+      message: 'content AI content',
+      summary: 'contentDecidecontent, content, content.',
     },
     {
-      name: '李娜',
-      title: '创业者',
-      message: '我们团队想请你点评当前的商业模式',
-      summary: '访客描述了当前项目商业模式，系统围绕目标用户、收入模型和竞争差异化给出建议。',
+      name: 'content',
+      title: 'content',
+      message: 'content',
+      summary: 'content, content, content.',
     },
     {
-      name: '王强',
-      title: '技术负责人',
-      message: '请帮我看下技术路线和融资节奏是否匹配',
-      summary: '访客咨询技术路线与融资节奏匹配问题，系统建议按阶段目标拆分里程碑并同步优化叙事。',
+      name: 'content',
+      title: 'Technicalcontent',
+      message: 'contentTechnicalcontent',
+      summary: 'contentTechnicalcontent, content.',
     },
   ];
 
@@ -181,9 +181,9 @@ export default async function AvatarHomePage() {
           email: dbUser.email,
           phone: dbUser.phone,
         }),
-        description: '这是你的默认数字分身，可在此持续完善它的表达与知识。',
+        description: 'contentdefaultcontent, content.',
         systemPrompt:
-          '你是该用户的数字分身。请保持专业、清晰、真诚的表达，基于已知信息回答问题；信息不足时主动追问，不要编造事实。',
+          'content.content, content, content, content; content, content.',
         status: 'ACTIVE',
       },
     });
@@ -223,8 +223,8 @@ export default async function AvatarHomePage() {
 
   const receivedConversationsRaw: ReceivedConversationItem[] = defaultAvatarRecord.chats
     .map((chat) => {
-      const visitorName = chat.candidate.nickname || chat.candidate.name || '匿名访客';
-      const lastMessage = chat.messages[0]?.content || chat.qualificationReason || '开始了新的对话';
+      const visitorName = chat.candidate.nickname || chat.candidate.name || 'content';
+      const lastMessage = chat.messages[0]?.content || chat.qualificationReason || 'content';
       return {
         id: chat.id,
         avatarId: defaultAvatarRecord.id,
@@ -232,7 +232,7 @@ export default async function AvatarHomePage() {
         visitor: {
           name: visitorName,
           avatar: pickVisitorEmoji(`${chat.candidate.id}-${chat.id}`),
-          title: chat.candidate.nickname ? '已注册用户' : '访客',
+          title: chat.candidate.nickname ? 'contentSign upcontent' : 'content',
         },
         lastMessage,
         messageCount: chat._count.messages,
@@ -242,7 +242,7 @@ export default async function AvatarHomePage() {
         aiSummary:
           chat.summary ||
           chat.qualificationReason ||
-          `该对话围绕 ${defaultAvatarRecord.name} 的关注方向展开，当前建议继续补充关键信息后再进一步跟进。`,
+          `content ${defaultAvatarRecord.name} contentExpand, content.`,
       };
     })
     .sort((a, b) => +new Date(b.lastActiveTime) - +new Date(a.lastActiveTime));

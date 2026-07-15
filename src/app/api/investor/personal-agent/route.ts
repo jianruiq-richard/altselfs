@@ -4,7 +4,7 @@ import { getInvestorOrNull } from '@/lib/investor-auth';
 import { prisma } from '@/lib/prisma';
 import {
   appendThreadMessage,
-  appendToolCall,
+  appendtoolCall,
   createThread,
   ensureThread,
   getLatestThreadWithMessages,
@@ -37,7 +37,7 @@ type PersonalAgentResponse = {
   error?: string;
 };
 
-type CompetitorDataToolAudit = {
+type CompetitorDatatoolAudit = {
   toolName: string;
   toolArgs: unknown;
   eventType: string;
@@ -124,7 +124,7 @@ function parseConnectorScopeJson(value: string) {
   try {
     return normalizeConnectorScope(JSON.parse(value) as unknown);
   } catch {
-    throw Object.assign(new Error('connectorScope 字段不是有效的 JSON。'), { status: 400 });
+    throw Object.assign(new Error('connectorScope message JSON.'), { status: 400 });
   }
 }
 
@@ -235,7 +235,7 @@ function parseMessagesJson(value: string) {
   try {
     return normalizeMessages(JSON.parse(value) as unknown);
   } catch {
-    throw Object.assign(new Error('messages 字段不是有效的 JSON。'), { status: 400 });
+    throw Object.assign(new Error('messages message JSON.'), { status: 400 });
   }
 }
 
@@ -319,7 +319,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     form = await req.formData();
   } catch {
     throw Object.assign(
-      new Error('附件上传请求解析失败：PDF 可能超过上传上限，或请求体被 Next 代理截断。请重启 npm run dev 后重试；单个附件请控制在 20MB 内。'),
+      new Error('messagefailed: PDF message, message Next message.message npm run dev message; message 20MB message.'),
       { status: 413 }
     );
   }
@@ -334,16 +334,16 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     .filter((value): value is File => typeof File !== 'undefined' && value instanceof File && value.size > 0);
 
   if (files.length > maxFiles) {
-    throw Object.assign(new Error(`最多支持一次上传 ${maxFiles} 个附件。`), { status: 400 });
+    throw Object.assign(new Error(`message ${maxFiles} attachments.`), { status: 400 });
   }
 
   const oversized = files.find((file) => file.size > maxFileBytes);
   if (oversized) {
-    throw Object.assign(new Error(`附件 ${oversized.name} 超过大小限制。`), { status: 400 });
+    throw Object.assign(new Error(`message ${oversized.name} message.`), { status: 400 });
   }
 
   const attachments = await Promise.all(files.map(fileToAttachment));
-  const fallbackMessage = attachments.length > 0 ? '请分析我上传的附件。' : '';
+  const fallbackMessage = attachments.length > 0 ? 'message.' : '';
   const userMessage = explicitMessage || latestUserMessage(messages) || fallbackMessage;
   const displayUserMessage = displayMessage || latestUserMessage(messages) || userMessage;
 
@@ -389,7 +389,7 @@ const COMPETITOR_DATA_TOOL_NAMES = new Set([
   'altselfs_domain_metrics_check',
 ]);
 
-function extractCompetitorDataToolAudit(event: unknown): CompetitorDataToolAudit | null {
+function extractCompetitorDatatoolAudit(event: unknown): CompetitorDatatoolAudit | null {
   if (!isRecord(event)) return null;
   const eventType = typeof event.type === 'string' ? event.type : '';
   const payload = isRecord(event.payload) ? event.payload : {};
@@ -406,16 +406,16 @@ function extractCompetitorDataToolAudit(event: unknown): CompetitorDataToolAudit
   };
 }
 
-async function persistCompetitorDataToolAudits(params: {
+async function persistCompetitorDatatoolAudits(params: {
   threadId: string;
   messageId: string | null;
   events: unknown[] | undefined;
 }) {
   const audits = (params.events || [])
-    .map(extractCompetitorDataToolAudit)
-    .filter((audit): audit is CompetitorDataToolAudit => Boolean(audit));
+    .map(extractCompetitorDatatoolAudit)
+    .filter((audit): audit is CompetitorDatatoolAudit => Boolean(audit));
   for (const audit of audits) {
-    await appendToolCall({
+    await appendtoolCall({
       threadId: params.threadId,
       messageId: params.messageId,
       toolName: audit.toolName,
@@ -487,12 +487,12 @@ async function syncTerminalPersonalAgentRun(params: {
   const reply = terminalRun.status === 'SUCCESS'
     ? (typeof terminalRun.result.reply === 'string' && terminalRun.result.reply.trim()
         ? terminalRun.result.reply.trim()
-        : '个人 Agent 已完成本轮处理，但没有返回可展示的回复。')
+        : 'message Agent Completedmessage, message.')
     : terminalRun.status === 'CANCELLED'
-      ? '已停止本次执行。'
+      ? 'messageStopmessage.'
       : terminalRun.status === 'TIMEOUT'
-        ? `执行超时：${terminalRun.error || '任务超过运行时间限制'}`
-      : `执行失败：${terminalRun.error || '发送失败'}`;
+        ? `message: ${terminalRun.error || 'message'}`
+      : `Execution failed: ${terminalRun.error || 'Sendfailed'}`;
 
   const existingMessages = await prisma.agentMessage.findMany({
     where: {
@@ -516,7 +516,7 @@ async function syncTerminalPersonalAgentRun(params: {
       route: terminalRun.route || (typeof terminalRun.result.route === 'string' ? terminalRun.result.route : undefined),
       raw: terminalRun.result.raw ?? null,
       runId: terminalRun.id,
-      error: terminalRun.status === 'ERROR' ? terminalRun.error || '发送失败' : undefined,
+      error: terminalRun.status === 'ERROR' ? terminalRun.error || 'Sendfailed' : undefined,
       cancelled: terminalRun.status === 'CANCELLED' || undefined,
       source: 'personal-agent-async',
     },
@@ -525,7 +525,7 @@ async function syncTerminalPersonalAgentRun(params: {
   const recentEvents = Array.isArray(params.statusPayload.recentEvents)
     ? params.statusPayload.recentEvents.map(storedRunEventToAgentEvent).filter(Boolean)
     : [];
-  await persistCompetitorDataToolAudits({
+  await persistCompetitorDatatoolAudits({
     threadId: params.threadId,
     messageId: null,
     events: recentEvents,
@@ -650,7 +650,7 @@ export async function GET(req: NextRequest) {
       });
     } catch (error) {
       return NextResponse.json(
-        { error: `个人 Agent 状态服务不可用：${error instanceof Error ? error.message : String(error)}` },
+        { error: `message Agent message: ${error instanceof Error ? error.message : String(error)}` },
         { status: 502 }
       );
     }
@@ -696,7 +696,7 @@ export async function PUT(req: NextRequest) {
   const thread = await createThread({
     investorId: investor.id,
     agentType: PERSONAL_AGENT_TYPE,
-    title: title || '新会话',
+    title: title || 'message',
   });
   const sessions = await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE);
 
@@ -717,12 +717,12 @@ export async function POST(req: NextRequest) {
     parsedBody = await parsePostBody(req);
   } catch (error) {
     const status = isRecord(error) && typeof error.status === 'number' ? error.status : 400;
-    const detail = error instanceof Error ? error.message : '请求格式不正确';
+    const detail = error instanceof Error ? error.message : 'message';
     return NextResponse.json({ error: detail }, { status });
   }
 
   const { messages, userMessage, displayUserMessage, attachments, codexModel, connectorScope } = parsedBody;
-  if (!userMessage && attachments.length === 0) return NextResponse.json({ error: '消息不能为空' }, { status: 400 });
+  if (!userMessage && attachments.length === 0) return NextResponse.json({ error: 'message' }, { status: 400 });
 
   const thread = await ensureThread({
     investorId: investor.id,
@@ -806,7 +806,7 @@ export async function POST(req: NextRequest) {
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      return NextResponse.json({ error: `个人 Agent 服务不可用：${detail}` }, { status: 502 });
+      return NextResponse.json({ error: `message Agent message: ${detail}` }, { status: 502 });
     }
 
     const [page, sessions] = await Promise.all([
@@ -861,12 +861,12 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: `个人 Agent 服务不可用：${detail}` }, { status: 502 });
+    return NextResponse.json({ error: `message Agent message: ${detail}` }, { status: 502 });
   }
 
   const reply = typeof result.reply === 'string' && result.reply.trim()
     ? result.reply.trim()
-    : '个人 Agent 已完成本轮处理，但没有返回可展示的回复。';
+    : 'message Agent Completedmessage, message.';
 
   await appendThreadMessage({
     threadId: thread.id,
@@ -877,7 +877,7 @@ export async function POST(req: NextRequest) {
       raw: result.raw,
     },
   });
-  await persistCompetitorDataToolAudits({
+  await persistCompetitorDatatoolAudits({
     threadId: thread.id,
     messageId: userThreadMessage.id,
     events: Array.isArray(result.events) ? result.events : [],
@@ -934,7 +934,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
-      { error: `停止个人 Agent 失败：${error instanceof Error ? error.message : String(error)}` },
+      { error: `Stopmessage Agent failed: ${error instanceof Error ? error.message : String(error)}` },
       { status: 502 }
     );
   }
@@ -1016,7 +1016,7 @@ function streamPersonalAgentTurn(params: {
                 finalResult = parsed.result as PersonalAgentStreamResult;
                 continue;
               }
-              if (parsed.type === 'event' && isRecord(parsed.event) && extractCompetitorDataToolAudit(parsed.event)) {
+              if (parsed.type === 'event' && isRecord(parsed.event) && extractCompetitorDatatoolAudit(parsed.event)) {
                 competitorDataEvents.push(parsed.event);
               }
               write(parsed);
@@ -1027,7 +1027,7 @@ function streamPersonalAgentTurn(params: {
             const parsed = parseStreamLine(buffer);
             if (parsed?.type === 'final' && isRecord(parsed.result)) {
               finalResult = parsed.result as PersonalAgentStreamResult;
-            } else if (parsed?.type === 'event' && isRecord(parsed.event) && extractCompetitorDataToolAudit(parsed.event)) {
+            } else if (parsed?.type === 'event' && isRecord(parsed.event) && extractCompetitorDatatoolAudit(parsed.event)) {
               competitorDataEvents.push(parsed.event);
               write(parsed);
             } else if (parsed) {
@@ -1037,11 +1037,11 @@ function streamPersonalAgentTurn(params: {
 
           const reply = typeof finalResult?.reply === 'string' && finalResult.reply.trim()
             ? finalResult.reply.trim()
-            : '个人 Agent 已完成本轮处理，但没有返回可展示的回复。';
+            : 'message Agent Completedmessage, message.';
 
           if (finalResult?.cancelled || finalResult?.error) {
-            const finalErrorMessage = finalResult.error || (finalResult.cancelled ? '已停止本次执行。' : '发送失败');
-            const persistedErrorReply = finalResult.cancelled ? finalErrorMessage : `执行失败：${finalErrorMessage}`;
+            const finalErrorMessage = finalResult.error || (finalResult.cancelled ? 'messageStopmessage.' : 'Sendfailed');
+            const persistedErrorReply = finalResult.cancelled ? finalErrorMessage : `Execution failed: ${finalErrorMessage}`;
             await appendThreadMessage({
               threadId: params.threadId,
               role: 'ASSISTANT',
@@ -1086,7 +1086,7 @@ function streamPersonalAgentTurn(params: {
               raw: finalResult?.raw,
             },
           });
-          await persistCompetitorDataToolAudits({
+          await persistCompetitorDatatoolAudits({
             threadId: params.threadId,
             messageId: params.userMessageId,
             events: competitorDataEvents,
@@ -1110,7 +1110,7 @@ function streamPersonalAgentTurn(params: {
             type: 'final',
             status: 502,
             data: {
-              error: `个人 Agent 服务不可用：${error instanceof Error ? error.message : String(error)}`,
+              error: `message Agent message: ${error instanceof Error ? error.message : String(error)}`,
             },
           });
         } finally {

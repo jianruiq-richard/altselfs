@@ -28,7 +28,7 @@ type SandboxExecArgs = {
   useProxy: boolean;
 };
 
-export function createSandboxExecDynamicTool() {
+export function createSandboxExecDynamictool() {
   return {
     namespace: null,
     name: 'altselfs_sandbox_exec',
@@ -66,11 +66,11 @@ export function createSandboxExecDynamicTool() {
   };
 }
 
-export function isSandboxExecTool(toolName: string) {
+export function isSandboxExectool(toolName: string) {
   return toolName === 'altselfs_sandbox_exec';
 }
 
-export async function runSandboxExecTool(
+export async function runSandboxExectool(
   argumentsValue: unknown,
   config: ServerConfig,
   context: SandboxExecContext = {}

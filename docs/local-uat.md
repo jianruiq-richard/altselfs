@@ -1,64 +1,64 @@
-# AltSelfs 本地人工验收清单（10-15 分钟）
+# AltSelfs Localized documentation (10-15 Localized documentation)
 
-## 0. 启动
+## 0. Localized documentation
 
 ```bash
 npm run dev -- --webpack --hostname 127.0.0.1 --port 3001
 ```
 
-访问：`http://127.0.0.1:3001`
+Localized documentation: `http://127.0.0.1:3001`
 
-## 1. 基础页
+## 1. Localized documentation
 
-1. 打开首页 `/`，确认两个入口卡片都可见，文字对比清晰。
-2. 点击投资人入口，未登录时应跳转登录。
-3. 点击人选入口，未登录时应跳转登录。
+1. Localized documentation `/`, Localized documentation, Localized documentation.
+2. Localized documentation, Localized documentationSign inLocalized documentationSign in.
+3. Localized documentation, Localized documentationSign inLocalized documentationSign in.
 
-## 2. 投资人端流程
+## 2. Localized documentation
 
-1. 使用投资人账号登录。
-2. 首次登录进入身份确认，选择“投资人”，应进入 `/dashboard`（访问 `/investor` 也应自动跳转到 `/dashboard`）。
-3. 创建一个分身（名称、简介、system prompt）。
-4. 在控制台看到新分身卡片，且“管理/对话记录”按钮可点。
-5. 进入分身管理页 `/avatar/[id]`，修改简介或状态并保存成功。
+1. Localized documentationaccountsSign in.
+2. Localized documentationSign inLocalized documentationRoleLocalized documentation, Localized documentation"Localized documentation", Localized documentation `/dashboard` (Localized documentation `/investor` Localized documentation `/dashboard`).
+3. Localized documentation (Localized documentation, Localized documentation, system prompt).
+4. Localized documentation, Localized documentation"Localized documentation/Conversation history"Localized documentation.
+5. Localized documentation `/avatar/[id]`, Localized documentationSaveLocalized documentation.
 
-预期：
-- 保存后刷新仍保留修改。
-- 页面不报 500。
+Localized documentation: 
+- SaveLocalized documentation.
+- Localized documentation 500.
 
-## 3. 人选端流程
+## 3. Localized documentation
 
-1. 退出投资人账号，使用人选账号登录。
-2. 首次登录选择“创业者”，进入 `/candidate`。
-3. 看到投资人分身卡片，点击“开始对话”。
-4. 连续发送 3-5 条项目信息。
+1. Sign outLocalized documentationaccounts, Localized documentationaccountsSign in.
+2. Localized documentationSign inLocalized documentation"Localized documentation", Localized documentation `/candidate`.
+3. Localized documentation, Localized documentation"Start conversation".
+4. Localized documentationSend 3-5 Localized documentation.
 
-预期：
-- AI能正常回复。
-- 聊天无白屏/无报错。
+Localized documentation: 
+- AILocalized documentation.
+- Localized documentation/Localized documentation.
 
-## 4. 核心目标验证（AI筛选后再介入）
+## 4. Localized documentation (AILocalized documentation)
 
-1. 切回投资人账号，进入该分身的“对话记录”。
-2. 打开刚才的人选会话。
+1. Localized documentationaccounts, Localized documentation"Conversation history".
+2. Localized documentation.
 
-预期：
-- 能看到 `AI评估分数`、状态（已达标/待补充/不建议）。
-- 若状态为已达标，显示“建议你立即介入”或“建议你现在亲自介入”。
-- 能看到对话总结与评估理由。
+Localized documentation: 
+- Localized documentation `AI qualification score`, Localized documentation (Qualified/Needs more information/Not recommended).
+- Localized documentationQualified, Localized documentation"Localized documentation"Localized documentation"Recommended: step in personally now".
+- Localized documentationConversation summaryLocalized documentation.
 
-## 5. 安全验证
+## 5. Localized documentation
 
-1. 用人选账号直接访问 `/api/avatar/<avatarId>`（浏览器打开即可）。
-2. 检查返回 JSON。
+1. Localized documentationaccountsLocalized documentation `/api/avatar/<avatarId>` (Localized documentation).
+2. Localized documentation JSON.
 
-预期：
-- 不应出现 `systemPrompt` 字段。
+Localized documentation: 
+- Localized documentation `systemPrompt` Localized documentation.
 
-## 6. 自动验收脚本（可选）
+## 6. Localized documentation (Localized documentation)
 
 ```bash
 ./scripts/local-acceptance.sh
 ```
 
-该脚本会自动检查：lint、build、db push、dev 启动、关键路由/API 非 500。
+Localized documentation: lint, build, db push, dev Localized documentation, Localized documentation/API Localized documentation 500.

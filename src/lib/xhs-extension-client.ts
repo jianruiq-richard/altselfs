@@ -26,7 +26,7 @@ function randomId() {
 function sendBridgeRequest<T extends ExtensionResponsePayload>(type: string, timeoutMs = 4000) {
   return new Promise<T>((resolve, reject) => {
     if (typeof window === 'undefined') {
-      reject(new Error('当前环境不支持浏览器扩展通信'));
+      reject(new Error('This environment does not support browser extension messaging'));
       return;
     }
 
@@ -49,7 +49,7 @@ function sendBridgeRequest<T extends ExtensionResponsePayload>(type: string, tim
     const timer = window.setTimeout(() => {
       if (settled) return;
       cleanup();
-      reject(new Error('未检测到小红书扩展响应，请先安装并刷新页面'));
+      reject(new Error('No Xiaohongshu extension response detected. Install the extension and refresh the page first.'));
     }, timeoutMs);
 
     window.addEventListener('message', onMessage);
@@ -74,13 +74,13 @@ export async function detectXhsExtension() {
 export async function connectXhsExtension() {
   const result = await sendBridgeRequest<ExtensionResponsePayload>('XHS_EXTENSION_CONNECT', 8000);
   if (!result.ok || !result.cookies) {
-    const error = new Error(result.error || '浏览器扩展未返回有效登录态') as Error & { debug?: unknown };
+    const error = new Error(result.error || 'sign in') as Error & { debug?: unknown };
     error.debug = result.debug;
     throw error;
   }
   return {
     cookies: result.cookies,
-    accountName: result.accountName || '小红书浏览器授权',
+    accountName: result.accountName || 'Xiaohongshu browser authorization',
   };
 }
 

@@ -5,7 +5,7 @@ import {
   type ChatCompletionMetadata,
   type ChatMessage,
 } from '@/lib/openrouter';
-import type { AgentBriefingItem, AgentRunInput, AgentRunResult, AgentRunToolCall, AgentTaskSpec } from '@/lib/agents/types';
+import type { AgentBriefingItem, AgentRunInput, AgentRunResult, AgentRuntoolCall, AgentTaskSpec } from '@/lib/agents/types';
 
 type WebSearchModuleKey = 'informationSummary';
 
@@ -58,7 +58,7 @@ type WebSearchSummaryOutput = {
 };
 
 const MODULE_LABELS: Record<WebSearchModuleKey, string> = {
-  informationSummary: '信息汇总',
+  informationSummary: 'Information Digest',
 };
 
 function extractJsonObject(raw: string) {
@@ -141,7 +141,7 @@ function normalizeItems(rawItems: unknown): WebSearchSourceItem[] {
 function parseWebSearchOutput(raw: string): WebSearchAgentOutput {
   const json = extractJsonObject(raw);
   if (!json) {
-    throw new Error(`OpenRouter Web Search agent 没有返回 JSON。原始输出：${raw.slice(0, 600)}`);
+    throw new Error(`OpenRouter Web Search agent instruction JSON.instruction: ${raw.slice(0, 600)}`);
   }
 
   const parsed = JSON.parse(json) as WebSearchAgentOutput;
@@ -160,7 +160,7 @@ function parseWebSearchOutput(raw: string): WebSearchAgentOutput {
 function parseWebSearchSummary(raw: string): WebSearchSummaryOutput {
   const json = extractJsonObject(raw);
   if (!json) {
-    throw new Error(`联网搜索 Step2 没有返回 JSON。原始输出：${raw.slice(0, 600)}`);
+    throw new Error(`instruction Step2 instruction JSON.instruction: ${raw.slice(0, 600)}`);
   }
   const parsed = JSON.parse(json) as WebSearchSummaryOutput;
   const findings = Array.isArray(parsed.findings)
@@ -193,7 +193,7 @@ function parseWebSearchSummary(raw: string): WebSearchSummaryOutput {
 function buildDefaultTaskSpec(input: AgentRunInput): AgentTaskSpec {
   const now = new Date();
   return {
-    objective: `根据用户指令进行联网搜索并整理晨报信息：${input.userQuery}`,
+    objective: `instruction: ${input.userQuery}`,
     sourceSelectionCriteria: [
       input.userQuery,
     ],
@@ -203,8 +203,8 @@ function buildDefaultTaskSpec(input: AgentRunInput): AgentTaskSpec {
       endAt: now.toISOString(),
     },
     returnFormat: {
-      sections: ['信息汇总'],
-      instructions: '每条信息必须有来源；优先最近24小时内的公开网页；无法确认时间时标注不确定。联网搜索助手只输出信息汇总素材；今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通。',
+      sections: ['Information Digest'],
+      instructions: 'instruction; instruction24instruction; instruction.instructionInformation Digestinstruction; Today To-DosinstructionExecutive Assistantinstruction; Twin Recommendationsinstruction.',
     },
   };
 }
@@ -217,7 +217,7 @@ function flattenBriefingItems(output: WebSearchAgentOutput): AgentBriefingItem[]
       result.push({
         category: MODULE_LABELS[key],
         title: item.title,
-        summary: item.whyItMatters ? `${item.summary}\n为什么重要：${item.whyItMatters}` : item.summary,
+        summary: item.whyItMatters ? `${item.summary}\ninstruction: ${item.whyItMatters}` : item.summary,
         source: item.source,
         url: item.url,
         publishedAt: item.publishedAt,
@@ -234,19 +234,19 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     ? input.context.subagentResults
     : [];
   const startedAt = Date.now();
-  const toolCalls: AgentRunToolCall[] = [];
+  const toolCalls: AgentRuntoolCall[] = [];
   const steps = [
     {
       id: 'web_search_collect',
-      goal: '按照晨报秘书指令调用 OpenRouter web_search / web_fetch 获取公开网页资料。',
+      goal: 'instruction OpenRouter web_search / web_fetch instruction.',
     },
     {
       id: 'web_search_summarize',
-      goal: '基于搜索资料精简为可用于晨报的信息点，不引入外部信息。',
+      goal: 'instruction, instruction.',
     },
     {
       id: 'web_search_structure',
-      goal: '把精简信息点结构化为信息汇总素材 JSON。',
+      goal: 'instructionInformation Digestinstruction JSON.',
     },
   ];
 
@@ -261,10 +261,10 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     {
       role: 'system',
       content: [
-        '你是“联网搜索助手”的 Step1 搜索执行器。',
-        '你必须使用可用的 OpenRouter web_search / web_fetch 工具进行搜索和打开网页，不能只凭模型记忆回答。',
-        '你根据上级总裁秘书传达的任务要求，自行规划搜索 query，优先查找最近24小时内的公开网页信息。',
-        '本步骤只负责获得搜索资料；搜索完成后用一句话说明已完成，不需要输出最终晨报JSON。',
+        'instruction"instruction"instruction Step1 instruction.',
+        'instruction OpenRouter web_search / web_fetch toolinstruction, instruction.',
+        'instructionExecutive Assistantinstruction, instruction query, instruction24instruction.',
+        'instruction; instructionCompleteinstructionCompleted, instructionJSON.',
       ].join('\n'),
     },
     {
@@ -276,16 +276,16 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
         searchIntent,
         ...(subagentSignals.length > 0 ? { existingSignals: subagentSignals } : {}),
         hardRules: [
-          '必须实际调用搜索工具。',
-          '搜索范围、关键词和筛选/保留策略必须以 taskSpec 和上级传达的 searchIntent 为准。',
-          '优先最近24小时内资料；无法确认发布时间的资料可以保留但后续需要标注不确定。',
+          'instructiontool.',
+          'instruction, instruction/instruction taskSpec instruction searchIntent instruction.',
+          'instruction24instruction; instruction.',
         ],
       }),
     },
   ];
 
   const searchStep = await createChatCompletionWithMetadata(searchMessages, getOpenRouterModel('WEB_SEARCH'), {
-    enableWebTools: true,
+    enableWebtools: true,
     maxTokens: 12000,
   });
   const citations = extractWebSearchCitations(searchStep.rawMessage);
@@ -309,16 +309,16 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     },
   });
   if (citations.length === 0) {
-    throw new Error(`联网搜索 Step1 未获得搜索结果。模型输出：${searchStep.content.slice(0, 600)}`);
+    throw new Error(`instruction Step1 instruction.instruction: ${searchStep.content.slice(0, 600)}`);
   }
 
   const summarizeMessages: ChatMessage[] = [
     {
       role: 'system',
       content: [
-        '你是“联网搜索助手”的 Step2 信息精简器，只输出严格JSON。',
-        '你会收到 Step1 的搜索资料。请根据总裁秘书任务筛选、去重、精简。',
-        '不要引入搜索资料之外的信息。不要为了凑数保留低相关内容。',
+        'instruction"instruction"instruction Step2 instruction, instructionJSON.',
+        'instruction Step1 instruction.instructionExecutive Assistantinstruction, instruction, instruction.',
+        'instruction.instruction.',
       ].join('\n'),
     },
     {
@@ -338,9 +338,9 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
               url: 'string',
               source: 'publisher/domain',
               publishedAt: 'date if known, otherwise empty',
-              summary: '120字以内，提炼这条资料的关键事实',
-              evidence: '资料中的关键证据',
-              relevance: '为什么符合本轮晨报任务',
+              summary: '120instruction, instruction',
+              evidence: 'instruction',
+              relevance: 'instruction',
             },
           ],
         },
@@ -371,11 +371,11 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     {
       role: 'system',
       content: [
-        '你是“联网搜索助手”的 Step3 信息汇总结构化器，只输出严格JSON。',
-        '你会收到 Step2 的精简信息点。请只整理为信息汇总素材。',
-        '今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通，不由联网搜索助手生成。',
-        '每条 item 必须来自 Step2 findings，必须保留 source 和 url。',
-        '不要编造，不要引入搜索资料之外的信息。',
+        'instruction"instruction"instruction Step3 Information Digestinstruction, instructionJSON.',
+        'instruction Step2 instruction.instructionInformation Digestinstruction.',
+        'Today To-DosinstructionExecutive Assistantinstruction; Twin Recommendationsinstruction, instruction.',
+        'instruction item instruction Step2 findings, instruction source instruction url.',
+        'instruction, instruction.',
       ].join('\n'),
     },
     {
@@ -411,9 +411,9 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
           ],
         },
         hardRules: [
-          '每个模块最多50条items。',
-          '每条item都必须来自Step2 findings。',
-          '没有足够证据的内容不要编造；找不到某模块信息时items为空并在content说明。',
+          'instruction50instructionitems.',
+          'instructioniteminstructionStep2 findings.',
+          'instruction; instructionitemsinstructioncontentinstruction.',
         ],
       }),
     },

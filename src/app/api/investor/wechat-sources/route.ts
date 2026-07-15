@@ -77,11 +77,11 @@ async function parseWechatArticleUrl(raw: string) {
   try {
     parsed = new URL(raw);
   } catch {
-    return { error: '请输入有效的文章链接' } as const;
+    return { error: 'message' } as const;
   }
 
   if (!['mp.weixin.qq.com', 'weixin.qq.com'].includes(parsed.hostname)) {
-    return { error: '仅支持微信公众平台文章链接' } as const;
+    return { error: 'message' } as const;
   }
 
   const directBiz = (parsed.searchParams.get('__biz') || '').trim();
@@ -115,7 +115,7 @@ async function parseWechatArticleUrl(raw: string) {
   }
 
   try {
-    // 兼容短链：先跟随跳转拿最终URL，再从URL或HTML中提取 __biz
+    // message: messageURL, messageURLmessageHTMLmessage __biz
     const res = await fetch(parsed.toString(), {
       method: 'GET',
       redirect: 'follow',
@@ -147,15 +147,15 @@ async function parseWechatArticleUrl(raw: string) {
       } as const;
     }
   } catch {
-    // 网络/超时失败时走统一报错
+    // message/messagefailedmessage
   }
 
-  return { error: '未识别到公众号标识（__biz），请确认是有效的公众号文章链接' } as const;
+  return { error: 'message (__biz), message' } as const;
 }
 
 function inferDisplayName(biz: string) {
   const suffix = biz.length > 8 ? biz.slice(-8) : biz;
-  return `公众号-${suffix}`;
+  return `message-${suffix}`;
 }
 
 type AnyRecord = Record<string, unknown>;
@@ -211,7 +211,7 @@ async function enrichFromProviderByBiz(biz: string, hintUrl?: string) {
     logs.push({
       step: `${provider}_config_check`,
       status: 'skip',
-      detail: `${requiredEnv} 未配置`,
+      detail: `${requiredEnv} message`,
     });
     return { displayName: '', description: '', latestArticleUrl: '', logs };
   }
@@ -262,12 +262,12 @@ async function enrichFromProviderByBiz(biz: string, hintUrl?: string) {
         const baseList = Array.isArray(baseData) ? (baseData as AnyRecord[]) : [];
         if (!displayName) {
           displayName =
-            pickFromKvPairs(baseList, ['公众号名称', '账号名称', '名称']) ||
+            pickFromKvPairs(baseList, ['message', 'accountsmessage', 'message']) ||
             displayName;
         }
         if (!description) {
           description =
-            pickFromKvPairs(baseList, ['公众号简介', '简介', '描述']) ||
+            pickFromKvPairs(baseList, ['message', 'message', 'message']) ||
             description;
         }
       } catch (error) {
@@ -303,7 +303,7 @@ async function enrichFromProviderByBiz(biz: string, hintUrl?: string) {
       logs.push({
         step: 'getMpHistoryPosts',
         status: 'skip',
-        detail: '已有文章链接，无需补抓历史',
+        detail: 'message, message',
       });
     }
 
@@ -342,7 +342,7 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: '请求体格式错误' }, { status: 400 });
+    return NextResponse.json({ error: 'messageError' }, { status: 400 });
   }
 
   const articleUrl = String((body as { articleUrl?: string })?.articleUrl || '').trim();
@@ -366,10 +366,10 @@ export async function POST(req: NextRequest) {
     }
   } else {
     if (!candidateBiz) {
-      return NextResponse.json({ error: '请先输入文章链接，或从候选公众号中选择后添加' }, { status: 400 });
+      return NextResponse.json({ error: 'message, messageAdd' }, { status: 400 });
     }
     if (!isValidBiz(candidateBiz)) {
-      return NextResponse.json({ error: '候选公众号标识无效，请重新搜索并选择' }, { status: 400 });
+      return NextResponse.json({ error: 'message, message' }, { status: 400 });
     }
     parsed = {
       biz: candidateBiz,
@@ -389,7 +389,7 @@ export async function POST(req: NextRequest) {
   if (existing) {
     return NextResponse.json(
       {
-        error: '该公众号已存在，请勿重复录入',
+        error: 'message, message',
         source: existing,
       },
       { status: 409 }

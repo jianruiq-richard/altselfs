@@ -31,7 +31,7 @@ export default function AuthStatus({ imageUrl, displayName, roleLabel }: AuthSta
           type="button"
           className="text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-md px-2 py-1"
         >
-          退出
+          Sign out
         </button>
       </SignOutButton>
     </div>

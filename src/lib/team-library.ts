@@ -12,10 +12,10 @@ export const TEAM_LIBRARY: Array<{
   name: string;
   defaultAgentName: string;
 }> = [
-  { key: TEAM_KEYS.EXECUTIVE_OFFICE, name: '总裁办', defaultAgentName: '总裁秘书Momo' },
-  { key: TEAM_KEYS.INFO_OPS, name: '信息处理运营部门', defaultAgentName: '信息助手小明' },
-  { key: TEAM_KEYS.ENGINEERING, name: '研发团队', defaultAgentName: '研发助手Alpha' },
-  { key: TEAM_KEYS.MARKETING_OPS, name: '营销运营团队', defaultAgentName: '营销助手Beta' },
+  { key: TEAM_KEYS.EXECUTIVE_OFFICE, name: 'Executive Office', defaultAgentName: 'Executive Assistant Momo' },
+  { key: TEAM_KEYS.INFO_OPS, name: 'Information Operations', defaultAgentName: 'Information Operations Assistant' },
+  { key: TEAM_KEYS.ENGINEERING, name: 'Engineering', defaultAgentName: 'Engineering Assistant Alpha' },
+  { key: TEAM_KEYS.MARKETING_OPS, name: 'Marketing Operations', defaultAgentName: 'Marketing Assistant Beta' },
 ];
 
 const VALID_TEAM_KEYS = new Set<TeamKey>(TEAM_LIBRARY.map((team) => team.key));

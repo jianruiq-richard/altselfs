@@ -56,47 +56,47 @@ const API_KEY = process.env.DAJIALA_API_KEY || '';
 const VERIFY_CODE = process.env.DAJIALA_VERIFY_CODE || '';
 
 const DEFINITIONS: EndpointDefinition[] = [
-  { key: 'getVideoChannelWorks', label: '获取单个视频号作品列表（可翻页）', method: 'POST', path: '/fbmain/monitor/v3/video_channel_works' },
-  { key: 'getVideoChannelReplay', label: '获取视频号直播回放记录', method: 'POST', path: '/fbmain/monitor/v3/video_live_replay' },
-  { key: 'getVideoChannelId', label: '获取指定视频号ID', method: 'POST', path: '/fbmain/monitor/v3/video_channel_id' },
-  { key: 'searchVideoChannelByKeyword', label: '关键词搜索视频号', method: 'POST', path: '/fbmain/monitor/v3/search_video_channel' },
-  { key: 'getVideoDownloadUrl', label: '获取视频号可下载链接', method: 'POST', path: '/fbmain/monitor/v3/video_download_url' },
-  { key: 'convertExportIdToObjectId', label: 'export_id转object_id', method: 'POST', path: '/fbmain/monitor/v3/convert_export_id' },
-  { key: 'searchVideoBySosuo1', label: '搜一搜搜视频1', method: 'POST', path: '/fbmain/monitor/v3/sosuo_video_mode1' },
-  { key: 'searchVideoAccountBySosuo', label: '搜一搜搜视频账号', method: 'POST', path: '/fbmain/monitor/v3/sosuo_video_account' },
-  { key: 'getBoundVideoChannelByMpOriginId', label: '通过公众号原始id获取绑定的视频号', method: 'POST', path: '/fbmain/monitor/v3/mp_bind_video' },
-  { key: 'getVideoInteractionStats', label: '获取视频号视频互动信息', method: 'POST', path: '/fbmain/monitor/v3/video_interaction' },
-  { key: 'getVideoComments', label: '获取视频号视频评论', method: 'POST', path: '/fbmain/monitor/v3/video_comments' },
-  { key: 'getMpTodayPosts', label: '通过公众号名称/微信Id/链接获取当天发文情况', method: 'POST', path: '/fbmain/monitor/v3/post_today' },
-  { key: 'getMpHistoryPosts', label: '通过公众号名称/微信Id/链接获取历史发文列表', method: 'POST', path: '/fbmain/monitor/v3/post_history' },
-  { key: 'getMpHistoryByOriginId', label: '通过公众号原始id获取历史列表', method: 'POST', path: '/fbmain/monitor/v3/post_history_by_origin_id' },
-  { key: 'getArticleStatsBasic', label: '获取文章阅读、点赞、在看', method: 'POST', path: '/fbmain/monitor/v3/article_stats' },
-  { key: 'getArticleStatsPro', label: '获取文章阅读、点赞、在看、转发、收藏、评论 Pro', method: 'POST', path: '/fbmain/monitor/v3/article_stats_pro' },
-  { key: 'getArticleDetailTextRich', label: '获取文章详情(纯文本/富文本)', method: 'GET', path: '/fbmain/monitor/v3/article_detail' },
-  { key: 'getArticleHtml', label: '获取文章正文HTML', method: 'GET', path: '/fbmain/monitor/v3/article_html' },
-  { key: 'getArticleDetailPro', label: '获取文章详情Pro', method: 'GET', path: '/fbmain/monitor/v3/article_detail_pro' },
-  { key: 'getArticleCommentsPro', label: '获取公众号文章评论Pro', method: 'POST', path: '/fbmain/monitor/v3/article_comments_pro' },
-  { key: 'getArticleInfoBatch', label: '获取文章阅读/点赞/标题/URL等', method: 'POST', path: '/fbmain/monitor/v3/article_info' },
-  { key: 'getArticleDetailWithVideoDownload', label: '获取文章详情(视频可下载)', method: 'GET', path: '/fbmain/monitor/v3/article_detail_video' },
-  { key: 'searchWechatArticlesDatabase', label: '关键词搜索微信文章(数据库)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_article' },
-  { key: 'searchWechatArticlesSegmented', label: '分词搜索微信文章2(数据库)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_article_segment' },
-  { key: 'searchWechatRealtime', label: '获取微信搜一搜结果(实时)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_realtime' },
-  { key: 'searchWechatRealtimeMode1', label: '搜一搜实时搜文章1(mode1)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_realtime_mode1' },
-  { key: 'searchWechatRealtimeMode2', label: '搜一搜实时搜文章2(mode2)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_realtime_mode2' },
-  { key: 'searchMiniProgramBySosuo', label: '搜一搜搜小程序账号', method: 'POST', path: '/fbmain/monitor/v3/search_miniprogram' },
-  { key: 'getWechatIndex', label: '获取微信指数', method: 'POST', path: '/fbmain/monitor/v3/wechat_index' },
-  { key: 'getMpPopularArticles', label: '公众号爆文api', method: 'POST', path: '/fbmain/monitor/v3/mp_popular_articles' },
-  { key: 'getMpSubjectInfo', label: '获取公众号主体信息', method: 'POST', path: '/fbmain/monitor/v3/principal_info' },
-  { key: 'getMpBaseInfo', label: '获取公众号基础信息', method: 'POST', path: '/fbmain/monitor/v3/avatar_type' },
-  { key: 'getMpEstimatedMetrics', label: '获取公众号预估指标', method: 'POST', path: '/fbmain/monitor/v3/mp_estimated_metrics' },
-  { key: 'searchMpsBySubject', label: '主体名下公众号搜索', method: 'POST', path: '/fbmain/monitor/v3/search_mps_by_subject' },
-  { key: 'searchMpByKeyword', label: '根据关键字查询公众号', method: 'POST', path: '/fbmain/monitor/v3/wx_account/search' },
-  { key: 'searchMpBySosuo', label: '搜一搜搜公众号', method: 'POST', path: '/fbmain/monitor/v3/sosuo_mp' },
-  { key: 'getCategoryMpRankings', label: '获取指定类别公众号日榜周榜月榜', method: 'POST', path: '/fbmain/monitor/v3/mp_rankings' },
-  { key: 'convertMpArticleUrl', label: '公众号文章链接长短互转', method: 'POST', path: '/fbmain/monitor/v3/convert_mp_article_url' },
-  { key: 'convertSogouTempUrl', label: '搜狗临时链接转永久链接', method: 'POST', path: '/fbmain/monitor/v3/convert_sogou_temp_url' },
-  { key: 'getApiBalance', label: '获取api余额', method: 'POST', path: '/fbmain/monitor/v3/api_balance' },
-  { key: 'convertSogouArticleUrl', label: '搜狗搜索文章链接转永久链接', method: 'POST', path: '/fbmain/monitor/v3/convert_sogou_article_url' },
+  { key: 'getVideoChannelWorks', label: 'content (content)', method: 'POST', path: '/fbmain/monitor/v3/video_channel_works' },
+  { key: 'getVideoChannelReplay', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/video_live_replay' },
+  { key: 'getVideoChannelId', label: 'contentID', method: 'POST', path: '/fbmain/monitor/v3/video_channel_id' },
+  { key: 'searchVideoChannelByKeyword', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/search_video_channel' },
+  { key: 'getVideoDownloadUrl', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/video_download_url' },
+  { key: 'convertExportIdToObjectId', label: 'export_idcontentobject_id', method: 'POST', path: '/fbmain/monitor/v3/convert_export_id' },
+  { key: 'searchVideoBySosuo1', label: 'content1', method: 'POST', path: '/fbmain/monitor/v3/sosuo_video_mode1' },
+  { key: 'searchVideoAccountBySosuo', label: 'contentaccounts', method: 'POST', path: '/fbmain/monitor/v3/sosuo_video_account' },
+  { key: 'getBoundVideoChannelByMpOriginId', label: 'contentidcontentConnectcontent', method: 'POST', path: '/fbmain/monitor/v3/mp_bind_video' },
+  { key: 'getVideoInteractionStats', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/video_interaction' },
+  { key: 'getVideoComments', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/video_comments' },
+  { key: 'getMpTodayPosts', label: 'content/contentId/content', method: 'POST', path: '/fbmain/monitor/v3/post_today' },
+  { key: 'getMpHistoryPosts', label: 'content/contentId/content', method: 'POST', path: '/fbmain/monitor/v3/post_history' },
+  { key: 'getMpHistoryByOriginId', label: 'contentidcontent', method: 'POST', path: '/fbmain/monitor/v3/post_history_by_origin_id' },
+  { key: 'getArticleStatsBasic', label: 'content, content, content', method: 'POST', path: '/fbmain/monitor/v3/article_stats' },
+  { key: 'getArticleStatsPro', label: 'content, content, content, content, content, content Pro', method: 'POST', path: '/fbmain/monitor/v3/article_stats_pro' },
+  { key: 'getArticleDetailTextRich', label: 'content(content/content)', method: 'GET', path: '/fbmain/monitor/v3/article_detail' },
+  { key: 'getArticleHtml', label: 'contentHTML', method: 'GET', path: '/fbmain/monitor/v3/article_html' },
+  { key: 'getArticleDetailPro', label: 'contentPro', method: 'GET', path: '/fbmain/monitor/v3/article_detail_pro' },
+  { key: 'getArticleCommentsPro', label: 'contentPro', method: 'POST', path: '/fbmain/monitor/v3/article_comments_pro' },
+  { key: 'getArticleInfoBatch', label: 'content/content/content/URLcontent', method: 'POST', path: '/fbmain/monitor/v3/article_info' },
+  { key: 'getArticleDetailWithVideoDownload', label: 'content(content)', method: 'GET', path: '/fbmain/monitor/v3/article_detail_video' },
+  { key: 'searchWechatArticlesDatabase', label: 'content(content)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_article' },
+  { key: 'searchWechatArticlesSegmented', label: 'content2(content)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_article_segment' },
+  { key: 'searchWechatRealtime', label: 'content(content)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_realtime' },
+  { key: 'searchWechatRealtimeMode1', label: 'content1(mode1)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_realtime_mode1' },
+  { key: 'searchWechatRealtimeMode2', label: 'content2(mode2)', method: 'POST', path: '/fbmain/monitor/v3/search_wechat_realtime_mode2' },
+  { key: 'searchMiniProgramBySosuo', label: 'contentaccounts', method: 'POST', path: '/fbmain/monitor/v3/search_miniprogram' },
+  { key: 'getWechatIndex', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/wechat_index' },
+  { key: 'getMpPopularArticles', label: 'contentapi', method: 'POST', path: '/fbmain/monitor/v3/mp_popular_articles' },
+  { key: 'getMpSubjectInfo', label: 'Get official account entity information', method: 'POST', path: '/fbmain/monitor/v3/principal_info' },
+  { key: 'getMpBaseInfo', label: 'Get official account profile', method: 'POST', path: '/fbmain/monitor/v3/avatar_type' },
+  { key: 'getMpEstimatedMetrics', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/mp_estimated_metrics' },
+  { key: 'searchMpsBySubject', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/search_mps_by_subject' },
+  { key: 'searchMpByKeyword', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/wx_account/search' },
+  { key: 'searchMpBySosuo', label: 'Search WeChat official accounts', method: 'POST', path: '/fbmain/monitor/v3/sosuo_mp' },
+  { key: 'getCategoryMpRankings', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/mp_rankings' },
+  { key: 'convertMpArticleUrl', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/convert_mp_article_url' },
+  { key: 'convertSogouTempUrl', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/convert_sogou_temp_url' },
+  { key: 'getApiBalance', label: 'contentapicontent', method: 'POST', path: '/fbmain/monitor/v3/api_balance' },
+  { key: 'convertSogouArticleUrl', label: 'content', method: 'POST', path: '/fbmain/monitor/v3/convert_sogou_article_url' },
 ];
 
 function parseOverrides() {
@@ -154,18 +154,18 @@ export function listDajialaEndpointDefinitions() {
 
 export async function callDajialaEndpoint(key: DajialaEndpointKey, params: AnyRecord = {}) {
   if (!isDajialaReady()) {
-    throw new Error('DAJIALA_API_KEY 未配置');
+    throw new Error('DAJIALA_API_KEY is not configured');
   }
 
   const endpoint = DEFINITIONS.find((item) => item.key === key);
   if (!endpoint) {
-    throw new Error(`未知接口: ${key}`);
+    throw new Error(`Unknown endpoint: ${key}`);
   }
 
   const overrides = parseOverrides();
   const path = overrides[key] || endpoint.path;
   if (!path) {
-    throw new Error(`接口未配置路径: ${key}`);
+    throw new Error(`Endpoint path is not configured: ${key}`);
   }
 
   const authParams = withAuth(params);

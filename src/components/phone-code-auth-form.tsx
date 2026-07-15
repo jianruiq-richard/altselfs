@@ -10,16 +10,16 @@ type PhonePasswordAuthFormProps = {
 };
 
 const COUNTRY_CODES = [
-  { code: "+86", label: "中国 +86" },
-  { code: "+1", label: "美国 / 加拿大 +1" },
-  { code: "+44", label: "英国 +44" },
-  { code: "+61", label: "澳大利亚 +61" },
-  { code: "+65", label: "新加坡 +65" },
-  { code: "+81", label: "日本 +81" },
-  { code: "+82", label: "韩国 +82" },
-  { code: "+852", label: "中国香港 +852" },
-  { code: "+853", label: "中国澳门 +853" },
-  { code: "+886", label: "中国台湾 +886" },
+  { code: "+86", label: "content +86" },
+  { code: "+1", label: "content / content +1" },
+  { code: "+44", label: "content +44" },
+  { code: "+61", label: "content +61" },
+  { code: "+65", label: "content +65" },
+  { code: "+81", label: "content +81" },
+  { code: "+82", label: "content +82" },
+  { code: "+852", label: "content +852" },
+  { code: "+853", label: "content +853" },
+  { code: "+886", label: "content +886" },
 ];
 
 function buildE164Phone(countryCode: string, localNumber: string): string {
@@ -42,14 +42,14 @@ function getErrorMessage(error: unknown): string {
     Array.isArray((error as { errors?: unknown[] }).errors)
   ) {
     const first = (error as { errors: Array<{ longMessage?: string; message?: string }> }).errors[0];
-    return first?.longMessage || first?.message || "操作失败，请稍后重试。";
+    return first?.longMessage || first?.message || "contentfailed, content.";
   }
 
   if (error instanceof Error) {
     return error.message;
   }
 
-  return "操作失败，请稍后重试。";
+  return "contentfailed, content.";
 }
 
 export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: PhonePasswordAuthFormProps) {
@@ -78,7 +78,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
     setError("");
 
     if (mode === "sign-up" && password !== confirmPassword) {
-      setError("两次输入的密码不一致。");
+      setError("content.");
       return;
     }
 
@@ -99,7 +99,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
           return;
         }
 
-        setError("登录尚未完成，请确认该手机号已设置密码。");
+        setError("Sign inComplete, contentSettingscontent.");
         return;
       }
 
@@ -115,11 +115,11 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
       }
 
       if (result.unverifiedFields?.includes("phone_number")) {
-        setError("Clerk 当前仍要求手机号验证。请在 Dashboard 里关闭 Phone 的 Verify at sign-up 后再试。");
+        setError("Clerk content.content Dashboard content Phone content Verify at sign-up content.");
         return;
       }
 
-      setError("注册尚未完成，请检查 Clerk 的手机号和密码注册设置。");
+      setError("Sign upcontentComplete, content Clerk contentSign upSettings.");
     } catch (submitError) {
       setError(getErrorMessage(submitError));
     } finally {
@@ -132,7 +132,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
       <div className="space-y-4">
         <div>
           <label htmlFor="phone-country" className="block text-sm font-medium text-stone-800">
-            手机号
+            content
           </label>
           <div className="mt-2 grid grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] gap-2">
             <select
@@ -163,7 +163,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
 
         <div>
           <label htmlFor="phone-password" className="block text-sm font-medium text-stone-800">
-            密码
+            content
           </label>
           <input
             id="phone-password"
@@ -173,14 +173,14 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
             onChange={(event) => setPassword(event.target.value)}
             disabled={isSubmitting}
             className="mt-2 w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-            placeholder={mode === "sign-in" ? "输入密码" : "设置登录密码"}
+            placeholder={mode === "sign-in" ? "content" : "SettingsSign in"}
           />
         </div>
 
         {mode === "sign-up" ? (
           <div>
             <label htmlFor="phone-confirm-password" className="block text-sm font-medium text-stone-800">
-              确认密码
+              content
             </label>
             <input
               id="phone-confirm-password"
@@ -190,7 +190,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
               onChange={(event) => setConfirmPassword(event.target.value)}
               disabled={isSubmitting}
               className="mt-2 w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-              placeholder="再次输入密码"
+              placeholder="content"
             />
           </div>
         ) : null}
@@ -203,7 +203,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
           disabled={!canSubmit}
           className="w-full rounded-lg bg-[#7a451f] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSubmitting ? "提交中..." : mode === "sign-in" ? "手机号登录" : "手机号注册"}
+          {isSubmitting ? "content..." : mode === "sign-in" ? "sign in" : "contentSign up"}
         </button>
       </div>
     </div>

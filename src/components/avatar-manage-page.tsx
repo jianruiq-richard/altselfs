@@ -32,12 +32,12 @@ export default function AvatarManagePage() {
         const response = await fetch(`/api/avatar/${avatarId}`);
         const data = await response.json();
         if (!response.ok) {
-          setError(data.error || '加载分身失败');
+          setError(data.error || 'contentfailed');
           return;
         }
         setAvatar(data.avatar);
       } catch {
-        setError('网络错误，请稍后重试');
+        setError('Network error. Please try again later.');
       } finally {
         setIsLoading(false);
       }
@@ -75,14 +75,14 @@ export default function AvatarManagePage() {
 
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || '保存失败');
+        setError(data.error || 'Savefailed');
         return;
       }
 
       setAvatar(data.avatar);
       router.refresh();
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setIsSaving(false);
     }
@@ -91,7 +91,7 @@ export default function AvatarManagePage() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600">加载中...</p>
+        <p className="text-slate-600">Loading...</p>
       </div>
     );
   }
@@ -100,9 +100,9 @@ export default function AvatarManagePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <p className="text-slate-700 mb-4">未找到该分身或无权限访问</p>
+          <p className="text-slate-700 mb-4">content</p>
           <Link href="/dashboard" className="text-blue-700 hover:underline">
-            返回工作台
+            Back to workspace
           </Link>
         </div>
       </div>
@@ -112,11 +112,11 @@ export default function AvatarManagePage() {
   return (
     <FigmaShell
       homeHref="/dashboard"
-      title="管理分身"
-      subtitle="调整分身设定与系统提示词"
+      title="content"
+      subtitle="content"
       actions={
         <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
-          返回工作台
+          Back to workspace
         </Link>
       }
     >
@@ -124,7 +124,7 @@ export default function AvatarManagePage() {
         {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">分身名称</label>
+          <label className="mb-2 block text-sm font-medium text-slate-700">Twin name</label>
           <input
             type="text"
             value={avatar.name}
@@ -135,7 +135,7 @@ export default function AvatarManagePage() {
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">简介</label>
+          <label className="mb-2 block text-sm font-medium text-slate-700">content</label>
           <textarea
             value={avatar.description || ''}
             onChange={(e) => onChange('description', e.target.value)}
@@ -145,7 +145,7 @@ export default function AvatarManagePage() {
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">头像 URL</label>
+          <label className="mb-2 block text-sm font-medium text-slate-700">content URL</label>
           <input
             type="url"
             value={avatar.avatar || ''}
@@ -153,18 +153,18 @@ export default function AvatarManagePage() {
             placeholder="https://..."
             className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <p className="mt-1 text-xs text-slate-500">先支持 URL 方式上传，后续可扩展为文件上传。</p>
+          <p className="mt-1 text-xs text-slate-500">content URL content, content.</p>
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">分身状态</label>
+          <label className="mb-2 block text-sm font-medium text-slate-700">content</label>
           <select
             value={avatar.status}
             onChange={(e) => onChange('status', e.target.value)}
             className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="ACTIVE">启用</option>
-            <option value="INACTIVE">停用</option>
+            <option value="ACTIVE">content</option>
+            <option value="INACTIVE">content</option>
           </select>
         </div>
 
@@ -185,14 +185,14 @@ export default function AvatarManagePage() {
             onClick={() => router.back()}
             className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-100"
           >
-            取消
+            content
           </button>
           <button
             type="submit"
             disabled={isSaving}
             className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
           >
-            {isSaving ? '保存中...' : '保存修改'}
+            {isSaving ? 'Saving...' : 'Savecontent'}
           </button>
         </div>
       </form>

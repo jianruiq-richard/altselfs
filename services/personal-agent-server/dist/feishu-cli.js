@@ -12,7 +12,7 @@ const FEISHU_CLI_FEATURE_PACKAGE_CONFIG = {
     meetings: { domains: ['vc', 'minutes', 'note'], scopes: [] },
 };
 const URL_RE = /^https?:\/\//i;
-const URL_SEARCH_RE = /https?:\/\/[^\s"'<>）)]+/i;
+const URL_SEARCH_RE = /https?:\/\/[^\s"'<>))]+/i;
 const SNAPSHOT_FORMAT = 'lark-cli-profile-snapshot-v1';
 const SNAPSHOT_MAX_FILES = 300;
 const SNAPSHOT_MAX_FILE_BYTES = 1024 * 1024;
@@ -70,10 +70,10 @@ export async function startFeishuCliAuthorization(config, input) {
 export async function continueFeishuCliAuthorization(config, input) {
     const session = getFeishuCliBindSession(input.sessionId, input.investorId);
     if (!session)
-        throw new Error('飞书绑定会话不存在或已过期，请重新开始绑定。');
+        throw new Error('instructionConnectinstruction, instructionConnect.');
     if (isFeishuCliBindSessionExpired(session)) {
         await destroyFeishuCliBindSession(config, session.sessionId, 'expired');
-        throw new Error('飞书绑定会话已过期，请重新开始绑定。');
+        throw new Error('instructionConnectinstruction, instructionConnect.');
     }
     if (session.phase === 'app_setup') {
         if (!session.setupClosed) {
@@ -114,18 +114,18 @@ export async function completeFeishuCliAuthorization(config, input) {
     if (input.sessionId) {
         const session = getFeishuCliBindSession(input.sessionId, input.investorId);
         if (!session)
-            throw new Error('飞书绑定会话不存在或已过期，请重新开始绑定。');
+            throw new Error('instructionConnectinstruction, instructionConnect.');
         if (isFeishuCliBindSessionExpired(session)) {
             await destroyFeishuCliBindSession(config, session.sessionId, 'expired');
-            throw new Error('飞书绑定会话已过期，请重新开始绑定。');
+            throw new Error('instructionConnectinstruction, instructionConnect.');
         }
         if (session.phase === 'app_setup' || session.phase === 'app_configured') {
-            throw new Error('请先完成飞书 CLI 应用配置，并继续到账号授权步骤。');
+            throw new Error('instructionCompleteinstruction CLI instruction, instructionaccountsinstruction.');
         }
         if (session.phase === 'completed' && session.completed)
             return session.completed;
         if (session.phase !== 'user_auth' || !session.deviceCode) {
-            throw new Error('飞书账号授权步骤尚未开始，请重新开始绑定。');
+            throw new Error('instructionaccountsinstruction, instructionConnect.');
         }
         await runLarkCliJson(config, ['auth', 'login', '--device-code', session.deviceCode, '--json'], {
             profileName: session.profileName,
@@ -156,7 +156,7 @@ export async function completeFeishuCliAuthorization(config, input) {
             profileName;
         const displayName = findFirstString(whoami, ['name', 'display_name', 'displayName', 'localized_name', 'localizedName', 'email']) ||
             findFirstString(authStatus, ['name', 'display_name', 'displayName', 'email']) ||
-            '飞书用户';
+            'instruction';
         return {
             profileName,
             accountId,
@@ -407,7 +407,7 @@ async function captureCompletedFeishuCliAuthorization(config, session) {
         session.profileName;
     const displayName = findFirstString(whoami, ['name', 'display_name', 'displayName', 'localized_name', 'localizedName', 'email']) ||
         findFirstString(authStatus, ['name', 'display_name', 'displayName', 'email']) ||
-        '飞书用户';
+        'instruction';
     return {
         profileName: session.profileName,
         accountId,
@@ -492,7 +492,7 @@ function waitForFeishuCliSetupUrl(session, timeoutMs) {
 function extractFirstUrl(value) {
     const cleaned = stripAnsi(value);
     const match = URL_SEARCH_RE.exec(cleaned);
-    return match?.[0] ? match[0].replace(/[.,;，。；]+$/, '') : '';
+    return match?.[0] ? match[0].replace(/[.,;, .; ]+$/, '') : '';
 }
 function stripAnsi(value) {
     return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
@@ -528,12 +528,12 @@ function hasFeishuCliUserIdentity(value) {
 }
 function isFeishuCliProfileMissing(value) {
     const text = JSON.stringify(value || {}).toLowerCase();
-    return ((text.includes('profile') || text.includes('配置')) &&
+    return ((text.includes('profile') || text.includes('instruction')) &&
         (text.includes('not found') ||
             text.includes('not exist') ||
             text.includes('missing') ||
-            text.includes('不存在') ||
-            text.includes('未找到')));
+            text.includes('instruction') ||
+            text.includes('instruction')));
 }
 async function ensureFeishuCliProfile(config, profileName, cliHome) {
     const appId = process.env.FEISHU_APP_ID?.trim();

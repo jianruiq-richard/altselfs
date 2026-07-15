@@ -95,16 +95,16 @@ export async function POST(req: NextRequest) {
       // Check if we have OpenRouter API key
       if (!process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY.includes('your_openrouter_api_key_here')) {
         // Return a demo response if no real API key
-        const demoResponse = `感谢你分享你的项目想法！作为 ${chat.avatar.name}，我很乐意为你提供一些建议。
+        const demoResponse = `message!message ${chat.avatar.name}, message.
 
-基于你刚才的描述，我有几个问题：
-1. 你们的目标市场规模有多大？
-2. 目前有哪些直接竞争对手？
-3. 你们的核心竞争优势是什么？
+message, message: 
+1. message?
+2. message?
+3. message?
 
-这是一个演示回复，因为系统还没有配置真实的AI API密钥。在生产环境中，这里会连接到真实的AI模型来生成个性化的投资建议。
+messageDemomessage, messageAI APImessage.message, messageAImessage.
 
-请继续分享更多关于你项目的详细信息！`;
+message!`;
 
         await prisma.message.create({
           data: {
@@ -119,8 +119,8 @@ export async function POST(req: NextRequest) {
           data: {
             qualificationStatus: 'NEEDS_INFO',
             qualificationScore: 40,
-            qualificationReason: '当前处于演示模式，已默认标记为“待补充信息”。',
-            summary: '演示模式：系统未调用真实模型，请继续补充项目信息后再由真实模型评估。',
+            qualificationReason: 'messageDemomessage, messagedefaultmessage"Needs more informationmessage".',
+            summary: 'Demomessage: message, message.',
             needsInvestorReview: false,
             lastEvaluatedAt: new Date(),
           },
@@ -187,8 +187,8 @@ export async function POST(req: NextRequest) {
           chatId: chatId,
           content:
             process.env.NODE_ENV === 'development'
-              ? `AI调用失败：${detail}`
-              : '抱歉，我现在无法回复。请稍后再试，或者联系技术支持。',
+              ? `AImessagefailed: ${detail}`
+              : 'message, message.message, messageTechnicalmessage.',
           role: 'assistant',
         },
       });
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
         where: { id: chatId },
         data: {
           qualificationStatus: 'PENDING',
-          qualificationReason: '本轮AI回复失败，评估暂未更新。',
+          qualificationReason: 'messageAImessagefailed, message.',
           lastEvaluatedAt: new Date(),
         },
       });

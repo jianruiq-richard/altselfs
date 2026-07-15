@@ -29,6 +29,6 @@ export async function GET(req: NextRequest) {
     return res;
   } catch (err) {
     console.error('[personal-data:meta] connect failed:', err);
-    return redirectWithResult(req, 'error', 'Meta OAuth 环境变量未配置，请先配置 META_APP_ID / META_APP_SECRET。');
+    return redirectWithResult(req, 'error', 'Meta OAuth message, message META_APP_ID / META_APP_SECRET.');
   }
 }

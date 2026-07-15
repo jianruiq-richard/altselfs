@@ -3,9 +3,9 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import { getOpenRouterModel } from '@/lib/openrouter';
-import { runCodexAgentLoop, type CodexAgentLoopEvent, type CodexAgentTool } from '@/lib/codex-agent-runtime';
+import { runCodexAgentLoop, type CodexAgentLoopEvent, type CodexAgenttool } from '@/lib/codex-agent-runtime';
 import {
-  appendToolCall,
+  appendtoolCall,
   appendThreadMessage,
   ensureThread,
   getLatestThreadWithMessages,
@@ -49,7 +49,7 @@ type ExecutiveExecutionSnapshot = {
   document?: unknown;
   subagents?: unknown;
   toolCalls?: unknown;
-  recentToolCalls?: unknown;
+  recenttoolCalls?: unknown;
 };
 
 type StoredExecutiveRunRequest = {
@@ -57,8 +57,8 @@ type StoredExecutiveRunRequest = {
   messages?: ClientMessage[];
 };
 
-const USER_CANCELLED_RUN_ERROR = '用户已强制停止本次执行';
-const STALE_RUN_ERROR = '任务已超过 30 分钟未更新，系统已自动终止旧的执行状态。';
+const USER_CANCELLED_RUN_ERROR = 'messageStopmessage';
+const STALE_RUN_ERROR = 'message 30 message, message.';
 
 function buildBriefingContext(briefing: {
   date: string;
@@ -69,25 +69,25 @@ function buildBriefingContext(briefing: {
   priorityTasks: Array<{ priority: 'high' | 'medium' | 'low'; task: string; deadline: string; assignedBy: string }>;
 }) {
   const departmentLines = briefing.departmentOverview
-    .map((item, index) => `${index + 1}. ${item.department} | ${item.status} | 进度${item.progress}% | ${item.summary}`)
+    .map((item, index) => `${index + 1}. ${item.department} | ${item.status} | message${item.progress}% | ${item.summary}`)
     .join('\n');
   const insightLines = briefing.externalInsights
     .map((item, index) => `${index + 1}. ${item.category} | ${item.source} | ${item.content}`)
     .join('\n');
   const taskLines = briefing.priorityTasks
-    .map((item, index) => `${index + 1}. ${item.priority.toUpperCase()} | ${item.task} | 截止${item.deadline} | 指派${item.assignedBy}`)
+    .map((item, index) => `${index + 1}. ${item.priority.toUpperCase()} | ${item.task} | message${item.deadline} | message${item.assignedBy}`)
     .join('\n');
 
   return [
-    `晨报日期：${briefing.date}`,
-    `晨报更新时间：${briefing.generatedTime}`,
-    `晨报headline：${briefing.headline}`,
-    '部门概览：',
-    departmentLines || '无',
-    '外界信息精选：',
-    insightLines || '无',
-    '重点事项：',
-    taskLines || '无',
+    `message: ${briefing.date}`,
+    `message: ${briefing.generatedTime}`,
+    `messageheadline: ${briefing.headline}`,
+    'messageOverview: ',
+    departmentLines || 'message',
+    'message: ',
+    insightLines || 'message',
+    'message: ',
+    taskLines || 'message',
   ].join('\n');
 }
 
@@ -108,7 +108,7 @@ function compactForModel(value: unknown, depth = 0): unknown {
 }
 
 function buildExecutionContext(snapshot?: ExecutiveExecutionSnapshot | null) {
-  if (!snapshot) return '暂无执行记录。';
+  if (!snapshot) return 'message.';
   return JSON.stringify(compactForModel(snapshot), null, 2);
 }
 
@@ -152,25 +152,25 @@ async function generateExecutiveReply(
 ) {
   const latest = params.messages[params.messages.length - 1];
   const contextPrompt = [
-    '下面是当前可用的业务上下文。只在用户明确需要时才引用，不要机械反复提及；如果用户要更新、查询实时状态或复盘调用链，应优先通过工具取得真实结果。',
+    'message.message, message; message, message, messagetoolmessage.',
     buildBriefingContext(params.briefing),
-    '下面是本轮和最近几轮真实执行记录。它是你回答“刚才调用了什么、执行了什么、哪里报错、拿到了什么结果”的唯一依据。',
+    'message.message"message, message, message, message"message.',
     buildExecutionContext(params.getExecutionSnapshot()),
-    'Codex agent loop 对齐约束：',
-    '1) 你不是一次性问答模型；你可以在本轮中选择工具、读取工具输出、再继续决定下一步。',
-    '2) 不要声称调用了没有真实调用的工具；工具输出才是系统事实。',
-    '3) 当用户要求更新信息、更新晨报、重新汇总今天信息时，调用 update_today_briefing；不要只凭已有上下文编造更新结果。',
-    '4) 当用户只是追问机制、解释结果、查看当前状态时，优先调用 get_current_briefing、get_recent_execution_trace 或 list_connected_information_channels。',
-    '5) 当问题依赖“今天、昨天、最近24小时”等时间判断时，先调用 get_current_time。',
-    '输出约束补充：',
-    '1) 回复使用中文口语化表达。',
-    '2) 不要使用 markdown 格式符号。',
-    '3) 一次最多提出一个问题；不要连续三轮都用问句。',
-    '4) 默认优先共情、复述、安抚。',
-    '5) 如果用户要求复盘执行过程，必须区分：计划了什么、实际执行了什么、跳过了什么、哪里报错、拿到哪些中间结果；不要编造未发生的调用。',
+    'Codex agent loop message: ',
+    '1) message; messagetool, messagetoolmessage, message.',
+    '2) messagetool; toolmessage.',
+    '3) messageUpdate briefing, message, message, message update_today_briefing; message.',
+    '4) message, message, message, message get_current_briefing, get_recent_execution_trace message list_connected_information_channels.',
+    '5) message"message, message, message24message"messageDecidemessage, message get_current_time.',
+    'message: ',
+    '1) message.',
+    '2) message markdown message.',
+    '3) message; message.',
+    '4) defaultmessage, message, message.',
+    '5) message, message: message, message, Skippedmessage, message, message; message.',
   ].join('\n\n');
 
-  const tools: CodexAgentTool[] = [
+  const tools: CodexAgenttool[] = [
     {
       name: 'get_current_time',
       description: 'Return the server current date and time for resolving relative date phrases.',
@@ -184,8 +184,8 @@ async function generateExecutiveReply(
         return {
           iso: date.toISOString(),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          locale: date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
-          dateKeyShanghai: date.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+          locale: date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai', hour12: false }),
+          dateKeyShanghai: date.toLocaleDateString('en-US', { timeZone: 'Asia/Shanghai' }),
         };
       },
     },
@@ -241,7 +241,7 @@ async function generateExecutiveReply(
       },
       execute: async () => ({
         executionSnapshot: params.getExecutionSnapshot(),
-        recentToolCalls: await loadRecentExecutionRecords(params.threadId),
+        recenttoolCalls: await loadRecentExecutionRecords(params.threadId),
       }),
     },
     {
@@ -314,7 +314,7 @@ async function generateExecutiveReply(
     onEvent: async (event) => {
       loopEvents.push(event);
       if (event.type === 'tool_call' && (event.status === 'SUCCESS' || event.status === 'ERROR')) {
-        await appendToolCall({
+        await appendtoolCall({
           threadId: params.threadId,
           toolName: event.toolName,
           status: event.status,
@@ -329,10 +329,10 @@ async function generateExecutiveReply(
           status: event.status === 'SKIPPED' ? 'SKIPPED' : event.status,
           detail:
             event.type === 'model_call'
-              ? `Codex式循环：第 ${event.turn} 轮模型调用 ${event.status}`
+              ? `Codexmessage: message ${event.turn} message ${event.status}`
               : event.type === 'tool_call'
-                ? `Codex式循环：${event.toolName} ${event.status}`
-                : `Codex式循环：上下文压缩 ${event.status}`,
+                ? `Codexmessage: ${event.toolName} ${event.status}`
+                : `Codexmessage: message ${event.status}`,
           timestamp: event.timestamp,
           payload: {
             codexAgentLoop: event,
@@ -344,7 +344,7 @@ async function generateExecutiveReply(
 
   params.setExecutionSnapshot({
     ...(params.getExecutionSnapshot() || { planner: getExecutivePlannerDefinition(), plannerTrace: [] }),
-    recentToolCalls: await loadRecentExecutionRecords(params.threadId),
+    recenttoolCalls: await loadRecentExecutionRecords(params.threadId),
   });
 
   return {
@@ -409,7 +409,7 @@ function routeErrorResponse(operation: string, error: unknown) {
   console.error(`[executive-assistant] ${operation} failed:`, error);
   return NextResponse.json(
     {
-      error: `${operation}失败：${detail}`,
+      error: `${operation}failed: ${detail}`,
       code: 'EXECUTIVE_ASSISTANT_ROUTE_ERROR',
     },
     { status: 500 }
@@ -609,7 +609,7 @@ async function runExecutiveAssistantTurn(params: {
     ...executionSnapshot,
     planner: currentPlanner,
     plannerTrace,
-    recentToolCalls: await loadRecentExecutionRecords(thread.id),
+    recenttoolCalls: await loadRecentExecutionRecords(thread.id),
   };
 
   await emitPlannerEvent({
@@ -617,7 +617,7 @@ async function runExecutiveAssistantTurn(params: {
     step: {
       ...getExecutivePlannerStepDefinition('generate_reply'),
       status: 'RUNNING',
-      detail: '正在生成总裁秘书回复。',
+      detail: 'messageExecutive Assistantmessage.',
       timestamp: new Date().toISOString(),
     },
   });
@@ -659,7 +659,7 @@ async function runExecutiveAssistantTurn(params: {
       step: {
         ...getExecutivePlannerStepDefinition('generate_reply'),
         status: 'SUCCESS',
-        detail: '总裁秘书回复已生成。',
+        detail: 'Executive Assistantmessage.',
         timestamp: new Date().toISOString(),
       },
     });
@@ -678,7 +678,7 @@ async function runExecutiveAssistantTurn(params: {
     return {
       status: 502,
       body: {
-        error: `总裁秘书暂时不可用：${detail}`,
+        error: `Executive Assistantmessage: ${detail}`,
         threadId: thread.id,
         briefing,
         planner: currentPlanner,
@@ -759,7 +759,7 @@ function streamExecutiveAssistantTurn(params: {
           write({
             type: 'final',
             status: 500,
-            data: { error: `AI代理执行失败：${detail}` },
+            data: { error: `AImessageExecution failed: ${detail}` },
           });
         } finally {
           clearInterval(heartbeat);
@@ -812,7 +812,7 @@ async function executeExecutiveAssistantRun(runId: string, investorId: string) {
       where: { id: runId, status: 'RUNNING' },
       data: {
         status: 'ERROR',
-        error: '异步任务参数无效',
+        error: 'message',
         completedAt: new Date(),
       },
     });
@@ -862,8 +862,8 @@ async function executeExecutiveAssistantRun(runId: string, investorId: string) {
       where: { id: runId, status: 'RUNNING' },
       data: {
         status: 'ERROR',
-        error: `AI代理执行失败：${detail}`,
-        result: toPrismaJson({ error: `AI代理执行失败：${detail}` }),
+        error: `AImessageExecution failed: ${detail}`,
+        result: toPrismaJson({ error: `AImessageExecution failed: ${detail}` }),
         planner: toPrismaJson(planner),
         plannerTrace: toPrismaJson(plannerTrace),
         completedAt: new Date(),
@@ -1107,7 +1107,7 @@ export async function GET(req: NextRequest) {
       await appendThreadMessage({
         threadId: created.id,
         role: 'ASSISTANT',
-        content: `早上好！我是总裁秘书Momo。\n\n${briefing.headline}\n\n你可以问我：\n1) 各部门工作情况\n2) 今日重点事项\n3) 外界信息变化`,
+        content: `message!messageExecutive Assistant Momo.\n\n${briefing.headline}\n\nmessage: \n1) messageWorkmessage\n2) Todaymessage\n3) message`,
       });
       thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
     }
@@ -1128,7 +1128,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    return routeErrorResponse('查询任务状态', error);
+    return routeErrorResponse('message', error);
   }
 }
 
@@ -1142,7 +1142,7 @@ export async function PUT(req: NextRequest) {
     const systemPrompt = resetToDefault ? '' : normalizeSystemPrompt(body?.systemPrompt);
 
     if (!resetToDefault && !systemPrompt) {
-      return NextResponse.json({ error: 'system prompt 不能为空' }, { status: 400 });
+      return NextResponse.json({ error: 'system prompt message' }, { status: 400 });
     }
 
     const saved = await prisma.investorAgentConfig.upsert({
@@ -1172,7 +1172,7 @@ export async function PUT(req: NextRequest) {
       },
     });
   } catch (error) {
-    return routeErrorResponse('保存 system prompt', error);
+    return routeErrorResponse('Save system prompt', error);
   }
 }
 
@@ -1189,7 +1189,7 @@ export async function POST(req: NextRequest) {
     const messages = normalizeMessages(body?.messages);
     const latest = messages[messages.length - 1];
     if (!latest || latest.role !== 'user') {
-      return NextResponse.json({ error: '最后一条消息必须是用户消息' }, { status: 400 });
+      return NextResponse.json({ error: 'messagemessagesmessage' }, { status: 400 });
     }
 
     const turnParams = {
@@ -1224,7 +1224,7 @@ export async function POST(req: NextRequest) {
     const result = await runExecutiveAssistantTurn(turnParams);
     return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
-    return routeErrorResponse('启动秘书任务', error);
+    return routeErrorResponse('message', error);
   }
 }
 
@@ -1250,6 +1250,6 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return routeErrorResponse('停止或删除秘书任务', error);
+    return routeErrorResponse('StopmessageDeletemessage', error);
   }
 }

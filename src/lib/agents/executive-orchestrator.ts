@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { createChatCompletion, createJsonChatCompletion, getOpenRouterModel, type ChatMessage } from '@/lib/openrouter';
 import { runWechatAgent } from '@/lib/agents/wechat-agent';
 import { runWebSearchAgent } from '@/lib/agents/web-search-agent';
-import type { AgentBriefingItem, AgentRunResult, AgentRunToolCall, AgentTaskSpec } from '@/lib/agents/types';
+import type { AgentBriefingItem, AgentRunResult, AgentRuntoolCall, AgentTaskSpec } from '@/lib/agents/types';
 import { buildExecutiveDailyBriefing, type ExecutiveDailyBriefing } from '@/lib/executive-office';
 import { resolveHiredTeamKeys } from '@/lib/team-library';
 
@@ -96,7 +96,7 @@ type StructuredBriefingItem = {
 };
 
 type StructuredBriefingModule = {
-  title: '信息汇总' | '今日to do' | '分身推荐';
+  title: 'Information Digest' | 'Today To-Dos' | 'Twin Recommendations';
   content: string;
   items: StructuredBriefingItem[];
 };
@@ -119,7 +119,7 @@ export type ExecutiveBriefingUpdateResult = {
   briefing: ExecutiveDailyBriefing;
   document: ExecutiveBriefingDocument;
   subagentResults: AgentRunResult[];
-  toolCalls: AgentRunToolCall[];
+  toolCalls: AgentRuntoolCall[];
 };
 
 type LoadedExecutiveContext = {
@@ -133,9 +133,9 @@ type LoadedExecutiveContext = {
 const STRUCTURED_AGENT_ITEM_LIMIT = 50;
 const INFORMATION_SUMMARY_ITEM_LIMIT = 200;
 const STRUCTURED_MODULE_PLANS: StructuredBriefingModulePlan[] = [
-  { key: 'informationSummary', title: '信息汇总' },
-  { key: 'todayTodo', title: '今日to do' },
-  { key: 'twinRecommendation', title: '分身推荐' },
+  { key: 'informationSummary', title: 'Information Digest' },
+  { key: 'todayTodo', title: 'Today To-Dos' },
+  { key: 'twinRecommendation', title: 'Twin Recommendations' },
 ];
 
 const WEB_SEARCH_ASSISTANT_ENABLED = false;
@@ -159,20 +159,20 @@ export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
     properties: {
       objective: {
         type: 'string',
-        description: '本轮执行目标，用一句中文说明要完成什么。',
+        description: 'Execution objective for this turn, in one concise English sentence.',
       },
       updateBriefing: {
         type: 'boolean',
-        description: '本轮是否需要更新并持久化今日晨报。',
+        description: 'Whether this turn should update and persist today briefing.',
       },
       useWebSearch: {
         type: 'boolean',
         enum: [false],
-        description: '本轮是否需要调用联网搜索助手。当前默认禁用，必须为 false。',
+        description: 'Whether this turn should call the web search assistant. Currently disabled by default and must be false.',
       },
       skills: {
         type: 'array',
-        description: '本轮实际需要执行或明确说明不可用的 skill id。',
+        description: 'Skill IDs that should be executed this turn or explicitly marked unavailable.',
         items: {
           type: 'string',
           enum: EXECUTIVE_PLANNER_SKILL_IDS,
@@ -180,7 +180,7 @@ export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
       },
       skillDecisions: {
         type: 'array',
-        description: '对每个候选 skill 的选择/跳过决策。必须覆盖 availableSkills 中出现的 skillId。',
+        description: 'Selection or skip decision for each candidate skill. Must cover every skillId in availableSkills.',
         items: {
           type: 'object',
           additionalProperties: false,
@@ -191,15 +191,15 @@ export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
             },
             available: {
               type: 'boolean',
-              description: '该 skill 对当前账户和当前代码实现是否可用。',
+              description: 'Whether this skill is available for the current account and implementation.',
             },
             selected: {
               type: 'boolean',
-              description: '本轮是否选择执行该 skill。',
+              description: 'Whether this skill is selected for this turn.',
             },
             reason: {
               type: 'string',
-              description: '为什么本轮选择或不选择该 skill。不可用时必须说明是未实现、缺少集成还是没有数据源。',
+              description: 'Why this skill is or is not selected. If unavailable, explain whether it is not implemented, missing integration, or missing data source.',
             },
           },
           required: ['skillId', 'available', 'selected', 'reason'],
@@ -213,12 +213,12 @@ export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
             properties: {
               objective: {
                 type: 'string',
-                description: '微信公众号助手本轮需要搜集整理的信息目标。',
+                description: 'Information objective for the WeChat Official Accounts assistant this turn.',
               },
               sourceSelectionCriteria: {
                 type: 'array',
                 items: { type: 'string' },
-                description: '用于筛选公众号画像的主题、领域、关键词或排除偏好。',
+                description: 'Topics, domains, keywords, or exclusions used to select official account profiles.',
               },
               returnFormat: {
                 type: 'object',
@@ -230,7 +230,7 @@ export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
                   },
                   instructions: {
                     type: 'string',
-                    description: '微信 agent 返回给晨报秘书时必须遵守的格式说明。',
+                    description: 'Format instructions the WeChat agent must follow when returning results to the briefing assistant.',
                   },
                 },
                 required: ['sections', 'instructions'],
@@ -243,22 +243,22 @@ export const EXECUTIVE_PLANNER_JSON_SCHEMA = {
       },
       steps: {
         type: 'array',
-        description: '按执行顺序列出本轮 planner step。只输出本轮真正需要执行或说明跳过的步骤。',
+        description: 'Planner steps for this turn in execution order. Only include steps that will actually run or must be explicitly skipped.',
         items: {
           type: 'object',
           additionalProperties: false,
           properties: {
             id: {
               type: 'string',
-              description: '短 snake_case step id。优先使用系统已有 step id。',
+              description: 'Short snake_case step id. Prefer existing system step ids.',
             },
             title: {
               type: 'string',
-              description: '中文步骤标题。',
+              description: 'English step title.',
             },
             description: {
               type: 'string',
-              description: '为什么本轮需要该步骤。',
+              description: 'Why this step is needed this turn.',
             },
             skillId: {
               anyOf: [
@@ -290,55 +290,55 @@ const EXECUTIVE_SKILL_REGISTRY: Array<{
 }> = [
   {
     skillId: 'web_search',
-    name: '联网搜索',
-    description: '调用联网搜索助手，使用 OpenRouter 原生 web_search / web_fetch 工具检索公开网页并整理来源。',
+    name: 'Web Search',
+    description: 'Call the Web Search Assistant to retrieve public pages with OpenRouter native web_search / web_fetch tools and organize sources.',
     implemented: true,
     agentType: 'WEB_SEARCH',
   },
   {
     skillId: 'wechat_articles',
-    name: '微信公众号助手',
-    description: '调用已雇佣的微信公众号 AI 员工，读取已追踪公众号的文章、正文和指标。',
+    name: 'WeChat Official Accounts Assistant',
+    description: 'Call the hired WeChat Official Accounts AI teammate to read tracked account articles, bodies, and metrics.',
     implemented: true,
     agentType: 'WECHAT',
   },
   {
     skillId: 'xiaohongshu_insights',
-    name: '小红书助手',
-    description: '调用小红书 AI 员工分析内容趋势、竞品声量和外部市场信号。',
+    name: 'Xiaohongshu Assistant',
+    description: 'Call the Xiaohongshu AI teammate to analyze content trends, competitor share of voice, and market signals.',
     implemented: false,
     agentType: 'XIAOHONGSHU',
   },
   {
     skillId: 'gmail_insights',
-    name: '邮件助手',
-    description: '调用邮件 AI 员工提取外部沟通、待办和风险信号。',
+    name: 'Email Assistant',
+    description: 'Call the email AI teammate to extract external communication, action items, and risk signals.',
     implemented: false,
     agentType: 'GMAIL',
   },
   {
     skillId: 'feishu_insights',
-    name: '飞书助手',
-    description: '调用飞书 AI 员工提取内部项目、团队进展和待办。',
+    name: 'Lark Assistant',
+    description: 'Call the Lark AI teammate to extract internal project, team progress, and action items.',
     implemented: false,
     agentType: 'FEISHU',
   },
   {
     skillId: 'internal_briefing',
-    name: '内部数据汇总',
-    description: '读取账户已有集成、数字分身、团队雇佣状态和基础晨报上下文。',
+    name: 'Internal Data Summary',
+    description: 'Read existing integrations, digital twins, hired teams, and baseline briefing context for the account.',
     implemented: true,
   },
   {
     skillId: 'persist_briefing',
-    name: '晨报持久化',
-    description: '把更新后的今日晨报保存到 executive_briefings。',
+    name: 'Briefing Persistence',
+    description: 'Save the updated briefing to executive_briefings.',
     implemented: true,
   },
   {
     skillId: 'chat_reply',
-    name: '总裁秘书回复',
-    description: '基于本轮结果生成面向用户的最终回复。',
+    name: 'Executive Assistant Reply',
+    description: "Generate the final user-facing reply from this turn's results.",
     implemented: true,
   },
 ];
@@ -386,94 +386,94 @@ export function getExecutivePlannerStepDefinition(id: ExecutivePlannerStepId): E
   const known: Record<string, ExecutivePlannerStepDefinition> = {
     load_context: {
       id: 'load_context',
-      title: '读取账户上下文',
-      description: '读取已接入数据源、已雇佣 AI 员工、数字分身和基础晨报。',
+      title: 'Load Account Context',
+      description: 'Read connected data sources, hired AI teammates, digital twins, and the baseline briefing.',
       skillId: 'internal_briefing',
     },
     plan_subagents: {
       id: 'plan_subagents',
-      title: '动态规划本轮任务',
-      description: '由总裁秘书根据用户指令决定本轮要调用哪些 skill 和子 agent。',
+      title: 'Plan This Turn',
+      description: 'Let the executive assistant decide which skills and child agents this turn should call.',
     },
     call_web_search: {
       id: 'call_web_search',
-      title: '调用联网搜索助手',
-      description: '调用独立 Web Search agent，使用 OpenRouter web_search / web_fetch 搜索和读取网页。',
+      title: 'Call Web Search Assistant',
+      description: 'Call the standalone Web Search agent to search and read pages with OpenRouter web_search / web_fetch.',
       skillId: 'web_search',
     },
     call_wechat_agent: {
       id: 'call_wechat_agent',
-      title: '调用微信公众号助手',
-      description: '读取已追踪公众号的文章、正文和指标。',
+      title: 'Call WeChat Official Accounts Assistant',
+      description: 'Read articles, bodies, and metrics from tracked official accounts.',
       agentType: 'WECHAT',
       skillId: 'wechat_articles',
     },
     call_xiaohongshu_agent: {
       id: 'call_xiaohongshu_agent',
-      title: '调用小红书助手',
-      description: '读取小红书趋势和竞品内容信号。',
+      title: 'Call Xiaohongshu Assistant',
+      description: 'Read Xiaohongshu trend and competitor content signals.',
       agentType: 'XIAOHONGSHU',
       skillId: 'xiaohongshu_insights',
     },
     call_gmail_agent: {
       id: 'call_gmail_agent',
-      title: '调用邮件助手',
-      description: '读取邮件中的外部沟通、待办和风险信号。',
+      title: 'Call Email Assistant',
+      description: 'Read external communication, action items, and risk signals from email.',
       agentType: 'GMAIL',
       skillId: 'gmail_insights',
     },
     call_feishu_agent: {
       id: 'call_feishu_agent',
-      title: '调用飞书助手',
-      description: '读取飞书中的内部项目和团队进展。',
+      title: 'Call Lark Assistant',
+      description: 'Read internal project and team progress from Lark.',
       agentType: 'FEISHU',
       skillId: 'feishu_insights',
     },
     merge_results: {
       id: 'merge_results',
-      title: '合并信息源',
-      description: '把各 skill 和子 agent 返回的信息合并到晨报上下文。',
+      title: 'Merge Sources',
+      description: 'Merge information returned by skills and child agents into the briefing context.',
     },
     generate_briefing_summary: {
       id: 'generate_briefing_summary',
-      title: '生成晨报摘要',
-      description: '基于内部数据、外部信息和子 agent 结果生成晨报。',
+      title: 'Generate Briefing Summary',
+      description: 'Generate the briefing from internal data, external information, and child agent results.',
     },
     structure_briefing_json: {
       id: 'structure_briefing_json',
-      title: '结构化晨报JSON',
-      description: '由总裁秘书把已获得的信息整理为信息汇总，并从所有信息里提取今日to do；分身推荐模块暂未开通。',
+      title: 'Structure Briefing JSON',
+      description: 'Have the executive assistant organize collected information into Information Digest and extract Today To-Dos from all sources; Twin Recommendations is not enabled yet.',
     },
     structure_informationSummary: {
       id: 'structure_informationSummary',
-      title: '结构化信息汇总',
-      description: '信息汇总结构化子 agent 整理所有渠道候选素材。',
+      title: 'Structure Information Digest',
+      description: 'The Information Digest structuring child agent organizes candidate material from all channels.',
     },
     structure_todayTodo: {
       id: 'structure_todayTodo',
-      title: '结构化今日to do',
-      description: '今日to do结构化子 agent 从所有消息渠道提取行动项。',
+      title: 'Structure Today To-Dos',
+      description: 'The Today To-Dos structuring child agent extracts action items from all message channels.',
     },
     structure_twinRecommendation: {
       id: 'structure_twinRecommendation',
-      title: '结构化分身推荐',
-      description: '分身推荐模块暂未开通，当前只输出占位说明。',
+      title: 'Structure Twin Recommendations',
+      description: 'Twin Recommendations is not enabled yet; currently outputs a placeholder only.',
     },
     aggregate_structured_briefing: {
       id: 'aggregate_structured_briefing',
-      title: '聚合结构化晨报',
-      description: '聚合 agent 校验三个模块并生成最终标题与总述。',
+      title: 'Aggregate Structured Briefing',
+      description: 'The aggregation agent validates the three modules and generates the final title and summary.',
     },
     persist_briefing: {
       id: 'persist_briefing',
-      title: '保存今日晨报',
-      description: '把今日晨报写入 executive_briefings。',
+      title: 'Save Today Briefing',
+      description: 'Write today briefing to executive_briefings.',
       skillId: 'persist_briefing',
     },
     generate_reply: {
       id: 'generate_reply',
-      title: '生成对话回复',
-      description: '总裁秘书 Momo 基于最新上下文回复用户。',
+      title: 'Generate Chat Reply',
+      description: 'Executive Assistant Momo replies to the user based on the latest context.',
       skillId: 'chat_reply',
     },
   };
@@ -481,7 +481,7 @@ export function getExecutivePlannerStepDefinition(id: ExecutivePlannerStepId): E
   return known[id] || {
     id,
     title: id,
-    description: '本轮动态 planner 生成的步骤。',
+    description: 'Step generated by the dynamic planner for this turn.',
   };
 }
 
@@ -493,43 +493,43 @@ function dateKey(now = new Date()) {
 }
 
 function shouldUpdateBriefing(userQuery: string) {
-  return /更新.*晨报|刷新.*晨报|生成.*晨报|今日晨报|今天.*晨报|daily briefing/i.test(userQuery);
+  return /update.*briefing|refresh.*briefing|generate.*briefing|today briefing|today.*briefing|daily briefing/i.test(userQuery);
 }
 
 function shouldIncludeWechat(userQuery: string, context: LoadedExecutiveContext) {
   if (!context.hasWechatSources) return false;
   if (shouldUpdateBriefing(userQuery)) return true;
-  return /公众号|微信|文章|外界|行业|动态|趋势|竞品|情报|新闻|ai\s*agent|agent|vibe\s*coding|vibe|coding/i.test(userQuery);
+  return /official account|wechat|article|market|industry|trend|competitive|intelligence|news|ai\s*agent|agent|vibe\s*coding|vibe|coding/i.test(userQuery);
 }
 
 function shouldUseExternalWeb(userQuery: string) {
-  return shouldUpdateBriefing(userQuery) || /外界|行业|动态|趋势|竞品|情报|新闻|ai\s*agent|agent|vibe\s*coding|vibe|coding/i.test(userQuery);
+  return shouldUpdateBriefing(userQuery) || /market|industry|trend|competitive|intelligence|news|ai\s*agent|agent|vibe\s*coding|vibe|coding/i.test(userQuery);
 }
 
 function isMultiChannelOrchestrationQuery(userQuery: string) {
-  return /子agent|子 agent|微信公众号|公众号|小红书|邮件|邮箱|gmail|飞书|feishu/i.test(userQuery);
+  return /child agent|subagent|WeChat Official Accounts|official account|xiaohongshu|email|Email|gmail|lark|feishu/i.test(userQuery);
 }
 
 function buildWebSearchChannelInstruction(userQuery: string) {
   if (!isMultiChannelOrchestrationQuery(userQuery)) return userQuery;
   return [
-    '用户要求更新今日晨报并汇总多渠道信息。',
-    '联网搜索助手只负责公开互联网搜索，补充可验证URL的信息汇总素材。',
-    '微信公众号、邮件、飞书、小红书等渠道由其他子agent处理；不要搜索或模拟这些私有/垂直渠道的内部结果。',
-    '今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通。',
+    'The user asked to update today briefing and consolidate multi-channel information.',
+    'The web search assistant only handles public web search and supplements Information Digest material with verifiable URLs.',
+    'WeChat Official Accounts, email, Lark, Xiaohongshu, and similar channels are handled by other child agents. Do not search for or simulate internal results from private or vertical channels.',
+    'Today To-Dos are extracted by the top-level executive assistant across all sources; Twin Recommendations is not enabled yet.',
   ].join(' ');
 }
 
 function buildWebSearchIntent(userQuery: string, executiveSystemPrompt?: string) {
   const preference = executiveSystemPrompt?.trim()
     ? executiveSystemPrompt.trim().slice(0, 1600)
-    : '无额外偏好。';
+    : 'No additional preferences.';
   const channelInstruction = buildWebSearchChannelInstruction(userQuery);
 
   return [
-    `联网搜索渠道任务：${channelInstruction}`,
-    `总裁秘书system prompt / 用户偏好：${preference}`,
-    '联网搜索要求：只搜索公开互联网资料，只产出信息汇总素材。搜索范围、关键词、是否过滤、信息保留策略都必须从总裁秘书system prompt / 用户偏好和上述渠道任务中读取，不要添加代码预设的业务主题偏好。优先查找有明确来源、发布时间和可验证URL的公开信息。',
+    `Web search channel task: ${channelInstruction}`,
+    `Executive assistant system prompt / user preferences: ${preference}`,
+    'Web search requirements: search only public internet sources and produce only Information Digest material. Search scope, keywords, filtering, and retention strategy must come from the executive assistant system prompt / user preferences and the channel task above. Do not add hard-coded business topic preferences. Prioritize public information with clear sources, timestamps, and verifiable URLs.',
   ].join('\n');
 }
 
@@ -546,11 +546,11 @@ function buildWechatTaskSpec(params: {
       ? raw.criteria
       : [];
   const prompt = params.executiveSystemPrompt?.trim();
-  const orchestrationQuery = /子agent|子 agent|小红书|邮件|邮箱|gmail|飞书|feishu/i.test(params.userQuery);
+  const orchestrationQuery = /child agent|subagent|xiaohongshu|email|Email|gmail|lark|feishu/i.test(params.userQuery);
   const scopedUserInstruction = orchestrationQuery
-    ? '原始用户请求是更新今日晨报并汇总多渠道信息；微信公众号助手只处理公众号文章，邮件、飞书、小红书等其他渠道由各自子agent处理。'
+    ? 'The original user request is to update today briefing and consolidate multi-channel information. The WeChat Official Accounts Assistant only handles official account articles; email, Lark, Xiaohongshu, and other channels are handled by their own child agents.'
     : params.userQuery;
-  const channelScope = '微信渠道任务范围：只从微信公众号来源提取可合并的信息汇总素材。今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通，不由微信公众号助手生成。';
+  const channelScope = 'WeChat channel scope: extract mergeable Information Digest material only from WeChat Official Accounts sources. Today To-Dos are extracted by the top-level executive assistant across all sources. Twin Recommendations is not enabled and should not be generated by the WeChat Official Accounts Assistant.';
   const sourceSelectionCriteria = Array.from(new Set([
     ...rawCriteria,
     scopedUserInstruction,
@@ -568,12 +568,12 @@ function buildWechatTaskSpec(params: {
       : [];
   const sections = rawSections
     .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter((item) => item === '信息汇总')
+    .filter((item) => item === 'Information Digest')
     .slice(0, 1);
   const wechatReturnFormatGuard = [
-    '微信公众号助手只提供信息汇总候选素材。',
-    '今日to do由总裁秘书顶层从所有信息源统一提取，微信公众号助手不要生成待办模块。',
-    '分身推荐暂未开通，微信公众号助手不要生成分身推荐模块。',
+    'The WeChat Official Accounts Assistant only provides candidate Information Digest material.',
+    'Today To-Dos are extracted by the top-level executive assistant across all sources. The WeChat Official Accounts Assistant should not generate the to-do module.',
+    'Twin Recommendations is not enabled. The WeChat Official Accounts Assistant should not generate the Twin Recommendations module.',
   ].join('\n');
   const instructions =
     raw.returnFormat &&
@@ -581,10 +581,10 @@ function buildWechatTaskSpec(params: {
     typeof (raw.returnFormat as Record<string, unknown>).instructions === 'string'
       ? `${String((raw.returnFormat as Record<string, unknown>).instructions).trim().slice(0, 1200)}\n${wechatReturnFormatGuard}`
       : [
-          '按晨报秘书可直接合并的格式返回。',
-          '每条信息必须包含来源公众号、文章标题、链接、发布时间、为什么重要。',
+          'Return results in a format the briefing assistant can merge directly.',
+          'Each item must include the source official account, article title, link, publication time, and why it matters.',
           wechatReturnFormatGuard,
-          '业务偏好、筛选规则和保留策略必须以晨报秘书system prompt为准。',
+          'Business preferences, filtering rules, and retention strategy must follow the briefing assistant system prompt.',
         ].join('\n');
 
   return {
@@ -599,7 +599,7 @@ function buildWechatTaskSpec(params: {
       endAt: new Date().toISOString(),
     },
     returnFormat: {
-      sections: sections.length > 0 ? sections : ['信息汇总'],
+      sections: sections.length > 0 ? sections : ['Information Digest'],
       instructions,
     },
   };
@@ -632,24 +632,24 @@ function buildFallbackSkillReason(params: {
   useWebSearch: boolean;
   userQuery: string;
 }) {
-  if (!params.available) return '当前账户缺少这个 skill 所需的数据源或集成。';
+  if (!params.available) return 'The current account is missing the data source or integration required by this skill.';
   if (params.selected) {
-    if (params.skillId === 'web_search') return 'Planner 判断本轮需要公开网络信息补充。';
-    if (params.skillId === 'wechat_articles') return 'Planner 判断本轮需要读取已追踪公众号文章。';
-    if (params.skillId === 'persist_briefing') return '本轮会更新今日晨报，需要保存结果。';
-    if (params.skillId === 'internal_briefing') return '每轮都需要读取账户上下文。';
-    if (params.skillId === 'chat_reply') return '每轮都需要生成最终回复。';
-    return 'Planner 选择在本轮调用这个 skill。';
+    if (params.skillId === 'web_search') return 'Planner decided this turn needs supplemental public web information.';
+    if (params.skillId === 'wechat_articles') return 'Planner decided this turn needs tracked official account articles.';
+    if (params.skillId === 'persist_briefing') return 'This turn updates today briefing, so the result must be saved.';
+    if (params.skillId === 'internal_briefing') return 'Every turn needs to load account context.';
+    if (params.skillId === 'chat_reply') return 'Every turn needs to generate a final reply.';
+    return 'Planner selected this skill for this turn.';
   }
   if (params.skillId === 'web_search') {
     if (!params.useWebSearch) {
-      return 'Planner 没有把本轮判断为需要公开网络检索；如果需要强制联网，请在指令中明确要求调用联网搜索助手或补充公开网页信息。';
+      return 'Planner did not decide that this turn needs public web retrieval. To force web access, explicitly ask to call the Web Search Assistant or add public web information.';
     }
-    return 'Planner 没有把 web_search 放入本轮执行技能列表。';
+    return "Planner did not include web_search in this turn's skill list.";
   }
-  if (params.skillId === 'wechat_articles') return 'Planner 没有判断本轮需要公众号文章。';
-  if (params.skillId === 'persist_briefing' && !params.updateBriefing) return '本轮不是晨报更新任务，不需要保存今日晨报。';
-  return `Planner 未选择该 skill；用户指令：${params.userQuery.slice(0, 120)}`;
+  if (params.skillId === 'wechat_articles') return 'Planner did not decide that official account articles are needed this turn.';
+  if (params.skillId === 'persist_briefing' && !params.updateBriefing) return 'This turn is not a briefing update, so today briefing does not need to be saved.';
+  return `Planner did not select this skill; user instruction: ${params.userQuery.slice(0, 120)}`;
 }
 
 function normalizeSkillDecisions(params: {
@@ -712,7 +712,7 @@ function normalizePlannerStep(value: unknown, index: number): ExecutivePlannerSt
     description:
       typeof item.description === 'string' && item.description.trim()
         ? item.description.trim().slice(0, 220)
-        : '本轮动态 planner 生成的步骤。',
+        : 'Step generated by the dynamic planner for this turn.',
     agentType: typeof item.agentType === 'string' && item.agentType.trim() ? item.agentType.trim().slice(0, 40) : undefined,
     skillId: skillId || undefined,
   };
@@ -750,15 +750,15 @@ function fallbackExecutivePlan(params: {
     skills.push('wechat_articles');
     steps.push(getExecutivePlannerStepDefinition('call_wechat_agent'));
   }
-  if (params.context.integrationProviders.has('XIAOHONGSHU') && /小红书|社媒|内容|竞品|趋势/.test(params.userQuery)) {
+  if (params.context.integrationProviders.has('XIAOHONGSHU') && /xiaohongshu|social|content|competitor|trend/.test(params.userQuery)) {
     skills.push('xiaohongshu_insights');
     steps.push(getExecutivePlannerStepDefinition('call_xiaohongshu_agent'));
   }
-  if (params.context.integrationProviders.has('GMAIL') && /邮件|邮箱|客户|投资人|外部沟通|待办/.test(params.userQuery)) {
+  if (params.context.integrationProviders.has('GMAIL') && /email|Email|customer|investor|external communication|todo|to-do/.test(params.userQuery)) {
     skills.push('gmail_insights');
     steps.push(getExecutivePlannerStepDefinition('call_gmail_agent'));
   }
-  if (params.context.integrationProviders.has('FEISHU') && /飞书|内部|团队|项目|进展|待办/.test(params.userQuery)) {
+  if (params.context.integrationProviders.has('FEISHU') && /lark|internal|team|project|progress|todo|to-do/.test(params.userQuery)) {
     skills.push('feishu_insights');
     steps.push(getExecutivePlannerStepDefinition('call_feishu_agent'));
   }
@@ -774,7 +774,7 @@ function fallbackExecutivePlan(params: {
   steps.push(getExecutivePlannerStepDefinition('generate_reply'));
 
   return {
-    objective: updateBriefing ? '更新今日晨报' : '回答用户问题并按需调用可用 skill',
+    objective: updateBriefing ? 'update today briefing' : 'answer the user and call available skills as needed',
     updateBriefing,
     useWebSearch,
     skills: Array.from(new Set(skills)),
@@ -790,7 +790,7 @@ function fallbackExecutivePlan(params: {
     wechatTaskSpec: includeWechat
       ? buildWechatTaskSpec({
           userQuery: params.userQuery,
-          objective: updateBriefing ? '更新今日晨报' : params.userQuery,
+          objective: updateBriefing ? 'update today briefing' : params.userQuery,
           executiveSystemPrompt: params.executiveSystemPrompt,
         })
       : undefined,
@@ -891,14 +891,14 @@ async function planExecutiveTurn(params: {
     {
       role: 'system',
       content: [
-        '你是总裁秘书Momo的动态planner。',
-        '每轮都要根据用户指令、已雇佣AI员工、可用skill和权限生成本轮执行计划。',
-        '不要输出固定全量能力清单；只输出本轮真正需要执行或需要说明不可用的步骤。',
-        '你必须只输出一个符合 response_format JSON Schema 的 JSON 对象，不要输出 markdown、解释文字或额外字段。',
-        'skills 只能包含本轮真实要执行或需要说明不可用的 skillId；不可用的 skill 不要标 selected=true。',
-        'skillDecisions 必须覆盖所有 availableSkills，并解释每个 skill 为什么选择或跳过。',
-        '如果不选择 wechat_articles，wechatTaskSpec 必须为 null；如果选择，则必须给出可执行的 objective/sourceSelectionCriteria/returnFormat。',
-        'steps 只描述本轮执行计划，不要编造代码里没有实现的 runner；skillId/agentType 没有时使用 null。',
+        "You are Executive Assistant Momo's dynamic planner.",
+        'For each turn, generate an execution plan based on the user instruction, hired AI teammates, available skills, and permissions.',
+        'Do not output a fixed full capability list; output only steps that really need to run this turn or need to be marked unavailable.',
+        'Output only one JSON object matching the response_format JSON Schema. Do not output markdown, explanations, or extra fields.',
+        'skills may only include skillIds that will actually run this turn or need to be marked unavailable; unavailable skills must not be selected=true.',
+        'skillDecisions must cover all availableSkills and explain why each skill is selected or skipped.',
+        'If wechat_articles is not selected, wechatTaskSpec must be null. If selected, provide an executable objective/sourceSelectionCriteria/returnFormat.',
+        "steps should describe only this turn's execution plan. Do not invent runners that do not exist in code; use null when skillId/agentType is absent.",
       ].join('\n'),
     },
     {
@@ -914,7 +914,7 @@ async function planExecutiveTurn(params: {
           internalFacts: params.context.internalFacts,
         },
         requiredOutputContract:
-          '输出必须匹配本请求的 response_format JSON Schema：objective/updateBriefing/useWebSearch/skills/skillDecisions/wechatTaskSpec/steps。不要新增字段。',
+          "Output must match this request's response_format JSON Schema: objective/updateBriefing/useWebSearch/skills/skillDecisions/wechatTaskSpec/steps. Do not add fields.",
         stepIdHints: [
           'load_context',
           'plan_subagents',
@@ -1041,14 +1041,14 @@ async function loadExecutiveContext(investorId: string): Promise<LoadedExecutive
   const integrationSnapshotFacts = integrations.flatMap((item) =>
     item.snapshots.slice(0, 1).map((snapshot) => {
       const createdAt = snapshot.createdAt.toISOString();
-      return `${item.provider} 最新消息摘要（${createdAt}）：${snapshot.summary}`;
+      return `${item.provider} latest message summary (${createdAt}): ${snapshot.summary}`;
     })
   );
   const internalFacts = [
-    `已接入集成：${integrations.map((item) => item.provider).join('、') || '无'}`,
-    `已录入公众号：${wechatSources.map((item) => item.displayName).join('、') || '无'}`,
-    `数字分身数量：${avatars.length}`,
-    `已雇佣团队：${Array.from(hiredTeamKeys).join('、') || '无'}`,
+    `Connected integrations: ${integrations.map((item) => item.provider).join(', ') || 'none'}`,
+    `Tracked official accounts: ${wechatSources.map((item) => item.displayName).join(', ') || 'none'}`,
+    `Digital twin count: ${avatars.length}`,
+    `Hired teams: ${Array.from(hiredTeamKeys).join(', ') || 'none'}`,
     ...integrationSnapshotFacts,
   ];
 
@@ -1071,7 +1071,7 @@ function mergeBriefingWithItems(
     .slice(0, 100)
     .map((item, index) => {
       const source = item.url ? `${item.source} ${item.url}` : item.source;
-      return `${index + 1}. ${item.title}：${item.summary}（${source}）`;
+      return `${index + 1}. ${item.title}: ${item.summary} (${source})`;
     })
     .join('\n');
 
@@ -1080,9 +1080,9 @@ function mergeBriefingWithItems(
     headline: suffix ? `${briefing.headline} ${suffix}` : briefing.headline,
     externalInsights: [
       {
-        category: '子Agent更新',
+        category: 'Child Agent Updates',
         content,
-        source: '总裁秘书Orchestrator',
+        source: 'Executive Assistant Orchestrator',
       },
       ...briefing.externalInsights,
     ],
@@ -1101,27 +1101,27 @@ async function buildBriefingSummary(input: {
     {
       role: 'system',
       content: [
-        '你是总裁秘书Momo的晨报生成器。',
-        '下面的“总裁秘书system prompt / 用户偏好”是业务偏好和用户倾向的唯一来源。',
-        '是否过滤、保留多少、哪些主题重要、如何排序，都必须从总裁秘书system prompt和用户当前命令中读取；不要添加代码预设的业务主题偏好。',
-        '根据内部数据、子agent结果和显式联网搜索结果，生成一份面向创始人的今日晨报。',
-        '如果子agent结果中包含 WEB_SEARCH，请只使用这些已记录的搜索结果，不要自行发起隐式搜索。',
-        '如果总裁秘书system prompt要求不要二次过滤或要求保留子agent结果，你必须遵守；否则只按system prompt和用户命令指定的规则处理。',
-        '必须把来源和不确定性说明清楚。',
-        '输出中文，结构清晰：信息汇总覆盖所有已调用信息源的重要信号；今日to do从所有信息和内部上下文中提炼行动项；分身推荐模块暂未开通，不要硬凑推荐。',
-        '今日to do必须从所有已调用消息渠道和内部上下文里提炼可执行事项，按红色P0、黄色P1、绿色P2排序。',
+        "You are Executive Assistant Momo's briefing generator.",
+        'The executive assistant system prompt / user preferences below are the only source of business preferences and user tendencies.',
+        'Filtering, retention volume, topic importance, and ordering must come from the executive assistant system prompt and the current user command. Do not add hard-coded business topic preferences.',
+        'Generate today founder-facing briefing from internal data, child agent results, and explicit web search results.',
+        'If child agent results include WEB_SEARCH, use only those recorded search results and do not start any implicit search.',
+        'If the executive assistant system prompt says not to filter again or to retain child agent results, comply; otherwise process only according to the system prompt and user command.',
+        'Clearly state sources and uncertainty.',
+        'Write in clear professional English. Information Digest should cover important signals from all called sources; Today To-Dos should extract action items from all information and internal context; Twin Recommendations is not enabled, so do not force recommendations.',
+        'Today To-Dos must extract actionable items from all called message channels and internal context, ordered by Red P0, Yellow P1, Green P2.',
       ].join('\n'),
     },
     {
       role: 'user',
       content: [
-        `总裁秘书system prompt / 用户偏好：\n${input.executiveSystemPrompt}`,
-        `用户命令：${input.userQuery}`,
-        `是否需要外部互联网搜索：${input.useWeb ? '是' : '否'}`,
-        `联网搜索意图：\n${buildWebSearchIntent(input.userQuery, input.executiveSystemPrompt)}`,
-        `基础晨报：${JSON.stringify(input.briefing)}`,
-        `内部数据：\n${input.internalFacts.join('\n')}`,
-        `子agent结果：${JSON.stringify(
+        `Executive assistant system prompt / user preferences: \n${input.executiveSystemPrompt}`,
+        `User command: ${input.userQuery}`,
+        `Needs external web search: ${input.useWeb ? 'yes' : 'no'}`,
+        `Web search intent: \n${buildWebSearchIntent(input.userQuery, input.executiveSystemPrompt)}`,
+        `Baseline briefing: ${JSON.stringify(input.briefing)}`,
+        `Internal data: \n${input.internalFacts.join('\n')}`,
+        `Child agent results: ${JSON.stringify(
           input.subagentResults.map((item) => ({
             agentType: item.agentType,
             answer: item.answer,
@@ -1133,14 +1133,14 @@ async function buildBriefingSummary(input: {
     },
   ];
 
-  return createChatCompletion(messages, getOpenRouterModel('EXECUTIVE'), { enableWebTools: false });
+  return createChatCompletion(messages, getOpenRouterModel('EXECUTIVE'), { enableWebtools: false });
 }
 
 function fallbackSummary(briefing: ExecutiveDailyBriefing, subagentResults: AgentRunResult[]) {
   const lines = [
     briefing.headline,
-    ...briefing.externalInsights.map((item) => `${item.category}：${item.content}`),
-    ...subagentResults.map((item) => `${item.agentType}：${item.answer}`),
+    ...briefing.externalInsights.map((item) => `${item.category}: ${item.content}`),
+    ...subagentResults.map((item) => `${item.agentType}: ${item.answer}`),
   ];
   return lines.join('\n\n');
 }
@@ -1155,7 +1155,7 @@ function normalizeStructuredItem(raw: unknown): StructuredBriefingItem | null {
   const item = raw as Record<string, unknown>;
   const title = asString(item.title).slice(0, 160);
   const summary = asString(item.summary).slice(0, 500);
-  const source = asString(item.source, '总裁秘书Momo').slice(0, 160);
+  const source = asString(item.source, 'Executive Assistant Momo').slice(0, 160);
   if (!title || !summary) return null;
   return {
     title,
@@ -1170,7 +1170,7 @@ function normalizeStructuredItem(raw: unknown): StructuredBriefingItem | null {
 function normalizeStructuredModule(raw: unknown, title: StructuredBriefingModule['title']): StructuredBriefingModule {
   const fallback = {
     title,
-    content: `暂无明确${title}，总裁秘书会在下一次更新晨报时继续补充。`,
+    content: `No clear ${title} yet. The executive assistant will continue filling this in during the next briefing update.`,
     items: [],
   };
   if (!raw || typeof raw !== 'object') return fallback;
@@ -1189,12 +1189,12 @@ function normalizeStructuredBriefing(raw: string): StructuredBriefingOutput {
   const parsed = JSON.parse(raw.trim()) as Record<string, unknown>;
   const modules = parsed.modules && typeof parsed.modules === 'object' ? (parsed.modules as Record<string, unknown>) : {};
   return {
-    title: asString(parsed.title, `总裁秘书Momo晨报 ${dateKey()}`).slice(0, 160),
-    summary: asString(parsed.summary, '今日晨报已更新。').slice(0, 2400),
+    title: asString(parsed.title, `Executive Assistant Momo Briefing ${dateKey()}`).slice(0, 160),
+    summary: asString(parsed.summary, 'Today briefing has been updated.').slice(0, 2400),
     modules: [
-      normalizeStructuredModule(modules.informationSummary, '信息汇总'),
-      normalizeStructuredModule(modules.todayTodo, '今日to do'),
-      normalizeStructuredModule(modules.twinRecommendation, '分身推荐'),
+      normalizeStructuredModule(modules.informationSummary, 'Information Digest'),
+      normalizeStructuredModule(modules.todayTodo, 'Today To-Dos'),
+      normalizeStructuredModule(modules.twinRecommendation, 'Twin Recommendations'),
     ],
   };
 }
@@ -1240,8 +1240,8 @@ function normalizeModuleAgentOutput(raw: string, module: StructuredBriefingModul
 function normalizeAggregatorOutput(raw: string) {
   const parsed = JSON.parse(raw.trim()) as Record<string, unknown>;
   return {
-    title: asString(parsed.title, `总裁秘书Momo晨报 ${dateKey()}`).slice(0, 160),
-    summary: asString(parsed.summary, '今日晨报已更新。').slice(0, 2400),
+    title: asString(parsed.title, `Executive Assistant Momo Briefing ${dateKey()}`).slice(0, 160),
+    summary: asString(parsed.summary, 'Today briefing has been updated.').slice(0, 2400),
   };
 }
 
@@ -1268,18 +1268,18 @@ async function runStructuredModuleAgent(input: {
 }) {
   const stepId = getModuleAgentStepId(input.module);
   await emitPlannerStep(input.onPlannerEvent, stepId, 'RUNNING', {
-    detail: `${input.module.title}结构化子 agent 正在整理候选素材。`,
+    detail: `${input.module.title} structuring child agent is organizing candidate material.`,
     payload: { sourceCount: input.sources.length },
   });
 
   if (input.module.key === 'twinRecommendation') {
     const structuredModule: StructuredBriefingModule = {
-      title: '分身推荐',
-      content: '分身推荐模块暂未开通；本轮不基于信息汇总素材生成推荐。',
+      title: 'Twin Recommendations',
+      content: 'Twin Recommendations is not enabled yet; this turn will not generate recommendations from Information Digest material.',
       items: [],
     };
     await emitPlannerStep(input.onPlannerEvent, stepId, 'SUCCESS', {
-      detail: '分身推荐模块暂未开通，已跳过素材推荐生成。',
+      detail: 'Twin Recommendations is not enabled, so material-based recommendation generation was skipped.',
       payload: { itemCount: 0, unavailable: true },
     });
     return structuredModule;
@@ -1289,19 +1289,19 @@ async function runStructuredModuleAgent(input: {
     {
       role: 'system',
       content: [
-        `你是总裁秘书Momo的晨报结构化子agent，只负责“${input.module.title}”模块。`,
-        '业务偏好、是否过滤、是否保留所有信息、排序规则，都必须从晨报秘书system prompt和用户当前命令中读取；不要添加代码预设的业务主题偏好。',
-        '如果晨报秘书system prompt要求不要二次过滤或要求保留子agent结果，你必须遵守。',
-        `你只能输出“${input.module.title}”模块，不要输出其他模块。`,
+        `You are Executive Assistant Momo's briefing structuring child agent, responsible only for "${input.module.title}" module.`,
+        'Business preferences, filtering, retention, and ordering rules must come from the briefing assistant system prompt and the current user command. Do not add hard-coded business topic preferences.',
+        'If the briefing assistant system prompt says not to filter again or to retain child agent results, comply.',
+        `Output only the "${input.module.title}" module; do not output other modules.`,
         input.module.key === 'todayTodo'
-          ? '本模块由总裁秘书顶层从所有信息汇总素材中提取可执行待办，不输出纯新闻。每个title必须用“红色P0 ”、“黄色P1 ”或“绿色P2 ”开头，summary说明为什么要做、涉及哪个渠道或来源、建议何时处理。'
+          ? 'This module extracts actionable to-dos from all Information Digest material at the top level and should not output pure news. Each title must start with "Red P0 ", "Yellow P1 ", or "Green P2 "; the summary should explain why it matters, which channel or source it relates to, and when to handle it.'
           : '',
         input.module.key === 'informationSummary'
-          ? '本模块汇总所有已调用渠道的候选素材。是否筛选完全服从晨报秘书system prompt和用户当前命令：如果要求不要二次过滤、尽量保留、所有来源都展示，就必须保留所有非重复sources；只有在明确要求筛选/精简/只保留重点时才筛选。'
+          ? 'This module consolidates candidate material from all called channels. Filtering must strictly follow the briefing assistant system prompt and current user command: if instructed not to filter again, retain as much as possible, or show every source, keep all non-duplicate sources; filter only when explicitly asked to filter, condense, or keep highlights only.'
           : '',
-        '不要编造，不要引入候选素材之外的信息；必须保留来源和URL。',
-        '只输出严格JSON，不要输出markdown或解释。',
-        '必须严格遵守 user message 中的 outputSchema，不得新增、删除、改名字段。',
+        'Do not fabricate or introduce information outside the candidate material; preserve sources and URLs.',
+        'Output strict JSON only. Do not output markdown or explanations.',
+        'Strictly follow the outputSchema in the user message. Do not add, delete, or rename fields.',
       ].join('\n'),
     },
     {
@@ -1315,16 +1315,16 @@ async function runStructuredModuleAgent(input: {
         calledAgents: input.calledAgents,
         sources: input.sources.slice(0, 200).map(compactBriefingSourceWithIndex),
         constraints: [
-          `只输出${input.module.title}模块`,
-          `items最多${STRUCTURED_AGENT_ITEM_LIMIT}条`,
-          '每个summary不超过160字',
-          'content使用一到三段中文，不要过长',
-          '不要复制大段原文',
+          `Output only ${input.module.title} module`,
+          `items max: ${STRUCTURED_AGENT_ITEM_LIMIT} items`,
+          'Each summary must be 160 English words or fewer',
+          'content should use one to three concise English paragraphs',
+          'Do not copy long source passages',
           input.module.key === 'todayTodo'
-            ? '待办必须从sources里的具体信息推导，必须具体可执行，避免“关注一下”“持续观察”这类空泛表达'
+            ? 'To-dos must be derived from specific information in sources, be concrete and actionable, and avoid vague phrasing such as "monitor this" or "keep watching"'
             : input.module.key === 'informationSummary'
-              ? '如果不筛选，items数量应接近去重后的sources数量；如果筛选，content必须说明筛选依据，并尽量覆盖不同渠道来源'
-            : '如果同一信息同时适合多个模块，请只在本模块确有商业意义时保留',
+              ? 'If not filtering, item count should be close to the deduplicated source count; if filtering, content must explain the selection criteria and cover different channels where possible'
+            : 'If the same information fits multiple modules, keep it here only when it has clear business value for this module',
         ],
         outputSchema: {
           moduleKey: input.module.key,
@@ -1344,14 +1344,14 @@ async function runStructuredModuleAgent(input: {
     );
     const structuredModule = normalizeModuleAgentOutput(raw, input.module);
     await emitPlannerStep(input.onPlannerEvent, stepId, 'SUCCESS', {
-      detail: `${input.module.title}结构化完成，返回 ${structuredModule.items.length} 条。`,
+      detail: `${input.module.title} structuring completed, returned ${structuredModule.items.length} items.`,
       payload: { itemCount: structuredModule.items.length },
     });
     return structuredModule;
   } catch (error) {
     const detail = error instanceof Error ? error.message : `${input.module.title} module structure failed`;
     await emitPlannerStep(input.onPlannerEvent, stepId, 'ERROR', { error: detail });
-    throw new Error(`${input.module.title}结构化失败：${detail}`);
+    throw new Error(`${input.module.title} structuring failed: ${detail}`);
   }
 }
 
@@ -1365,7 +1365,7 @@ async function runStructuredBriefingAggregator(input: {
   onPlannerEvent?: ExecutivePlannerEmit;
 }) {
   await emitPlannerStep(input.onPlannerEvent, 'aggregate_structured_briefing', 'RUNNING', {
-    detail: '晨报聚合 agent 正在校验三个模块并生成标题与总述。',
+    detail: 'The briefing aggregation agent is validating the three modules and generating the title and summary.',
     payload: {
       moduleItemCounts: input.modules.map((module) => ({ title: module.title, itemCount: module.items.length })),
     },
@@ -1375,12 +1375,12 @@ async function runStructuredBriefingAggregator(input: {
     {
       role: 'system',
       content: [
-        '你是总裁秘书Momo的晨报聚合agent。',
-        '你会收到三个模块结构化子agent的结果。你只负责校验整体一致性，并生成最终晨报title和summary。',
-        '不要重写items，不要删除items，不要新增事实，不要二次过滤。',
-        '如果发现模块内容有轻微表达问题，只在summary中概括修正；items由系统按子agent结果原样装配。',
-        '只输出严格JSON，不要输出markdown或解释。',
-        '必须严格遵守 user message 中的 outputSchema，不得新增、删除、改名字段。',
+        "You are Executive Assistant Momo's briefing aggregation agent.",
+        'You will receive results from three module structuring child agents. Only check overall consistency and generate the final briefing title and summary.',
+        'Do not rewrite items, delete items, add facts, or filter again.',
+        'If module content has minor wording issues, address them only in the summary; items are assembled exactly from child agent results.',
+        'Output strict JSON only. Do not output markdown or explanations.',
+        'Strictly follow the outputSchema in the user message. Do not add, delete, or rename fields.',
       ].join('\n'),
     },
     {
@@ -1413,14 +1413,14 @@ async function runStructuredBriefingAggregator(input: {
     );
     const result = normalizeAggregatorOutput(raw);
     await emitPlannerStep(input.onPlannerEvent, 'aggregate_structured_briefing', 'SUCCESS', {
-      detail: '晨报聚合 agent 已生成标题与总述。',
+      detail: 'The briefing aggregation agent generated the title and summary.',
       payload: { title: result.title },
     });
     return result;
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'structured briefing aggregation failed';
     await emitPlannerStep(input.onPlannerEvent, 'aggregate_structured_briefing', 'ERROR', { error: detail });
-    throw new Error(`结构化晨报聚合失败：${detail}`);
+    throw new Error(`Structured briefing aggregation failed: ${detail}`);
   }
 }
 
@@ -1437,7 +1437,7 @@ async function buildStructuredBriefing(input: {
 }) {
   try {
     await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'RUNNING', {
-      detail: '总裁秘书正在并行调用三个结构化子 agent，并由聚合 agent 校验输出。',
+      detail: 'The executive assistant is calling three structuring child agents in parallel and validating output through the aggregation agent.',
       payload: {
         sourceCount: input.sources.length,
         modules: STRUCTURED_MODULE_PLANS.map((module) => module.title),
@@ -1472,7 +1472,7 @@ async function buildStructuredBriefing(input: {
       modules,
     };
     await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'SUCCESS', {
-      detail: '三个结构化子 agent 与聚合 agent 已完成，最终晨报 JSON 已通过校验。',
+      detail: 'The three structuring child agents and aggregation agent completed; the final briefing JSON passed validation.',
       payload: {
         moduleCount: structured.modules.length,
         itemCount: structured.modules.reduce((sum, item) => sum + item.items.length, 0),
@@ -1485,7 +1485,7 @@ async function buildStructuredBriefing(input: {
     await emitPlannerStep(input.onPlannerEvent, 'structure_briefing_json', 'ERROR', {
       error: detail,
     });
-    throw new Error(`结构化晨报 JSON 生成失败：${detail}`);
+    throw new Error(`Structured briefing JSON generation failed: ${detail}`);
   }
 }
 
@@ -1518,7 +1518,7 @@ async function buildDocument(input: {
     summary: structured.summary,
     sections: [
       {
-        title: '总览',
+        title: 'Overview',
         content: input.briefing.headline,
       },
       ...structured.modules.map((section) => ({
@@ -1527,7 +1527,7 @@ async function buildDocument(input: {
         items: section.items.map((item) => ({
           category: section.title,
           title: item.title,
-          summary: item.whyItMatters ? `${item.summary}\n为什么重要：${item.whyItMatters}` : item.summary,
+          summary: item.whyItMatters ? `${item.summary}\nWhy it matters: ${item.whyItMatters}` : item.summary,
           source: item.source,
           url: item.url,
           publishedAt: item.publishedAt,
@@ -1557,7 +1557,7 @@ export async function updateTodayExecutiveBriefing(params: {
   onPlannerEvent?: ExecutivePlannerEmit;
 }): Promise<ExecutiveBriefingUpdateResult | null> {
   await emitPlannerStep(params.onPlannerEvent, 'load_context', 'RUNNING', {
-    detail: '正在读取账户数据和已雇佣的 AI 员工。',
+    detail: 'Reading account data and hired AI teammates.',
   });
   const context = await loadExecutiveContext(params.investorId);
   if (!context) {
@@ -1567,7 +1567,7 @@ export async function updateTodayExecutiveBriefing(params: {
     return null;
   }
   await emitPlannerStep(params.onPlannerEvent, 'load_context', 'SUCCESS', {
-    detail: '账户上下文已加载。',
+    detail: 'Account context loaded.',
     payload: {
       hasWechatSources: context.hasWechatSources,
       integrations: Array.from(context.integrationProviders),
@@ -1576,7 +1576,7 @@ export async function updateTodayExecutiveBriefing(params: {
   });
 
   await emitPlannerStep(params.onPlannerEvent, 'plan_subagents', 'RUNNING', {
-    detail: '正在由总裁秘书动态规划本轮要调用的 skill 和子 agent。',
+    detail: 'The executive assistant is dynamically planning which skills and child agents to call this turn.',
   });
   const plan = await planExecutiveTurn({
     userQuery: params.userQuery,
@@ -1590,9 +1590,9 @@ export async function updateTodayExecutiveBriefing(params: {
   });
   await emitPlannerStep(params.onPlannerEvent, 'plan_subagents', 'SUCCESS', {
     detail: [
-      `本轮目标：${plan.objective}`,
-      `Planner来源：${plan.plannerSource}`,
-      plan.plannerError ? `Planner降级原因：${plan.plannerError}` : '',
+      `Turn objective: ${plan.objective}`,
+      `PlannerSource: ${plan.plannerSource}`,
+      plan.plannerError ? `Planner fallback reason: ${plan.plannerError}` : '',
     ]
       .filter(Boolean)
       .join(' '),
@@ -1614,14 +1614,14 @@ export async function updateTodayExecutiveBriefing(params: {
 
   if (!useWeb && WEB_SEARCH_ASSISTANT_ENABLED) {
     await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'SKIPPED', {
-      detail: webSearchDecision?.reason || 'Planner 未选择联网搜索助手。',
+      detail: webSearchDecision?.reason || 'Planner did not select the Web Search Assistant.',
       payload: { selected: false, decision: webSearchDecision },
     });
   }
 
   if (includeWechat) {
     await emitPlannerStep(params.onPlannerEvent, 'call_wechat_agent', 'RUNNING', {
-      detail: '正在调用微信公众号助手抓取文章、正文和指标。',
+      detail: 'Calling the WeChat Official Accounts Assistant to retrieve articles, bodies, and metrics.',
     });
     subagentTasks.push(
       runWechatAgent({
@@ -1645,7 +1645,7 @@ export async function updateTodayExecutiveBriefing(params: {
             reason: `returned ${result.briefingItems.length} briefing items`,
           });
           await emitPlannerStep(params.onPlannerEvent, 'call_wechat_agent', 'SUCCESS', {
-            detail: `微信公众号助手完成，返回 ${result.briefingItems.length} 条可合并信息。`,
+            detail: `WeChat Official Accounts Assistant completed and returned ${result.briefingItems.length} mergeable items.`,
             payload: result.debug,
           });
           return result;
@@ -1666,7 +1666,7 @@ export async function updateTodayExecutiveBriefing(params: {
   } else {
     if (hasSkill(plan, 'wechat_articles')) {
       await emitPlannerStep(params.onPlannerEvent, 'call_wechat_agent', 'SKIPPED', {
-        detail: 'Planner 选择了微信公众号助手，但当前账户没有可用公众号源。',
+        detail: 'Planner selected the WeChat Official Accounts Assistant, but the current account has no usable official account sources.',
       });
     }
   }
@@ -1675,30 +1675,30 @@ export async function updateTodayExecutiveBriefing(params: {
     calledAgents.push({ agentType: 'XIAOHONGSHU', status: 'SKIPPED', reason: 'subagent runner not migrated yet' });
     await emitPlannerStep(params.onPlannerEvent, 'call_xiaohongshu_agent', 'SKIPPED', {
       detail: context.integrationProviders.has('XIAOHONGSHU')
-        ? 'Planner 选择了小红书助手，但子 agent runner 尚未迁移。'
-        : 'Planner 选择了小红书助手，但当前账户没有小红书集成。',
+        ? 'Planner selected the Xiaohongshu Assistant, but the child agent runner has not been migrated yet.'
+        : 'Planner selected the Xiaohongshu Assistant, but the current account has no Xiaohongshu integration.',
     });
   }
   if (hasSkill(plan, 'gmail_insights')) {
     calledAgents.push({ agentType: 'GMAIL', status: 'SKIPPED', reason: 'subagent runner not migrated yet' });
     await emitPlannerStep(params.onPlannerEvent, 'call_gmail_agent', 'SKIPPED', {
       detail: context.integrationProviders.has('GMAIL')
-        ? 'Planner 选择了邮件助手，但子 agent runner 尚未迁移。'
-        : 'Planner 选择了邮件助手，但当前账户没有 Gmail 集成。',
+        ? 'Planner selected the Email Assistant, but the child agent runner has not been migrated yet.'
+        : 'Planner selected the Email Assistant, but the current account has no Gmail integration.',
     });
   }
   if (hasSkill(plan, 'feishu_insights')) {
     calledAgents.push({ agentType: 'FEISHU', status: 'SKIPPED', reason: 'subagent runner not migrated yet' });
     await emitPlannerStep(params.onPlannerEvent, 'call_feishu_agent', 'SKIPPED', {
       detail: context.integrationProviders.has('FEISHU')
-        ? 'Planner 选择了飞书助手，但子 agent runner 尚未迁移。'
-        : 'Planner 选择了飞书助手，但当前账户没有飞书集成。',
+        ? 'Planner selected the Lark Assistant, but the child agent runner has not been migrated yet.'
+        : 'Planner selected the Lark Assistant, but the current account has no Lark integration.',
     });
   }
 
   if (useWeb) {
     await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'RUNNING', {
-      detail: '正在并行调用联网搜索助手，通过 OpenRouter 原生 web tool 检索和整理公开网页信息。',
+      detail: 'Calling the Web Search Assistant in parallel to retrieve and organize public web information through OpenRouter native web tools.',
       payload: { webSearchIntent },
     });
     subagentTasks.push(
@@ -1710,7 +1710,7 @@ export async function updateTodayExecutiveBriefing(params: {
           webSearchIntent,
           subagentResults: [],
           taskSpec: {
-            objective: `根据总裁秘书要求进行联网搜索，补充晨报所需外部公开信息：${plan.objective}`,
+            objective: `Run web search according to the executive assistant requirements and supplement the briefing with external public information: ${plan.objective}`,
             sourceSelectionCriteria: [
               webSearchChannelInstruction,
               params.executiveSystemPrompt || '',
@@ -1721,9 +1721,9 @@ export async function updateTodayExecutiveBriefing(params: {
               endAt: new Date().toISOString(),
             },
             returnFormat: {
-              sections: ['信息汇总'],
+              sections: ['Information Digest'],
               instructions:
-                '只返回信息汇总素材；每条信息必须有来源，能拿到URL时必须提供URL。本任务与其他信息源助手并行执行，不等待微信公众号助手结果。今日to do由总裁秘书顶层从所有信息源统一提取；分身推荐暂未开通。业务偏好、搜索范围和筛选/保留策略必须以晨报秘书system prompt为准。',
+                'Return only Information Digest material. Every item must include a source, and a URL whenever available. This task runs in parallel with other source assistants and does not wait for the WeChat Official Accounts Assistant. Today To-Dos are extracted by the top-level executive assistant across all sources; Twin Recommendations is not enabled yet. Business preferences, search scope, filtering, and retention strategy must follow the briefing assistant system prompt.',
             },
           },
         },
@@ -1735,7 +1735,7 @@ export async function updateTodayExecutiveBriefing(params: {
             reason: `returned ${webResult.briefingItems.length} search results`,
           });
           await emitPlannerStep(params.onPlannerEvent, 'call_web_search', 'SUCCESS', {
-            detail: `联网搜索助手完成，返回 ${webResult.briefingItems.length} 条可合并信息。`,
+            detail: `Web Search Assistant completed and returned ${webResult.briefingItems.length} mergeable items.`,
             payload: webResult.debug,
           });
           return webResult;
@@ -1747,7 +1747,7 @@ export async function updateTodayExecutiveBriefing(params: {
             error: detail,
             payload: { webSearchIntent },
           });
-          throw new Error(`联网搜索助手失败：${detail}`);
+          throw new Error(`Web Search Assistant failed: ${detail}`);
         })
     );
   }
@@ -1764,20 +1764,20 @@ export async function updateTodayExecutiveBriefing(params: {
     }
   }
   if (subagentErrors.length > 0) {
-    throw new Error(`子 agent 执行失败：${subagentErrors.join('；')}`);
+    throw new Error(`Child agent execution failed: ${subagentErrors.join('; ')}`);
   }
 
   await emitPlannerStep(params.onPlannerEvent, 'merge_results', 'RUNNING', {
-    detail: '正在把子 agent 结果合并进晨报上下文。',
+    detail: 'Merging child agent results into the briefing context.',
   });
   const briefingItems = subagentResults.flatMap((item) => item.briefingItems);
   const mergedBriefing = mergeBriefingWithItems(
     context.baseBriefing,
     briefingItems,
-    briefingItems.length > 0 ? `本次晨报已合并 ${briefingItems.length} 条子Agent信息。` : undefined
+    briefingItems.length > 0 ? `This briefing merged ${briefingItems.length} child agent items.` : undefined
   );
   await emitPlannerStep(params.onPlannerEvent, 'merge_results', 'SUCCESS', {
-    detail: `已合并 ${briefingItems.length} 条子 agent 信息。`,
+    detail: `Merged ${briefingItems.length} child agent items.`,
   });
 
   let summary = fallbackSummary(mergedBriefing, subagentResults);
@@ -1785,8 +1785,8 @@ export async function updateTodayExecutiveBriefing(params: {
     try {
       await emitPlannerStep(params.onPlannerEvent, 'generate_briefing_summary', 'RUNNING', {
         detail: useWeb
-          ? '正在基于已记录的联网搜索助手结果生成摘要。'
-          : '正在基于现有上下文生成摘要。',
+          ? 'Generating the summary from recorded Web Search Assistant results.'
+          : 'Generating the summary from the current context.',
         payload: useWeb ? { webSearchIntent } : undefined,
       });
       summary = await buildBriefingSummary({
@@ -1798,14 +1798,14 @@ export async function updateTodayExecutiveBriefing(params: {
         useWeb,
       });
       await emitPlannerStep(params.onPlannerEvent, 'generate_briefing_summary', 'SUCCESS', {
-        detail: plan.updateBriefing ? '晨报摘要已生成。' : '本轮信息摘要已生成。',
+        detail: plan.updateBriefing ? 'Briefing summary generated.' : "This turn's information summary has been generated.",
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'summary generation failed';
       await emitPlannerStep(params.onPlannerEvent, 'generate_briefing_summary', 'ERROR', {
         error: detail,
       });
-      throw new Error(`晨报摘要生成失败：${detail}`);
+      throw new Error(`Briefing summary generation failed: ${detail}`);
     }
   }
 
@@ -1823,7 +1823,7 @@ export async function updateTodayExecutiveBriefing(params: {
 
   if (plan.updateBriefing) {
     await emitPlannerStep(params.onPlannerEvent, 'persist_briefing', 'RUNNING', {
-      detail: '正在保存今日晨报。',
+      detail: 'Saving today briefing.',
     });
     await prisma.executiveBriefing.upsert({
       where: {
@@ -1848,7 +1848,7 @@ export async function updateTodayExecutiveBriefing(params: {
       },
     });
     await emitPlannerStep(params.onPlannerEvent, 'persist_briefing', 'SUCCESS', {
-      detail: `今日晨报已保存：${document.dateKey}。`,
+      detail: `Today briefing saved: ${document.dateKey}.`,
     });
   }
 

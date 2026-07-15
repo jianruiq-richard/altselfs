@@ -61,20 +61,20 @@ const COMPETITIVE_DATA_SOURCE_PROVIDERS = [
 const COMPETITIVE_DATA_SOURCE_SET = new Set<ProviderKey>(COMPETITIVE_DATA_SOURCE_PROVIDERS);
 
 const FEISHU_FEATURE_PACKAGES = [
-  { key: 'messages', label: '消息', description: 'IM 搜索、群聊/单聊消息读取' },
-  { key: 'contacts', label: '联系人', description: '按姓名搜索用户、辅助定位单聊' },
-  { key: 'calendar', label: '日历', description: '读取今日/时间段日程' },
-  { key: 'docs', label: '文档', description: '搜索和读取云文档、云空间文件' },
-  { key: 'meetings', label: '会议', description: '预留会议/妙记/纪要授权，工具接通后可用' },
+  { key: 'messages', label: 'content', description: 'IM content, content/content' },
+  { key: 'contacts', label: 'content', description: 'content, content' },
+  { key: 'calendar', label: 'content', description: 'contentToday/content' },
+  { key: 'docs', label: 'content', description: 'content, content' },
+  { key: 'meetings', label: 'content', description: 'content/content/content, toolcontent' },
 ] as const satisfies readonly { key: FeishuFeaturePackage; label: string; description: string }[];
 
 const DEFAULT_FEISHU_FEATURE_PACKAGES: FeishuFeaturePackage[] = ['messages', 'contacts', 'calendar', 'docs'];
 
 const providerLabels: Record<ProviderKey, string> = {
   gmail: 'Gmail',
-  feishu: '飞书',
+  feishu: 'content',
   meta: 'Instagram / Facebook',
-  xiaohongshu: '小红书',
+  xiaohongshu: 'content',
   similarweb_api1: 'Similarweb API1',
   semrush13: 'Semrush13',
   semrush8: 'Semrush8',
@@ -86,17 +86,17 @@ function providerLabel(provider: ProviderKey) {
 }
 
 const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
-  similarweb_api1: '提供 Similarweb 类访问量、趋势、国家、设备、来源渠道、关键词和竞品发现信号。',
-  semrush13: '提供较完整的域名情报，覆盖访问量、增长历史、搜索流量、渠道、关键词、竞品和外链摘要。',
-  semrush8: '提供轻量 SEO URL traffic 指标，可作为覆盖不足时的备选流量、关键词、成本和链接代理信号。',
-  domain_metrics_check: '提供 Moz、Majestic、Ahrefs 类域名权威和外链摘要指标，例如 DA、DR、反链和引用域。',
+  similarweb_api1: 'content Similarweb content, content, content, content, content, content.',
+  semrush13: 'content, content, content, content, content, content, content.',
+  semrush8: 'content SEO URL traffic content, content, content, content.',
+  domain_metrics_check: 'content Moz, Majestic, Ahrefs content, content DA, DR, content.',
 };
 
 const competitiveDataSourceScopes: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
-  similarweb_api1: '访问量、趋势、国家、设备、渠道、关键词、竞品/来源发现。用户量和营收需要结合代理指标推断。',
-  semrush13: '访问量、增长历史、搜索流量、渠道、关键词、竞品、AI traffic、外链摘要。不提供完整外链 URL 列表。',
-  semrush8: 'Semrush-like rank、关键词数、流量估计、流量价值、链接数。适合补充或兜底，不适合单独确认营收。',
-  domain_metrics_check: 'DA/PA、Spam Score、Trust Flow、Citation Flow、DR、外链、引用域、自然关键词和流量代理指标。',
+  similarweb_api1: 'content, content, content, content, content, content, content/content.content.',
+  semrush13: 'content, content, content, content, content, content, AI traffic, content.content URL content.',
+  semrush8: 'Semrush-like rank, content, content, content, content.content, content.',
+  domain_metrics_check: 'DA/PA, Spam Score, Trust Flow, Citation Flow, DR, content, content, content.',
 };
 
 const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
@@ -143,13 +143,13 @@ function togglePackage(packages: FeishuFeaturePackage[], featurePackage: FeishuF
     : [...packages, featurePackage];
 }
 
-function openFeishuAuthPlaceholder(message = '正在准备飞书账号授权...', options: { disownOpener?: boolean } = {}) {
+function openFeishuAuthPlaceholder(message = 'contentaccountscontent...', options: { disownOpener?: boolean } = {}) {
   if (typeof window === 'undefined') return null;
   const popup = window.open('', '_blank');
   if (!popup) return null;
   try {
     if (options.disownOpener) popup.opener = null;
-    popup.document.title = '飞书账号授权';
+    popup.document.title = 'contentaccountscontent';
     popup.document.body.style.cssText = 'font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; padding: 24px; color: #0f172a;';
     popup.document.body.textContent = message;
   } catch {
@@ -271,14 +271,14 @@ export default function InvestorIntegrationsPanel({
 
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
-    const providerLabel = providerLabels[integrationProvider as ProviderKey] || '数据源';
+    const providerLabel = providerLabels[integrationProvider as ProviderKey] || 'content';
     if (integrationStatus === 'pending') {
-      return `${providerLabel} 授权待完成：${integrationDetail || '请完成授权后返回本页。'}`;
+      return `${providerLabel} contentComplete: ${integrationDetail || 'contentCompletecontent.'}`;
     }
     if (integrationStatus === 'connected') {
-      return `${providerLabel} 绑定成功`;
+      return `${providerLabel} connected successfully`;
     }
-    return `${providerLabel} 绑定失败：${integrationDetail || '未知错误'}`;
+    return `${providerLabel} connection failed: ${integrationDetail || 'Unknown error'}`;
   }, [integrationDetail, integrationProvider, integrationStatus]);
 
   const assistantEndpoint = (provider: ProviderKey) =>
@@ -297,7 +297,7 @@ export default function InvestorIntegrationsPanel({
       if (!res.ok) {
         setPersonalAccountsError((prev) => ({
           ...prev,
-          [provider]: data.error || `${providerLabel(provider)} 授权状态检查失败。`,
+          [provider]: data.error || `${providerLabel(provider)} authorization status check failed.`,
         }));
         return;
       }
@@ -324,7 +324,7 @@ export default function InvestorIntegrationsPanel({
                 connected: accounts.length > 0,
                 accountEmail: provider === 'gmail' && accounts.length === 1 ? accounts[0].accountEmail : null,
                 accountName: accounts.length > 1
-                  ? `${accounts.length} 个 ${providerLabel(provider)} 账号`
+                  ? `${accounts.length} ${providerLabel(provider)} accounts`
                   : accounts[0]?.displayName || (provider === 'gmail' ? accounts[0]?.accountEmail : null) || null,
                 updatedAt: accounts[0]?.updatedAt || card.updatedAt,
               }
@@ -334,7 +334,7 @@ export default function InvestorIntegrationsPanel({
     } catch {
       setPersonalAccountsError((prev) => ({
         ...prev,
-        [provider]: `${providerLabel(provider)} 授权状态检查失败。`,
+        [provider]: `${providerLabel(provider)} authorization status check failed.`,
       }));
     } finally {
       setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
@@ -410,7 +410,7 @@ export default function InvestorIntegrationsPanel({
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error || `更新 ${providerLabel(provider)} 员工状态失败`);
+          setError(data.error || `Update ${providerLabel(provider)} teammatecontentfailed`);
           return;
         }
         setCards((prev) =>
@@ -419,7 +419,7 @@ export default function InvestorIntegrationsPanel({
               ? {
                   ...card,
                   connected: Boolean(data.integration?.connected),
-                  accountName: data.integration?.accountName || `${providerLabel(provider)} 员工`,
+                  accountName: data.integration?.accountName || `${providerLabel(provider)} teammate`,
                   updatedAt: data.integration?.updatedAt || new Date().toISOString(),
                   platformConfigured: Boolean(data.integration?.platformConfigured),
                 }
@@ -427,7 +427,7 @@ export default function InvestorIntegrationsPanel({
           )
         );
       } catch {
-        setError('网络错误，请稍后重试');
+        setError('Network error. Please try again later.');
       } finally {
         setLoadingProvider(null);
       }
@@ -444,7 +444,7 @@ export default function InvestorIntegrationsPanel({
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error || '启用小红书助手失败');
+          setError(data.error || 'contentXiaohongshu Assistantfailed');
           return;
         }
         setCards((prev) =>
@@ -453,14 +453,14 @@ export default function InvestorIntegrationsPanel({
               ? {
                   ...card,
                   connected: true,
-                  accountName: data.integration?.provider || '小红书助手',
+                  accountName: data.integration?.provider || 'Xiaohongshu Assistant',
                   updatedAt: data.integration?.updatedAt || new Date().toISOString(),
                 }
               : card
           )
         );
       } catch {
-        setError('网络错误，请稍后重试');
+        setError('Network error. Please try again later.');
       } finally {
         setLoadingProvider(null);
       }
@@ -468,7 +468,7 @@ export default function InvestorIntegrationsPanel({
     }
     if (isPersonalAccountProvider(provider)) {
       if (provider === 'feishu' && feishuBindPackages.length === 0) {
-        setError('至少选择一个飞书功能包后再绑定。');
+        setError('Select at least one Lark capability package before connecting.');
         return;
       }
       const packagesQuery = provider === 'feishu'
@@ -490,17 +490,17 @@ export default function InvestorIntegrationsPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || `解绑 ${providerLabel(provider)} 失败`);
+        setError(data.error || `Disconnect ${providerLabel(provider)} failed`);
         return;
       }
       await loadPersonalAccounts(provider);
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
       if (isPersonalAccountProvider(provider)) {
         setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
         setPersonalAccountsError((prev) => ({
           ...prev,
-          [provider]: `${providerLabel(provider)} 授权状态检查失败。`,
+          [provider]: `${providerLabel(provider)} authorization status check failed.`,
         }));
       }
     } finally {
@@ -513,14 +513,14 @@ export default function InvestorIntegrationsPanel({
     const next = normalizeFeishuFeaturePackages(feishuPackageDrafts[account.connectionId], []);
     setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: '' }));
     if (sameFeaturePackages(current, next)) {
-      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: '功能包没有变化。' }));
+      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: 'Capability packages did not change.' }));
       return;
     }
 
     if (hasAddedFeaturePackages(current, next)) {
       setFeishuPackageMessages((prev) => ({
         ...prev,
-        [account.connectionId]: '新增功能包需要重新授权，请在飞书授权页选择同一个账号。',
+        [account.connectionId]: 'content, contentaccounts.',
       }));
       window.location.href = `/api/investor/personal-data/feishu/connect?packages=${encodeURIComponent(next.join(','))}`;
       return;
@@ -535,13 +535,13 @@ export default function InvestorIntegrationsPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: data.error || '保存功能包失败。' }));
+        setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: data.error || 'Save packagesfailed.' }));
         return;
       }
-      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: '已保存，Codex 可调用工具范围已更新。' }));
+      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: 'contentSave, Codex contentCall toolcontent.' }));
       await loadPersonalAccounts('feishu');
     } catch {
-      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: '网络错误，请稍后重试。' }));
+      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: 'Network error. Please try again later..' }));
     } finally {
       setFeishuPackageSaving((prev) => ({ ...prev, [account.connectionId]: false }));
     }
@@ -549,21 +549,21 @@ export default function InvestorIntegrationsPanel({
 
   const openFeishuSetupAndPoll = () => {
     if (!feishuCliSetupUrl) {
-      setFeishuCliMessage('飞书 CLI 应用配置链接不存在，请重新绑定。');
+      setFeishuCliMessage('The Lark CLI app setup link is missing. Reconnect.');
       return;
     }
     clearFeishuCliPoll();
-    const setupPopup = openFeishuAuthPlaceholder('正在打开飞书 CLI 应用配置...', { disownOpener: true });
-    const authPopup = openFeishuAuthPlaceholder('等待飞书应用配置完成，随后会自动进入账号授权...');
+    const setupPopup = openFeishuAuthPlaceholder('Opening Lark CLI app setup...', { disownOpener: true });
+    const authPopup = openFeishuAuthPlaceholder('contentComplete, contentaccountscontent...');
     if (!setupPopup) {
       closePreparedPopup(authPopup);
-      setFeishuCliMessage('浏览器拦截了弹窗，请允许弹窗后重试，或手动打开应用配置链接。');
+      setFeishuCliMessage('The browser blocked the popup. Allow popups and try again, or open the app setup link manually.');
       return;
     }
     try {
       setupPopup.location.href = feishuCliSetupUrl;
     } catch {
-      setFeishuCliMessage('打开飞书 CLI 应用配置失败，请手动打开链接。');
+      setFeishuCliMessage('content CLI contentfailed, content.');
       return;
     }
     if (authPopup) {
@@ -578,8 +578,8 @@ export default function InvestorIntegrationsPanel({
     setFeishuCliPhase('app_setup');
     setFeishuCliMessage(
       authPopup
-        ? '飞书 CLI 应用配置页已打开，账号授权页已预备。完成配置后会自动进入账号授权。'
-        : '飞书 CLI 应用配置页已打开；浏览器拦截了账号授权预备窗口，完成配置后如未自动弹出请手动重新打开。'
+        ? 'content CLI content, accountscontent.Completecontentaccountscontent.'
+        : 'content CLI content; contentaccountscontent, Completecontent.'
     );
     startFeishuCliSetupPolling(authPopup);
   };
@@ -591,7 +591,7 @@ export default function InvestorIntegrationsPanel({
       attempts += 1;
       if (attempts > 120) {
         clearFeishuCliPoll();
-        setFeishuCliMessage('飞书 CLI 应用配置等待超时。你可以手动检查状态，或重新开始绑定。');
+        setFeishuCliMessage('Lark CLI app setup timed out. Check status manually or restart connection.');
         return;
       }
       void continueFeishuCliSetup({ auto: true, popup });
@@ -605,7 +605,7 @@ export default function InvestorIntegrationsPanel({
       attempts += 1;
       if (attempts > 120) {
         clearFeishuCliPoll();
-        setFeishuCliMessage('飞书账号授权等待超时。如果你已经在飞书完成授权，可以点击手动完成绑定。');
+        setFeishuCliMessage('contentaccountscontent.contentCompletecontent, contentComplete binding manually.');
         return;
       }
       void completeFeishuCliBinding({ auto: true, popup });
@@ -636,7 +636,7 @@ export default function InvestorIntegrationsPanel({
       if (!res.ok) {
         if (!options.auto) {
           closePreparedPopup(authPopup);
-          setFeishuCliMessage(data.error || '飞书 CLI 应用配置还没有完成，请完成后再继续。');
+          setFeishuCliMessage(data.error || 'Lark CLI app setup is not complete yet. Complete it before continuing.');
         }
         return;
       }
@@ -645,7 +645,7 @@ export default function InvestorIntegrationsPanel({
         closePreparedPopup(authPopup);
         feishuCliPopupRef.current = null;
         setFeishuCliPhase('connected');
-        setFeishuCliMessage('飞书绑定成功，已切换到 lark-cli 增强连接。');
+        setFeishuCliMessage('contentconnected successfully, content lark-cli content.');
         await loadPersonalAccounts('feishu');
         return;
       }
@@ -657,8 +657,8 @@ export default function InvestorIntegrationsPanel({
         setFeishuCliUserCode(typeof data.userCode === 'string' ? data.userCode : '');
         setFeishuCliMessage(
           opened
-            ? '飞书 CLI 应用配置完成，已打开账号授权页。确认授权后会自动完成绑定。'
-            : '飞书 CLI 应用配置完成，请点击打开账号授权。'
+            ? 'content CLI contentComplete, contentaccountscontent.contentCompleteConnect.'
+            : 'content CLI contentComplete, contentaccountscontent.'
         );
         if (opened) {
           startFeishuCliCompletionPolling(authPopup);
@@ -669,12 +669,12 @@ export default function InvestorIntegrationsPanel({
       if (data.setupUrl) setFeishuCliSetupUrl(String(data.setupUrl));
       if (!options.auto) {
         closePreparedPopup(authPopup);
-        setFeishuCliMessage('仍在等待飞书 CLI 应用配置完成，请完成页面操作后再试。');
+        setFeishuCliMessage('Still waiting for Lark CLI app setup to complete. Finish setup and try again.');
       }
     } catch {
       if (!options.auto) {
         closePreparedPopup(authPopup);
-        setFeishuCliMessage('网络错误，请稍后重试。');
+        setFeishuCliMessage('Network error. Please try again later..');
       }
     } finally {
       feishuCliAutoRequestRef.current = false;
@@ -701,9 +701,9 @@ export default function InvestorIntegrationsPanel({
       const data = await res.json();
       if (!res.ok) {
         if (options.auto) {
-          setFeishuCliMessage('等待你在飞书账号授权页确认授权...');
+          setFeishuCliMessage('contentaccountscontent...');
         } else {
-          setFeishuCliMessage(data.error || '飞书绑定完成失败，请确认已在飞书页面完成授权。');
+          setFeishuCliMessage(data.error || 'contentConnectCompletefailed, contentCompletecontent.');
         }
         return;
       }
@@ -711,13 +711,13 @@ export default function InvestorIntegrationsPanel({
       closePreparedPopup(options.popup || feishuCliPopupRef.current);
       feishuCliPopupRef.current = null;
       setFeishuCliPhase('connected');
-      setFeishuCliMessage('飞书绑定成功，已切换到 lark-cli 增强连接。');
+      setFeishuCliMessage('contentconnected successfully, content lark-cli content.');
       await loadPersonalAccounts('feishu');
     } catch {
       if (options.auto) {
-        setFeishuCliMessage('等待你在飞书账号授权页确认授权...');
+        setFeishuCliMessage('contentaccountscontent...');
       } else {
-        setFeishuCliMessage('网络错误，请稍后重试。');
+        setFeishuCliMessage('Network error. Please try again later..');
       }
     } finally {
       feishuCliAutoRequestRef.current = false;
@@ -741,7 +741,7 @@ export default function InvestorIntegrationsPanel({
             });
       const data = await res.json();
       if (!res.ok) {
-        const detail = data.error || '刷新摘要失败';
+        const detail = data.error || 'Refresh summaryfailed';
         setError(detail);
         if (isPersonalAccountProvider(provider)) {
           setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
@@ -768,11 +768,11 @@ export default function InvestorIntegrationsPanel({
                 accountEmail: provider === 'xiaohongshu' || isPersonalAccountProvider(provider) || isCompetitiveDataSource(provider) ? null : data.integration.accountEmail || null,
                 accountName:
                   isCompetitiveDataSource(provider)
-                    ? `${providerLabel(provider)} 员工`
+                    ? `${providerLabel(provider)} teammate`
                     : isPersonalAccountProvider(provider)
-                    ? (Array.isArray(data.accounts) && data.accounts.length > 0 ? `${data.accounts.length} 个 ${providerLabel(provider)} 账号` : null)
+                    ? (Array.isArray(data.accounts) && data.accounts.length > 0 ? `${data.accounts.length} ${providerLabel(provider)} accounts` : null)
                     : provider === 'xiaohongshu'
-                    ? (data.integration?.connected ? '小红书助手' : null)
+                    ? (data.integration?.connected ? 'Xiaohongshu Assistant' : null)
                     : data.integration.accountName || null,
                 updatedAt:
                   isCompetitiveDataSource(provider)
@@ -788,7 +788,7 @@ export default function InvestorIntegrationsPanel({
                   isCompetitiveDataSource(provider)
                     ? card.latestSummary
                     : isPersonalAccountProvider(provider)
-                    ? `${providerLabel(provider)} 多账号绑定状态已刷新。`
+                    ? `${providerLabel(provider)} contentaccountsConnectcontent.`
                     : provider === 'xiaohongshu'
                     ? data.thread?.messages?.length
                       ? String(data.thread.messages[data.thread.messages.length - 1]?.content || card.latestSummary || '')
@@ -826,7 +826,7 @@ export default function InvestorIntegrationsPanel({
         }
       }
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setLoadingProvider(null);
     }
@@ -853,7 +853,7 @@ export default function InvestorIntegrationsPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        const content = data.error || 'AI助手暂时不可用，请稍后重试。';
+        const content = data.error || 'The AI assistant is temporarily unavailable. Please try again later.';
         setAssistantChats((prev) => ({
           ...prev,
           [provider]: [...nextMessages, { role: 'assistant', content }],
@@ -863,7 +863,7 @@ export default function InvestorIntegrationsPanel({
 
       setAssistantChats((prev) => ({
         ...prev,
-        [provider]: [...nextMessages, { role: 'assistant', content: data.reply || '已收到，但暂无回复。' }],
+        [provider]: [...nextMessages, { role: 'assistant', content: data.reply || 'Received, but no reply is available yet.' }],
       }));
       if (data.threadId) {
         setAssistantThreadIds((prev) => ({ ...prev, [provider]: String(data.threadId) }));
@@ -871,7 +871,7 @@ export default function InvestorIntegrationsPanel({
     } catch {
       setAssistantChats((prev) => ({
         ...prev,
-        [provider]: [...nextMessages, { role: 'assistant', content: '网络错误，请稍后重试。' }],
+        [provider]: [...nextMessages, { role: 'assistant', content: 'Network error. Please try again later..' }],
       }));
     } finally {
       setAssistantLoading((prev) => ({ ...prev, [provider]: false }));
@@ -891,7 +891,7 @@ export default function InvestorIntegrationsPanel({
       const res = await fetch(assistantEndpoint(provider));
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '加载调教设置失败');
+        setError(data.error || 'Failed to load coaching settings');
         return;
       }
 
@@ -900,7 +900,7 @@ export default function InvestorIntegrationsPanel({
       setCoachSaved((prev) => ({ ...prev, [provider]: prompt }));
       setCoachLoaded((prev) => ({ ...prev, [provider]: true }));
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setCoachLoading((prev) => ({ ...prev, [provider]: false }));
     }
@@ -920,35 +920,35 @@ export default function InvestorIntegrationsPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '保存调教设置失败');
+        setError(data.error || 'SavecontentSettingsfailed');
         return;
       }
 
       const prompt = String(data.integration?.customPrompt || data.customPrompt || '');
       setCoachDraft((prev) => ({ ...prev, [provider]: prompt }));
       setCoachSaved((prev) => ({ ...prev, [provider]: prompt }));
-      setCoachMessage((prev) => ({ ...prev, [provider]: '已保存，后续对话已生效。' }));
+      setCoachMessage((prev) => ({ ...prev, [provider]: 'Saved. Future conversations will use these settings.' }));
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setCoachSaving((prev) => ({ ...prev, [provider]: false }));
     }
   };
 
   const feishuCliMessageIsError =
-    feishuCliMessage.includes('失败') ||
-    feishuCliMessage.includes('错误') ||
-    feishuCliMessage.includes('过期') ||
-    feishuCliMessage.includes('超时') ||
-    feishuCliMessage.includes('不存在');
+    feishuCliMessage.includes('failed') ||
+    feishuCliMessage.includes('Error') ||
+    feishuCliMessage.includes('content') ||
+    feishuCliMessage.includes('content') ||
+    feishuCliMessage.includes('content');
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 mb-8 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">外部消息助手</h2>
+          <h2 className="text-lg font-semibold text-slate-900">External Message Assistants</h2>
           <p className="text-sm text-slate-600 mt-1">
-            先绑定 Gmail / 飞书 / Instagram / Facebook 账号，再由数字分身按需调用个人数据工具。
+            contentConnect Gmail / content / Instagram / Facebook accounts, contenttool.
           </p>
         </div>
       </div>
@@ -960,12 +960,12 @@ export default function InvestorIntegrationsPanel({
       )}
       {integrationProvider === 'feishu' && integrationStatus === 'pending' && (feishuCliSetupUrl || feishuCliAuthUrl) ? (
         <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-slate-700">
-          <p className="font-medium text-sky-950">飞书增强授权</p>
+          <p className="font-medium text-sky-950">Enhanced Lark Authorization</p>
           <div className="mt-2 space-y-3">
             <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
-              <p className="text-xs font-semibold text-slate-900">第 1 步：配置你自己的飞书 CLI 应用</p>
+              <p className="text-xs font-semibold text-slate-900">Step 1: Configure your Lark CLI app</p>
               <p className="mt-1 text-xs text-slate-600">
-                打开后按飞书页面完成应用创建/配置；本页会自动检测，并把预备好的授权窗口切到账号授权。
+                contentCompletecontent/content; content, contentaccountscontent.
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {feishuCliSetupUrl && (
@@ -975,7 +975,7 @@ export default function InvestorIntegrationsPanel({
                     disabled={feishuCliCompleting || feishuCliPhase === 'user_auth' || feishuCliPhase === 'connected'}
                     className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
                   >
-                    打开应用配置并自动继续
+                    Open app setup and continue automatically
                   </button>
                 )}
                 <button
@@ -984,17 +984,17 @@ export default function InvestorIntegrationsPanel({
                   disabled={feishuCliCompleting || feishuCliPhase === 'user_auth' || feishuCliPhase === 'connected'}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
                 >
-                  {feishuCliCompleting && feishuCliPhase !== 'user_auth' ? '检查中...' : '手动检查状态'}
+                  {feishuCliCompleting && feishuCliPhase !== 'user_auth' ? 'Checking...' : 'Check status manually'}
                 </button>
               </div>
             </div>
 
             {(feishuCliPhase === 'user_auth' || feishuCliAuthUrl) && (
               <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
-                <p className="text-xs font-semibold text-slate-900">第 2 步：授权你的飞书账号</p>
+                <p className="text-xs font-semibold text-slate-900">content 2 content: contentaccounts</p>
                 <p className="mt-1 text-xs text-slate-600">
-                  账号授权窗口会自动切换；确认授权后本页会自动完成绑定。如果弹窗被拦截，可以手动重新打开。
-                  {feishuCliUserCode ? ` 页面提示时输入验证码：${feishuCliUserCode}` : ''}
+                  accountscontent; contentCompleteConnect.content, content.
+                  {feishuCliUserCode ? ` Enter this verification code when prompted: ${feishuCliUserCode}` : ''}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {feishuCliAuthUrl && (
@@ -1004,7 +1004,7 @@ export default function InvestorIntegrationsPanel({
                       rel="noreferrer"
                       className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
                     >
-                      重新打开账号授权
+                      contentaccountscontent
                     </a>
                   )}
                   <button
@@ -1013,7 +1013,7 @@ export default function InvestorIntegrationsPanel({
                     disabled={feishuCliCompleting}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
                   >
-                    {feishuCliCompleting ? '绑定中...' : '手动完成绑定'}
+                    {feishuCliCompleting ? 'Connecting...' : 'Complete binding manually'}
                   </button>
                 </div>
               </div>
@@ -1049,37 +1049,37 @@ export default function InvestorIntegrationsPanel({
                 }`}
               >
           {personalChecking
-            ? '检查中'
+            ? 'Checking'
             : personalLoadError
-              ? '检查失败'
+              ? 'contentfailed'
               : displayConnected
-                ? (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? '已启用' : '已绑定')
-                : (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? '未启用' : '未绑定')}
+                ? (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? 'Enabled' : 'Connected')
+                : (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? 'Not enabled' : 'Not connected')}
                 </span>
               </div>
 
             <p className="text-sm text-slate-600 mt-2">
               {personalChecking
-                ? `正在检查 ${providerLabel(card.provider)} 授权状态...`
+                ? `Checking ${providerLabel(card.provider)} authorization status...`
                 : personalLoadError
-                  ? `${providerLabel(card.provider)} 授权状态检查失败，请刷新状态。`
+                  ? `${providerLabel(card.provider)} authorization status check failed, contentRefresh status.`
                   : isCompetitiveDataSource(card.provider)
                 ? competitiveDataSourceDescriptions[card.provider]
-                : card.accountEmail || card.accountName || '尚未绑定账号'}
+                : card.accountEmail || card.accountName || 'contentNot connectedaccounts'}
             </p>
             {isCompetitiveDataSource(card.provider) && (
               <p className="mt-2 text-xs text-slate-500">
-                平台托管 RapidAPI 数据源；真实调用由后端个人 Agent 服务的环境变量和供应商额度决定。
+                Platform-managed RapidAPI data source. Actual calls depend on backend Personal Agent environment variables and provider quota.
               </p>
             )}
             {card.updatedAt && (
               <p className="text-xs text-slate-500 mt-1">
-                最近同步：{new Date(card.updatedAt).toLocaleString('zh-CN')}
+                Last synced: {new Date(card.updatedAt).toLocaleString('en-US')}
               </p>
             )}
             {card.provider === 'feishu' && (
               <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xs font-medium text-slate-700">绑定新飞书账号时启用的功能包</p>
+                <p className="text-xs font-medium text-slate-700">Connectcontentaccountscontent</p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {FEISHU_FEATURE_PACKAGES.map((item) => (
                     <label key={item.key} className="flex items-start gap-2 rounded-md border border-slate-200 px-2 py-2 text-xs text-slate-700">
@@ -1097,19 +1097,19 @@ export default function InvestorIntegrationsPanel({
                   ))}
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  绑定后也可以在账号下调整；新增功能包需要重新授权，取消功能包会立即停止向 Codex 暴露对应工具。
+                  Connectcontentaccountscontent; content, contentStopcontent Codex contenttool.
                 </p>
               </div>
             )}
             {isPersonalAccountProvider(card.provider) && (
               <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-sky-900">已授权 {providerLabel(card.provider)} 账号</p>
-                  {personalAccountsLoadingFor(card.provider) && <span className="text-xs text-sky-700">加载中...</span>}
+                  <p className="text-xs font-medium text-sky-900">Authorized {providerLabel(card.provider)} accounts</p>
+                  {personalAccountsLoadingFor(card.provider) && <span className="text-xs text-sky-700">Loading...</span>}
                 </div>
                 {personalChecking ? (
                   <p className="mt-2 text-sm text-slate-600">
-                    正在加载 {providerLabel(card.provider)} 授权状态...
+                    Loading {providerLabel(card.provider)} authorization status...
                   </p>
                 ) : personalLoadError ? (
                   <p className="mt-2 text-sm text-red-600">
@@ -1118,10 +1118,10 @@ export default function InvestorIntegrationsPanel({
                 ) : personalAccountsFor(card.provider).length === 0 ? (
                   <p className="mt-2 text-sm text-slate-600">
                     {card.provider === 'gmail'
-                      ? '暂无 Gmail 授权。绑定后主 AI 助手会按需调用 Gmail 搜索、读取邮件和线程工具。'
+                      ? 'content Gmail content.Connectcontent AI content Gmail content, contenttool.'
                       : card.provider === 'feishu'
-                        ? '暂无飞书授权。绑定后主 AI 助手会按需调用飞书消息搜索、联系人、日历和文档搜索工具。'
-                        : '暂无 Instagram / Facebook 授权。绑定后主 AI 助手会按需读取授权 Page、关联 Instagram 专业账号、近期媒体和 Page 帖子。'}
+                        ? 'content.Connectcontent AI content, content, contenttool.'
+                        : 'content Instagram / Facebook content.Connectcontent AI content Page, content Instagram contentaccounts, content Page content.'}
                   </p>
                 ) : (
                   <div className="mt-2 space-y-2">
@@ -1142,14 +1142,14 @@ export default function InvestorIntegrationsPanel({
                                 <p className="truncate text-xs text-slate-500">{account.accountEmail}</p>
                               )}
                               <p className="text-xs text-slate-500">
-                                {account.status === 'connected' ? '已绑定' : account.status}
-                                {card.provider === 'feishu' && account.connectionType === 'lark_cli_user' ? ' · CLI增强' : ''}
+                                {account.status === 'connected' ? 'Connected' : account.status}
+                                {card.provider === 'feishu' && account.connectionType === 'lark_cli_user' ? ' · CLI enhanced' : ''}
                                 {' · '}
-                                {new Date(account.updatedAt).toLocaleString('zh-CN')}
+                                {new Date(account.updatedAt).toLocaleString('en-US')}
                               </p>
                               {card.provider === 'meta' && account.metadata && (
                                 <p className="mt-1 text-xs text-slate-500">
-                                  Page {account.metadata.pageCount || 0} 个 · Instagram 专业账号 {account.metadata.instagramAccountCount || 0} 个
+                                  Page {account.metadata.pageCount || 0} · Instagram contentaccounts {account.metadata.instagramAccountCount || 0} content
                                 </p>
                               )}
                             </div>
@@ -1159,13 +1159,13 @@ export default function InvestorIntegrationsPanel({
                               onClick={() => void disconnectPersonalAccount(card.provider, account.connectionId)}
                               className="shrink-0 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                             >
-                              解绑
+                              Disconnect
                             </button>
                           </div>
 
                           {card.provider === 'feishu' && (
                             <div className="mt-3 border-t border-slate-100 pt-3">
-                              <p className="text-xs font-medium text-slate-700">该账号启用的功能包</p>
+                              <p className="text-xs font-medium text-slate-700">contentaccountscontent</p>
                               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                                 {FEISHU_FEATURE_PACKAGES.map((item) => (
                                   <label key={item.key} className="flex items-start gap-2 rounded-md border border-slate-200 px-2 py-2 text-xs text-slate-700">
@@ -1195,17 +1195,17 @@ export default function InvestorIntegrationsPanel({
                                   className="rounded border border-sky-300 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-50"
                                 >
                                   {feishuPackageSaving[account.connectionId]
-                                    ? '保存中...'
+                                    ? 'Saving...'
                                     : packageAdded
-                                      ? '重新授权新增功能包'
-                                      : '保存功能包'}
+                                      ? 'Reauthorize new packages'
+                                      : 'Save packages'}
                                 </button>
                                 {packageAdded && (
-                                  <span className="text-xs text-amber-700">新增功能包需要重新授权同一个飞书账号。</span>
+                                  <span className="text-xs text-amber-700">contentaccounts.</span>
                                 )}
                               </div>
                               {feishuPackageMessages[account.connectionId] && (
-                                <p className={`mt-2 text-xs ${feishuPackageMessages[account.connectionId].includes('失败') || feishuPackageMessages[account.connectionId].includes('错误') ? 'text-red-600' : 'text-emerald-700'}`}>
+                                <p className={`mt-2 text-xs ${feishuPackageMessages[account.connectionId].includes('failed') || feishuPackageMessages[account.connectionId].includes('Error') ? 'text-red-600' : 'text-emerald-700'}`}>
                                   {feishuPackageMessages[account.connectionId]}
                                 </p>
                               )}
@@ -1214,23 +1214,23 @@ export default function InvestorIntegrationsPanel({
 
                           {card.provider === 'meta' && account.metadata && (
                             <div className="mt-3 border-t border-slate-100 pt-3">
-                              <p className="text-xs font-medium text-slate-700">授权资产</p>
+                              <p className="text-xs font-medium text-slate-700">Authorized assets</p>
                               <div className="mt-2 grid gap-2">
                                 {(account.metadata.instagramAccounts || []).slice(0, 5).map((item, index) => (
                                   <div key={`ig-${account.connectionId}-${index}`} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
-                                    Instagram：{String(item.username || item.name || item.id || '未命名账号')}
-                                    {item.pageName ? ` · Page：${String(item.pageName)}` : ''}
+                                    Instagram: {String(item.username || item.name || item.id || 'contentaccounts')}
+                                    {item.pageName ? ` · Page: ${String(item.pageName)}` : ''}
                                   </div>
                                 ))}
                                 {(account.metadata.pages || []).slice(0, 5).map((item, index) => (
                                   <div key={`page-${account.connectionId}-${index}`} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
-                                    Facebook Page：{String(item.name || item.id || '未命名 Page')}
+                                    Facebook Page: {String(item.name || item.id || 'Unnamed Page')}
                                     {item.category ? ` · ${String(item.category)}` : ''}
                                   </div>
                                 ))}
                                 {(account.metadata.instagramAccounts || []).length === 0 && (account.metadata.pages || []).length === 0 && (
                                   <p className="text-xs text-slate-500">
-                                    当前授权没有返回 Page 或 Instagram 专业账号。请确认 Facebook 账号管理了 Page，且 Page 已关联 Instagram Business/Creator 账号。
+                                    content Page content Instagram contentaccounts.content Facebook accountscontent Page, content Page content Instagram Business/Creator accounts.
                                   </p>
                                 )}
                               </div>
@@ -1252,20 +1252,20 @@ export default function InvestorIntegrationsPanel({
                 className="bg-sky-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-sky-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {personalChecking
-                  ? '检查中...'
+                  ? 'Checking...'
                   : card.provider === 'xiaohongshu'
                   ? displayConnected
-                    ? '已启用小红书助手'
-                    : '启用小红书助手'
+                    ? 'EnabledXiaohongshu Assistant'
+                    : 'contentXiaohongshu Assistant'
                   : isCompetitiveDataSource(card.provider)
                     ? displayConnected
-                      ? `停用 ${providerLabel(card.provider)}`
-                      : `启用 ${providerLabel(card.provider)}`
+                      ? `Disable ${providerLabel(card.provider)}`
+                      : `Enable ${providerLabel(card.provider)}`
                   : displayConnected
                     ? isPersonalAccountProvider(card.provider)
-                      ? `绑定更多 ${providerLabel(card.provider)}`
-                      : '重新绑定'
-                    : `绑定${providerLabel(card.provider)}`}
+                      ? `Connect more ${providerLabel(card.provider)}`
+                      : 'Reconnect'
+                    : `Connect${providerLabel(card.provider)}`}
               </button>
               <button
                 type="button"
@@ -1274,39 +1274,39 @@ export default function InvestorIntegrationsPanel({
                 className="bg-white text-slate-800 px-3 py-2 rounded-lg text-sm border border-slate-300 hover:bg-slate-100 disabled:opacity-50"
               >
                 {loadingProvider === card.provider
-                  ? '刷新中...'
+                  ? 'Refreshing...'
                   : isPersonalAccountProvider(card.provider) || card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider)
-                    ? '刷新状态'
-                    : '刷新摘要'}
+                    ? 'Refresh status'
+                    : 'Refresh summary'}
               </button>
             </div>
 
             <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">{isCompetitiveDataSource(card.provider) ? '调用范围' : '最近摘要'}</p>
+              <p className="text-xs text-slate-500 mb-1">{isCompetitiveDataSource(card.provider) ? 'Call scope' : 'Latest summary'}</p>
               <p className="text-sm text-slate-700 whitespace-pre-wrap">
                 {card.latestSummary ||
                   (isCompetitiveDataSource(card.provider)
                     ? competitiveDataSourceScopes[card.provider]
                     : card.provider === 'gmail'
-                    ? 'Gmail 账号会作为主 AI 助手的原生工具使用；用户提问需要邮件信息时，Codex 会按需调用已授权账号。'
+                    ? 'Gmail accountscontent AI contenttoolcontent; content, Codex contentaccounts.'
                     : card.provider === 'feishu'
-                    ? '飞书账号会作为主 AI 助手的 lark-cli 增强工具使用；用户提问需要飞书消息、联系人、日历或文档信息时，Codex 会按需调用已授权账号。'
+                    ? 'contentaccountscontent AI content lark-cli contenttoolcontent; content, content, content, Codex contentaccounts.'
                     : card.provider === 'meta'
-                    ? 'Instagram / Facebook 账号会作为主 AI 助手的 Meta Graph 工具使用；用户提问需要运营账号、媒体、Page 帖子时，Codex 会按需调用已授权资产。'
+                    ? 'Instagram / Facebook accountscontent AI content Meta Graph toolcontent; contentaccounts, content, Page content, Codex contentAuthorized assets.'
                     : card.provider === 'xiaohongshu'
-                    ? '暂无摘要，可直接对话触发 skill 抓取。'
-                    : '暂无摘要，绑定后点击“刷新摘要”生成。')}
+                    ? 'No summary yet. You can trigger skill retrieval directly in chat.'
+                    : 'content, Connectcontent"Refresh summary"content.')}
               </p>
               {card.latestSummaryAt && (
                 <p className="text-xs text-slate-500 mt-2">
-                  生成于：{new Date(card.latestSummaryAt).toLocaleString('zh-CN')}
+                  Generated at: {new Date(card.latestSummaryAt).toLocaleString('en-US')}
                 </p>
               )}
             </div>
 
             {!isCompetitiveDataSource(card.provider) && !isPersonalAccountProvider(card.provider) && (
             <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-white">
-              <p className="text-xs text-slate-500 mb-2">AI员工对话</p>
+              <p className="text-xs text-slate-500 mb-2">AI teammate chat</p>
               <div
                 ref={(node) => {
                   assistantViewportRefs.current[card.provider] = node;
@@ -1315,7 +1315,7 @@ export default function InvestorIntegrationsPanel({
               >
                 {assistantChats[card.provider].length === 0 ? (
                   <p className="text-sm text-slate-500">
-                    你可以直接提问，例如“帮我按优先级整理最近邮件并给出今天要做的3件事”。
+                    You can ask directly, for example: Prioritize my recent emails and give me the three things I should do today.
                   </p>
                 ) : (
                   assistantChats[card.provider].map((m, idx) => (
@@ -1343,7 +1343,7 @@ export default function InvestorIntegrationsPanel({
                     }
                   }}
                   disabled={!card.connected}
-                  placeholder={card.connected ? '输入你的问题...' : '先绑定账号后可对话'}
+                  placeholder={card.connected ? 'Type your question...' : 'contentConnectaccountscontent'}
                   className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:bg-slate-100"
                 />
                 <button
@@ -1352,7 +1352,7 @@ export default function InvestorIntegrationsPanel({
                   onClick={() => void sendAssistantMessage(card.provider)}
                   className="px-3 py-2 rounded-lg text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
                 >
-                  {assistantLoading[card.provider] ? '思考中...' : '发送'}
+                  {assistantLoading[card.provider] ? 'Thinking...' : 'Send'}
                 </button>
               </div>
             </div>
@@ -1360,20 +1360,20 @@ export default function InvestorIntegrationsPanel({
 
             {!isCompetitiveDataSource(card.provider) && !isPersonalAccountProvider(card.provider) && (
             <div className="mt-3">
-              <DebugCollapsible title="高级设置（AI员工调教）">
+              <DebugCollapsible title="Advanced settings (AI teammate coaching)">
                 <div className="mt-2">
                   <button
                     type="button"
                     onClick={() => void toggleCoach(card.provider)}
                     className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
                   >
-                    {coachOpen[card.provider] ? '隐藏调教编辑器' : '加载调教编辑器'}
+                    {coachOpen[card.provider] ? 'Hide coaching editor' : 'Load coaching editor'}
                   </button>
 
                   {coachOpen[card.provider] && (
                     <div className="mt-2">
                       {coachLoading[card.provider] ? (
-                        <p className="text-sm text-slate-500">加载中...</p>
+                        <p className="text-sm text-slate-500">Loading...</p>
                       ) : (
                         <>
                           <textarea
@@ -1382,12 +1382,12 @@ export default function InvestorIntegrationsPanel({
                               setCoachDraft((prev) => ({ ...prev, [card.provider]: e.target.value }))
                             }
                             rows={6}
-                            placeholder="例如：你是我的执行型邮箱助理。优先输出待办清单、风险点、可直接发送的回复草稿。语气简洁专业。"
+                            placeholder="Example: You are my execution-focused email assistant. Prioritize to-do lists, risks, and ready-to-send reply drafts. Keep the tone concise and professional."
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                           />
                           <div className="mt-2 flex items-center justify-between gap-2">
                             <p className="text-xs text-slate-500">
-                              当前长度 {coachDraft[card.provider].length}/8000
+                              Current length {coachDraft[card.provider].length}/8000
                             </p>
                             <div className="flex gap-2">
                               <button
@@ -1398,7 +1398,7 @@ export default function InvestorIntegrationsPanel({
                                 }
                                 className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                               >
-                                撤销修改
+                                Discard changes
                               </button>
                               <button
                                 type="button"
@@ -1406,7 +1406,7 @@ export default function InvestorIntegrationsPanel({
                                 onClick={() => void saveCoachPrompt(card.provider)}
                                 className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
                               >
-                                {coachSaving[card.provider] ? '保存中...' : '保存并生效'}
+                                {coachSaving[card.provider] ? 'Saving...' : 'Save and apply'}
                               </button>
                             </div>
                           </div>

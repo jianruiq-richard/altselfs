@@ -113,7 +113,7 @@ export class PersonalMainAgent {
                 return {
                     threadId,
                     route: 'unsupported',
-                    reply: 'Codex 子 Agent 尚未注册。',
+                    reply: 'Codex instruction Agent instructionSign up.',
                     events,
                     memoryWrites,
                 };
@@ -191,30 +191,30 @@ function selectBoundaryOverrideProfile(message, availableProfiles) {
 function isHermesMainOnlyMessage(message) {
     if (inferExplicitMemoryWrite(message))
         return true;
-    if (/^(你好|hi|hello|嗨|在吗|谢谢|多谢|好的|ok|收到)[。！？!,.，\s]*$/i.test(message.trim()))
+    if (/^(instruction|hi|hello|instruction|instruction|instruction|instruction|instruction|ok|instruction)[.!?!,., \s]*$/i.test(message.trim()))
         return true;
-    if (/偏好|画像|用户画像|记忆|记住|以后记得|请记住|称呼我/.test(message))
+    if (/instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction/.test(message))
         return true;
     return false;
 }
 function isCompetitiveIntelligenceMessage(message) {
-    return /竞品|竞争对手|竞争格局|增长|获客|用户量|访问量|营收|ARR|收入|增速|市场份额|SEO|PPC|关键词|外链|backlink|流量|渠道|投放|广告|semrush|similarweb|competitor|competitive|acquisition|growth|revenue|traffic/i.test(message);
+    return /instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|ARR|instruction|instruction|instruction|SEO|PPC|instruction|instruction|backlink|instruction|instruction|instruction|instruction|semrush|similarweb|competitor|competitive|acquisition|growth|revenue|traffic/i.test(message);
 }
 function buildMainAgentReply(params) {
     if (params.decision.needsClarification && params.decision.clarificationQuestion) {
         return params.decision.clarificationQuestion;
     }
     if (params.memoryWrites.length > 0) {
-        return '我记住了。后续对话里我会把这条信息作为你的长期偏好或用户画像上下文来使用。';
+        return 'Got it. I will use this as long-term preference or profile context in future conversations.';
     }
-    if (/记忆|偏好|画像|用户画像/.test(params.message)) {
+    if (/instruction|instruction|instruction|instruction/.test(params.message)) {
         return [
-            '这是我当前能读取到的长期记忆和用户画像：',
+            'Here is the long-term memory and user profile context I can currently access:',
             '',
             params.memorySnapshotText,
         ].join('\n');
     }
-    return '我在。你可以直接告诉我你的问题、想法或要我记住的偏好；需要搜索、分析、计划或调用工具时，我会交给 codex-general 处理。';
+    return 'I am here. Tell me your question, idea, or preference to remember; when search, analysis, planning, or tool use is needed, I will delegate it to codex-general.';
 }
 function validateTurnRequest(request) {
     if (!request || typeof request !== 'object')

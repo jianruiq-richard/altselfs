@@ -18,7 +18,7 @@ export interface ChatMessage {
   content: string;
 }
 
-export type ToolChatMessage =
+export type toolChatMessage =
   | { role: 'system' | 'user'; content: string }
   | {
       role: 'assistant';
@@ -38,7 +38,7 @@ export type ToolChatMessage =
       content: string;
     };
 
-export type OpenRouterFunctionTool = {
+export type OpenRouterFunctiontool = {
   type: 'function';
   function: {
     name: string;
@@ -53,7 +53,7 @@ type JsonSchemaResponseFormat = {
   schema: Record<string, unknown>;
 };
 
-type OpenRouterServerTool =
+type OpenRouterServertool =
   | {
       type: 'openrouter:web_search';
       parameters?: {
@@ -85,7 +85,7 @@ type ChatCompletionResult = {
 type ChatCompletionRequestResult = {
   content: string;
   completion: ChatCompletionResult;
-  tools: OpenRouterServerTool[];
+  tools: OpenRouterServertool[];
 };
 
 type OpenRouterProviderRouting = {
@@ -106,12 +106,12 @@ type JsonCompletionRequestResult = {
 export type ChatCompletionMetadata = {
   content: string;
   model: string;
-  tools: OpenRouterServerTool[];
+  tools: OpenRouterServertool[];
   rawMessage: ChatCompletionResult['choices'][number]['message'] | null;
   rawCompletion: ChatCompletionResult;
 };
 
-export type ToolChatCompletionMetadata = {
+export type toolChatCompletionMetadata = {
   model: string;
   rawMessage: ChatCompletionResult['choices'][number]['message'] | null;
   rawCompletion: ChatCompletionResult;
@@ -205,10 +205,10 @@ async function appendOpenRouterTrace(entry: Record<string, unknown>) {
   }
 }
 
-function getOpenRouterServerTools(): OpenRouterServerTool[] {
+function getOpenRouterServertools(): OpenRouterServertool[] {
   if (!readBoolEnv('OPENROUTER_WEB_TOOLS_ENABLED', true)) return [];
 
-  const tools: OpenRouterServerTool[] = [];
+  const tools: OpenRouterServertool[] = [];
   if (readBoolEnv('OPENROUTER_WEB_SEARCH_ENABLED', true)) {
     tools.push({
       type: 'openrouter:web_search',
@@ -256,16 +256,16 @@ function safeParseQualification(raw: string): QualificationResult {
       status: status as QualificationResult['status'],
       score: clampScore(Number(parsed.score ?? 0)),
       needsInvestorReview: Boolean(parsed.needsInvestorReview),
-      reason: String(parsed.reason || '暂无明确理由'),
-      summary: String(parsed.summary || '暂无总结'),
+      reason: String(parsed.reason || 'content'),
+      summary: String(parsed.summary || 'content'),
     };
   } catch {
     return {
       status: 'NEEDS_INFO',
       score: 0,
       needsInvestorReview: false,
-      reason: '评估结果解析失败，已回退为待补充信息状态。',
-      summary: '当前会话信息不足或评估格式异常，请继续追问关键信息后再评估。',
+      reason: 'contentfailed, contentNeeds more informationcontent.',
+      summary: 'content, content.',
     };
   }
 }
@@ -273,9 +273,9 @@ function safeParseQualification(raw: string): QualificationResult {
 async function requestCompletion(
   messages: ChatMessage[],
   model: string,
-  options?: { enableWebTools?: boolean; maxTokens?: number }
+  options?: { enableWebtools?: boolean; maxTokens?: number }
 ): Promise<ChatCompletionRequestResult> {
-  const tools = options?.enableWebTools === false ? [] : getOpenRouterServerTools();
+  const tools = options?.enableWebtools === false ? [] : getOpenRouterServertools();
   const completion = (await openai.chat.completions.create({
     model,
     messages,
@@ -294,11 +294,11 @@ async function requestCompletion(
   };
 }
 
-async function requestToolCompletion(
-  messages: ToolChatMessage[],
-  tools: OpenRouterFunctionTool[],
+async function requesttoolCompletion(
+  messages: toolChatMessage[],
+  tools: OpenRouterFunctiontool[],
   model: string,
-  options?: { maxTokens?: number; toolChoice?: 'auto' | 'none'; parallelToolCalls?: boolean }
+  options?: { maxTokens?: number; toolChoice?: 'auto' | 'none'; paralleltoolCalls?: boolean }
 ) {
   const completion = (await openai.chat.completions.create({
     model,
@@ -307,7 +307,7 @@ async function requestToolCompletion(
     max_tokens: options?.maxTokens || readPositiveIntEnv('OPENROUTER_AGENT_MAX_TOKENS', 12000),
     tools,
     tool_choice: options?.toolChoice || 'auto',
-    parallel_tool_calls: options?.parallelToolCalls ?? true,
+    parallel_tool_calls: options?.paralleltoolCalls ?? true,
     stream: false,
   } as Parameters<typeof openai.chat.completions.create>[0], {
     timeout: OPENROUTER_REQUEST_TIMEOUT_MS,
@@ -399,7 +399,7 @@ export function getOpenRouterModelCandidates(keys: OpenRouterAgentModelKey[] = [
 export async function createChatCompletion(
   messages: ChatMessage[],
   model?: string,
-  options?: { enableWebTools?: boolean; maxTokens?: number }
+  options?: { enableWebtools?: boolean; maxTokens?: number }
 ) {
   const result = await createChatCompletionWithMetadata(messages, model, options);
   return result.content;
@@ -408,7 +408,7 @@ export async function createChatCompletion(
 export async function createChatCompletionWithMetadata(
   messages: ChatMessage[],
   model?: string,
-  options?: { enableWebTools?: boolean; maxTokens?: number }
+  options?: { enableWebtools?: boolean; maxTokens?: number }
 ): Promise<ChatCompletionMetadata> {
   const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]).slice(0, OPENROUTER_MAX_MODEL_ATTEMPTS);
 
@@ -440,7 +440,7 @@ export async function createChatCompletionWithMetadata(
         model: currentModel,
         durationMs: Date.now() - startedAt,
         outputLength: result.content.length,
-        hasToolCalls: Boolean(result.completion.choices[0]?.message && 'tool_calls' in result.completion.choices[0].message),
+        hastoolCalls: Boolean(result.completion.choices[0]?.message && 'tool_calls' in result.completion.choices[0].message),
       });
       return {
         content: result.content,
@@ -472,12 +472,12 @@ export async function createChatCompletionWithMetadata(
   throw new Error(`OpenRouter failed after trying models [${tried.join(', ')}]: ${detail}`);
 }
 
-export async function createToolChatCompletionWithMetadata(
-  messages: ToolChatMessage[],
-  tools: OpenRouterFunctionTool[],
+export async function createtoolChatCompletionWithMetadata(
+  messages: toolChatMessage[],
+  tools: OpenRouterFunctiontool[],
   model?: string,
-  options?: { maxTokens?: number; toolChoice?: 'auto' | 'none'; parallelToolCalls?: boolean }
-): Promise<ToolChatCompletionMetadata> {
+  options?: { maxTokens?: number; toolChoice?: 'auto' | 'none'; paralleltoolCalls?: boolean }
+): Promise<toolChatCompletionMetadata> {
   const candidates = uniqueModels([model, ...getOpenRouterModelCandidates()]).slice(0, OPENROUTER_MAX_MODEL_ATTEMPTS);
 
   let lastError: unknown;
@@ -492,7 +492,7 @@ export async function createToolChatCompletionWithMetadata(
       toolCount: tools.length,
     });
     try {
-      const result = await requestToolCompletion(messages, tools, currentModel, options);
+      const result = await requesttoolCompletion(messages, tools, currentModel, options);
       const rawMessage = result.completion.choices[0]?.message || null;
       await appendOpenRouterTrace({
         type: 'tool_chat',
@@ -509,7 +509,7 @@ export async function createToolChatCompletionWithMetadata(
       console.log('[openrouter] tool-chat success', {
         model: currentModel,
         durationMs: Date.now() - startedAt,
-        hasToolCalls: Boolean(rawMessage && 'tool_calls' in rawMessage),
+        hastoolCalls: Boolean(rawMessage && 'tool_calls' in rawMessage),
       });
       return {
         model: currentModel,
@@ -612,29 +612,29 @@ export async function evaluateConversation(
   avatarSystemPrompt: string,
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<QualificationResult> {
-  const evaluationPrompt = `你是投资流程评估引擎。请基于下面对话判断该项目是否达到了“值得投资人亲自介入”的标准。
+  const evaluationPrompt = `content.contentDecidecontent"content"content.
 
-评估原则：
-1) 结合投资人分身的 system prompt 判断匹配度。
-2) 判断信息是否充分：市场、团队、产品、商业模式、竞争、阶段与需求是否基本清晰。
-3) 只输出 JSON，不要输出任何额外文本。
+content: 
+1) content system prompt Decidecontent.
+2) Decidecontent: content, content, content, content, content, content.
+3) content JSON, content.
 
-JSON格式：
+JSONcontent: 
 {
   "status": "PENDING|NEEDS_INFO|QUALIFIED|REJECTED",
   "score": 0-100,
   "needsInvestorReview": true/false,
-  "reason": "一句到三句中文，说明判断依据",
-  "summary": "中文摘要，<=180字，供投资人后台快速浏览"
+  "reason": "content, contentDecidecontent",
+  "summary": "content, <=180content, content"
 }
 
-判定建议：
-- QUALIFIED：信息充分且明显匹配，可转人工
-- NEEDS_INFO：暂不充分，需继续追问
-- REJECTED：明显不匹配或质量较差
-- PENDING：非常早期、仍无法判断
+content: 
+- QUALIFIED: content, content
+- NEEDS_INFO: content, content
+- REJECTED: content
+- PENDING: content, contentDecide
 
-投资人分身 system prompt：
+content system prompt: 
 ${avatarSystemPrompt}`;
 
   const evaluationMessages: ChatMessage[] = [
@@ -664,34 +664,34 @@ ${avatarSystemPrompt}`;
       status: 'NEEDS_INFO',
       score: 0,
       needsInvestorReview: false,
-      reason: '评估模型暂时不可用，请稍后重试。',
-      summary: '评估暂不可用，本轮仅保留聊天记录。',
+      reason: 'content, content.',
+      summary: 'content, content.',
     };
   }
 
   return safeParseQualification(raw);
 }
 
-// 可用的模型列表
+// content
 export const availableModels = [
   {
     id: "deepseek/deepseek-v3.2",
     name: "DeepSeek V3.2",
-    description: "默认主模型，适合中文长上下文、agent规划与综合推理"
+    description: "defaultcontent, content, agentcontent"
   },
   {
     id: "qwen/qwen3-max",
     name: "Qwen3 Max",
-    description: "中文指令跟随和结构化输出稳定，适合对话、总结和JSON任务"
+    description: "content, content, contentJSONcontent"
   },
   {
     id: "z-ai/glm-4.6",
     name: "GLM 4.6",
-    description: "适合planner、工具调用和搜索型agent任务"
+    description: "contentplanner, toolcontentagentcontent"
   },
   {
     id: "moonshotai/kimi-k2-thinking",
     name: "Kimi K2 Thinking",
-    description: "适合长链路推理、复杂研究和多步骤agent任务"
+    description: "content, contentagentcontent"
   }
 ];

@@ -17,28 +17,28 @@ type CenterMessage = {
 
 const providerLabel: Record<string, string> = {
   GMAIL: 'Gmail',
-  FEISHU: '飞书',
-  XIAOHONGSHU: '小红书',
+  FEISHU: 'Lark',
+  XIAOHONGSHU: 'Xiaohongshu',
 };
 
 const sourceIconMap = {
   Gmail: Mail,
-  飞书: MessageSquare,
-  小红书: FileText,
-  公众号: FileText,
-  分身会话: MessageSquare,
-  分身对话: MessageSquare,
-  '行业雷达（演示）': FileText,
+  Lark: MessageSquare,
+  Xiaohongshu: FileText,
+  WeChat: FileText,
+  Instagram: MessageSquare,
+  Facebook: MessageSquare,
+  'Demo Source': FileText,
 } as const;
 
 const sourceColorMap: Record<string, string> = {
   Gmail: 'text-red-600 bg-red-50',
-  飞书: 'text-blue-600 bg-blue-50',
-  小红书: 'text-rose-600 bg-rose-50',
-  公众号: 'text-green-600 bg-green-50',
-  分身会话: 'text-indigo-600 bg-indigo-50',
-  分身对话: 'text-sky-600 bg-sky-50',
-  '行业雷达（演示）': 'text-purple-600 bg-purple-50',
+  Lark: 'text-blue-600 bg-blue-50',
+  Xiaohongshu: 'text-rose-600 bg-rose-50',
+  WeChat: 'text-green-600 bg-green-50',
+  Instagram: 'text-indigo-600 bg-indigo-50',
+  Facebook: 'text-sky-600 bg-sky-50',
+  'Demo Source': 'text-purple-600 bg-purple-50',
 };
 
 export default async function MessagesPage() {
@@ -140,8 +140,8 @@ export default async function MessagesPage() {
     items.push({
       id: `integration-${integration.id}`,
       source: providerLabel[integration.provider] || integration.provider,
-      sender: integration.accountEmail || '集成系统',
-      title: `${providerLabel[integration.provider] || integration.provider} 最新摘要`,
+      sender: integration.accountEmail || 'content',
+      title: `${providerLabel[integration.provider] || integration.provider} content`,
       summary: latest.summary,
       priority: 'medium',
       createdAt: latest.createdAt,
@@ -152,10 +152,10 @@ export default async function MessagesPage() {
   for (const source of dbUser.wechatSources) {
     items.push({
       id: `wechat-${source.id}`,
-      source: '公众号',
+      source: 'content',
       sender: source.displayName,
-      title: `公众号更新：${source.displayName}`,
-      summary: source.description || '已接入该公众号，后续文章将进入信息中心。',
+      title: `content: ${source.displayName}`,
+      summary: source.description || 'content, content.',
       priority: 'low',
       createdAt: source.updatedAt,
       isRead: true,
@@ -167,9 +167,9 @@ export default async function MessagesPage() {
     if (!latest) continue;
     items.push({
       id: `candidate-chat-${chat.id}`,
-      source: '分身对话',
+      source: 'content',
       sender: chat.avatar.name,
-      title: `与 ${chat.avatar.name} 的会话更新`,
+      title: `content ${chat.avatar.name} content`,
       summary: latest.content,
       priority: 'medium',
       createdAt: latest.createdAt,
@@ -181,12 +181,12 @@ export default async function MessagesPage() {
     for (const chat of avatar.chats) {
       const latest = chat.messages[0];
       if (!latest) continue;
-      const candidateName = chat.candidate.nickname || chat.candidate.name || '用户';
+      const candidateName = chat.candidate.nickname || chat.candidate.name || 'content';
       items.push({
         id: `investor-chat-${chat.id}`,
-        source: '分身会话',
+        source: 'content',
         sender: candidateName,
-        title: `${avatar.name} 与 ${candidateName} 的会话更新`,
+        title: `${avatar.name} content ${candidateName} content`,
         summary: latest.content,
         priority: chat.needsInvestorReview || chat.qualificationStatus === 'QUALIFIED' ? 'high' : 'medium',
         createdAt: latest.createdAt,
@@ -198,10 +198,10 @@ export default async function MessagesPage() {
   const mockDemoItems: CenterMessage[] = [
     {
       id: 'demo-1',
-      source: '行业雷达（演示）',
-      sender: '行业雷达Agent',
-      title: 'AI 应用方向出现新信号',
-      summary: '演示态数据：后续可接入外部情报源，自动汇总行业趋势。',
+      source: 'content (Demo)',
+      sender: 'contentAgent',
+      title: 'AI content',
+      summary: 'Democontent: content, content.',
       priority: 'low',
       createdAt: new Date(),
       isRead: true,
@@ -217,8 +217,8 @@ export default async function MessagesPage() {
   return (
     <FigmaShell
       homeHref="/dashboard"
-      title="信息中心"
-      subtitle="AI助手为你整理的所有信息"
+      title="content"
+      subtitle="AIcontent"
     >
       <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6">
         <div className="mb-4 flex items-center gap-4">
@@ -226,7 +226,7 @@ export default async function MessagesPage() {
             <input
               readOnly
               value=""
-              placeholder="搜索信息..."
+              placeholder="content..."
               className="w-full rounded-xl border border-gray-300 px-4 py-2.5 pl-10 text-sm text-gray-700 placeholder:text-gray-400"
             />
             <Search className="pointer-events-none -mt-8 ml-3 h-4 w-4 text-gray-400" />
@@ -234,10 +234,10 @@ export default async function MessagesPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {[
-            `全部 (${list.length})`,
-            `高优先级 (${highCount})`,
-            `集成摘要 (${dbUser.integrations.filter((it) => it.snapshots[0]).length})`,
-            `演示态 (${mockDemoItems.length})`,
+            `All (${list.length})`,
+            `content (${highCount})`,
+            `contentSummary (${dbUser.integrations.filter((it) => it.snapshots[0]).length})`,
+            `Demo (${mockDemoItems.length})`,
           ].map((tab, index) => (
             <button
               key={tab}
@@ -272,16 +272,16 @@ export default async function MessagesPage() {
                 })()}
                 <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-600">{item.source}</span>
                 <span className="text-xs text-gray-500">{item.sender}</span>
-                {!item.isRead ? <span className="rounded bg-blue-600 px-1.5 py-0.5 text-xs text-white">新</span> : null}
+                {!item.isRead ? <span className="rounded bg-blue-600 px-1.5 py-0.5 text-xs text-white">content</span> : null}
               </div>
-              <span className="text-xs text-gray-400">{item.createdAt.toLocaleString('zh-CN')}</span>
+              <span className="text-xs text-gray-400">{item.createdAt.toLocaleString('en-US')}</span>
             </div>
 
             <h3 className="text-base font-semibold text-gray-900">{item.title}</h3>
 
             <div className="mt-3 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50 p-3">
               <div className="flex items-start gap-2">
-                <span className="text-xs font-medium text-purple-600">AI摘要</span>
+                <span className="text-xs font-medium text-purple-600">AIcontent</span>
                 <p className="flex-1 whitespace-pre-wrap text-sm text-gray-700">{item.summary}</p>
               </div>
             </div>
@@ -297,19 +297,19 @@ export default async function MessagesPage() {
                         : 'bg-slate-100 text-slate-700'
                   }`}
                 >
-                  {item.priority === 'high' ? '高优先级' : item.priority === 'medium' ? '中优先级' : '低优先级'}
+                  {item.priority === 'high' ? 'content' : item.priority === 'medium' ? 'content' : 'content'}
                 </span>
                 <button type="button" className="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100">
                   <Eye className="mr-1 h-3.5 w-3.5" />
-                  标记已读
+                  content
                 </button>
                 <button type="button" className="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100">
                   <Star className="mr-1 h-3.5 w-3.5" />
-                  收藏
+                  content
                 </button>
                 <button type="button" className="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100">
                   <Archive className="mr-1 h-3.5 w-3.5" />
-                  归档
+                  content
                 </button>
               </div>
             </div>
@@ -318,7 +318,7 @@ export default async function MessagesPage() {
 
         {list.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-slate-500">
-            暂无信息，先去接入 Gmail / 飞书 / 公众号或开启会话。
+            content, content Gmail / content / content.
           </div>
         ) : null}
       </div>

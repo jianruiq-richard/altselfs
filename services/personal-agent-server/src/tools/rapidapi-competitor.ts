@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { ServerConfig } from '../config.js';
 import { isRecord } from '../util.js';
 
-type RapidApiToolSpec = {
+type RapidApitoolSpec = {
   provider: string;
   source: string;
   host: string;
@@ -13,7 +13,7 @@ type RapidApiToolSpec = {
   run: (args: Record<string, unknown>, config: ServerConfig) => Promise<unknown>;
 };
 
-const TOOLS: RapidApiToolSpec[] = [
+const TOOLS: RapidApitoolSpec[] = [
   {
     provider: 'similarweb_api1',
     source: 'similarweb-api1',
@@ -116,12 +116,12 @@ export const RAPIDAPI_COMPETITOR_TOOL_PROVIDER_NAMES = Object.freeze(
   Object.fromEntries(TOOLS.map((tool) => [tool.name, tool.provider])) as Record<string, string>
 );
 
-export function getRapidApiCompetitorToolNamesForProviders(providers: Iterable<string>) {
+export function getRapidApiCompetitortoolNamesForProviders(providers: Iterable<string>) {
   const enabled = new Set(Array.from(providers, (provider) => provider.toLowerCase()));
   return TOOLS.filter((tool) => enabled.has(tool.provider)).map((tool) => tool.name);
 }
 
-export function createRapidApiCompetitorDynamicTools(providers?: Iterable<string>) {
+export function createRapidApiCompetitorDynamictools(providers?: Iterable<string>) {
   const enabled = providers ? new Set(Array.from(providers, (provider) => provider.toLowerCase())) : null;
   return TOOLS.filter((tool) => !enabled || enabled.has(tool.provider)).map((tool) => ({
     namespace: null,
@@ -132,7 +132,7 @@ export function createRapidApiCompetitorDynamicTools(providers?: Iterable<string
   }));
 }
 
-export async function runRapidApiCompetitorTool(toolName: string, argumentsValue: unknown, config: ServerConfig) {
+export async function runRapidApiCompetitortool(toolName: string, argumentsValue: unknown, config: ServerConfig) {
   const tool = TOOLS.find((item) => item.name === toolName);
   if (!tool) return JSON.stringify({ source: 'rapidapi-competitor', error: `Unsupported tool: ${toolName}` });
   const args = isRecord(argumentsValue) ? argumentsValue : {};
@@ -174,7 +174,7 @@ export async function runRapidApiCompetitorTool(toolName: string, argumentsValue
   }
 }
 
-export function isRapidApiCompetitorTool(toolName: string) {
+export function isRapidApiCompetitortool(toolName: string) {
   return TOOLS.some((tool) => tool.name === toolName);
 }
 
@@ -243,12 +243,12 @@ export async function getRapidApiQuotaSnapshots() {
     return {
       provider: 'RapidAPI',
       account: `${tool.source} · ${tool.host}`,
-      fingerprint: configured ? 'ECS key configured' : '未配置',
-      balance: remaining !== null && limit !== null ? `${remaining.toLocaleString()} / ${limit.toLocaleString()}` : configured ? '未采集' : '未知',
-      usage: reset ? `reset ${reset}` : quota ? `HTTP ${String(quota.status || 'unknown')}` : '等待下一次调用采集',
+      fingerprint: configured ? 'ECS key configured' : 'instruction',
+      balance: remaining !== null && limit !== null ? `${remaining.toLocaleString()} / ${limit.toLocaleString()}` : configured ? 'instruction' : 'instruction',
+      usage: reset ? `reset ${reset}` : quota ? `HTTP ${String(quota.status || 'unknown')}` : 'instruction',
       status: !configured ? 'unknown' : remaining === null || limit === null ? 'unknown' : remaining <= 0 ? 'critical' : remaining / limit < 0.1 ? 'warning' : 'ok',
       updatedAt: typeof quota?.updatedAt === 'string' ? quota.updatedAt : new Date().toISOString(),
-      note: quota ? '来自最近一次 RapidAPI 响应头' : '该订阅源还没有采集到 quota headers',
+      note: quota ? 'instruction RapidAPI instruction' : 'instruction quota headers',
     };
   });
 }

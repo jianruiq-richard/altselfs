@@ -13,18 +13,18 @@ function redirectWithResult(req: NextRequest, status: string, detail?: string) {
 
 function friendlyError(detail: string) {
   const normalized = detail.toLowerCase();
-  if (normalized.includes('redirect_uri')) return '飞书回调地址不匹配，请检查飞书开放平台 redirect URI。';
-  if (normalized.includes('invalid_grant') || normalized.includes('code')) return '飞书授权码无效或已过期，请重新绑定。';
-  if (normalized.includes('credential vault')) return '后端密钥保险箱未配置，请先配置 ECS secret。';
-  if (normalized.includes('ops_agent_token')) return '后端 internal API 授权未配置。';
+  if (normalized.includes('redirect_uri')) return 'message, message redirect URI.';
+  if (normalized.includes('invalid_grant') || normalized.includes('code')) return 'message, messageReconnect.';
+  if (normalized.includes('credential vault')) return 'message, message ECS secret.';
+  if (normalized.includes('ops_agent_token')) return 'message internal API message.';
   if (
     normalized.includes('und_err_connect_timeout') ||
     normalized.includes('connect timeout') ||
     normalized.includes('fetch failed')
   ) {
-    return '飞书授权成功，但连接后端保存授权信息超时，请稍后重试或联系管理员检查 personal-agent-server 网络。';
+    return 'message, messageSavemessage, message personal-agent-server message.';
   }
-  return '飞书绑定失败，请稍后重试或联系管理员。';
+  return 'messageconnection failed, message.';
 }
 
 export async function GET(req: NextRequest) {
@@ -36,9 +36,9 @@ export async function GET(req: NextRequest) {
   const error = req.nextUrl.searchParams.get('error');
   const stateCookie = req.cookies.get('oauth_state_personal_feishu')?.value;
 
-  if (error) return redirectWithResult(req, 'error', `授权失败：${error}`);
-  if (!state || !stateCookie || state !== stateCookie) return redirectWithResult(req, 'error', '授权状态校验失败，请重试');
-  if (!code) return redirectWithResult(req, 'error', '缺少授权码');
+  if (error) return redirectWithResult(req, 'error', `messagefailed: ${error}`);
+  if (!state || !stateCookie || state !== stateCookie) return redirectWithResult(req, 'error', 'messagefailed, message');
+  if (!code) return redirectWithResult(req, 'error', 'message');
 
   try {
     const token = await exchangeFeishuPersonalCode(req.nextUrl.origin, code);
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
         investorId: investor.id,
         userId: investor.email || investor.id,
         accountId,
-        accountName: profile.name || profile.en_name || profile.email || '飞书用户',
+        accountName: profile.name || profile.en_name || profile.email || 'message',
         token: {
           accessToken: token.access_token,
           refreshToken: token.refresh_token,

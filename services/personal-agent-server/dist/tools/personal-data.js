@@ -1,6 +1,6 @@
 import { decryptCredentialPayload, isCredentialVaultConfigured } from '../credential-vault.js';
 import { externalFetch } from '../outbound-fetch.js';
-import { listPersonalConnections, loadPersonalCredential, recordPersonalToolCallAudit, updatePersonalCredentialPayload, } from '../personal-data-store.js';
+import { listPersonalConnections, loadPersonalCredential, recordPersonaltoolCallAudit, updatePersonalCredentialPayload, } from '../personal-data-store.js';
 import { DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, runFeishuCliRawWithSnapshot, runFeishuCliWithSnapshot, } from '../feishu-cli.js';
 import { isRecord, truncate } from '../util.js';
 const PERSONAL_TOOL_NAMES = new Set([
@@ -25,25 +25,41 @@ const LARK_CLI_OUTPUT_MAX_CHARS = 60_000;
 const LARK_CLI_ARGS_MAX_ITEMS = 64;
 const LARK_CLI_ARG_MAX_CHARS = 2_000;
 const LARK_CLI_ARGS_TOTAL_MAX_CHARS = 12_000;
-export function isPersonalDataTool(toolName) {
+export function isPersonalDatatool(toolName) {
     return PERSONAL_TOOL_NAMES.has(toolName);
 }
-export async function createPersonalDataDynamicTools(config, input) {
+export async function createPersonalDataDynamictools(config, input) {
     const investorId = input.investorId?.trim();
     const userId = input.userId?.trim();
     if (!investorId || !isCredentialVaultConfigured())
         return [];
+    const providerFilter = Array.isArray(input.enabledProviders)
+        ? new Set(input.enabledProviders.map((provider) => provider.trim().toLowerCase()).filter(Boolean))
+        : null;
+    const connectionFilter = Array.isArray(input.enabledConnectionIds)
+        ? new Set(input.enabledConnectionIds.map((connectionId) => connectionId.trim()).filter(Boolean))
+        : null;
+    const providerEnabled = (provider) => !providerFilter || providerFilter.has(provider);
+    const filterConnections = (connections) => (connectionFilter ? connections.filter((connection) => connectionFilter.has(connection.id)) : connections);
     let gmailConnections = [];
     let feishuConnections = [];
     let metaConnections = [];
     try {
-        gmailConnections = await listPersonalConnections(config, { investorId, userId, provider: 'gmail' });
-        feishuConnections = await listPersonalConnections(config, { investorId, userId, provider: 'feishu' });
-        metaConnections = await listPersonalConnections(config, { investorId, userId, provider: 'meta' });
+        if (providerEnabled('gmail')) {
+            gmailConnections = filterConnections(await listPersonalConnections(config, { investorId, userId, provider: 'gmail' }));
+        }
+        if (providerEnabled('feishu')) {
+            feishuConnections = filterConnections(await listPersonalConnections(config, { investorId, userId, provider: 'feishu' }));
+        }
+        if (providerEnabled('meta')) {
+            metaConnections = filterConnections(await listPersonalConnections(config, { investorId, userId, provider: 'meta' }));
+        }
     }
     catch {
         return [];
     }
+    if (gmailConnections.length === 0 && feishuConnections.length === 0 && metaConnections.length === 0)
+        return [];
     const tools = [
         {
             namespace: null,
@@ -120,7 +136,7 @@ export async function createPersonalDataDynamicTools(config, input) {
                     args: {
                         type: 'array',
                         items: { type: 'string' },
-                        description: 'Arguments after lark-cli, e.g. ["drive","+search","--as","user","--query","商业数据","--json"], ["skills","read","lark-doc","references/lark-doc-fetch.md"], or ["api","GET","/open-apis/drive/v1/files"]. Do not include the lark-cli binary name.',
+                        description: 'Arguments after lark-cli, e.g. ["drive","+search","--as","user","--query","instruction","--json"], ["skills","read","lark-doc","references/lark-doc-fetch.md"], or ["api","GET","/open-apis/drive/v1/files"]. Do not include the lark-cli binary name.',
                     },
                     timeoutMs: { type: 'number', description: 'Optional timeout in milliseconds, default lark-cli timeout, capped at 120000.' },
                     accountId: { type: 'string', description: 'Optional Altselfs connection id. Required when multiple Feishu accounts are connected.' },
@@ -339,10 +355,10 @@ export async function createPersonalDataDynamicTools(config, input) {
             deferLoading: false,
         });
     }
-    const enabledToolNames = new Set(['altselfs_connected_accounts_list']);
+    const enabledtoolNames = new Set(providerFilter ? [] : ['altselfs_connected_accounts_list']);
     if (gmailConnections.length > 0) {
         for (const name of ['altselfs_gmail_search_messages', 'altselfs_gmail_get_message', 'altselfs_gmail_get_thread']) {
-            enabledToolNames.add(name);
+            enabledtoolNames.add(name);
         }
     }
     if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'messages'))) {
@@ -352,30 +368,30 @@ export async function createPersonalDataDynamicTools(config, input) {
             'altselfs_feishu_list_messages',
             'altselfs_feishu_recent_messages',
         ]) {
-            enabledToolNames.add(name);
+            enabledtoolNames.add(name);
         }
     }
     if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'contacts'))) {
-        enabledToolNames.add('altselfs_feishu_search_users');
+        enabledtoolNames.add('altselfs_feishu_search_users');
     }
     if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'calendar'))) {
-        enabledToolNames.add('altselfs_feishu_today_calendar');
+        enabledtoolNames.add('altselfs_feishu_today_calendar');
     }
     if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'docs'))) {
-        enabledToolNames.add('altselfs_feishu_search_docs');
-        enabledToolNames.add('altselfs_feishu_fetch_doc');
+        enabledtoolNames.add('altselfs_feishu_search_docs');
+        enabledtoolNames.add('altselfs_feishu_fetch_doc');
     }
     if (feishuConnections.some((connection) => connection.connectionType === 'lark_cli_user')) {
-        enabledToolNames.add('altselfs_feishu_lark_cli');
+        enabledtoolNames.add('altselfs_feishu_lark_cli');
     }
     if (metaConnections.length > 0) {
-        enabledToolNames.add('altselfs_meta_accounts_list');
-        enabledToolNames.add('altselfs_instagram_list_media');
-        enabledToolNames.add('altselfs_facebook_page_posts');
+        enabledtoolNames.add('altselfs_meta_accounts_list');
+        enabledtoolNames.add('altselfs_instagram_list_media');
+        enabledtoolNames.add('altselfs_facebook_page_posts');
     }
-    return tools.filter((tool) => !isRecord(tool) || typeof tool.name !== 'string' || enabledToolNames.has(tool.name));
+    return tools.filter((tool) => !isRecord(tool) || typeof tool.name !== 'string' || enabledtoolNames.has(tool.name));
 }
-export async function runPersonalDataTool(toolName, argumentsValue, config, context) {
+export async function runPersonalDatatool(toolName, argumentsValue, config, context) {
     const args = isRecord(argumentsValue) ? argumentsValue : {};
     try {
         if (toolName === 'altselfs_connected_accounts_list') {
@@ -1523,7 +1539,7 @@ function summarizeResult(result) {
     return null;
 }
 async function audit(config, context, toolName, args, result, status, provider, connectionId, error) {
-    await recordPersonalToolCallAudit(config, {
+    await recordPersonaltoolCallAudit(config, {
         investorId: context.investorId,
         userId: context.userId,
         threadId: context.threadId,

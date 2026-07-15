@@ -1,75 +1,75 @@
-# 小红书助手浏览器扩展授权流程
+# Xiaohongshu AssistantLocalized documentation
 
-## 目标
+## Localized documentation
 
-保留“小红书助手”作为 AI agent 对话入口，不再在信息处理运营部门页面里单独做一个小红书管理面板。
+Localized documentation"Xiaohongshu Assistant"Localized documentation AI agent Localized documentation, Localized documentationInformation OperationsLocalized documentation.
 
-当前流程是：
+Localized documentation: 
 
-1. 用户在 `altselfs` 工作台点击小红书助手卡片。
-2. 页面通过浏览器扩展读取用户当前浏览器里的小红书登录态。
-3. `altselfs` 后端把这份登录态保存到当前投资人的 `XIAOHONGSHU` integration。
-4. 小红书助手继续复用现有 `Spider_XHS` 技能调用链。
+1. Localized documentation `altselfs` WorkLocalized documentationXiaohongshu AssistantLocalized documentation.
+2. Localized documentationSign inLocalized documentation.
+3. `altselfs` Localized documentationSign inLocalized documentationSaveLocalized documentation `XIAOHONGSHU` integration.
+4. Xiaohongshu AssistantLocalized documentation `Spider_XHS` Localized documentation.
 
-## 关键文件
+## Localized documentation
 
-- 工作台卡片: [src/components/xhs-assistant-card.tsx](/Users/richardjian/work/altselfs/src/components/xhs-assistant-card.tsx:1)
-- 小红书对话页: [src/app/investor/chat/[agentId]/page.tsx](/Users/richardjian/work/altselfs/src/app/investor/chat/[agentId]/page.tsx:1)
-- 扩展授权入库 API: [src/app/api/investor/xiaohongshu/connector/route.ts](/Users/richardjian/work/altselfs/src/app/api/investor/xiaohongshu/connector/route.ts:1)
-- 小红书助手 API: [src/app/api/investor/xiaohongshu/assistant/route.ts](/Users/richardjian/work/altselfs/src/app/api/investor/xiaohongshu/assistant/route.ts:1)
-- 浏览器扩展目录: [extensions/xhs-connector/README.md](/Users/richardjian/work/altselfs/extensions/xhs-connector/README.md:1)
+- WorkLocalized documentation: [src/components/xhs-assistant-card.tsx](/Users/richardjian/work/altselfs/src/components/xhs-assistant-card.tsx:1)
+- Localized documentation: [src/app/investor/chat/[agentId]/page.tsx](/Users/richardjian/work/altselfs/src/app/investor/chat/[agentId]/page.tsx:1)
+- Localized documentation API: [src/app/api/investor/xiaohongshu/connector/route.ts](/Users/richardjian/work/altselfs/src/app/api/investor/xiaohongshu/connector/route.ts:1)
+- Xiaohongshu Assistant API: [src/app/api/investor/xiaohongshu/assistant/route.ts](/Users/richardjian/work/altselfs/src/app/api/investor/xiaohongshu/assistant/route.ts:1)
+- Localized documentation: [extensions/xhs-connector/README.md](/Users/richardjian/work/altselfs/extensions/xhs-connector/README.md:1)
 
-## 本地操作步骤
+## Localized documentation
 
-### 1. 启动 `altselfs`
+### 1. Localized documentation `altselfs`
 
 ```bash
 cd /Users/richardjian/work/altselfs
 npm run dev
 ```
 
-### 2. 加载浏览器扩展
+### 2. Localized documentation
 
-打开 Chrome：
+Localized documentation Chrome: 
 
-1. 访问 `chrome://extensions`
-2. 打开“开发者模式”
-3. 点击“加载已解压的扩展程序”
-4. 选择目录 `extensions/xhs-connector`
+1. Localized documentation `chrome://extensions`
+2. Localized documentation"Localized documentation"
+3. Localized documentation"Localized documentation"
+4. Localized documentation `extensions/xhs-connector`
 
-### 3. 浏览器里登录小红书
+### 3. Localized documentationSign inLocalized documentation
 
-在同一个 Chrome Profile 里登录：
+Localized documentationChrome Profile Localized documentationSign in: 
 
 - `http://localhost:3000`
 - `https://www.xiaohongshu.com`
 
-### 4. 在工作台完成授权
+### 4. Localized documentationWorkLocalized documentationCompleteLocalized documentation
 
-进入工作台的小红书助手卡片：
+Localized documentationWorkLocalized documentationXiaohongshu AssistantLocalized documentation: 
 
-1. 点击“连接浏览器扩展”
-2. 扩展读取当前浏览器里的小红书 Cookie
-3. 前端把 Cookie 提交给 `/api/investor/xiaohongshu/connector`
-4. 后端写入当前用户的 `InvestorIntegration`
+1. Localized documentation"Localized documentation"
+2. Localized documentation Cookie
+3. Localized documentation Cookie Localized documentation `/api/investor/xiaohongshu/connector`
+4. Localized documentation `InvestorIntegration`
 
-### 5. 开始对话
+### 5. Start conversation
 
-进入：
+Localized documentation: 
 
 ```text
 /investor/chat/xiaohongshu
 ```
 
-示例问题：
+Localized documentation: 
 
-- `帮我搜最近 AI 陪伴赛道的小红书笔记`
-- `分析一下最近母婴赛道的爆文方向`
-- `给我总结这个笔记链接的核心观点`
+- `Localized documentation AI Localized documentation`
+- `Localized documentation`
+- `Localized documentation`
 
-## 当前限制
+## Localized documentation
 
-1. 扩展当前按“当前浏览器登录态”工作，不做多小红书账号切换。
-2. 扩展目前默认支持 `localhost:3000` 和 `*.vercel.app`。
-3. 如果你的正式域名是自定义域名，需要把域名补进扩展的 `manifest.json`。
-4. 后端仍然依赖 `Spider_XHS` 运行链路，因此生产环境仍推荐保留远端 Spider 服务。
+1. Localized documentation"Localized documentationSign inLocalized documentation"Work, Localized documentationaccountsLocalized documentation.
+2. Localized documentationdefaultLocalized documentation `localhost:3000` Localized documentation `*.vercel.app`.
+3. Localized documentation, Localized documentation `manifest.json`.
+4. Localized documentation `Spider_XHS` Localized documentation, Localized documentation Spider Localized documentation.

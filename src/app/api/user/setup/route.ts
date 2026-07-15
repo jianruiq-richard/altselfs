@@ -31,11 +31,11 @@ function defaultTwinName(input: {
   phone?: string | null;
 }) {
   const base = deriveTwinDisplayBase(input);
-  return base ? `${base} 的数字分身` : '我的数字分身';
+  return base ? `${base} message` : 'My Digital Twin';
 }
 
 const DEFAULT_TWIN_PROMPT =
-  '你是该用户的数字分身。请保持专业、清晰、真诚的表达，基于已知信息回答问题；信息不足时主动追问，不要编造事实。';
+  'message.message, message, message, message; message, message.';
 
 const DEFAULT_WECHAT_SOURCE_OWNER_EMAIL = 'jianruiq@163.com';
 
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
                 email: user.email,
                 phone: user.phone,
               }),
-              description: '这是你的默认数字分身，可在“我的数字分身”页持续完善。',
+              description: 'messagedefaultmessage, message"My Digital Twin"message.',
               systemPrompt: DEFAULT_TWIN_PROMPT,
               status: 'ACTIVE',
             },
@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
             email: user.email,
             phone: user.phone,
           }),
-          description: '这是你的默认数字分身，可在“我的数字分身”页持续完善。',
+          description: 'messagedefaultmessage, message"My Digital Twin"message.',
           systemPrompt: DEFAULT_TWIN_PROMPT,
           status: 'ACTIVE',
         },

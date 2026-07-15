@@ -42,7 +42,7 @@ async function readResponsePayload(res: Response): Promise<Record<string, unknow
     return JSON.parse(text) as Record<string, unknown>;
   } catch {
     return {
-      error: text.slice(0, 500) || `请求失败（HTTP ${res.status}）`,
+      error: text.slice(0, 500) || `Request failed (HTTP ${res.status})`,
     };
   }
 }
@@ -128,7 +128,7 @@ export default function InvestorWechatSourcesPanel({
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || '录入失败，请稍后重试');
+        setError(data.error || 'Unable to add this source. Please try again later.');
         return;
       }
 
@@ -136,12 +136,12 @@ export default function InvestorWechatSourcesPanel({
       setSources((prev) => [created, ...prev.filter((it) => it.id !== created.id)]);
       setArticleUrl('');
       setExpanded(true);
-      setSuccess(`已录入：${created.displayName}`);
+      setSuccess(`content: ${created.displayName}`);
       const logs = Array.isArray(data.logs) ? (data.logs as AddSourceLog[]) : [];
       setAddLogs(logs);
       setLogsOpen(logs.length > 0);
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -162,14 +162,14 @@ export default function InvestorWechatSourcesPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '删除失败，请稍后重试');
+        setError(data.error || 'Delete failed. Please try again later.');
         return;
       }
 
       setSources((prev) => prev.filter((it) => it.id !== id));
-      setSuccess('已删除公众号');
+      setSuccess('WeChat Official Account removed');
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -187,15 +187,15 @@ export default function InvestorWechatSourcesPanel({
       const res = await fetch(`/api/investor/wechat-sources/search?keyword=${encodeURIComponent(keyword)}`);
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '搜索失败，请稍后重试');
+        setError(data.error || 'Search failed. Please try again later.');
         return;
       }
       setSearchCandidates(Array.isArray(data.candidates) ? data.candidates : []);
       if (!Array.isArray(data.candidates) || data.candidates.length === 0) {
-        setSuccess('未搜索到候选公众号，请换个关键词或改用文章链接录入');
+        setSuccess('No candidate accounts found. Try another keyword or add an article URL instead.');
       }
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setSearchLoading(false);
     }
@@ -221,19 +221,19 @@ export default function InvestorWechatSourcesPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '录入失败，请稍后重试');
+        setError(data.error || 'Unable to add this source. Please try again later.');
         return;
       }
 
       const created = data.source as WechatSource;
       setSources((prev) => [created, ...prev.filter((it) => it.id !== created.id)]);
       setExpanded(true);
-      setSuccess(`已录入：${created.displayName}`);
+      setSuccess(`content: ${created.displayName}`);
       const logs = Array.isArray(data.logs) ? (data.logs as AddSourceLog[]) : [];
       setAddLogs(logs);
       setLogsOpen(logs.length > 0);
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -265,7 +265,7 @@ export default function InvestorWechatSourcesPanel({
             content:
               typeof data.error === 'string' && data.error.trim()
                 ? data.error
-                : 'AI员工暂时不可用，请稍后重试。',
+                : 'The AI teammate is temporarily unavailable. Please try again later.',
           },
         ]);
         return;
@@ -276,7 +276,7 @@ export default function InvestorWechatSourcesPanel({
         {
           role: 'assistant',
           content:
-            typeof data.reply === 'string' && data.reply.trim() ? data.reply : '已收到，但暂无回复。',
+            typeof data.reply === 'string' && data.reply.trim() ? data.reply : 'Received, but no reply is available yet.',
         },
       ]);
       if (data.threadId) {
@@ -285,7 +285,7 @@ export default function InvestorWechatSourcesPanel({
     } catch {
       setAssistantMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: '网络错误，请稍后重试。' },
+        { role: 'assistant', content: 'Network error. Please try again later..' },
       ]);
     } finally {
       setAssistantLoading(false);
@@ -294,7 +294,7 @@ export default function InvestorWechatSourcesPanel({
 
   const clearAssistantHistory = async () => {
     if (clearingAssistant || assistantLoading) return;
-    if (!window.confirm('确定清空该 AI 员工的全部聊天记录吗？此操作不可恢复。')) return;
+    if (!window.confirm('Clear all chat history for this AI teammate? This cannot be undone.')) return;
 
     setClearingAssistant(true);
     setError(null);
@@ -305,14 +305,14 @@ export default function InvestorWechatSourcesPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '清空失败，请稍后重试');
+        setError(data.error || 'Unable to clear history. Please try again later.');
         return;
       }
       setAssistantMessages([]);
       setAssistantThreadId(null);
-      setSuccess('已清空公众号 AI 员工聊天记录');
+      setSuccess('WeChat AI teammate chat history cleared');
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setClearingAssistant(false);
     }
@@ -330,7 +330,7 @@ export default function InvestorWechatSourcesPanel({
       const res = await fetch('/api/investor/wechat-sources/assistant');
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '加载调教设置失败');
+        setError(data.error || 'Failed to load coaching settings');
         return;
       }
       const prompt = String(data.customPrompt || '');
@@ -338,7 +338,7 @@ export default function InvestorWechatSourcesPanel({
       setCoachSaved(prompt);
       setCoachLoaded(true);
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setCoachLoading(false);
     }
@@ -358,16 +358,16 @@ export default function InvestorWechatSourcesPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || '保存调教设置失败');
+        setError(data.error || 'SavecontentSettingsfailed');
         return;
       }
 
       const prompt = String(data.integration?.customPrompt || '');
       setCoachDraft(prompt);
       setCoachSaved(prompt);
-      setCoachMessage('已保存，后续公众号AI员工对话已生效。');
+      setCoachMessage('contentSave, contentAI teammate chatcontent.');
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setCoachSaving(false);
     }
@@ -375,9 +375,9 @@ export default function InvestorWechatSourcesPanel({
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 mb-8 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">微信公众号</h2>
+      <h2 className="text-lg font-semibold text-slate-900">WeChat Official Accounts</h2>
       <p className="text-sm text-slate-600 mt-1">
-        录入公众号文章链接，系统会自动识别并维护你的公众号库，后续可由 AI Agent 拉取文章并分析。
+        content, content, content AI Agent content.
       </p>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -389,8 +389,8 @@ export default function InvestorWechatSourcesPanel({
             onClick={() => setLogsOpen((v) => !v)}
             className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors"
           >
-            <span className="text-xs font-medium text-slate-700">后台执行日志（{addLogs.length}）</span>
-            <span className="text-xs text-slate-500">{logsOpen ? '收起' : '展开'}</span>
+            <span className="text-xs font-medium text-slate-700">Background execution logs ({addLogs.length})</span>
+            <span className="text-xs text-slate-500">{logsOpen ? 'Collapse' : 'Expand'}</span>
           </button>
           {logsOpen && (
             <div className="bg-white divide-y divide-slate-200">
@@ -429,27 +429,27 @@ export default function InvestorWechatSourcesPanel({
           onClick={() => setExpanded((v) => !v)}
           className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
         >
-          <span className="text-sm font-medium text-slate-800">当前公众号库（{sources.length}）</span>
-          <span className="text-xs text-slate-500">{expanded ? '收起' : '展开'}</span>
+          <span className="text-sm font-medium text-slate-800">Current WeChat account library ({sources.length})</span>
+          <span className="text-xs text-slate-500">{expanded ? 'Collapse' : 'Expand'}</span>
         </button>
 
         {expanded && (
           <div className="divide-y divide-slate-200">
             {sortedSources.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-slate-500">暂无录入公众号</p>
+              <p className="px-4 py-3 text-sm text-slate-500">No WeChat accounts added yet</p>
             ) : (
               sortedSources.map((source) => (
                 <div key={source.id} className="px-4 py-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900 truncate">{source.displayName}</p>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{source.description || '暂无公众号简介'}</p>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{source.description || 'No account description available'}</p>
                     <a
                       href={source.lastArticleUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="text-xs text-sky-700 hover:underline break-all mt-1 inline-block"
                     >
-                      最近录入链接
+                      Recently added link
                     </a>
                   </div>
                   <button
@@ -458,7 +458,7 @@ export default function InvestorWechatSourcesPanel({
                     onClick={() => void removeSource(source.id)}
                     className="shrink-0 px-3 py-1.5 text-xs rounded border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                   >
-                    删除
+                    Delete
                   </button>
                 </div>
               ))
@@ -471,7 +471,7 @@ export default function InvestorWechatSourcesPanel({
         <input
           value={articleUrl}
           onChange={(e) => setArticleUrl(e.target.value)}
-          placeholder="输入公众号文章链接，例如 https://mp.weixin.qq.com/s?..."
+          placeholder="content, content https://mp.weixin.qq.com/s?..."
           className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
         />
         <button
@@ -480,12 +480,12 @@ export default function InvestorWechatSourcesPanel({
           onClick={() => void addSource()}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
         >
-          {loading ? '处理中...' : '添加'}
+          {loading ? 'Processing...' : 'Add'}
         </button>
       </div>
 
       <div className="mt-3 border border-slate-200 rounded-lg p-3 bg-slate-50">
-        <p className="text-xs text-slate-500 mb-2">关键词搜索公众号后直接选择录入</p>
+        <p className="text-xs text-slate-500 mb-2">Search by keyword and add the right official account directly</p>
         <div className="flex flex-col sm:flex-row gap-2">
           <input
             value={searchKeyword}
@@ -496,7 +496,7 @@ export default function InvestorWechatSourcesPanel({
                 void searchCandidatesByKeyword();
               }
             }}
-            placeholder="输入公众号名称或关键词"
+            placeholder="Enter an account name or keyword"
             className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
           />
           <button
@@ -505,7 +505,7 @@ export default function InvestorWechatSourcesPanel({
             onClick={() => void searchCandidatesByKeyword()}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-white text-slate-800 border border-slate-300 hover:bg-slate-100 disabled:opacity-50"
           >
-            {searchLoading ? '搜索中...' : '搜索候选'}
+            {searchLoading ? 'Searching...' : 'Search candidates'}
           </button>
         </div>
 
@@ -521,12 +521,12 @@ export default function InvestorWechatSourcesPanel({
                     wxid: {candidate.wechatId || '-'} · biz: {candidate.biz || '-'}
                   </p>
                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                    {candidate.description || '暂无公众号简介'}
+                    {candidate.description || 'No account description available'}
                   </p>
                   {candidate.latestArticleUrl ? (
-                    <p className="text-xs text-emerald-700 mt-1 break-all">已解析最新文章链接</p>
+                    <p className="text-xs text-emerald-700 mt-1 break-all">Latest article link resolved</p>
                   ) : (
-                    <p className="text-xs text-amber-700 mt-1 break-all">未拿到最新文章链接（可先录入，后续补链接）</p>
+                    <p className="text-xs text-amber-700 mt-1 break-all">Latest article link unavailable. You can add it now and update it later.</p>
                   )}
                 </div>
                 <button
@@ -535,7 +535,7 @@ export default function InvestorWechatSourcesPanel({
                   onClick={() => void addSourceFromCandidate(candidate)}
                   className="shrink-0 px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
                 >
-                  选择并添加
+                  contentAdd
                 </button>
               </div>
             ))}
@@ -545,20 +545,20 @@ export default function InvestorWechatSourcesPanel({
 
       <div className="mt-4 border border-slate-200 rounded-lg p-3 bg-white">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-xs text-slate-500">AI员工对话</p>
+          <p className="text-xs text-slate-500">AI teammate chat</p>
           <button
             type="button"
             disabled={clearingAssistant || assistantLoading || assistantMessages.length === 0}
             onClick={() => void clearAssistantHistory()}
             className="px-2 py-1 text-xs rounded border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
           >
-            {clearingAssistant ? '清空中...' : '清空聊天记录'}
+            {clearingAssistant ? 'Clearing...' : 'Clear chat history'}
           </button>
         </div>
         <div ref={assistantViewportRef} className="max-h-44 overflow-y-auto space-y-2 pr-1">
           {assistantMessages.length === 0 ? (
             <p className="text-sm text-slate-500">
-              你可以提问：例如“基于我当前公众号库，帮我总结 AI 应用方向最近值得关注的3个信号”。
+              Ask a question such as: Summarize the three most important AI application signals from my current WeChat account library.
             </p>
           ) : (
             assistantMessages.map((message, idx) => (
@@ -584,7 +584,7 @@ export default function InvestorWechatSourcesPanel({
                 void sendAssistantMessage();
               }
             }}
-            placeholder="输入你的问题..."
+            placeholder="Type your question..."
             className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
           />
           <button
@@ -593,36 +593,36 @@ export default function InvestorWechatSourcesPanel({
             onClick={() => void sendAssistantMessage()}
             className="px-3 py-2 rounded-lg text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
           >
-            {assistantLoading ? '思考中...' : '发送'}
+            {assistantLoading ? 'Thinking...' : 'Send'}
           </button>
         </div>
       </div>
 
       <div className="mt-3">
-        <DebugCollapsible title="高级设置（AI员工调教）">
+        <DebugCollapsible title="Advanced settings (AI teammate coaching)">
           <button
             type="button"
             onClick={() => void toggleCoach()}
             className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
           >
-            {coachOpen ? '隐藏调教编辑器' : '加载调教编辑器'}
+            {coachOpen ? 'Hide coaching editor' : 'Load coaching editor'}
           </button>
 
           {coachOpen && (
             <div className="mt-2">
               {coachLoading ? (
-                <p className="text-sm text-slate-500">加载中...</p>
+                <p className="text-sm text-slate-500">Loading...</p>
               ) : (
                 <>
                   <textarea
                     value={coachDraft}
                     onChange={(e) => setCoachDraft(e.target.value)}
                     rows={6}
-                    placeholder="例如：你是我的公众号研究员。每次先给3条核心结论，再给证据链接，再给可执行建议。"
+                    placeholder="content: content.content3content, content, content."
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <p className="text-xs text-slate-500">当前长度 {coachDraft.length}/8000</p>
+                    <p className="text-xs text-slate-500">Current length {coachDraft.length}/8000</p>
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -630,7 +630,7 @@ export default function InvestorWechatSourcesPanel({
                         onClick={() => setCoachDraft(coachSaved)}
                         className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                       >
-                        撤销修改
+                        Discard changes
                       </button>
                       <button
                         type="button"
@@ -638,7 +638,7 @@ export default function InvestorWechatSourcesPanel({
                         onClick={() => void saveCoachPrompt()}
                         className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
                       >
-                        {coachSaving ? '保存中...' : '保存并生效'}
+                        {coachSaving ? 'Saving...' : 'Save and apply'}
                       </button>
                     </div>
                   </div>

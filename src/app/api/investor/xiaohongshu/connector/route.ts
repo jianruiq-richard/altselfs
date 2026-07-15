@@ -51,21 +51,21 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as ConnectorBody | null;
   const cookies = typeof body?.cookies === 'string' ? body.cookies.trim() : '';
   const accountName =
-    typeof body?.accountName === 'string' && body.accountName.trim() ? body.accountName.trim() : '小红书浏览器授权';
+    typeof body?.accountName === 'string' && body.accountName.trim() ? body.accountName.trim() : 'Xiaohongshu browser authorization';
   const connectionMethod =
     typeof body?.connectionMethod === 'string' && body.connectionMethod.trim()
       ? body.connectionMethod.trim()
       : 'browser_extension';
 
   if (!cookies) {
-    return NextResponse.json({ error: '缺少小红书 Cookie' }, { status: 400 });
+    return NextResponse.json({ error: 'message Cookie' }, { status: 400 });
   }
   if (cookies.length > MAX_COOKIES_LENGTH) {
-    return NextResponse.json({ error: `Cookie 长度超限（>${MAX_COOKIES_LENGTH}）` }, { status: 400 });
+    return NextResponse.json({ error: `Cookie message (>${MAX_COOKIES_LENGTH})` }, { status: 400 });
   }
   if (!hasSupportedXhsAuthCookie(cookies)) {
     return NextResponse.json(
-      { error: `Cookie 缺少可用登录态，至少需要其一：${ACCEPTED_XHS_AUTH_COOKIES.join(' / ')}` },
+      { error: `Cookie messageSign inmessage, message: ${ACCEPTED_XHS_AUTH_COOKIES.join(' / ')}` },
       { status: 400 }
     );
   }

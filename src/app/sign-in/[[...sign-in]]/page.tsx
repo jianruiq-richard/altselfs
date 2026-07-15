@@ -58,19 +58,19 @@ export default async function Page({
               Welcome back
             </p>
             <h1 className="mt-5 text-4xl font-semibold leading-tight sm:text-5xl sm:leading-tight">
-              回到你的决策 OS
+              content OS
             </h1>
             <p className="mt-6 text-base leading-8 text-[#fff0dc]/82 sm:text-lg sm:leading-9">
-              继续查看每日晨报、重要事项判断，以及正在沉淀的个人决策偏好。
+              content, contentDecide, contentLearncontentPersonal decision preferences.
             </p>
           </section>
 
           <section className="flex justify-center lg:justify-end">
             <div className="w-full max-w-md rounded-2xl border border-[#ead8bd] bg-[#fffaf2] p-5 shadow-2xl shadow-black/20 sm:p-7">
               <div className="mb-6 text-center">
-                <h1 className="text-2xl font-semibold text-stone-950">欢迎回来</h1>
+                <h1 className="text-2xl font-semibold text-stone-950">content</h1>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  选择手机号和密码，或使用邮箱 / Google 登录
+                  content, contentEmail / Google Sign in
                 </p>
               </div>
               <div className="mb-4 grid grid-cols-2 gap-2">
@@ -82,7 +82,7 @@ export default async function Page({
                       : 'border-[#d8c8b5] bg-white text-stone-700 hover:bg-[#fff4df]'
                   }`}
                 >
-                  手机号 / 密码
+                  Phone / password
                 </Link>
                 <Link
                   href={buildMethodHref('email', redirectTarget)}
@@ -92,7 +92,7 @@ export default async function Page({
                       : 'border-[#d8c8b5] bg-white text-stone-700 hover:bg-[#fff4df]'
                   }`}
                 >
-                  邮箱 / Google
+                  Email / Google
                 </Link>
               </div>
               {method === 'phone' ? (
@@ -112,9 +112,9 @@ export default async function Page({
                 </EmbeddedBrowserAuthGuard>
               )}
               <div className="mt-4 text-center text-sm text-stone-600">
-                还没账号？
+                contentaccounts?
                 <Link href="/sign-up?method=phone" className="ml-1 font-medium text-[#7a451f] hover:underline">
-                  创建 Altselfs
+                  content Altselfs
                 </Link>
               </div>
             </div>

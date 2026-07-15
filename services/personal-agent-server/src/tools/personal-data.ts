@@ -4,7 +4,7 @@ import { externalFetch } from '../outbound-fetch.js';
 import {
   listPersonalConnections,
   loadPersonalCredential,
-  recordPersonalToolCallAudit,
+  recordPersonaltoolCallAudit,
   updatePersonalCredentialPayload,
   type FeishuCredentialPayload,
   type GmailCredentialPayload,
@@ -22,7 +22,7 @@ import {
 } from '../feishu-cli.js';
 import { isRecord, truncate } from '../util.js';
 
-type PersonalToolContext = {
+type PersonaltoolContext = {
   userId: string;
   investorId: string;
   threadId?: string;
@@ -53,11 +53,11 @@ const LARK_CLI_ARGS_MAX_ITEMS = 64;
 const LARK_CLI_ARG_MAX_CHARS = 2_000;
 const LARK_CLI_ARGS_TOTAL_MAX_CHARS = 12_000;
 
-export function isPersonalDataTool(toolName: string) {
+export function isPersonalDatatool(toolName: string) {
   return PERSONAL_TOOL_NAMES.has(toolName);
 }
 
-export async function createPersonalDataDynamicTools(config: ServerConfig, input: {
+export async function createPersonalDataDynamictools(config: ServerConfig, input: {
   investorId?: string;
   userId?: string;
   enabledProviders?: string[];
@@ -179,7 +179,7 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
             args: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Arguments after lark-cli, e.g. ["drive","+search","--as","user","--query","商业数据","--json"], ["skills","read","lark-doc","references/lark-doc-fetch.md"], or ["api","GET","/open-apis/drive/v1/files"]. Do not include the lark-cli binary name.',
+              description: 'Arguments after lark-cli, e.g. ["drive","+search","--as","user","--query","instruction","--json"], ["skills","read","lark-doc","references/lark-doc-fetch.md"], or ["api","GET","/open-apis/drive/v1/files"]. Do not include the lark-cli binary name.',
             },
             timeoutMs: { type: 'number', description: 'Optional timeout in milliseconds, default lark-cli timeout, capped at 120000.' },
             accountId: { type: 'string', description: 'Optional Altselfs connection id. Required when multiple Feishu accounts are connected.' },
@@ -422,10 +422,10 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
       }
     );
   }
-  const enabledToolNames = new Set(providerFilter ? [] : ['altselfs_connected_accounts_list']);
+  const enabledtoolNames = new Set(providerFilter ? [] : ['altselfs_connected_accounts_list']);
   if (gmailConnections.length > 0) {
     for (const name of ['altselfs_gmail_search_messages', 'altselfs_gmail_get_message', 'altselfs_gmail_get_thread']) {
-      enabledToolNames.add(name);
+      enabledtoolNames.add(name);
     }
   }
   if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'messages'))) {
@@ -435,35 +435,35 @@ export async function createPersonalDataDynamicTools(config: ServerConfig, input
       'altselfs_feishu_list_messages',
       'altselfs_feishu_recent_messages',
     ]) {
-      enabledToolNames.add(name);
+      enabledtoolNames.add(name);
     }
   }
   if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'contacts'))) {
-    enabledToolNames.add('altselfs_feishu_search_users');
+    enabledtoolNames.add('altselfs_feishu_search_users');
   }
   if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'calendar'))) {
-    enabledToolNames.add('altselfs_feishu_today_calendar');
+    enabledtoolNames.add('altselfs_feishu_today_calendar');
   }
   if (feishuConnections.some((connection) => hasFeishuFeaturePackage(connection, 'docs'))) {
-    enabledToolNames.add('altselfs_feishu_search_docs');
-    enabledToolNames.add('altselfs_feishu_fetch_doc');
+    enabledtoolNames.add('altselfs_feishu_search_docs');
+    enabledtoolNames.add('altselfs_feishu_fetch_doc');
   }
   if (feishuConnections.some((connection) => connection.connectionType === 'lark_cli_user')) {
-    enabledToolNames.add('altselfs_feishu_lark_cli');
+    enabledtoolNames.add('altselfs_feishu_lark_cli');
   }
   if (metaConnections.length > 0) {
-    enabledToolNames.add('altselfs_meta_accounts_list');
-    enabledToolNames.add('altselfs_instagram_list_media');
-    enabledToolNames.add('altselfs_facebook_page_posts');
+    enabledtoolNames.add('altselfs_meta_accounts_list');
+    enabledtoolNames.add('altselfs_instagram_list_media');
+    enabledtoolNames.add('altselfs_facebook_page_posts');
   }
-  return tools.filter((tool) => !isRecord(tool) || typeof tool.name !== 'string' || enabledToolNames.has(tool.name));
+  return tools.filter((tool) => !isRecord(tool) || typeof tool.name !== 'string' || enabledtoolNames.has(tool.name));
 }
 
-export async function runPersonalDataTool(
+export async function runPersonalDatatool(
   toolName: string,
   argumentsValue: unknown,
   config: ServerConfig,
-  context: PersonalToolContext
+  context: PersonaltoolContext
 ) {
   const args = isRecord(argumentsValue) ? argumentsValue : {};
   try {
@@ -560,7 +560,7 @@ export async function runPersonalDataTool(
   }
 }
 
-async function connectedAccountsList(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function connectedAccountsList(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const provider = typeof args.provider === 'string' && args.provider.trim() ? args.provider.trim().toLowerCase() : undefined;
   const connections = await listPersonalConnections(config, { investorId: context.investorId, userId: context.userId, provider });
   return {
@@ -570,7 +570,7 @@ async function connectedAccountsList(config: ServerConfig, context: PersonalTool
   };
 }
 
-async function gmailSearchMessages(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function gmailSearchMessages(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const query = typeof args.query === 'string' ? args.query.trim() : '';
   const maxResults = clampNumber(args.maxResults, 10, 1, 20);
   const connections = await resolveGmailConnections(config, context, args, { allowAll: true });
@@ -593,7 +593,7 @@ async function gmailSearchMessages(config: ServerConfig, context: PersonalToolCo
   };
 }
 
-async function gmailGetMessage(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function gmailGetMessage(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const messageId = typeof args.messageId === 'string' ? args.messageId.trim() : '';
   if (!messageId) throw new Error('messageId is required.');
   const [connection] = await resolveGmailConnections(config, context, args, { allowAll: false });
@@ -607,7 +607,7 @@ async function gmailGetMessage(config: ServerConfig, context: PersonalToolContex
   };
 }
 
-async function gmailGetThread(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function gmailGetThread(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const threadId = typeof args.threadId === 'string' ? args.threadId.trim() : '';
   if (!threadId) throw new Error('threadId is required.');
   const maxMessages = clampNumber(args.maxMessages, 10, 1, 20);
@@ -627,7 +627,7 @@ async function gmailGetThread(config: ServerConfig, context: PersonalToolContext
   };
 }
 
-async function metaAccountsList(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function metaAccountsList(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const connections = await resolveMetaConnections(config, context, args, { allowAll: true, maxAll: 5 });
   const accounts = [];
   for (const connection of connections) {
@@ -648,7 +648,7 @@ async function metaAccountsList(config: ServerConfig, context: PersonalToolConte
   };
 }
 
-async function instagramListMedia(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function instagramListMedia(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const limit = clampNumber(args.limit, 10, 1, 25);
   const connections = await resolveMetaConnections(config, context, args, { allowAll: true, maxAll: 3 });
   const accounts = [];
@@ -697,7 +697,7 @@ async function instagramListMedia(config: ServerConfig, context: PersonalToolCon
   };
 }
 
-async function facebookPagePosts(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function facebookPagePosts(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const limit = clampNumber(args.limit, 10, 1, 25);
   const connections = await resolveMetaConnections(config, context, args, { allowAll: true, maxAll: 3 });
   const accounts = [];
@@ -734,7 +734,7 @@ async function facebookPagePosts(config: ServerConfig, context: PersonalToolCont
   };
 }
 
-async function feishuListChats(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function feishuListChats(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const pageSize = clampNumber(args.pageSize, 20, 1, 100);
   const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3, requiredPackage: 'messages' });
   const accounts = [];
@@ -770,7 +770,7 @@ async function feishuListChats(config: ServerConfig, context: PersonalToolContex
   };
 }
 
-async function feishuListMessages(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function feishuListMessages(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const containerId = readArgString(args.containerId) || readArgString(args.chatId) || readArgString(args.threadId);
   const userId = readArgString(args.userId) || readArgString(args.openId);
   if (!containerId && !userId) throw new Error('containerId/chatId or userId is required.');
@@ -810,7 +810,7 @@ async function feishuListMessages(config: ServerConfig, context: PersonalToolCon
   };
 }
 
-async function feishuRecentMessages(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function feishuRecentMessages(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   return feishuSearchMessages(config, context, {
     ...args,
     pageSize: args.maxMessagesPerChat || args.pageSize || 20,
@@ -818,7 +818,7 @@ async function feishuRecentMessages(config: ServerConfig, context: PersonalToolC
   });
 }
 
-async function feishuSearchMessages(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function feishuSearchMessages(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const pageSize = clampNumber(args.pageSize, 20, 1, 50);
   const pageLimit = clampNumber(args.pageLimit, 1, 1, 5);
   const timeWindow = resolveFeishuIsoTimeWindow(args);
@@ -856,7 +856,7 @@ async function feishuSearchMessages(config: ServerConfig, context: PersonalToolC
   };
 }
 
-async function feishuSearchUsers(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function feishuSearchUsers(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const query = readArgString(args.query);
   const queries = readArgString(args.queries);
   const userIds = readArgString(args.userIds) || readArgString(args.userId);
@@ -886,7 +886,7 @@ async function feishuSearchUsers(config: ServerConfig, context: PersonalToolCont
   };
 }
 
-async function feishuTodayCalendar(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function feishuTodayCalendar(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const timeWindow = resolveFeishuIsoTimeWindow(args, { defaultToday: true });
   const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3, requiredPackage: 'calendar' });
   const accounts = [];
@@ -913,7 +913,7 @@ async function feishuTodayCalendar(config: ServerConfig, context: PersonalToolCo
   };
 }
 
-async function feishuSearchDocs(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function feishuSearchDocs(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const query = readArgString(args.query);
   const pageSize = clampNumber(args.pageSize, 10, 1, 20);
   const connections = await resolveFeishuConnections(config, context, args, { allowAll: true, maxAll: 3, requiredPackage: 'docs' });
@@ -955,7 +955,7 @@ async function feishuSearchDocs(config: ServerConfig, context: PersonalToolConte
   };
 }
 
-async function feishuFetchDoc(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function feishuFetchDoc(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const doc = readArgString(args.doc) || readArgString(args.url) || readArgString(args.token);
   if (!doc) throw new Error('doc is required.');
   const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1, requiredPackage: 'docs' });
@@ -993,7 +993,7 @@ async function feishuFetchDoc(config: ServerConfig, context: PersonalToolContext
   };
 }
 
-async function feishuLarkCli(config: ServerConfig, context: PersonalToolContext, args: Record<string, unknown>) {
+async function feishuLarkCli(config: ServerConfig, context: PersonaltoolContext, args: Record<string, unknown>) {
   const cliArgs = readStringArrayArg(args.args);
   validateLarkCliArgs(cliArgs);
   const [connection] = await resolveFeishuConnections(config, context, args, { allowAll: false, maxAll: 1 });
@@ -1024,7 +1024,7 @@ async function feishuLarkCli(config: ServerConfig, context: PersonalToolContext,
 
 async function resolveGmailConnections(
   config: ServerConfig,
-  context: PersonalToolContext,
+  context: PersonaltoolContext,
   args: Record<string, unknown>,
   options: { allowAll: boolean }
 ) {
@@ -1047,7 +1047,7 @@ async function resolveGmailConnections(
   throw new Error('Multiple Gmail accounts are connected. Provide accountId or accountEmail.');
 }
 
-async function getFreshGmailAccessToken(config: ServerConfig, context: PersonalToolContext, connection: PersonalConnection) {
+async function getFreshGmailAccessToken(config: ServerConfig, context: PersonaltoolContext, connection: PersonalConnection) {
   const credential = await loadPersonalCredential(config, { investorId: connection.investorId, connectionId: connection.id });
   if (!credential) throw new Error(`Credential not found for Gmail account ${connection.externalAccountId}.`);
   const payload = decryptCredentialPayload<GmailCredentialPayload>({
@@ -1076,7 +1076,7 @@ async function getFreshGmailAccessToken(config: ServerConfig, context: PersonalT
 
 async function resolveMetaConnections(
   config: ServerConfig,
-  context: PersonalToolContext,
+  context: PersonaltoolContext,
   args: Record<string, unknown>,
   options: { allowAll: boolean; maxAll: number }
 ) {
@@ -1184,7 +1184,7 @@ async function metaGraphFetch<T>(
 
 async function resolveFeishuConnections(
   config: ServerConfig,
-  context: PersonalToolContext,
+  context: PersonaltoolContext,
   args: Record<string, unknown>,
   options: { allowAll: boolean; maxAll: number; requiredPackage?: FeishuCliFeaturePackage }
 ) {
@@ -1228,7 +1228,7 @@ function hasFeishuFeaturePackage(connection: PersonalConnection, featurePackage:
   return DEFAULT_FEISHU_CLI_FEATURE_PACKAGES.includes(featurePackage);
 }
 
-async function loadFeishuCliCredential(config: ServerConfig, context: PersonalToolContext, connection: PersonalConnection) {
+async function loadFeishuCliCredential(config: ServerConfig, context: PersonaltoolContext, connection: PersonalConnection) {
   const credential = await loadPersonalCredential(config, { investorId: connection.investorId, connectionId: connection.id });
   if (!credential) throw new Error(`Credential not found for Feishu account ${connection.displayName}.`);
   const payload = decryptCredentialPayload<FeishuCredentialPayload>({
@@ -1249,7 +1249,7 @@ async function loadFeishuCliCredential(config: ServerConfig, context: PersonalTo
 
 async function runFeishuCliForConnection(
   config: ServerConfig,
-  context: PersonalToolContext,
+  context: PersonaltoolContext,
   connection: PersonalConnection,
   args: string[]
 ) {
@@ -1274,7 +1274,7 @@ async function runFeishuCliForConnection(
 
 async function runFeishuCliRawForConnection(
   config: ServerConfig,
-  context: PersonalToolContext,
+  context: PersonaltoolContext,
   connection: PersonalConnection,
   args: string[],
   options: { timeoutMs?: number } = {}
@@ -1637,7 +1637,7 @@ function summarizeResult(result: unknown) {
 
 async function audit(
   config: ServerConfig,
-  context: PersonalToolContext,
+  context: PersonaltoolContext,
   toolName: string,
   args: unknown,
   result: unknown,
@@ -1646,7 +1646,7 @@ async function audit(
   connectionId?: string,
   error?: string
 ) {
-  await recordPersonalToolCallAudit(config, {
+  await recordPersonaltoolCallAudit(config, {
     investorId: context.investorId,
     userId: context.userId,
     threadId: context.threadId,

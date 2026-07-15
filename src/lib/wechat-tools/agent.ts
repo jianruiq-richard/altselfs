@@ -50,7 +50,7 @@ export async function resolveWechatAccountsByKeyword(keyword: string) {
   const query = keyword.trim();
   if (!query) return [];
   if (!isWechatProviderReady()) {
-    throw new Error('微信公众号数据源未配置');
+    throw new Error('WeChat Official Accountsinstruction');
   }
 
   const primary = await WechatProviderRaw.searchMpByKeyword({

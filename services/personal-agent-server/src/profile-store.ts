@@ -49,13 +49,13 @@ export class LocalProfileStore implements UserProfileStore {
   async rememberExplicitUserProfile(userId: string, message: string, threadId?: string) {
     const content = extractExplicitProfileContent(message);
     if (!content) return null;
-    return this.saveProfileEntry(userId, content, threadId, '用户明确要求长期记住这条偏好或画像信息');
+    return this.saveProfileEntry(userId, content, threadId, 'The user explicitly asked to remember this long-term preference or profile detail');
   }
 
   async saveReviewedUserProfile(userId: string, content: string, threadId?: string, reason?: string) {
     const normalized = content.trim();
     if (!normalized) return null;
-    return this.saveProfileEntry(userId, normalized, threadId, reason || 'Hermes memory review 识别出的长期用户画像或偏好');
+    return this.saveProfileEntry(userId, normalized, threadId, reason || 'Long-term user profile or preference identified by Hermes memory review');
   }
 
   private async saveProfileEntry(userId: string, content: string, threadId?: string, reason?: string) {
@@ -74,7 +74,7 @@ export class LocalProfileStore implements UserProfileStore {
       id: id('profile'),
       userId,
       content,
-      reason: reason || '用户画像存储',
+      reason: reason || 'instruction',
       sourceThreadId: threadId,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -107,13 +107,13 @@ function renderProfile(entries: UserProfileEntry[]) {
 
 function extractExplicitProfileContent(message: string) {
   const match = message.match(
-    /(?:^|[。！？\n]\s*)(?:请你?|帮我)?(?:记住|请记住|以后记得|帮我记住)(?:[：:\s]+)(?<content>[\s\S]+)/u
+    /(?:^|[.!?\n]\s*)(?:instruction?|instruction)?(?:instruction|instruction|instruction|instruction)(?:[: :\s]+)(?<content>[\s\S]+)/u
   );
   let content = match?.groups?.content?.trim();
   if (!content) return '';
-  content = content.replace(/(?:请)?只回复[：:].*$/s, '').trim();
-  content = content.replace(/(?:请)?回复[：:].*$/s, '').trim();
-  content = content.replace(/^(这个偏好|这条偏好|这件事)[：:\s]*/u, '').trim();
+  content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
+  content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
+  content = content.replace(/^(instruction|instruction|instruction)[: :\s]*/u, '').trim();
   return content;
 }
 

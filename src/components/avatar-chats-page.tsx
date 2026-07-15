@@ -77,18 +77,18 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
   return (
     <FigmaShell
       homeHref="/dashboard"
-      title={`${avatar.name} · 对话记录`}
-      subtitle={`共 ${avatar.chats.length} 个会话`}
+      title={`${avatar.name} · Conversation history`}
+      subtitle={`content ${avatar.chats.length} content`}
       actions={
         <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
-          返回工作台
+          Back to workspace
         </Link>
       }
     >
       {avatar.chats.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-          <h2 className="text-2xl font-bold text-slate-900">还没有对话</h2>
-          <p className="mt-2 text-slate-600">等待用户与你的分身开始对话。</p>
+          <h2 className="text-2xl font-bold text-slate-900">No conversations yet</h2>
+          <p className="mt-2 text-slate-600">contentStart conversation.</p>
         </div>
       ) : (
         <div className="space-y-5">
@@ -97,13 +97,13 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <h3 className="text-lg font-semibold text-gray-900">
-                    {chat.title || `与 ${chat.candidate.nickname || chat.candidate.name || '匿名用户'} 的对话`}
+                    {chat.title || `content ${chat.candidate.nickname || chat.candidate.name || 'Anonymous user'} content`}
                   </h3>
                   <p className="break-all text-sm text-gray-500">
-                    {chat.candidate.nickname || chat.candidate.name || '匿名用户'} ({displayEmail(chat.candidate.email)})
+                    {chat.candidate.nickname || chat.candidate.name || 'Anonymous user'} ({displayEmail(chat.candidate.email)})
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    电话：{chat.candidate.phone || '未填写'} · 微信：{chat.candidate.wechatId || '未填写'}
+                    Phone: {chat.candidate.phone || 'Not provided'} · WeChat: {chat.candidate.wechatId || 'Not provided'}
                   </p>
                 </div>
                 <div className="text-left sm:text-right">
@@ -114,15 +114,15 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                         ? 'bg-blue-100 text-blue-800'
                         : 'bg-gray-100 text-gray-800'
                   }`}>
-                    {chat.status === 'ACTIVE' ? '进行中' : chat.status === 'COMPLETED' ? '已完成' : '已归档'}
+                    {chat.status === 'ACTIVE' ? 'Active' : chat.status === 'COMPLETED' ? 'Completed' : 'Archived'}
                   </span>
-                  <p className="text-sm text-gray-500 mt-1">{chat._count.messages} 条消息</p>
+                  <p className="text-sm text-gray-500 mt-1">{chat._count.messages} messages</p>
                 </div>
               </div>
 
               {chat.summary && (
                 <div className="bg-blue-50 rounded-lg p-4 mb-4">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">对话总结</h4>
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">Conversation summary</h4>
                   <p className="text-sm text-blue-800">{chat.summary}</p>
                 </div>
               )}
@@ -130,7 +130,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
               <div className="bg-slate-50 rounded-lg p-3 mb-4 border border-slate-200">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-slate-700">
-                    AI评估分数: <span className="font-semibold">{chat.qualificationScore}</span>
+                    AI qualification score: <span className="font-semibold">{chat.qualificationScore}</span>
                   </p>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     chat.qualificationStatus === 'QUALIFIED'
@@ -140,10 +140,10 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                         : 'bg-amber-100 text-amber-800'
                   }`}>
                     {chat.qualificationStatus === 'QUALIFIED'
-                      ? '已达标'
+                      ? 'Qualified'
                       : chat.qualificationStatus === 'REJECTED'
-                        ? '不建议'
-                        : '待补充'}
+                        ? 'Not recommended'
+                        : 'Needs more information'}
                   </span>
                 </div>
                 {chat.qualificationReason && (
@@ -152,7 +152,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
               </div>
 
               <div className="border-t pt-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">最近的对话</h4>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Recent messages</h4>
                 <div className="space-y-3 max-h-60 overflow-y-auto">
                   {[...chat.messages].reverse().map((message) => (
                     <div
@@ -170,7 +170,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                           {message.content.length > 100 ? `${message.content.substring(0, 100)}...` : message.content}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
-                          {new Date(message.createdAt).toLocaleString('zh-CN')}
+                          {new Date(message.createdAt).toLocaleString('en-US')}
                         </p>
                       </div>
                     </div>
@@ -183,11 +183,11 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
                   href={`/avatar/${avatar.id}/chat/${chat.id}`}
                   className="rounded-xl bg-blue-600 px-4 py-3 text-center text-sm text-white hover:bg-blue-700 sm:py-2"
                 >
-                  查看完整对话
+                  View full conversation
                 </Link>
                 {chat.needsInvestorReview && (
                   <span className="rounded bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-700 sm:py-2">
-                    建议你现在亲自介入
+                    Recommended: step in personally now
                   </span>
                 )}
               </div>

@@ -34,7 +34,7 @@ export type AgentBriefingItem = {
   publishedAt?: string;
 };
 
-export type AgentRunToolCall = {
+export type AgentRuntoolCall = {
   toolName: string;
   status: 'SUCCESS' | 'ERROR';
   args?: unknown;
@@ -45,6 +45,6 @@ export type AgentRunResult = {
   agentType: string;
   answer: string;
   briefingItems: AgentBriefingItem[];
-  toolCalls: AgentRunToolCall[];
+  toolCalls: AgentRuntoolCall[];
   debug?: Record<string, unknown>;
 };

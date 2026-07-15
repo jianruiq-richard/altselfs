@@ -15,7 +15,7 @@ type ActiveRun = {
   child: ChildProcess;
   startedAt: string;
   cancelledAt?: string;
-  personalDataToolNames?: string[];
+  personalDatatoolNames?: string[];
 };
 
 const activeRuns = new Map<string, ActiveRun>();
@@ -26,11 +26,11 @@ export function registerActiveRun(input: {
   userId: string;
   threadId: string;
   child: ChildProcess;
-  personalDataToolNames?: string[];
+  personalDatatoolNames?: string[];
 }) {
   activeRuns.set(input.runId, {
     ...input,
-    personalDataToolNames: input.personalDataToolNames ? [...input.personalDataToolNames] : undefined,
+    personalDatatoolNames: input.personalDatatoolNames ? [...input.personalDatatoolNames] : undefined,
     startedAt: nowIso(),
   });
   if (cancelledRuns.has(input.runId)) {
@@ -42,11 +42,11 @@ export function registerActiveRun(input: {
   }
 }
 
-export function getActiveRunToolScope(runId: string) {
+export function getActiveRuntoolScope(runId: string) {
   const active = activeRuns.get(runId);
   if (!active) return null;
   return {
-    personalDataToolNames: active.personalDataToolNames ? [...active.personalDataToolNames] : undefined,
+    personalDatatoolNames: active.personalDatatoolNames ? [...active.personalDatatoolNames] : undefined,
   };
 }
 

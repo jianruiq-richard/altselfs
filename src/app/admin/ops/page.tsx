@@ -15,12 +15,12 @@ export default async function OpsPage() {
       <div className="mx-auto max-w-7xl px-6 py-8">
         <header className="mb-8 flex flex-col gap-3 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Altselfs 内部运营</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-normal">运营监控</h1>
-            <p className="mt-2 text-sm text-slate-500">当前登录：{admin.name} · 采集时间 {formatDateTime(data.collectedAt)}</p>
+            <p className="text-sm font-medium text-slate-500">Altselfs content</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-normal">content</h1>
+            <p className="mt-2 text-sm text-slate-500">sign in: {admin.name} · content {formatDateTime(data.collectedAt)}</p>
           </div>
           <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-            管理员白名单由 <code>OPS_ADMIN_EMAILS</code> / <code>OPS_ADMIN_CLERK_IDS</code> 控制
+            content <code>OPS_ADMIN_EMAILS</code> / <code>OPS_ADMIN_CLERK_IDS</code> content
           </div>
         </header>
 
@@ -38,10 +38,10 @@ export default async function OpsPage() {
         </section>
 
         <section className="mt-6 rounded-lg border border-slate-200 bg-white">
-          <SectionTitle title="告警中心" subtitle="低余额、容量高水位和异常用户会在这里汇总。" />
+          <SectionTitle title="content" subtitle="content, content." />
           <div className="divide-y divide-slate-100">
             {data.alerts.length === 0 ? (
-              <EmptyRow text="当前没有 warning / critical 告警。" />
+              <EmptyRow text="content warning / critical content." />
             ) : (
               data.alerts.map((alert) => (
                 <div key={`${alert.title}-${alert.detail}`} className="flex items-start justify-between gap-4 px-4 py-3">
@@ -58,15 +58,15 @@ export default async function OpsPage() {
 
         <section className="mt-6 grid gap-6 lg:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-white">
-            <SectionTitle title="API Key / 余额" subtitle="真实 key 不展示，只显示指纹和采集状态。" />
+            <SectionTitle title="API Key / content" subtitle="content key content, content." />
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-medium">服务</th>
+                    <th className="px-4 py-3 font-medium">content</th>
                     <th className="px-4 py-3 font-medium">Key</th>
-                    <th className="px-4 py-3 font-medium">余额</th>
-                    <th className="px-4 py-3 font-medium">状态</th>
+                    <th className="px-4 py-3 font-medium">content</th>
+                    <th className="px-4 py-3 font-medium">content</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -91,14 +91,14 @@ export default async function OpsPage() {
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white">
-            <SectionTitle title="云资源" subtitle="Supabase 分数据库配额和文件存储配额；ECS 分系统盘和工作区盘。" />
+            <SectionTitle title="content" subtitle="Supabase content; ECS contentWorkcontent." />
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-medium">资源</th>
-                    <th className="px-4 py-3 font-medium">用量</th>
-                    <th className="px-4 py-3 font-medium">状态</th>
+                    <th className="px-4 py-3 font-medium">content</th>
+                    <th className="px-4 py-3 font-medium">content</th>
+                    <th className="px-4 py-3 font-medium">content</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -122,21 +122,21 @@ export default async function OpsPage() {
         </section>
 
         <section className="mt-6 rounded-lg border border-slate-200 bg-white">
-          <SectionTitle title="用户资源使用" subtitle="Token 为估算；数据库按用户相关内容字节估算，ECS 为 Agent workspace 目录实际占用。" />
+          <SectionTitle title="content" subtitle="Token content; content, ECS content Agent workspace content." />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-medium">用户</th>
-                  <th className="px-4 py-3 font-medium">角色</th>
-                  <th className="px-4 py-3 font-medium">聊天消息</th>
-                  <th className="px-4 py-3 font-medium">Agent 消息</th>
-                  <th className="px-4 py-3 font-medium">估算 tokens</th>
+                  <th className="px-4 py-3 font-medium">content</th>
+                  <th className="px-4 py-3 font-medium">content</th>
+                  <th className="px-4 py-3 font-medium">content</th>
+                  <th className="px-4 py-3 font-medium">Agent content</th>
+                  <th className="px-4 py-3 font-medium">content tokens</th>
                   <th className="px-4 py-3 font-medium">Supabase DB</th>
                   <th className="px-4 py-3 font-medium">Storage</th>
                   <th className="px-4 py-3 font-medium">Agent RDS</th>
-                  <th className="px-4 py-3 font-medium">ECS 硬盘</th>
-                  <th className="px-4 py-3 font-medium">最近活跃</th>
+                  <th className="px-4 py-3 font-medium">ECS content</th>
+                  <th className="px-4 py-3 font-medium">contentActive</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -163,7 +163,7 @@ export default async function OpsPage() {
         </section>
 
         <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-base font-semibold">一期说明</h2>
+          <h2 className="text-base font-semibold">content</h2>
           <ul className="mt-3 space-y-2 text-sm text-slate-600">
             {data.notes.map((note) => <li key={note}>{note}</li>)}
           </ul>
@@ -199,7 +199,7 @@ function StatusPill({ status }: { status: OpsStatus }) {
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat('en-US', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -208,8 +208,8 @@ function formatDateTime(value: string) {
 }
 
 function formatBytes(bytes: number | null) {
-  if (bytes === null) return '未知';
-  if (!Number.isFinite(bytes) || bytes < 0) return '未知';
+  if (bytes === null) return 'content';
+  if (!Number.isFinite(bytes) || bytes < 0) return 'content';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let index = 0;

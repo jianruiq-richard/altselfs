@@ -4,7 +4,7 @@ import { createChatCompletion, createJsonChatCompletion, getOpenRouterModel, typ
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import {
   appendThreadMessage,
-  appendToolCall,
+  appendtoolCall,
   ensureThread,
   getLatestThreadWithMessages,
   toClientMessages,
@@ -61,7 +61,7 @@ type PlannerAction =
   | 'mixed_analysis'
   | 'clarify';
 
-type WechatToolPlan = {
+type WechattoolPlan = {
   action: PlannerAction;
   reason?: string;
   args?: {
@@ -91,12 +91,12 @@ type ArticleCandidate = {
   summary: string;
 };
 
-type ToolResultEntry = {
+type toolResultEntry = {
   tool: string;
   result: unknown;
 };
 
-type ToolFailureEntry = {
+type toolFailureEntry = {
   tool: string;
   target?: string;
   detail: string;
@@ -142,9 +142,9 @@ function extractJsonObject(raw: string): string | null {
   return null;
 }
 
-function safeParsePlan(raw: string): WechatToolPlan {
+function safeParsePlan(raw: string): WechattoolPlan {
   try {
-    const parsed = JSON.parse(extractJsonObject(raw) ?? raw) as Partial<WechatToolPlan>;
+    const parsed = JSON.parse(extractJsonObject(raw) ?? raw) as Partial<WechattoolPlan>;
     const allowed = new Set<PlannerAction>([
       'list_source_articles',
       'search_global_articles',
@@ -204,13 +204,13 @@ function safeParsePlan(raw: string): WechatToolPlan {
 
 function buildSystemPrompt(customPrompt?: string | null) {
   const lines = [
-    '你是投资人的微信公众号AI员工。',
-    '你会先通过工具获取文章列表/正文/指标，再给出结论。',
-    '必须基于工具结果回答，不可编造。',
-    '输出简洁中文，优先给可执行结论。',
+    'messageWeChat Official AccountsAI teammate.',
+    'messagetoolmessage/message/message, message.',
+    'messagetoolmessage, message.',
+    'message, message.',
   ];
   if (customPrompt?.trim()) {
-    lines.push('用户自定义调教要求：');
+    lines.push('message: ');
     lines.push(customPrompt.trim());
   }
   return lines.join('\n');
@@ -219,7 +219,7 @@ function buildSystemPrompt(customPrompt?: string | null) {
 function buildPlannerPrompt(input: { userQuery: string; sources: SourceRecord[]; messages: ClientMessage[] }) {
   const sourceText =
     input.sources.length === 0
-      ? '无'
+      ? 'message'
       : input.sources.map((source, i) => `${i + 1}. ${source.displayName} | biz=${source.biz}`).join('\n');
   const history = input.messages
     .slice(-8)
@@ -227,40 +227,40 @@ function buildPlannerPrompt(input: { userQuery: string; sources: SourceRecord[];
     .join('\n');
 
   return [
-    '你是函数规划器，只返回 JSON。',
-    '你要选择 action 并提供 args，驱动后端工具执行。',
-    'action 候选：',
-    '1) list_source_articles: 在用户已录入公众号里查文章列表（按日期/关键词）',
-    '2) search_global_articles: 用全网搜索查文章',
-    '3) get_article_detail: 抓单篇或多篇文章正文',
-    '4) get_article_metrics: 抓文章阅读/点赞等指标',
-    '5) get_article_comments: 抓文章留言（支持自动先解析 comment_id）',
-    '6) mixed_analysis: 先列文章再抓正文/指标（推荐默认）',
-    '7) clarify: 信息不足，先追问',
+    'message, message JSON.',
+    'message action message args, messagetoolmessage.',
+    'action message: ',
+    '1) list_source_articles: message (message/message)',
+    '2) search_global_articles: message',
+    '3) get_article_detail: message',
+    '4) get_article_metrics: message/message',
+    '5) get_article_comments: message (message comment_id)',
+    '6) mixed_analysis: message/message (messagedefault)',
+    '7) clarify: message, message',
     'JSON Schema:',
     '{',
     '  "action":"list_source_articles|search_global_articles|get_article_detail|get_article_metrics|get_article_comments|mixed_analysis|clarify",',
-    '  "reason":"短原因",',
+    '  "reason":"message",',
     '  "args":{',
-    '    "bizList":["可选"],',
-    '    "keyword":"可选关键词",',
-    '    "dateFrom":"可选 YYYY-MM-DD",',
-    '    "dateTo":"可选 YYYY-MM-DD",',
-    '    "targetUrl":"可选，单篇 URL",',
-    '    "articleUrls":["可选，多个 URL"],',
-    '    "commentId":"可选，已知留言ID时可直接用",',
-    '    "buffer":"可选，留言翻页游标",',
-    '    "contentId":"可选，一级留言ID（拉回复）",',
-    '    "maxReplyId":"可选，最大回复ID（拉回复）",',
+    '    "bizList":["message"],',
+    '    "keyword":"message",',
+    '    "dateFrom":"message YYYY-MM-DD",',
+    '    "dateTo":"message YYYY-MM-DD",',
+    '    "targetUrl":"message, message URL",',
+    '    "articleUrls":["message, messageURL"],',
+    '    "commentId":"message, messageIDmessage",',
+    '    "buffer":"message, message",',
+    '    "contentId":"message, messageID (message)",',
+    '    "maxReplyId":"message, messageID (message)",',
     '    "offset":0,',
-    `    "maxSources":"可选，1-${MAX_PLAN_SOURCES}",`,
-    `    "maxArticles":"可选，1-${MAX_PLAN_ARTICLES}",`,
+    `    "maxSources":"message, 1-${MAX_PLAN_SOURCES}",`,
+    `    "maxArticles":"message, 1-${MAX_PLAN_ARTICLES}",`,
     '    "realtime":true/false',
     '  }',
     '}',
-    `用户问题：${input.userQuery}`,
-    `用户录入公众号：\n${sourceText}`,
-    `最近对话：\n${history || '无'}`,
+    `message: ${input.userQuery}`,
+    `message: \n${sourceText}`,
+    `message: \n${history || 'message'}`,
   ].join('\n');
 }
 
@@ -295,7 +295,7 @@ function toArticleCandidates(sourceName: string, biz: string, payload: unknown):
     .map((item) => ({
       sourceName,
       biz,
-      title: pickFirstString(item, ['title', 'msg_title', 'name']) || '未命名文章',
+      title: pickFirstString(item, ['title', 'msg_title', 'name']) || 'message',
       url: pickFirstString(item, ['url', 'article_url', 'link', 'content_url']),
       publishAt: pickFirstString(item, ['publish_time', 'pub_time', 'datetime', 'time', 'date']) || null,
       summary: pickFirstString(item, ['digest', 'summary', 'abstract', 'desc']),
@@ -303,7 +303,7 @@ function toArticleCandidates(sourceName: string, biz: string, payload: unknown):
     .filter((item) => item.url);
 }
 
-function chooseSources(sources: SourceRecord[], plan: WechatToolPlan, userQuery: string) {
+function chooseSources(sources: SourceRecord[], plan: WechattoolPlan, userQuery: string) {
   const maxSources = plan.args?.maxSources || DEFAULT_MAX_SOURCES;
   if (plan.args?.bizList && plan.args.bizList.length > 0) {
     return sources.filter((source) => plan.args?.bizList?.includes(source.biz)).slice(0, maxSources);
@@ -317,26 +317,26 @@ function chooseSources(sources: SourceRecord[], plan: WechatToolPlan, userQuery:
 }
 
 function renderCandidates(candidates: ArticleCandidate[]) {
-  if (candidates.length === 0) return '无候选文章。';
+  if (candidates.length === 0) return 'message.';
   return candidates
     .map(
       (item, i) =>
         `${i + 1}. ${item.title}\n` +
-        `来源：${item.sourceName}（biz: ${item.biz}）\n` +
-        `发布时间：${item.publishAt || '未知'}\n` +
-        `链接：${item.url}\n` +
-        `摘要：${item.summary || '无'}`
+        `Source: ${item.sourceName} (biz: ${item.biz})\n` +
+        `message: ${item.publishAt || 'message'}\n` +
+        `message: ${item.url}\n` +
+        `message: ${item.summary || 'message'}`
     )
     .join('\n\n');
 }
 
-function renderToolResults(results: Array<{ tool: string; result: unknown }>) {
-  if (results.length === 0) return '无工具结果。';
+function rendertoolResults(results: Array<{ tool: string; result: unknown }>) {
+  if (results.length === 0) return 'messagetoolmessage.';
   return results.map((r, i) => `${i + 1}. ${r.tool}\n${JSON.stringify(r.result)}`).join('\n\n');
 }
 
-function renderToolFailures(failures: ToolFailureEntry[]) {
-  if (failures.length === 0) return '无工具异常。';
+function rendertoolFailures(failures: toolFailureEntry[]) {
+  if (failures.length === 0) return 'messagetoolmessage.';
   return failures
     .map((item, index) => `${index + 1}. ${item.tool}${item.target ? `(${item.target})` : ''}: ${item.detail}`)
     .join('\n');
@@ -378,11 +378,11 @@ function compactValue(value: unknown, depth = 0): unknown {
   return String(value);
 }
 
-function summarizeToolPayload(payload: unknown) {
+function summarizetoolPayload(payload: unknown) {
   return compactValue(payload, 0);
 }
 
-async function logToolCallSafe(params: {
+async function logtoolCallSafe(params: {
   threadId: string;
   messageId?: string | null;
   toolName: string;
@@ -391,12 +391,12 @@ async function logToolCallSafe(params: {
   status?: 'SUCCESS' | 'ERROR';
 }) {
   try {
-    await appendToolCall({
+    await appendtoolCall({
       threadId: params.threadId,
       messageId: params.messageId,
       toolName: params.toolName,
-      toolArgs: summarizeToolPayload(params.toolArgs),
-      toolResult: summarizeToolPayload(params.toolResult),
+      toolArgs: summarizetoolPayload(params.toolArgs),
+      toolResult: summarizetoolPayload(params.toolResult),
       status: params.status || 'SUCCESS',
     });
   } catch (error) {
@@ -404,8 +404,8 @@ async function logToolCallSafe(params: {
   }
 }
 
-function pushToolFailure(
-  failures: ToolFailureEntry[],
+function pushtoolFailure(
+  failures: toolFailureEntry[],
   tool: string,
   error: unknown,
   target?: string
@@ -472,7 +472,7 @@ export async function PUT(req: NextRequest) {
   const customPrompt = String(body.customPrompt || '');
   if (customPrompt.length > MAX_CUSTOM_PROMPT_LENGTH) {
     return NextResponse.json(
-      { error: `调教内容过长，最多 ${MAX_CUSTOM_PROMPT_LENGTH} 字符` },
+      { error: `message, message ${MAX_CUSTOM_PROMPT_LENGTH} message` },
       { status: 400 }
     );
   }
@@ -488,7 +488,7 @@ export async function PUT(req: NextRequest) {
       investorId: investor.id,
       provider: WECHAT_PROVIDER,
       status: 'CONNECTED',
-      accountName: '微信公众号AI员工',
+      accountName: 'WeChat Official AccountsAI teammate',
       assistantCustomPrompt: customPrompt,
     },
     update: {
@@ -513,7 +513,7 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json().catch(() => ({}))) as { messages?: unknown; threadId?: string };
   const messages = normalizeMessages(body.messages);
-  if (messages.length === 0) return NextResponse.json({ error: '消息不能为空' }, { status: 400 });
+  if (messages.length === 0) return NextResponse.json({ error: 'message' }, { status: 400 });
 
   const thread = await ensureThread({
     investorId: investor.id,
@@ -535,7 +535,7 @@ export async function POST(req: NextRequest) {
   if (!isWechatProviderReady()) {
     const provider = getWechatDataProviderLabel();
     const requiredEnv = getWechatProviderRequiredEnv();
-    const reply = `公众号数据源未配置（provider=${provider}，缺少 ${requiredEnv}），请先配置后再使用。`;
+    const reply = `message (provider=${provider}, message ${requiredEnv}), message.`;
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({ ok: true, reply, threadId: thread.id });
   }
@@ -566,7 +566,7 @@ export async function POST(req: NextRequest) {
   ]);
 
   if (sources.length === 0) {
-    const reply = '当前没有可用公众号源。请先录入公众号，再进行文章检索。';
+    const reply = 'message.message, message.';
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({ ok: true, reply, threadId: thread.id });
   }
@@ -574,8 +574,8 @@ export async function POST(req: NextRequest) {
   const validSources = sources.filter((source) => isValidBiz(source.biz));
   const invalidSources = sources.filter((source) => !isValidBiz(source.biz));
   if (validSources.length === 0) {
-    const names = invalidSources.map((item) => item.displayName).join('、');
-    const reply = `当前录入的公众号标识异常（例如包含模板占位符），请删除并重录。异常项：${names || '未知'}`;
+    const names = invalidSources.map((item) => item.displayName).join(', ');
+    const reply = `message (message), messageDeletemessage.message: ${names || 'message'}`;
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({ ok: true, reply, threadId: thread.id });
   }
@@ -584,14 +584,14 @@ export async function POST(req: NextRequest) {
     [...messages].reverse().find((m) => m.role === 'user')?.content || messages[messages.length - 1].content;
 
   const plannerInput: ChatMessage[] = [
-    { role: 'system', content: '你是严格JSON输出规划器。' },
+    { role: 'system', content: 'messageJSONmessage.' },
     {
       role: 'user',
       content: buildPlannerPrompt({ userQuery, sources, messages }),
     },
   ];
 
-  let plan: WechatToolPlan = {
+  let plan: WechattoolPlan = {
     action: 'mixed_analysis',
     reason: 'default',
     args: { maxSources: DEFAULT_MAX_SOURCES, maxArticles: DEFAULT_MAX_ARTICLES },
@@ -607,7 +607,7 @@ export async function POST(req: NextRequest) {
     };
   }
 
-  await logToolCallSafe({
+  await logtoolCallSafe({
     threadId: thread.id,
     messageId: userMessageId,
     toolName: 'wechat_planner',
@@ -619,8 +619,8 @@ export async function POST(req: NextRequest) {
   const selectedSources = chooseSources(validSources, plan, userQuery);
   const maxArticles = plan.args?.maxArticles || DEFAULT_MAX_ARTICLES;
   const keyword = plan.args?.keyword || '';
-  const toolResults: ToolResultEntry[] = [];
-  const toolFailures: ToolFailureEntry[] = [];
+  const toolResults: toolResultEntry[] = [];
+  const toolFailures: toolFailureEntry[] = [];
   let candidates: ArticleCandidate[] = [];
 
   const needList = ['list_source_articles', 'mixed_analysis'].includes(plan.action);
@@ -638,7 +638,7 @@ export async function POST(req: NextRequest) {
     );
     for (const item of listResults) {
       if (item.status !== 'fulfilled') {
-        pushToolFailure(toolFailures, 'listArticlesByAccount', item.reason);
+        pushtoolFailure(toolFailures, 'listArticlesByAccount', item.reason);
         continue;
       }
       const { source, result } = item.value;
@@ -653,7 +653,7 @@ export async function POST(req: NextRequest) {
           sample: arr.slice(0, 3),
         },
       });
-      await logToolCallSafe({
+      await logtoolCallSafe({
         threadId: thread.id,
         messageId: userMessageId,
         toolName: 'listArticlesByAccount',
@@ -669,13 +669,13 @@ export async function POST(req: NextRequest) {
       const result = plan.args?.realtime
         ? await searchRealtimeArticles({ keyword: keyword || userQuery, mode: 1, page: 1, limit: maxArticles })
         : await searchArticles({ keyword: keyword || userQuery, page: 1, limit: maxArticles });
-      const arr = toArticleCandidates('全网搜索', '', result);
+      const arr = toArticleCandidates('message', '', result);
       candidates.push(...arr);
       toolResults.push({
         tool: plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
         result: { count: arr.length, sample: arr.slice(0, 5) },
       });
-      await logToolCallSafe({
+      await logtoolCallSafe({
         threadId: thread.id,
         messageId: userMessageId,
         toolName: plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
@@ -684,7 +684,7 @@ export async function POST(req: NextRequest) {
         status: 'SUCCESS',
       });
     } catch (error) {
-      pushToolFailure(
+      pushtoolFailure(
         toolFailures,
         plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
         error,
@@ -727,11 +727,11 @@ export async function POST(req: NextRequest) {
   );
   for (const item of detailSettled) {
     if (item.status !== 'fulfilled') {
-      pushToolFailure(toolFailures, 'getArticleDetail', item.reason);
+      pushtoolFailure(toolFailures, 'getArticleDetail', item.reason);
       continue;
     }
     detailResults.push(item.value);
-    await logToolCallSafe({
+    await logtoolCallSafe({
       threadId: thread.id,
       messageId: userMessageId,
       toolName: 'getArticleDetail',
@@ -747,7 +747,7 @@ export async function POST(req: NextRequest) {
         count: detailResults.length,
         sample: detailResults.slice(0, 2).map((item) => ({
           url: item.url,
-          detail: summarizeToolPayload(item.detail),
+          detail: summarizetoolPayload(item.detail),
         })),
       },
     });
@@ -762,11 +762,11 @@ export async function POST(req: NextRequest) {
   );
   for (const item of metricsSettled) {
     if (item.status !== 'fulfilled') {
-      pushToolFailure(toolFailures, 'getArticleMetrics', item.reason);
+      pushtoolFailure(toolFailures, 'getArticleMetrics', item.reason);
       continue;
     }
     metricResults.push(item.value);
-    await logToolCallSafe({
+    await logtoolCallSafe({
       threadId: thread.id,
       messageId: userMessageId,
       toolName: 'getArticleMetrics',
@@ -782,7 +782,7 @@ export async function POST(req: NextRequest) {
         count: metricResults.length,
         sample: metricResults.slice(0, 3).map((item) => ({
           url: item.url,
-          metrics: summarizeToolPayload(item.metrics),
+          metrics: summarizetoolPayload(item.metrics),
         })),
       },
     });
@@ -811,7 +811,7 @@ export async function POST(req: NextRequest) {
         try {
           detail = await getArticleDetail({ url });
           detailCache.set(url, detail);
-          await logToolCallSafe({
+          await logtoolCallSafe({
             threadId: thread.id,
             messageId: userMessageId,
             toolName: 'getArticleDetail',
@@ -820,7 +820,7 @@ export async function POST(req: NextRequest) {
             status: 'SUCCESS',
           });
         } catch (error) {
-          pushToolFailure(toolFailures, 'getArticleDetail', error, url);
+          pushtoolFailure(toolFailures, 'getArticleDetail', error, url);
           continue;
         }
       }
@@ -852,11 +852,11 @@ export async function POST(req: NextRequest) {
     );
     for (const item of commentsSettled) {
       if (item.status !== 'fulfilled') {
-        pushToolFailure(toolFailures, 'getArticleComments', item.reason);
+        pushtoolFailure(toolFailures, 'getArticleComments', item.reason);
         continue;
       }
       commentResults.push(item.value);
-      await logToolCallSafe({
+      await logtoolCallSafe({
         threadId: thread.id,
         messageId: userMessageId,
         toolName: 'getArticleComments',
@@ -881,14 +881,14 @@ export async function POST(req: NextRequest) {
         sample: commentResults.slice(0, 2).map((item) => ({
           url: item.url,
           commentId: item.commentId,
-          comments: summarizeToolPayload(item.comments),
+          comments: summarizetoolPayload(item.comments),
         })),
       },
     });
   }
 
   if (toolResults.length === 0 && toolFailures.length > 0) {
-    const reply = `公众号数据抓取失败，当前未拿到可用结果：\n${renderToolFailures(toolFailures)}`;
+    const reply = `messagefailed, message: \n${rendertoolFailures(toolFailures)}`;
     await appendThreadMessage({
       threadId: thread.id,
       role: 'ASSISTANT',
@@ -918,24 +918,24 @@ export async function POST(req: NextRequest) {
     {
       role: 'system',
       content: [
-        `用户有效公众号源：${validSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`,
+        `message: ${validSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`,
         invalidSources.length > 0
-          ? `检测到无效公众号标识，已自动跳过：${invalidSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`
+          ? `message, messageSkipped: ${invalidSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`
           : '',
       ]
         .filter(Boolean)
         .join('\n'),
     },
-    { role: 'system', content: `本轮执行计划：${JSON.stringify(plan)}` },
-    { role: 'system', content: `候选文章：\n${renderCandidates(candidates)}` },
-    { role: 'system', content: `工具结果：\n${renderToolResults(toolResults)}` },
-    { role: 'system', content: `工具异常：\n${renderToolFailures(toolFailures)}` },
+    { role: 'system', content: `message: ${JSON.stringify(plan)}` },
+    { role: 'system', content: `message: \n${renderCandidates(candidates)}` },
+    { role: 'system', content: `toolmessage: \n${rendertoolResults(toolResults)}` },
+    { role: 'system', content: `toolmessage: \n${rendertoolFailures(toolFailures)}` },
     ...messages.map((message) => ({ role: message.role, content: message.content })),
   ];
 
   try {
     const reply = await createChatCompletion(responseMessages, getOpenRouterModel('WECHAT_SOURCES_ASSISTANT'));
-    const finalReply = reply || '已收到，但暂无回复。';
+    const finalReply = reply || 'Received, but no reply is available yet.';
     await appendThreadMessage({
       threadId: thread.id,
       role: 'ASSISTANT',
@@ -962,6 +962,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown';
-    return NextResponse.json({ error: `AI员工暂时不可用：${detail}` }, { status: 500 });
+    return NextResponse.json({ error: `AI teammatemessage: ${detail}` }, { status: 500 });
   }
 }

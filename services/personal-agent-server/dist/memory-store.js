@@ -37,7 +37,7 @@ function renderMemoryBlock(entries) {
 function shouldAutoApprove(suggestion) {
     if (suggestion.confidence < 0.9)
         return false;
-    return /^用户明确要求记住|^User explicitly asked to remember/i.test(suggestion.reason);
+    return /^instruction|^User explicitly asked to remember/i.test(suggestion.reason);
 }
 export function buildMemoryContext(snapshot) {
     return [
@@ -53,7 +53,7 @@ export function buildMemoryContext(snapshot) {
     ].join('\n');
 }
 export function inferExplicitMemoryWrite(message) {
-    const match = message.match(/(?:记住|以后记得|请记住)([：:\s]*)(?<content>[\s\S]+)/);
+    const match = message.match(/(?:instruction|instruction|instruction)([: :\s]*)(?<content>[\s\S]+)/);
     const content = match?.groups?.content?.trim();
     if (!content)
         return null;
@@ -61,12 +61,12 @@ export function inferExplicitMemoryWrite(message) {
         action: 'add',
         scope: classifyMemoryScope(content),
         content,
-        reason: '用户明确要求记住这条信息',
+        reason: 'instruction',
         confidence: 0.98,
     };
 }
 function classifyMemoryScope(content) {
-    if (/我|我的|偏好|喜欢|不喜欢|以后.*我|称呼我/.test(content))
+    if (/instruction|instruction|instruction|instruction|instruction|instruction.*instruction|instruction/.test(content))
         return 'user';
     return 'agent';
 }

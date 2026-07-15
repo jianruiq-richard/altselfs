@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { calculateDirectoryBytes, sanitizePathSegment } from '../sandbox-runtime.js';
 import { isRecord, nowIso, truncate } from '../util.js';
-export function createSandboxExecDynamicTool() {
+export function createSandboxExecDynamictool() {
     return {
         namespace: null,
         name: 'altselfs_sandbox_exec',
@@ -39,10 +39,10 @@ export function createSandboxExecDynamicTool() {
         deferLoading: false,
     };
 }
-export function isSandboxExecTool(toolName) {
+export function isSandboxExectool(toolName) {
     return toolName === 'altselfs_sandbox_exec';
 }
-export async function runSandboxExecTool(argumentsValue, config, context = {}) {
+export async function runSandboxExectool(argumentsValue, config, context = {}) {
     const fetchedAt = nowIso();
     const parsedArgs = parseSandboxExecArgs(argumentsValue, config);
     if ('error' in parsedArgs) {

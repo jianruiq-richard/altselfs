@@ -1,6 +1,6 @@
 export type ExecutiveDepartmentOverview = {
   department: string;
-  status: '运行正常' | '待配置' | '待创建分身' | '待跟进';
+  status: 'Healthy' | 'Setup needed' | 'Create a twin' | 'Follow-up needed';
   summary: string;
   progress: number;
 };
@@ -52,7 +52,7 @@ function clampProgress(value: number) {
 
 export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDailyBriefing {
   const now = input.now || new Date();
-  const date = now.toLocaleDateString('zh-CN', {
+  const date = now.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -81,55 +81,55 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
   const engineeringProgress = clampProgress(input.avatars.length > 0 ? 50 + Math.min(40, totalChats * 4) : 0);
   const hiredTeamSet = new Set(input.hiredTeamKeys || []);
 
-  const decisionTracks = '个人决策分身、AI 工作流、跨渠道 context 聚合与行动建议';
+  const decisionTracks = 'personal decision twins, AI workflows, cross-channel context aggregation, and action recommendations';
   const crossChannelInsight =
     connectedIntegrations.length > 0 || input.wechatSources.length > 0
-      ? `已围绕 ${decisionTracks} 建立基础信息链路，当前 AI 员工会从已接入渠道持续搜集信号；建议继续细化关注领域与排除偏好，提升判断精度。`
-      : `Decision OS 将围绕 ${decisionTracks} 汇总信息，当前尚未接入可用渠道，建议先完成至少 1 个外部渠道接入。`;
+      ? `A baseline information loop has been established around ${decisionTracks}. Current AI teammates will keep collecting signals from connected channels. Refine focus areas and exclusions to improve decision quality.`
+      : `Decision OS will consolidate information around ${decisionTracks}. No usable channels are connected yet; complete at least one external channel connection first.`;
   const twinRecommendationInsight =
     input.wechatSources.length > 0
-      ? '已具备公众号等外部信号源，后续可把关键人物、产品线索和合作机会交给个人决策分身继续拆解。'
-      : '分身推荐暂缺可用渠道样本，建议先补齐公众号、小红书、Gmail、飞书等来源。';
+      ? 'External signal sources are available. Key people, product leads, and partnership opportunities can be explored further with a Personal Decision Twin.'
+      : 'Twin Recommendations needs more channel samples. Connect WeChat Official Accounts, Xiaohongshu, Gmail, Lark, and similar sources first.';
 
   const priorityTasks: ExecutivePriorityTask[] = [];
   if (hiredTeamSet.has('info_ops') && !gmailConnected) {
     priorityTasks.push({
       priority: 'high',
-      task: '完成 Gmail 绑定并首次拉取摘要',
-      deadline: '今日内',
-      assignedBy: '总裁秘书Momo',
+      task: 'Connect Gmail and pull the first summary',
+      deadline: 'Today',
+      assignedBy: 'Executive Assistant Momo',
     });
   }
   if (hiredTeamSet.has('info_ops') && !feishuConnected) {
     priorityTasks.push({
       priority: 'medium',
-      task: '完成 飞书 绑定并校验协作摘要',
-      deadline: '今日内',
-      assignedBy: '总裁秘书Momo',
+      task: 'Connect Lark and verify the collaboration summary',
+      deadline: 'Today',
+      assignedBy: 'Executive Assistant Momo',
     });
   }
   if (hiredTeamSet.has('info_ops') && !wechatConnected) {
     priorityTasks.push({
       priority: 'medium',
-      task: '录入至少 1 个公众号源',
-      deadline: '本周内',
-      assignedBy: '公众号助手小智',
+      task: 'Add at least one WeChat Official Account source',
+      deadline: 'This week',
+      assignedBy: 'WeChat Assistant',
     });
   }
   if (hiredTeamSet.has('engineering') && reviewChats > 0) {
     priorityTasks.push({
       priority: 'high',
-      task: `跟进 ${reviewChats} 个待人工介入会话`,
-      deadline: '今日 18:00 前',
-      assignedBy: '总裁秘书Momo',
+      task: `Follow up on ${reviewChats} conversations that need human review`,
+      deadline: 'Today by 6:00 PM',
+      assignedBy: 'Executive Assistant Momo',
     });
   }
   if (priorityTasks.length < 3) {
     priorityTasks.push({
       priority: 'medium',
-      task: '审阅今日 Decision Briefing 并补充个人决策偏好',
-      deadline: '今日 20:00 前',
-      assignedBy: '总裁秘书Momo',
+      task: 'Review today Decision Briefing and add personal decision preferences',
+      deadline: 'Today by 8:00 PM',
+      assignedBy: 'Executive Assistant Momo',
     });
   }
 
@@ -137,71 +137,71 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
 
   if (hiredTeamSet.has('executive_office')) {
     departmentOverview.push({
-      department: '总裁办',
-      status: '运行正常',
-      summary: '总裁秘书负责跨部门信息汇总、晨报生成与重点事项提醒。',
+      department: 'Executive Office',
+      status: 'Healthy',
+      summary: 'The executive assistant owns cross-team information digestion, briefing generation, and priority reminders.',
       progress: 100,
     });
   }
 
   if (hiredTeamSet.has('info_ops')) {
     departmentOverview.push({
-      department: '信息处理运营部门',
-      status: infoOpsProgress > 0 ? '运行正常' : '待配置',
+      department: 'Information Operations',
+      status: infoOpsProgress > 0 ? 'Healthy' : 'Setup needed',
       summary:
         infoOpsProgress > 0
-          ? `已接入 ${connectedIntegrations.length} 个外部集成与 ${input.wechatSources.length} 个公众号源，信息处理链路可用。`
-          : '尚未完成外部渠道接入，建议优先配置 Gmail、飞书、公众号。',
+          ? `Connected ${connectedIntegrations.length} external integrations and ${input.wechatSources.length} WeChat Official Account sources; the information operations loop is ready.`
+          : 'External channel setup is not complete. Prioritize Gmail, Lark, and WeChat Official Accounts.',
       progress: infoOpsProgress,
     });
   }
 
   if (hiredTeamSet.has('engineering')) {
     departmentOverview.push({
-      department: '研发团队',
-      status: input.avatars.length > 0 ? '运行正常' : '待配置',
+      department: 'Engineering',
+      status: input.avatars.length > 0 ? 'Healthy' : 'Setup needed',
       summary:
         input.avatars.length === 0
-          ? '研发团队已雇佣，默认 AI 员工已配置，等待分身与会话数据接入。'
+          ? 'Engineering has been hired and default AI teammates are configured. Waiting for twin and conversation data.'
           : reviewChats > 0
-          ? `当前共有 ${input.avatars.length} 个分身，累计会话 ${totalChats} 次，待人工介入 ${reviewChats} 个。`
-          : `当前共有 ${input.avatars.length} 个分身，累计会话 ${totalChats} 次，已达标会话 ${qualifiedChats} 个。`,
+          ? `There are currently ${input.avatars.length} twins, ${totalChats} total conversations, and ${reviewChats} needing human review.`
+          : `There are currently ${input.avatars.length} twins, ${totalChats} total conversations, and ${qualifiedChats} qualified conversations.`,
       progress: engineeringProgress,
     });
   }
 
   if (hiredTeamSet.has('marketing_ops')) {
     departmentOverview.push({
-      department: '营销运营团队',
-      status: '待配置',
-      summary: '营销运营团队已雇佣，默认 AI 员工已配置，待接入营销渠道与推广监控规则后自动更新进展。',
+      department: 'Marketing Operations',
+      status: 'Setup needed',
+      summary: 'Marketing Operations has been hired and default AI teammates are configured. Progress will update after marketing channels and campaign monitoring rules are connected.',
       progress: 20,
     });
   }
 
   return {
     date,
-    generatedTime: '今天 06:00',
-    headline: `今日已汇总 ${processedInfoCount} 条信息流，当前有 ${priorityTasks.filter((item) => item.priority === 'high').length} 项高优先级事项需要关注。`,
+    generatedTime: '6:00 AM today',
+    headline: `Today briefing consolidated ${processedInfoCount} information streams. ${priorityTasks.filter((item) => item.priority === 'high').length} high-priority items need attention.`,
     departmentOverview,
     externalInsights: [
       {
-        category: '信息汇总',
+        category: 'Information Digest',
         content: crossChannelInsight,
         source: 'Decision OS',
       },
       {
-        category: '今日to do',
+        category: 'Today To-Dos',
         content:
           priorityTasks.length > 0
-            ? `当前有 ${priorityTasks.length} 个待办，建议优先处理 ${priorityTasks.filter((item) => item.priority === 'high').length} 个高优先级事项。`
-            : '更新晨报后，总裁秘书会从所有消息渠道提取可执行事项。',
-        source: '总裁秘书Momo',
+            ? `There are ${priorityTasks.length} to-dos. Prioritize ${priorityTasks.filter((item) => item.priority === 'high').length} high-priority items first.`
+            : 'After the briefing is updated, the executive assistant will extract actionable items from all message channels.',
+        source: 'Executive Assistant Momo',
       },
       {
-        category: '分身推荐',
+        category: 'Twin Recommendations',
         content: twinRecommendationInsight,
-        source: '个人决策分身',
+        source: 'Personal Decision Twin',
       },
     ],
     priorityTasks: priorityTasks.slice(0, 4),
@@ -211,57 +211,57 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
 export function buildExecutiveAssistantReply(question: string, briefing: ExecutiveDailyBriefing) {
   const normalized = question.toLowerCase();
 
-  if (/部门|工作|概览|团队|组织/.test(normalized)) {
+  if (/department|team|overview|work|organization|org/.test(normalized)) {
     return [
-      '各部门今日概览：',
+      'Today team overview:',
       ...briefing.departmentOverview.map(
-        (item) => `- ${item.department}：${item.status}（进度 ${item.progress}%）\n  ${item.summary}`
+        (item) => `- ${item.department} - ${item.status} (progress ${item.progress}%)\n  ${item.summary}`
       ),
       '',
-      '需要我继续展开某一个部门的详细行动建议吗？',
+      'Would you like me to expand the action plan for one team?',
     ].join('\n');
   }
 
-  if (/外界|行业|动态|趋势|情报/.test(normalized)) {
+  if (/market|industry|trend|intelligence|external|news/.test(normalized)) {
     return [
-      '信息汇总：',
-      ...briefing.externalInsights.map((item) => `- ${item.category}：${item.content}（${item.source}）`),
+      'Information Digest - ',
+      ...briefing.externalInsights.map((item) => `- ${item.category} - ${item.content} (${item.source})`),
       '',
-      '如需，我可以把这些信息按“判断依据/执行风险/下一步动作”三类再重排一次。',
+      'I can also regroup this into decision rationale, execution risk, and next actions.',
     ].join('\n');
   }
 
-  if (/重点|任务|待办|优先级/.test(normalized)) {
+  if (/priority|task|todo|to-do|action/.test(normalized)) {
     return [
-      '今日重点事项：',
+      "Today priorities:",
       ...briefing.priorityTasks.map(
-        (item, index) => `${index + 1}. [${item.priority.toUpperCase()}] ${item.task}（截止：${item.deadline}，分配：${item.assignedBy}）`
+        (item, index) => `${index + 1}. [${item.priority.toUpperCase()}] ${item.task} (Due: ${item.deadline}, owner: ${item.assignedBy})`
       ),
       '',
-      '建议优先处理 HIGH 项，再处理配置类 MEDIUM 项。',
+      'Handle HIGH items first, then MEDIUM setup items.',
     ].join('\n');
   }
 
-  if (/晨报|报告|完整/.test(normalized)) {
+  if (/briefing|report|full/.test(normalized)) {
     return [
-      `今日晨报（${briefing.date}，${briefing.generatedTime}）：`,
+      `Today briefing (${briefing.date}, ${briefing.generatedTime}):`,
       briefing.headline,
       '',
-      '包含三个模块：',
-      '1) 信息汇总',
-      '2) 今日to do',
-      '3) 分身推荐',
+      'It includes three modules:',
+      '1) Information Digest',
+      '2) Today To-Dos',
+      '3) Twin Recommendations',
       '',
-      '你可以直接问我“展开信息汇总 / 展开今日待办 / 展开分身推荐”。',
+      'You can ask me to expand Information Digest, Today To-Dos, or Twin Recommendations.',
     ].join('\n');
   }
 
   return [
-    `晨报已就绪：${briefing.headline}`,
-    '你可以让我做以下任一项：',
-    '- 汇报 Decision OS 工作情况',
-    '- 列出今天的重点事项',
-    '- 总结跨渠道信息变化',
-    '- 给出执行优先级建议',
+    `The briefing is ready: ${briefing.headline}`,
+    'You can ask me to:',
+    '- Report Decision OS operating status',
+    '- List today priorities',
+    '- Summarize cross-channel information changes',
+    '- Recommend execution priorities',
   ].join('\n');
 }

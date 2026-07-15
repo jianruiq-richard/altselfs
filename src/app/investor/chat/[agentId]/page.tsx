@@ -162,7 +162,7 @@ type ConnectorScopePayload = {
 
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 const CODEX_MODEL_STORAGE_KEY = 'altselfs:personal-agent-codex-model';
-const AUTH_EXPIRED_MESSAGE = '登录已过期，请重新登录。';
+const AUTH_EXPIRED_MESSAGE = 'Your sign-in session expired. Please sign in again.';
 
 function buildSignInRedirectUrl() {
   if (typeof window === 'undefined') return '/sign-in';
@@ -197,19 +197,19 @@ function normalizeCodexModelOption(value: unknown): CodexModelOption['value'] {
 }
 
 const suggestedQuestions = [
-  '请帮我搜集一下今日关于 OPC 相关的行业或者技术信息。',
-  '帮我分析一下这个产品想法是否值得做。',
-  '今天 AI agent 领域有什么值得关注的变化？',
-  '帮我把一个复杂问题拆成行动计划。',
-  '记住：我喜欢看结论、依据和下一步建议。',
+  'instructionTodayinstruction OPC instructionTechnicalinstruction.',
+  'Help me analyze whether this product idea is worth pursuing.',
+  'What changes in AI agents are worth paying attention to today?',
+  'Help me turn a complex problem into an action plan.',
+  'Remember: I prefer conclusions, supporting rationale, and next-step recommendations.',
 ];
 
 const plannerStatusLabel: Record<PlannerStepStatus, string> = {
-  PENDING: '待执行',
-  RUNNING: '执行中',
-  SUCCESS: '完成',
-  ERROR: '错误',
-  SKIPPED: '跳过',
+  PENDING: 'Pending',
+  RUNNING: 'Running',
+  SUCCESS: 'Complete',
+  ERROR: 'Error',
+  SKIPPED: 'Skipped',
 };
 
 const plannerStatusClass: Record<PlannerStepStatus, string> = {
@@ -269,7 +269,7 @@ function formatBytes(bytes: number) {
 function formatSessionTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('zh-CN', {
+  return date.toLocaleDateString('en-US', {
     month: '2-digit',
     day: '2-digit',
   });
@@ -288,7 +288,7 @@ function createPendingAttachment(file: File): PendingAttachment {
 
 function formatAttachmentList(attachments: PendingAttachment[]) {
   if (attachments.length === 0) return '';
-  return attachments.map((attachment) => `- ${attachment.name}（${formatBytes(attachment.size)}）`).join('\n');
+  return attachments.map((attachment) => `- ${attachment.name} (${formatBytes(attachment.size)})`).join('\n');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -416,18 +416,18 @@ function describeCodexItem(item: Record<string, unknown>) {
   const text = extractCodexText(item).trim();
 
   if (type.toLowerCase().includes('command')) {
-    return { title: '运行命令', detail: command || '命令执行中', content: text };
+    return { title: 'Run command', detail: command || 'Command running', content: text };
   }
   if (type.toLowerCase().includes('tool') || tool) {
-    return { title: '调用工具', detail: [namespace, tool].filter(Boolean).join('.') || '工具调用中', content: text };
+    return { title: 'Call tool', detail: [namespace, tool].filter(Boolean).join('.') || 'tool call in progress', content: text };
   }
   if (type.toLowerCase().includes('file') || type.toLowerCase().includes('patch')) {
-    return { title: '更新文件', detail: path || type, content: text };
+    return { title: 'Update file', detail: path || type, content: text };
   }
   if (type.toLowerCase().includes('agentmessage') || type === 'message') {
-    return { title: '生成回复', detail: '正在输出 assistant message', content: text };
+    return { title: 'Generate reply', detail: 'Writing assistant message', content: text };
   }
-  return { title: '处理项目', detail: type, content: text };
+  return { title: 'Process item', detail: type, content: text };
 }
 
 function projectCodexStreamItem(envelope: Record<string, unknown>, index: number): CodexStreamItem | null {
@@ -440,8 +440,8 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (envelopeType === 'error') {
     return {
       id: `stream-error-${index}`,
-      title: '执行失败',
-      detail: typeof envelope.error === 'string' ? envelope.error : '执行过程中发生错误',
+      title: 'Execution failed',
+      detail: typeof envelope.error === 'string' ? envelope.error : 'An error occurred during execution',
       status: 'error',
       timestamp: now,
     };
@@ -461,7 +461,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const tool = typeof params.tool === 'string' ? params.tool : '';
     return {
       id: `codex-server-request-${timestamp}-${index}`,
-      title: '调用工具',
+      title: 'Call tool',
       detail: [namespace, tool].filter(Boolean).join('.') || 'item/tool/call',
       status: 'running',
       timestamp,
@@ -474,10 +474,10 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
       ? payload.error
       : typeof payload.warning === 'string'
         ? payload.warning
-        : 'Codex runtime 返回错误';
+        : 'Codex runtime returned an error';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: type === 'codex.web_search.not_used' ? '搜索未执行' : 'Codex 执行失败',
+      title: type === 'codex.web_search.not_used' ? 'Search was not run' : 'Codex Execution failed',
       detail,
       status: 'error',
       timestamp,
@@ -494,7 +494,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
         : '';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '更新计划',
+      title: 'Update plan',
       detail: typeof payload.callId === 'string' && payload.callId ? `callId: ${payload.callId}` : 'update_plan',
       status: 'completed',
       timestamp,
@@ -504,7 +504,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   }
 
   if (type === 'codex.tool.call') {
-    const name = typeof payload.name === 'string' ? payload.name : '工具';
+    const name = typeof payload.name === 'string' ? payload.name : 'tool';
     const content = isRecord(payload.parsedArguments)
       ? formatStreamPayload(payload.parsedArguments)
       : typeof payload.arguments === 'string'
@@ -512,7 +512,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
         : '';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '调用工具',
+      title: 'Call tool',
       detail: name,
       status: 'running',
       timestamp,
@@ -524,7 +524,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type === 'codex.tool.output') {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '工具返回',
+      title: 'toolinstruction',
       detail: typeof payload.callId === 'string' && payload.callId ? `callId: ${payload.callId}` : 'function_call_output',
       status: 'completed',
       timestamp,
@@ -537,7 +537,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const message = typeof payload.message === 'string' ? payload.message : '';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '生成中间回复',
+      title: 'Generate intermediate reply',
       detail: 'Codex assistant message',
       status: 'running',
       timestamp,
@@ -550,7 +550,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const message = typeof payload.lastAgentMessage === 'string' ? payload.lastAgentMessage : '';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: 'Codex 完成任务',
+      title: 'Codex completed task',
       detail: 'task_complete',
       status: 'completed',
       timestamp,
@@ -563,7 +563,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const reason = typeof payload.reason === 'string' ? payload.reason : 'turn aborted before task_complete';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: 'Codex 回合中断',
+      title: 'Codex turn interrupted',
       detail: reason,
       status: 'error',
       timestamp,
@@ -575,7 +575,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type === 'codex.rollout.bridge_error') {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: 'Codex 事件桥接失败',
+      title: 'Codex event bridge failed',
       detail: typeof payload.error === 'string' ? payload.error : 'rollout bridge error',
       status: 'error',
       timestamp,
@@ -586,7 +586,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type === 'codex.session.starting' || type === 'codex.thread.started' || type === 'codex.turn.started') {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: type === 'codex.session.starting' ? '启动 Codex' : type === 'codex.thread.started' ? '创建线程' : '开始回合',
+      title: type === 'codex.session.starting' ? 'Start Codex' : type === 'codex.thread.started' ? 'Create thread' : 'Start turn',
       detail: type.replace('codex.', ''),
       status: type === 'codex.thread.started' ? 'completed' : 'running',
       timestamp,
@@ -597,8 +597,8 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type === 'agent_context.input_persisted' || type === 'agent_context.async_turn_started') {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: type === 'agent_context.async_turn_started' ? '后台任务已创建' : '创建任务',
-      detail: typeof payload.runId === 'string' ? `runId: ${payload.runId}` : '已记录本轮输入',
+      title: type === 'agent_context.async_turn_started' ? 'Background task created' : 'Create task',
+      detail: typeof payload.runId === 'string' ? `runId: ${payload.runId}` : 'This turn input has been recorded',
       status: 'completed',
       timestamp,
       method: type,
@@ -611,7 +611,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const workerId = typeof payload.workerId === 'string' ? payload.workerId : '';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: type === 'agent_context.queue_claimed' ? '开始执行后台任务' : '任务超时，正在停止',
+      title: type === 'agent_context.queue_claimed' ? 'Start background task' : 'Task timed out; stopping',
       detail: [model, provider, workerId ? `worker: ${workerId}` : ''].filter(Boolean).join(' · ') || type.replace('agent_context.', ''),
       status: type === 'agent_context.queue_claimed' ? 'running' : 'error',
       timestamp,
@@ -635,8 +635,8 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
       .join('\n');
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '解析附件',
-      detail: count > 0 ? `已处理 ${count} 个附件` : '无附件或解析警告',
+      title: 'Parse attachments',
+      detail: count > 0 ? `Processed ${count} attachments` : 'No attachments or parse warnings',
       status: Array.isArray(payload.warnings) && payload.warnings.length > 0 ? 'error' : 'completed',
       timestamp,
       method: type,
@@ -650,8 +650,8 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const artifactCount = typeof payload.artifactCount === 'number' ? payload.artifactCount : 0;
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '加载上下文',
-      detail: `摘要 ${summaryChars} 字符，历史消息 ${messageCount} 条，附件 ${artifactCount} 个`,
+      title: 'Load context',
+      detail: `Summary ${summaryChars} chars, history messages ${messageCount} rows, attachments ${artifactCount} instruction`,
       status: 'completed',
       timestamp,
       method: type,
@@ -663,11 +663,11 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const diskBytes = typeof payload.diskBytes === 'number' ? payload.diskBytes : null;
     const detailParts = [
       status,
-      diskBytes === null ? '' : `磁盘 ${formatBytes(diskBytes)}`,
+      diskBytes === null ? '' : `instruction ${formatBytes(diskBytes)}`,
     ].filter(Boolean);
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: type === 'agent_context.sandbox_state_failed' ? '记录沙盒状态失败' : '记录沙盒状态',
+      title: type === 'agent_context.sandbox_state_failed' ? 'instructionfailed' : 'instruction',
       detail: detailParts.join(' · ') || type.replace('agent_context.', ''),
       status: type === 'agent_context.sandbox_state_failed' || status === 'ERROR' ? 'error' : 'completed',
       timestamp,
@@ -678,10 +678,10 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type === 'hermes.profile.updated' || type === 'hermes.profile.loaded') {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: type === 'hermes.profile.updated' ? '更新用户画像' : '加载用户画像',
+      title: type === 'hermes.profile.updated' ? 'instruction' : 'instruction',
       detail: type === 'hermes.profile.loaded'
-        ? `画像条目 ${typeof payload.entryCount === 'number' ? payload.entryCount : 0} 条`
-        : '已记录新的长期偏好/画像线索',
+        ? `instruction ${typeof payload.entryCount === 'number' ? payload.entryCount : 0} instruction`
+        : 'instruction/instruction',
       status: 'completed',
       timestamp,
       method: type,
@@ -693,8 +693,8 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const sessionMode = typeof payload.sessionMode === 'string' ? payload.sessionMode : '';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '启动 Hermes/Codex',
-      detail: [model, sessionMode].filter(Boolean).join(' · ') || '正在进入 agent loop',
+      title: 'instruction Hermes/Codex',
+      detail: [model, sessionMode].filter(Boolean).join(' · ') || 'instruction agent loop',
       status: 'running',
       timestamp,
       method: type,
@@ -704,8 +704,8 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type === 'hermes.source_runtime.completed') {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '完成 Hermes/Codex',
-      detail: typeof payload.sessionId === 'string' ? `sessionId: ${payload.sessionId}` : 'agent loop 已完成',
+      title: 'Complete Hermes/Codex',
+      detail: typeof payload.sessionId === 'string' ? `sessionId: ${payload.sessionId}` : 'agent loop Completed',
       status: 'completed',
       timestamp,
       method: type,
@@ -715,7 +715,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type.startsWith('runtime_state.')) {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: '同步运行状态',
+      title: 'instruction',
       detail: type.replace('runtime_state.', ''),
       status: type.includes('cleaned') || type.includes('flushed') || type.includes('hydrated') ? 'completed' : 'running',
       timestamp,
@@ -740,7 +740,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
       const params = isRecord(notification.params) ? notification.params : {};
       return {
         id: `warning-${timestamp}-${index}`,
-        title: 'Codex 警告',
+        title: 'Codex instruction',
         detail: typeof params.message === 'string' ? params.message : 'warning',
         status: 'error',
         timestamp,
@@ -751,7 +751,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     if (method === 'turn/completed') {
       return {
         id: 'turn-completed',
-        title: '完成回合',
+        title: 'Completeinstruction',
         detail: 'turn/completed',
         status: 'completed',
         timestamp,
@@ -785,7 +785,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     }
     return {
       id: `${method}-${timestamp}-${index}`,
-      title: 'Codex 事件',
+      title: 'Codex instruction',
       detail: method || type,
       status: method.includes('completed') ? 'completed' : 'running',
       timestamp,
@@ -797,7 +797,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
 
   return {
     id: `${type}-${timestamp}-${index}`,
-    title: 'Agent 事件',
+    title: 'Agent instruction',
     detail: type,
     status: type.includes('completed') ? 'completed' : 'running',
     timestamp,
@@ -828,8 +828,8 @@ function messagesContainUserTurn(value: unknown, expectedUserContent: string) {
 }
 
 function getRunPollErrorMessage(data: ExecutiveRunPollResult, status: number) {
-  const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : '查询任务状态失败';
-  return `查询任务状态失败（HTTP ${status}）：${detail}`;
+  const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : 'Failed to check task status';
+  return `Failed to check task status (HTTP ${status}): ${detail}`;
 }
 
 function formatDuration(ms: number) {
@@ -889,36 +889,36 @@ function buildCompletedActivityFromStatus(params: {
 
 function codexActionLabel(item: CodexStreamItem) {
   const method = item.method || '';
-  if (item.status === 'error') return item.title || '执行失败';
-  if (method.includes('tool') || item.title.includes('工具')) {
-    return item.status === 'completed' ? '已调用工具' : '正在调用工具';
+  if (item.status === 'error') return item.title || 'Execution failed';
+  if (method.includes('tool') || item.title.includes('tool')) {
+    return item.status === 'completed' ? 'instructionCall tool' : 'instructionCall tool';
   }
-  if (method.includes('queue_claimed')) return '开始执行';
-  if (method.includes('queue_timeout')) return '执行超时';
-  if (method.includes('plan') || item.title.includes('计划')) return '正在规划';
-  if (method.includes('thread') || method.includes('session')) return '准备会话';
-  if (method.includes('agent_context') || method.includes('runtime_state')) return '读取上下文';
-  if (method.includes('workspace_artifacts')) return '处理附件';
-  if (method.includes('profile')) return '读取记忆';
-  if (method.includes('task_complete') || method.includes('completed')) return '完成处理';
-  return item.status === 'running' ? '正在思考' : item.title;
+  if (method.includes('queue_claimed')) return 'instruction';
+  if (method.includes('queue_timeout')) return 'instruction';
+  if (method.includes('plan') || item.title.includes('instruction')) return 'instruction';
+  if (method.includes('thread') || method.includes('session')) return 'instruction';
+  if (method.includes('agent_context') || method.includes('runtime_state')) return 'instruction';
+  if (method.includes('workspace_artifacts')) return 'instruction';
+  if (method.includes('profile')) return 'instruction';
+  if (method.includes('task_complete') || method.includes('completed')) return 'Completeinstruction';
+  return item.status === 'running' ? 'instruction' : item.title;
 }
 
 function codexCompletedActionLabel(item: CodexStreamItem) {
   const method = item.method || '';
-  if (item.status === 'error') return item.title || '执行失败';
-  if (method.includes('tool') || item.title.includes('工具')) return '调用工具';
-  if (method.includes('queue_claimed')) return '开始执行';
-  if (method.includes('queue_timeout')) return '执行超时';
-  if (method.includes('plan') || item.title.includes('计划')) return '规划';
-  if (method.includes('thread') || method.includes('session')) return '准备会话';
-  if (method.includes('agent_context') || method.includes('runtime_state')) return '读取上下文';
-  if (method.includes('workspace_artifacts')) return '处理附件';
-  if (method.includes('profile')) return '读取记忆';
-  if (method.includes('hermes.source_runtime')) return '运行 Hermes/Codex';
-  if (method.includes('codex.agent_message')) return '生成回复';
-  if (method.includes('task_complete') || method.includes('completed')) return '完成处理';
-  return item.title.replace(/^正在/, '');
+  if (item.status === 'error') return item.title || 'Execution failed';
+  if (method.includes('tool') || item.title.includes('tool')) return 'Call tool';
+  if (method.includes('queue_claimed')) return 'instruction';
+  if (method.includes('queue_timeout')) return 'instruction';
+  if (method.includes('plan') || item.title.includes('instruction')) return 'instruction';
+  if (method.includes('thread') || method.includes('session')) return 'instruction';
+  if (method.includes('agent_context') || method.includes('runtime_state')) return 'instruction';
+  if (method.includes('workspace_artifacts')) return 'instruction';
+  if (method.includes('profile')) return 'instruction';
+  if (method.includes('hermes.source_runtime')) return 'instruction Hermes/Codex';
+  if (method.includes('codex.agent_message')) return 'Generate reply';
+  if (method.includes('task_complete') || method.includes('completed')) return 'Completeinstruction';
+  return item.title.replace(/^instruction/, '');
 }
 
 function codexCompactDetail(item: CodexStreamItem) {
@@ -968,7 +968,7 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
       <div className="w-full max-w-2xl border-b border-slate-200 pb-3 text-sm text-slate-600">
         <details className="group">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md px-0 py-1 text-sm font-medium text-slate-500 hover:text-slate-900">
-            <span>已处理 {formatDuration(activity.durationMs)}</span>
+            <span>Processed {formatDuration(activity.durationMs)}</span>
             <ChevronDown className="h-4 w-4 transition group-open:rotate-180" />
           </summary>
 
@@ -992,8 +992,8 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
                         <span className="min-w-0 break-words text-slate-500">{codexCompactDetail(item)}</span>
                       </div>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
-                        {item.method ? <span>来源 {item.method}</span> : null}
-                        <span>耗时 {formatDuration(stepDuration(items, index, completedAtMs))}</span>
+                        {item.method ? <span>instruction {item.method}</span> : null}
+                        <span>instruction {formatDuration(stepDuration(items, index, completedAtMs))}</span>
                       </div>
                       {links.length > 0 ? (
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1014,7 +1014,7 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
                         <details className="group/output mt-2">
                           <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
                             <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
-                            输出
+                            instruction
                           </summary>
                           <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
                             {content}
@@ -1077,7 +1077,7 @@ async function waitForExecutiveRun(
     if (data.status === 'SUCCESS' || data.status === 'ERROR') return data;
     await sleep(typeof data.pollIntervalMs === 'number' ? data.pollIntervalMs : 3000);
   }
-  throw new Error('晨报执行仍未完成，请稍后刷新查看结果');
+  throw new Error('instructionComplete, instruction');
 }
 
 function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active: boolean }) {
@@ -1087,15 +1087,15 @@ function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active
     : [
         {
           id: 'agent-stream-preparing',
-          title: '正在思考',
-          detail: '正在创建任务并读取上下文',
+          title: 'instruction',
+          detail: 'instructionCreate taskinstruction',
           status: 'running' as const,
           timestamp: new Date().toISOString(),
         },
       ];
   const latestItem = [...visibleItems].reverse().find((item) => item.status === 'running') || visibleItems[visibleItems.length - 1];
-  const activeTitle = latestItem ? codexActionLabel(latestItem) : '正在思考';
-  const activeDetail = latestItem ? codexCompactDetail(latestItem) : '正在创建任务并读取上下文';
+  const activeTitle = latestItem ? codexActionLabel(latestItem) : 'instruction';
+  const activeDetail = latestItem ? codexCompactDetail(latestItem) : 'instructionCreate taskinstruction';
 
   return (
     <div className="flex justify-start">
@@ -1111,14 +1111,14 @@ function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="shrink-0 font-medium text-slate-950">{active ? activeTitle : '处理完成'}</span>
+                <span className="shrink-0 font-medium text-slate-950">{active ? activeTitle : 'instructionComplete'}</span>
                 {active ? <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" /> : null}
-                <span className="min-w-0 truncate text-slate-500">{active ? activeDetail : '已生成回复'}</span>
+                <span className="min-w-0 truncate text-slate-500">{active ? activeDetail : 'instructionGenerate reply'}</span>
               </div>
               <details className="group mt-2">
                 <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900">
                   <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
-                  查看过程
+                  instruction
                 </summary>
 
                 <div className="mt-3 space-y-2 border-l border-slate-200 pl-3">
@@ -1143,7 +1143,7 @@ function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active
                               <details className="group/output mt-2">
                                 <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
                                   <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
-                                  输出
+                                  instruction
                                 </summary>
                                 <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
                                   {content}
@@ -1233,17 +1233,17 @@ export default function InvestorAgentChatPage() {
     router.replace(buildSignInRedirectUrl());
   }, [router]);
 
-  const title = useMemo(() => (isExecutive ? '个人 Hermes Agent' : 'AI 助手'), [isExecutive]);
+  const title = useMemo(() => (isExecutive ? 'instruction Hermes Agent' : 'AI instruction'), [isExecutive]);
   const showExecutiveControls = false;
   const latestPlannerStatuses = useMemo(() => getLatestPlannerStatuses(plannerTrace), [plannerTrace]);
   const hasPlannerErrors = plannerTrace.some((item) => item.status === 'ERROR');
   const plannerButtonText = sending
-    ? '正在执行，查看过程'
+    ? 'instruction, instruction'
     : plannerTrace.length > 0
       ? hasPlannerErrors
-        ? '查看上次过程和错误'
-        : '查看上次执行过程'
-        : '等待本轮 planner';
+        ? 'instructionError'
+        : 'instruction'
+        : 'instruction planner';
   const selectedCodexModel =
     codexModelOptions.find((option) => option.value === codexModel) ||
     codexModelOptions.find((option) => option.value === DEFAULT_CODEX_MODEL) ||
@@ -1269,7 +1269,7 @@ export default function InvestorAgentChatPage() {
     })
       .then(async (res) => {
         const data = (await res.json().catch(() => ({}))) as { connectors?: ConnectorItem[]; error?: string };
-        if (!res.ok) throw new Error(data.error || '连接器列表加载失败');
+        if (!res.ok) throw new Error(data.error || 'instructionfailed');
         return Array.isArray(data.connectors) ? data.connectors : [];
       })
       .then((items) => {
@@ -1282,7 +1282,7 @@ export default function InvestorAgentChatPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setConnectorsError(err instanceof Error ? err.message : '连接器列表加载失败');
+        setConnectorsError(err instanceof Error ? err.message : 'instructionfailed');
       })
       .finally(() => {
         if (!cancelled) setConnectorsLoading(false);
@@ -1325,7 +1325,7 @@ export default function InvestorAgentChatPage() {
     ) => {
       const data = isRecord(run.result) ? run.result : {};
       if (run.status === 'ERROR') {
-        setError(run.error || (typeof data.error === 'string' ? data.error : '发送失败'));
+        setError(run.error || (typeof data.error === 'string' ? data.error : 'Sendfailed'));
         setMessages(fallbackMessages);
         setPlannerTrace(normalizePlannerTrace(run.plannerTrace || data.plannerTrace));
         setPlannerSteps(normalizePlannerSteps(run.planner || data.planner));
@@ -1378,7 +1378,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
+        setError(err instanceof Error ? `instructionError: ${err.message}` : 'Network error. Please try again later.');
       } finally {
         activeRunIdRef.current = null;
         setActiveRunId(null);
@@ -1406,7 +1406,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(typeof data.error === 'string' ? data.error : '停止任务失败');
+        setError(typeof data.error === 'string' ? data.error : 'Failed to stop task');
         return;
       }
       activeRunIdRef.current = null;
@@ -1414,9 +1414,9 @@ export default function InvestorAgentChatPage() {
       setSending(false);
       clearStoredActiveRunId(runId);
       setPlannerTrace(normalizePlannerTrace(data.plannerTrace || (isRecord(data.result) ? data.result.plannerTrace : null)));
-      setError('已停止本次执行。');
+      setError('instructionStopinstruction.');
     } catch (err) {
-      setError(err instanceof Error ? `停止任务失败：${err.message}` : '停止任务失败，请稍后重试');
+      setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task, instruction');
     } finally {
       setStoppingRun(false);
     }
@@ -1440,21 +1440,21 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(typeof data.error === 'string' ? data.error : '停止任务失败');
+        setError(typeof data.error === 'string' ? data.error : 'Failed to stop task');
         return;
       }
       setCodexStreamItems((prev) => [
         ...prev,
         {
           id: `personal-agent-stopped-${Date.now()}`,
-          title: '已请求停止',
+          title: 'instructionStop',
           detail: `runId: ${runId}`,
           status: 'completed' as const,
           timestamp: new Date().toISOString(),
         },
       ].slice(-18));
     } catch (err) {
-      setError(err instanceof Error ? `停止任务失败：${err.message}` : '停止任务失败，请稍后重试');
+      setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task, instruction');
     } finally {
       setStoppingRun(false);
     }
@@ -1582,10 +1582,10 @@ export default function InvestorAgentChatPage() {
         const terminalError = typeof latestTerminalRun.error === 'string' && latestTerminalRun.error.trim()
           ? latestTerminalRun.error.trim()
             : latestTerminalStatus === 'CANCELLED'
-              ? '已停止本次执行。'
+              ? 'instructionStopinstruction.'
               : latestTerminalStatus === 'TIMEOUT'
-                ? '执行超时。'
-              : '发送失败';
+                ? 'instruction.'
+              : 'Sendfailed';
         setError(terminalError);
         return 'terminal';
       }
@@ -1636,7 +1636,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || '加载失败');
+        setError(data.error || 'instructionfailed');
         return;
       }
       resetPersonalAgentRunState();
@@ -1655,7 +1655,7 @@ export default function InvestorAgentChatPage() {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
       }
     } catch {
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setLoading(false);
       setRecoveringRunState(false);
@@ -1691,7 +1691,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || '创建新会话失败');
+        setError(data.error || 'instructionfailed');
         return;
       }
       resetPersonalAgentRunState();
@@ -1705,7 +1705,7 @@ export default function InvestorAgentChatPage() {
         messagesViewportRef.current?.scrollTo({ top: 0 });
       });
     } catch {
-      setError('创建新会话失败，请稍后重试');
+      setError('instructionfailed, instruction');
     } finally {
       setCreatingSession(false);
       setRecoveringRunState(false);
@@ -1759,7 +1759,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || '加载更早消息失败');
+        setError(data.error || 'instructionfailed');
         return;
       }
 
@@ -1780,7 +1780,7 @@ export default function InvestorAgentChatPage() {
         nextViewport.scrollTop = nextViewport.scrollHeight - previousScrollHeight + previousScrollTop;
       });
     } catch {
-      setError('加载更早消息失败，请稍后重试');
+      setError('instructionfailed, instruction');
     } finally {
       loadingOlderMessagesRef.current = false;
       setLoadingOlderMessages(false);
@@ -1804,7 +1804,7 @@ export default function InvestorAgentChatPage() {
     const selectedFiles = Array.from(files);
     const oversized = selectedFiles.find((file) => file.size > MAX_ATTACHMENT_FILE_BYTES);
     if (oversized) {
-      setError(`附件 ${oversized.name} 超过 ${formatBytes(MAX_ATTACHMENT_FILE_BYTES)}，请压缩后再上传。`);
+      setError(`instruction ${oversized.name} instruction ${formatBytes(MAX_ATTACHMENT_FILE_BYTES)}, instruction.`);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -1864,8 +1864,8 @@ export default function InvestorAgentChatPage() {
       ...prev,
       {
         id: `stream-recovery-${Date.now()}`,
-        title: '连接中断，正在恢复',
-        detail: '正在确认后台任务是否已创建',
+        title: 'instruction, instruction',
+        detail: 'instruction',
         status: 'running' as const,
         timestamp: new Date().toISOString(),
       },
@@ -1915,8 +1915,8 @@ export default function InvestorAgentChatPage() {
             ...prev,
             {
               id: `stream-recovery-active-${Date.now()}`,
-              title: '已切换为后台恢复',
-              detail: '网络连接断开过，结果完成后会自动同步到当前会话',
+              title: 'instruction',
+              detail: 'instruction, instructionCompleteinstruction',
               status: 'running' as const,
               timestamp: new Date().toISOString(),
             },
@@ -1953,8 +1953,8 @@ export default function InvestorAgentChatPage() {
 
     const attachmentList = formatAttachmentList(requestAttachments);
     const displayContent = [
-      content || '请分析我上传的附件。',
-      attachmentList ? `附件：\n${attachmentList}` : '',
+      content || 'instruction.',
+      attachmentList ? `instruction: \n${attachmentList}` : '',
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -2021,8 +2021,8 @@ export default function InvestorAgentChatPage() {
             ...prev,
             {
               id: `personal-agent-start-retry-${clientRequestId}-${attempt}`,
-              title: '创建任务连接中断，正在重试',
-              detail: `第 ${attempt + 2} 次尝试`,
+              title: 'Create taskinstruction, instruction',
+              detail: `instruction ${attempt + 2} instruction`,
               status: 'running' as const,
               timestamp: new Date().toISOString(),
             },
@@ -2045,7 +2045,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(typeof data.error === 'string' ? data.error : '发送失败');
+        setError(typeof data.error === 'string' ? data.error : 'Sendfailed');
         setMessages(nextMessages);
         setInput(content);
         setAttachments(requestAttachments);
@@ -2055,7 +2055,7 @@ export default function InvestorAgentChatPage() {
       const asyncThreadId = typeof data.threadId === 'string' ? data.threadId : threadId;
       const runId = typeof data.runId === 'string' ? data.runId : '';
       if (!runId) {
-        setError('后台任务启动失败：未返回 runId');
+        setError('instructionfailed: instruction runId');
         setMessages(nextMessages);
         setInput(content);
         setAttachments(requestAttachments);
@@ -2074,7 +2074,7 @@ export default function InvestorAgentChatPage() {
       setCodexStreamItems([
         {
           id: `async-run-${runId}`,
-          title: '后台任务已启动',
+          title: 'instruction',
           detail: `runId: ${runId}`,
           status: 'running' as const,
           timestamp: new Date().toISOString(),
@@ -2090,11 +2090,11 @@ export default function InvestorAgentChatPage() {
       }
       if (recoveryResult === 'recovered') return;
       if (recoveryResult === 'saved') {
-        setError('网络连接中断，本轮消息已保存；请稍后刷新当前会话查看结果。');
+        setError('instruction, instructionSave; instruction.');
         return;
       }
 
-      setError(err instanceof Error ? `网络错误：${err.message}` : '网络错误，请稍后重试');
+      setError(err instanceof Error ? `instructionError: ${err.message}` : 'Network error. Please try again later.');
       setMessages(nextMessages);
       setInput(content);
       setAttachments(requestAttachments);
@@ -2127,7 +2127,7 @@ export default function InvestorAgentChatPage() {
     if (promptSaving) return;
     const nextPrompt = resetToDefault ? defaultPrompt : promptDraft.trim();
     if (!resetToDefault && !nextPrompt) {
-      setPromptMessage('system prompt 不能为空。');
+      setPromptMessage('system prompt instruction.');
       return;
     }
 
@@ -2146,14 +2146,14 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setPromptMessage(data.error || '保存 system prompt 失败');
+        setPromptMessage(data.error || 'Save system prompt failed');
         return;
       }
 
       applyAgentConfig(data.agentConfig);
-      setPromptMessage(resetToDefault ? '已恢复默认 system prompt，后续对话生效。' : '已保存，后续对话生效。');
+      setPromptMessage(resetToDefault ? 'instructiondefault system prompt, instruction.' : 'instructionSave, instruction.');
     } catch {
-      setPromptMessage('网络错误，请稍后重试');
+      setPromptMessage('Network error. Please try again later.');
     } finally {
       setPromptSaving(false);
     }
@@ -2163,16 +2163,16 @@ export default function InvestorAgentChatPage() {
     return (
       <FigmaShell
         homeHref="/dashboard"
-        title="AI助手"
-        subtitle="当前仅开放总裁秘书Momo入口"
+        title="AIinstruction"
+        subtitle="instructionExecutive Assistant Momoinstruction"
         actions={
           <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
-            返回工作台
+            Back to workspace
           </Link>
         }
       >
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-slate-600">
-          暂不支持该助手，请返回工作台使用总裁秘书Momo入口。
+          instruction, instructionBack to workspaceinstructionExecutive Assistant Momoinstruction.
         </div>
       </FigmaShell>
     );
@@ -2182,7 +2182,7 @@ export default function InvestorAgentChatPage() {
     <FigmaShell
       homeHref="/dashboard"
       title={title}
-      subtitle="长期记忆、联网研究和多 Agent 调度入口"
+      subtitle="instruction, instruction Agent instruction"
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {showExecutiveControls ? (
@@ -2191,11 +2191,11 @@ export default function InvestorAgentChatPage() {
               onClick={openPromptEditor}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              {promptEditorOpen ? '收起 system prompt' : '编辑 system prompt'}
+              {promptEditorOpen ? 'Collapse system prompt' : 'instruction system prompt'}
             </button>
           ) : null}
           <Link href="/dashboard" className="px-2 text-sm text-blue-700 hover:underline">
-            返回工作台
+            Back to workspace
           </Link>
         </div>
       }
@@ -2204,9 +2204,9 @@ export default function InvestorAgentChatPage() {
         <div ref={promptEditorRef} className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">总裁秘书 system prompt</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Executive Assistant system prompt</h2>
               <p className="mt-1 text-sm text-slate-500">
-                当前账户专属配置。保存后，Momo 后续生成回复会使用这段系统提示词。
+                instruction.Saveinstruction, Momo instructionGenerate replyinstruction.
               </p>
             </div>
             <span
@@ -2214,7 +2214,7 @@ export default function InvestorAgentChatPage() {
                 hasCustomPrompt ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
               }`}
             >
-              {hasCustomPrompt ? '已自定义' : '默认配置'}
+              {hasCustomPrompt ? 'instruction' : 'defaultinstruction'}
             </span>
           </div>
 
@@ -2226,13 +2226,13 @@ export default function InvestorAgentChatPage() {
             }}
             rows={14}
             className="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 font-mono text-sm leading-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="输入总裁秘书 Momo 的 system prompt..."
+            placeholder="instructionExecutive Assistant Momo instruction system prompt..."
           />
 
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">
-              当前长度 {promptDraft.length}/30000
-              {promptDraft !== promptSaved ? ' · 有未保存修改' : ''}
+              Current length {promptDraft.length}/30000
+              {promptDraft !== promptSaved ? ' · instructionSaveinstruction' : ''}
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -2244,7 +2244,7 @@ export default function InvestorAgentChatPage() {
                 }}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
-                撤销修改
+                Discard changes
               </button>
               <button
                 type="button"
@@ -2252,7 +2252,7 @@ export default function InvestorAgentChatPage() {
                 onClick={() => void savePrompt(true)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
-                恢复默认
+                instructiondefault
               </button>
               <button
                 type="button"
@@ -2260,12 +2260,12 @@ export default function InvestorAgentChatPage() {
                 onClick={() => void savePrompt(false)}
                 className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                {promptSaving ? '保存中...' : '保存并生效'}
+                {promptSaving ? 'Saving...' : 'Save and apply'}
               </button>
             </div>
           </div>
           {promptMessage ? (
-            <p className={`mt-3 text-sm ${promptMessage.includes('失败') || promptMessage.includes('错误') || promptMessage.includes('不能为空') ? 'text-red-600' : 'text-emerald-700'}`}>
+            <p className={`mt-3 text-sm ${promptMessage.includes('failed') || promptMessage.includes('Error') || promptMessage.includes('instruction') ? 'text-red-600' : 'text-emerald-700'}`}>
               {promptMessage}
             </p>
           ) : null}
@@ -2276,9 +2276,9 @@ export default function InvestorAgentChatPage() {
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">秘书 Planner</h2>
+            <h2 className="text-lg font-semibold text-gray-900">instruction Planner</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Momo 会根据每条指令动态生成本轮计划；发送后实时显示，完成后自动收起。
+              Momo instruction; Sendinstruction, CompleteinstructionCollapse.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -2289,7 +2289,7 @@ export default function InvestorAgentChatPage() {
                 disabled={stoppingRun}
                 className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
               >
-                {stoppingRun ? '停止中...' : '强制停止'}
+                {stoppingRun ? 'Stopping...' : 'instructionStop'}
               </button>
             ) : null}
             <button
@@ -2301,7 +2301,7 @@ export default function InvestorAgentChatPage() {
                   : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
               }`}
             >
-              {plannerPanelOpen ? '收起过程' : plannerButtonText}
+              {plannerPanelOpen ? 'Collapseinstruction' : plannerButtonText}
             </button>
           </div>
         </div>
@@ -2309,7 +2309,7 @@ export default function InvestorAgentChatPage() {
         {plannerPanelOpen ? (
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <h3 className="text-sm font-semibold text-slate-900">本轮动态 planner</h3>
+              <h3 className="text-sm font-semibold text-slate-900">instruction planner</h3>
               <div className="mt-3 space-y-2">
                 {plannerSteps.length > 0 ? (
                   plannerSteps.map((step) => {
@@ -2335,13 +2335,13 @@ export default function InvestorAgentChatPage() {
                     );
                   })
                 ) : (
-                  <p className="text-sm text-slate-500">发送一条指令后，这里会显示 Momo 为本轮任务动态生成的计划。</p>
+                  <p className="text-sm text-slate-500">Sendinstruction, instruction Momo instruction.</p>
                 )}
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-950 p-3 text-slate-100">
-              <h3 className="text-sm font-semibold">过程详细</h3>
+              <h3 className="text-sm font-semibold">instruction</h3>
               <div className="mt-3 max-h-96 space-y-3 overflow-y-auto pr-1">
                 {plannerTrace.length > 0 ? (
                   plannerTrace.map((item, index) => {
@@ -2351,7 +2351,7 @@ export default function InvestorAgentChatPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-medium">{item.title}</p>
-                            <p className="mt-1 text-xs text-slate-400">{item.timestamp || '时间未知'}</p>
+                            <p className="mt-1 text-xs text-slate-400">{item.timestamp || 'instruction'}</p>
                           </div>
                           <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${plannerStatusClass[item.status]}`}>
                             {plannerStatusLabel[item.status]}
@@ -2368,7 +2368,7 @@ export default function InvestorAgentChatPage() {
                     );
                   })
                 ) : (
-                  <p className="text-sm text-slate-400">发送“更新今天的晨报...”后，这里会实时追加执行过程。</p>
+                  <p className="text-sm text-slate-400">Send a message to start a new turn.</p>
                 )}
               </div>
             </div>
@@ -2393,20 +2393,20 @@ export default function InvestorAgentChatPage() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <MessageSquare className="h-4 w-4 text-slate-500" />
-                <span>会话</span>
+                <span>instruction</span>
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                用户画像和长期偏好跨会话共享；对话上下文、附件和工作区按会话隔离。
+                instruction; instruction, instructionWorkinstruction.
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <label className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                <span className="text-xs font-medium text-slate-500">模型</span>
+                <span className="text-xs font-medium text-slate-500">instruction</span>
                 <select
                   value={codexModel}
                   onChange={(event) => setCodexModel(normalizeCodexModelOption(event.target.value))}
                   disabled={sending || recoveringRunState}
-                  title={`当前：${selectedCodexModel.detail}`}
+                  title={`instruction: ${selectedCodexModel.detail}`}
                   className="bg-transparent text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {codexModelOptions.map((option) => (
@@ -2420,11 +2420,11 @@ export default function InvestorAgentChatPage() {
                 type="button"
                 onClick={() => void createNewSession()}
                 disabled={creatingSession || sending || recoveringRunState}
-                title="新建会话"
+                title="instruction"
                 className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" />
-                {creatingSession ? '创建中...' : '新会话'}
+                {creatingSession ? 'instruction...' : 'instruction'}
               </button>
             </div>
           </div>
@@ -2447,16 +2447,16 @@ export default function InvestorAgentChatPage() {
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60',
                     ].join(' ')}
                   >
-                    <span className="block truncate text-sm font-medium">{session.title || '新会话'}</span>
+                    <span className="block truncate text-sm font-medium">{session.title || 'instruction'}</span>
                     <span className="mt-1 block text-xs text-slate-500">
-                      {session.messageCount} 条消息{formatSessionTime(session.updatedAt) ? ` · ${formatSessionTime(session.updatedAt)}` : ''}
+                      {session.messageCount} messages{formatSessionTime(session.updatedAt) ? ` · ${formatSessionTime(session.updatedAt)}` : ''}
                     </span>
                   </button>
                 );
               })
             ) : (
               <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-500">
-                发送第一条消息后会自动创建会话。
+                Sendinstructionmessagesinstruction.
               </div>
             )}
           </div>
@@ -2468,7 +2468,7 @@ export default function InvestorAgentChatPage() {
           className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5"
         >
           {loading ? (
-            <div className="py-8 text-center text-slate-600">加载中...</div>
+            <div className="py-8 text-center text-slate-600">Loading...</div>
           ) : (
             <div className="mx-auto max-w-3xl space-y-4">
               {messages.length > 0 ? (
@@ -2480,10 +2480,10 @@ export default function InvestorAgentChatPage() {
                       disabled={loadingOlderMessages}
                       className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {loadingOlderMessages ? '加载中...' : '加载更早消息'}
+                      {loadingOlderMessages ? 'Loading...' : 'instruction'}
                     </button>
                   ) : (
-                    <span className="text-xs text-slate-400">已到最早消息</span>
+                    <span className="text-xs text-slate-400">instruction</span>
                   )}
                 </div>
               ) : null}
@@ -2511,7 +2511,7 @@ export default function InvestorAgentChatPage() {
               })}
               <CodexStreamOutput items={codexStreamItems} active={sending} />
               <StreamingAssistantMessage content={assistantDraft} />
-              {messages.length === 0 ? <div className="py-8 text-center text-slate-500">开始和你的个人 Hermes Agent 对话吧。</div> : null}
+              {messages.length === 0 ? <div className="py-8 text-center text-slate-500">instruction Hermes Agent instruction.</div> : null}
             </div>
           )}
         </div>
@@ -2542,9 +2542,9 @@ export default function InvestorAgentChatPage() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-600">
                   <Plug className="h-3.5 w-3.5 shrink-0" />
-                  <span>本轮连接器</span>
+                  <span>instruction</span>
                   <span className="text-slate-400">
-                    {connectorsLoading ? '加载中' : `${activeConnectors.length}/${connectors.filter((connector) => connector.connected).length} 已启用`}
+                    {connectorsLoading ? 'instruction' : `${activeConnectors.length}/${connectors.filter((connector) => connector.connected).length} Enabled`}
                   </span>
                 </div>
                 <Link
@@ -2552,7 +2552,7 @@ export default function InvestorAgentChatPage() {
                   className="inline-flex items-center gap-1 self-start text-xs font-medium text-blue-700 hover:underline sm:self-auto"
                 >
                   <Settings2 className="h-3.5 w-3.5" />
-                  管理连接器
+                  instruction
                 </Link>
               </div>
               <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
@@ -2561,12 +2561,12 @@ export default function InvestorAgentChatPage() {
                     const selected = connector.connected && selectedConnectorKeys.includes(connector.key);
                     const disabled = sending || recoveringRunState || !connector.connected;
                     const accountLabel = connector.accounts.length > 0
-                      ? connector.accounts.map((account) => account.displayName || account.accountEmail).filter(Boolean).join('、')
+                      ? connector.accounts.map((account) => account.displayName || account.accountEmail).filter(Boolean).join(', ')
                       : connector.platformConfigured === false
-                        ? '平台密钥未配置'
+                        ? 'instruction'
                         : connector.connected
-                          ? '已连接'
-                          : '未连接';
+                          ? 'instruction'
+                          : 'instruction';
                     return (
                       <button
                         key={connector.key}
@@ -2575,7 +2575,7 @@ export default function InvestorAgentChatPage() {
                           if (connector.connected) toggleConnector(connector.key);
                         }}
                         disabled={disabled}
-                        title={`${connector.label}：${connector.description}${accountLabel ? `\n${accountLabel}` : ''}`}
+                        title={`${connector.label}: ${connector.description}${accountLabel ? `\n${accountLabel}` : ''}`}
                         className={[
                           'inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border px-2.5 text-xs transition disabled:cursor-not-allowed',
                           selected
@@ -2592,7 +2592,7 @@ export default function InvestorAgentChatPage() {
                   })
                 ) : (
                   <span className="text-xs text-slate-400">
-                    {connectorsError || (connectorsLoading ? '正在读取可用连接器...' : '暂无可用连接器')}
+                    {connectorsError || (connectorsLoading ? 'instruction...' : 'instruction')}
                   </span>
                 )}
               </div>
@@ -2608,10 +2608,10 @@ export default function InvestorAgentChatPage() {
                   >
                     <span className="min-w-0 truncate">{attachment.name}</span>
                     <span className="shrink-0 text-slate-400">{formatBytes(attachment.size)}</span>
-                    <span className="hidden shrink-0 text-slate-400 sm:inline">发送时上传</span>
+                    <span className="hidden shrink-0 text-slate-400 sm:inline">Sendinstruction</span>
                     <button
                       type="button"
-                      title="移除附件"
+                      title="Removeinstruction"
                       onClick={() => removeAttachment(attachment.id)}
                       className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                     >
@@ -2626,7 +2626,7 @@ export default function InvestorAgentChatPage() {
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="输入你的问题..."
+                placeholder="Type your question..."
                 rows={3}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -2647,7 +2647,7 @@ export default function InvestorAgentChatPage() {
                 />
                 <button
                   type="button"
-                  title="添加附件"
+                  title="Addinstruction"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending || recoveringRunState}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50 sm:h-9 sm:w-9"
@@ -2665,14 +2665,14 @@ export default function InvestorAgentChatPage() {
                     ].join(' ')}
                     title={
                       recoveringRunState
-                        ? '正在恢复任务状态'
+                        ? 'instruction'
                         : activeRunId
-                          ? '停止本轮任务'
-                          : '正在创建本轮任务'
+                          ? 'Stopinstruction'
+                          : 'instruction'
                     }
                   >
                     {recoveringRunState ? null : <Square className="h-3.5 w-3.5 fill-current" />}
-                    {recoveringRunState ? '恢复中...' : stoppingRun ? '停止中...' : activeRunId ? '停止' : '准备中...'}
+                    {recoveringRunState ? 'instruction...' : stoppingRun ? 'Stopping...' : activeRunId ? 'Stop' : 'instruction...'}
                   </button>
                 ) : (
                   <button
@@ -2680,7 +2680,7 @@ export default function InvestorAgentChatPage() {
                     disabled={!input.trim() && attachments.length === 0}
                     className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:py-2"
                   >
-                    发送
+                    Send
                   </button>
                 )}
               </div>

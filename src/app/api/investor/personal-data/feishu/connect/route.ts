@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     const url = new URL('/investor/info-ops', req.url);
     url.searchParams.set('integrationProvider', 'feishu');
     url.searchParams.set('integrationStatus', 'pending');
-    url.searchParams.set('integrationDetail', '请先打开飞书 CLI 应用配置链接，完成后回到这里继续账号授权。');
+    url.searchParams.set('integrationDetail', 'message CLI message, Completemessageaccountsmessage.');
     url.searchParams.set('feishuPhase', 'app_setup');
     url.searchParams.set('feishuSetupUrl', started.setupUrl);
     const res = NextResponse.redirect(url);
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     const url = new URL('/investor/info-ops', req.url);
     url.searchParams.set('integrationProvider', 'feishu');
     url.searchParams.set('integrationStatus', 'error');
-    url.searchParams.set('integrationDetail', err instanceof Error ? err.message : '飞书 CLI 授权启动失败');
+    url.searchParams.set('integrationDetail', err instanceof Error ? err.message : 'message CLI messagefailed');
     return NextResponse.redirect(url);
   }
 }

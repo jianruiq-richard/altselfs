@@ -129,7 +129,7 @@ export default function ChatPage() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">加载中...</p>
+          <p className="text-slate-600">Loading...</p>
         </div>
       </div>
     );
@@ -139,8 +139,8 @@ export default function ChatPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 mb-4">分身不存在</h1>
-          <p className="text-slate-600">请检查链接是否正确</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-4">Digital twin not found</h1>
+          <p className="text-slate-600">Please check that the link is correct</p>
         </div>
       </div>
     );
@@ -150,10 +150,10 @@ export default function ChatPage() {
     <FigmaShell
       homeHref="/candidate"
       title={avatar.name}
-      subtitle={`来自 ${avatar.investor.name || 'Altselfs 用户'} 的数字分身`}
+      subtitle={`content ${avatar.investor.name || 'Altselfs user'} content`}
       actions={
         <Link href="/candidate" className="text-sm text-blue-700 hover:underline">
-          返回分身大厅
+          Back to twin gallery
         </Link>
       }
     >
@@ -162,13 +162,13 @@ export default function ChatPage() {
           <div className="mx-auto max-w-3xl space-y-4">
             {messages.length === 0 && (
               <div className="py-8 text-center">
-                <p className="mb-4 text-slate-600">开始与 {avatar.name} 对话吧！</p>
+                <p className="mb-4 text-slate-600">content {avatar.name} content!</p>
                 <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
-                  <p className="mb-2 font-medium">提示：</p>
+                  <p className="mb-2 font-medium">content: </p>
                   <ul className="space-y-1 text-left">
-                    <li>• 介绍你的项目和团队背景</li>
-                    <li>• 说明你的商业模式和市场机会</li>
-                    <li>• 询问投资建议和改进方向</li>
+                    <li>• content</li>
+                    <li>• content</li>
+                    <li>• content</li>
                   </ul>
                 </div>
               </div>
@@ -183,7 +183,7 @@ export default function ChatPage() {
                 >
                   <MarkdownMessage content={message.content} inverted={message.role === 'user'} />
                   <p className={`mt-1 text-xs ${message.role === 'user' ? 'text-blue-100' : 'text-slate-500'}`}>
-                    {new Date(message.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(message.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
               </div>
@@ -192,7 +192,7 @@ export default function ChatPage() {
             {isSending && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-slate-700 sm:max-w-xs lg:max-w-md">
-                  正在回复...
+                  content...
                 </div>
               </div>
             )}
@@ -204,7 +204,7 @@ export default function ChatPage() {
             <textarea
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="输入你的消息..."
+              placeholder="content..."
               className="min-h-[7rem] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-0 sm:py-2"
               rows={3}
               onKeyDown={(e) => {
@@ -219,7 +219,7 @@ export default function ChatPage() {
               disabled={!newMessage.trim() || isSending}
               className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:self-end sm:py-2"
             >
-              {isSending ? '发送中...' : '发送'}
+              {isSending ? 'Sendcontent...' : 'Send'}
             </button>
           </form>
         </div>

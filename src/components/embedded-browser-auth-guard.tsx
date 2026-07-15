@@ -93,7 +93,7 @@ export function EmbeddedBrowserAuthGuard({
     window.setTimeout(() => setCopied(false), 1800);
   }
 
-  const actionLabel = mode === 'sign-up' ? '注册' : '登录';
+  const actionLabel = mode === 'sign-up' ? 'Sign up' : 'Sign in';
 
   return (
     <div
@@ -114,10 +114,9 @@ export function EmbeddedBrowserAuthGuard({
                 <AlertTriangle className="h-5 w-5" aria-hidden="true" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-semibold text-slate-950">请在系统浏览器中继续</h2>
+                <h2 className="text-base font-semibold text-slate-950">Browser sign-in required</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Google {actionLabel}会拒绝微信内置浏览器发起的请求。请点右上角“...”
-                  并选择“在浏览器打开”，或复制链接到 Safari、Chrome 后继续。
+                  Google {actionLabel} may not work inside an embedded browser. Open this page in Safari or Chrome, then try again.
                 </p>
               </div>
             </div>
@@ -132,7 +131,7 @@ export function EmbeddedBrowserAuthGuard({
                 onClick={() => setIsPromptOpen(false)}
                 className="inline-flex flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
               >
-                继续用手机号/邮箱
+                content/Email
               </button>
               <button
                 type="button"
@@ -144,7 +143,7 @@ export function EmbeddedBrowserAuthGuard({
                 ) : (
                   <Copy className="h-4 w-4" aria-hidden="true" />
                 )}
-                {copied ? '已复制' : '复制链接'}
+                {copied ? 'content' : 'content'}
               </button>
             </div>
           </div>

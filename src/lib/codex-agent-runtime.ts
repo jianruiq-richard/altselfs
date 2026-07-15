@@ -1,13 +1,13 @@
 import {
   createChatCompletion,
-  createToolChatCompletionWithMetadata,
+  createtoolChatCompletionWithMetadata,
   getOpenRouterModel,
   type OpenRouterAgentModelKey,
-  type OpenRouterFunctionTool,
-  type ToolChatMessage,
+  type OpenRouterFunctiontool,
+  type toolChatMessage,
 } from '@/lib/openrouter';
 
-export type CodexAgentTool = {
+export type CodexAgenttool = {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
@@ -48,7 +48,7 @@ export type CodexAgentLoopEvent =
 
 export type CodexAgentLoopResult = {
   finalText: string;
-  messages: ToolChatMessage[];
+  messages: toolChatMessage[];
   events: CodexAgentLoopEvent[];
   model: string | null;
 };
@@ -56,7 +56,7 @@ export type CodexAgentLoopResult = {
 type RunCodexAgentLoopParams = {
   systemMessages: string[];
   conversation: Array<{ role: 'user' | 'assistant'; content: string }>;
-  tools: CodexAgentTool[];
+  tools: CodexAgenttool[];
   modelKey?: OpenRouterAgentModelKey;
   maxTurns?: number;
   maxContextTokensEstimate?: number;
@@ -64,7 +64,7 @@ type RunCodexAgentLoopParams = {
   onEvent?: (event: CodexAgentLoopEvent) => void | Promise<void>;
 };
 
-type ToolCall = {
+type toolCall = {
   id: string;
   type: 'function';
   function: {
@@ -90,7 +90,7 @@ function safeStringify(value: unknown, maxChars = 12000) {
   return `${raw.slice(0, maxChars)}\n... [truncated ${raw.length - maxChars} chars]`;
 }
 
-function parseToolArgs(raw: string): Record<string, unknown> {
+function parsetoolArgs(raw: string): Record<string, unknown> {
   if (!raw.trim()) return {};
   const parsed = JSON.parse(raw) as unknown;
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -105,7 +105,7 @@ function getTextFromMessage(message: unknown) {
   return typeof content === 'string' ? content : '';
 }
 
-function getToolCallsFromMessage(message: unknown): ToolCall[] {
+function gettoolCallsFromMessage(message: unknown): toolCall[] {
   if (!message || typeof message !== 'object') return [];
   const raw = (message as { tool_calls?: unknown }).tool_calls;
   if (!Array.isArray(raw)) return [];
@@ -129,10 +129,10 @@ function getToolCallsFromMessage(message: unknown): ToolCall[] {
         },
       };
     })
-    .filter(Boolean) as ToolCall[];
+    .filter(Boolean) as toolCall[];
 }
 
-function toOpenRouterTools(tools: CodexAgentTool[]): OpenRouterFunctionTool[] {
+function toOpenRoutertools(tools: CodexAgenttool[]): OpenRouterFunctiontool[] {
   return tools.map((tool) => ({
     type: 'function',
     function: {
@@ -143,18 +143,18 @@ function toOpenRouterTools(tools: CodexAgentTool[]): OpenRouterFunctionTool[] {
   }));
 }
 
-function buildInitialMessages(params: RunCodexAgentLoopParams): ToolChatMessage[] {
+function buildInitialMessages(params: RunCodexAgentLoopParams): toolChatMessage[] {
   return [
     ...params.systemMessages
       .map((content) => content.trim())
       .filter(Boolean)
       .map((content) => ({ role: 'system' as const, content })),
-    ...params.conversation.map((item) => ({ role: item.role, content: item.content }) as ToolChatMessage),
+    ...params.conversation.map((item) => ({ role: item.role, content: item.content }) as toolChatMessage),
   ];
 }
 
 async function compactMessages(params: {
-  messages: ToolChatMessage[];
+  messages: toolChatMessage[];
   compactPrompt?: string;
   model: string;
 }) {
@@ -182,7 +182,7 @@ async function compactMessages(params: {
       },
     ],
     params.model,
-    { enableWebTools: false, maxTokens: 3000 }
+    { enableWebtools: false, maxTokens: 3000 }
   );
 
   return [
@@ -208,7 +208,7 @@ export async function runCodexAgentLoop(params: RunCodexAgentLoopParams): Promis
   const model = getOpenRouterModel(params.modelKey || 'EXECUTIVE');
   const maxTurns = params.maxTurns || DEFAULT_MAX_TURNS;
   const contextLimit = params.maxContextTokensEstimate || DEFAULT_CONTEXT_TOKEN_ESTIMATE_LIMIT;
-  const tools = toOpenRouterTools(params.tools);
+  const tools = toOpenRoutertools(params.tools);
   const toolByName = new Map(params.tools.map((tool) => [tool.name, tool]));
   let messages = buildInitialMessages(params);
   let finalText = '';
@@ -264,7 +264,7 @@ export async function runCodexAgentLoop(params: RunCodexAgentLoopParams): Promis
 
     let rawMessage: unknown = null;
     try {
-      const completion = await createToolChatCompletionWithMetadata(messages, tools, model, {
+      const completion = await createtoolChatCompletionWithMetadata(messages, tools, model, {
         toolChoice: tools.length > 0 ? 'auto' : 'none',
       });
       rawMessage = completion.rawMessage;
@@ -289,7 +289,7 @@ export async function runCodexAgentLoop(params: RunCodexAgentLoopParams): Promis
     }
 
     const text = getTextFromMessage(rawMessage);
-    const toolCalls = getToolCallsFromMessage(rawMessage);
+    const toolCalls = gettoolCallsFromMessage(rawMessage);
     messages.push({
       role: 'assistant',
       content: text || null,
@@ -306,9 +306,9 @@ export async function runCodexAgentLoop(params: RunCodexAgentLoopParams): Promis
       const tool = toolByName.get(toolName);
       let args: Record<string, unknown> = {};
       try {
-        args = parseToolArgs(call.function.arguments);
+        args = parsetoolArgs(call.function.arguments);
       } catch (error) {
-        const message = `Tool arguments JSON parse failed: ${error instanceof Error ? error.message : String(error)}`;
+        const message = `tool arguments JSON parse failed: ${error instanceof Error ? error.message : String(error)}`;
         await emit({
           type: 'tool_call',
           status: 'ERROR',
@@ -384,7 +384,7 @@ export async function runCodexAgentLoop(params: RunCodexAgentLoopParams): Promis
   }
 
   if (!finalText) {
-    finalText = '我已经完成可用工具调用，但模型没有返回最终回复。请再发一句你的具体问题，我会基于刚才的执行结果继续。';
+    finalText = 'instructionCompleteinstructiontoolinstruction, instruction.instruction, instruction.';
   }
 
   return {

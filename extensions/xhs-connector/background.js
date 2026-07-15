@@ -164,9 +164,9 @@ async function fetchAccountName() {
     });
     const data = await res.json();
     const profile = data?.data || {};
-    return profile.nickname || profile.nick_name || profile.name || '小红书浏览器授权';
+    return profile.nickname || profile.nick_name || profile.name || 'Xiaohongshu browser authorization';
   } catch {
-    return '小红书浏览器授权';
+    return 'Xiaohongshu browser authorization';
   }
 }
 
@@ -188,7 +188,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (!cookies || !hasSupportedAuthCookie(mergedCookies)) {
         sendResponse({
           ok: false,
-          error: '未读取到可用的小红书网页登录态。请先确认当前浏览器已登录网页版小红书，再重试。',
+          error: 'sign in.sign in, content.',
           debug: {
             ...buildDebugPayload(mergedCookies),
             probeHasA1: probedCookies.some((item) => item.name === 'a1'),
@@ -223,7 +223,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   })().catch((error) => {
     sendResponse({
       ok: false,
-      error: error instanceof Error ? error.message : '扩展执行失败',
+      error: error instanceof Error ? error.message : 'Extension execution failed',
     });
   });
 

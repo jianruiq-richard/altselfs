@@ -16,7 +16,7 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function summarizeToolCall(call: unknown, index: number) {
+function summarizetoolCall(call: unknown, index: number) {
   const item = asRecord(call);
   return {
     index: index + 1,
@@ -29,11 +29,11 @@ function summarizeToolCall(call: unknown, index: number) {
 
 function readModelTraces(path: string | undefined, raw: Record<string, unknown>) {
   if (!path || !existsSync(path)) return [];
-  const selectedToolCall = asRecord(raw.selectedToolCall);
+  const selectedtoolCall = asRecord(raw.selectedtoolCall);
   const latestMessages = asArray(raw.latestMessages);
   const latestUser = latestMessages.find((value) => asRecord(value).role === 'USER');
   const latestAssistant = latestMessages.find((value) => asRecord(value).role === 'ASSISTANT');
-  const startValue = asRecord(latestUser).createdAt || selectedToolCall.createdAt;
+  const startValue = asRecord(latestUser).createdAt || selectedtoolCall.createdAt;
   const endValue = asRecord(latestAssistant).createdAt || raw.exportedAt;
   const start = new Date(String(startValue || 0)).getTime() - 2 * 60 * 1000;
   const end = new Date(String(endValue || Date.now())).getTime() + 2 * 60 * 1000;
@@ -72,25 +72,25 @@ function readModelTraces(path: string | undefined, raw: Record<string, unknown>)
 }
 
 function inferModelPurpose(firstSystem: string, messages: unknown[]) {
-  if (firstSystem.includes('动态planner')) return 'planner';
-  if (firstSystem.includes('微信公众号源选择器')) return 'wechat_source_selector';
-  if (firstSystem.includes('联网搜索助手') && firstSystem.includes('Step1')) return 'web_search_collect';
-  if (firstSystem.includes('联网搜索助手') && firstSystem.includes('Step2')) return 'web_search_summarize';
-  if (firstSystem.includes('联网搜索助手') && firstSystem.includes('Step3')) return 'web_search_structure';
-  if (firstSystem.includes('微信公众号文章初筛器')) return 'wechat_article_selector';
-  if (firstSystem.includes('微信公众号文章分析员')) return 'wechat_article_insight';
-  if (firstSystem.includes('晨报生成器')) return 'briefing_summary';
-  if (firstSystem.includes('只负责“信息汇总”模块')) return 'structure_informationSummary';
-  if (firstSystem.includes('只负责“今日to do”模块')) return 'structure_todayTodo';
-  if (firstSystem.includes('只负责“分身推荐”模块')) return 'structure_twinRecommendation';
-  if (firstSystem.includes('晨报聚合agent')) return 'aggregate_structured_briefing';
+  if (firstSystem.includes('Trace replayplanner')) return 'planner';
+  if (firstSystem.includes('WeChat Official AccountsTrace replay')) return 'wechat_source_selector';
+  if (firstSystem.includes('Trace replay') && firstSystem.includes('Step1')) return 'web_search_collect';
+  if (firstSystem.includes('Trace replay') && firstSystem.includes('Step2')) return 'web_search_summarize';
+  if (firstSystem.includes('Trace replay') && firstSystem.includes('Step3')) return 'web_search_structure';
+  if (firstSystem.includes('WeChat Official AccountsTrace replay')) return 'wechat_article_selector';
+  if (firstSystem.includes('WeChat Official AccountsTrace replay')) return 'wechat_article_insight';
+  if (firstSystem.includes('Trace replay')) return 'briefing_summary';
+  if (firstSystem.includes('Trace replay"Information Digest"Trace replay')) return 'structure_informationSummary';
+  if (firstSystem.includes('Trace replay"Today To-Dos"Trace replay')) return 'structure_todayTodo';
+  if (firstSystem.includes('Trace replay"Twin Recommendations"Trace replay')) return 'structure_twinRecommendation';
+  if (firstSystem.includes('Trace replayAggregateagent')) return 'aggregate_structured_briefing';
   if (messages.length === 3) return 'generate_reply';
   return 'unknown_model_call';
 }
 
 function buildReplayData(raw: Record<string, unknown>) {
-  const selectedToolCall = asRecord(raw.selectedToolCall);
-  const toolResult = asRecord(selectedToolCall.toolResult);
+  const selectedtoolCall = asRecord(raw.selectedtoolCall);
+  const toolResult = asRecord(selectedtoolCall.toolResult);
   const document = asRecord(toolResult.document);
   const subagents = asArray(toolResult.subagents).map((value) => {
     const item = asRecord(value);
@@ -101,14 +101,14 @@ function buildReplayData(raw: Record<string, unknown>) {
       debug: item.debug ?? null,
     };
   });
-  const toolCalls = asArray(toolResult.toolCalls).map(summarizeToolCall);
+  const toolCalls = asArray(toolResult.toolCalls).map(summarizetoolCall);
   const plannerTrace = asArray(toolResult.plannerTrace);
   const latestMessages = asArray(raw.latestMessages);
   const latestUser = latestMessages.find((value) => asRecord(value).role === 'USER');
   const latestAssistant = latestMessages.find((value) => asRecord(value).role === 'ASSISTANT');
   const persisted = asRecord(raw.latestPersistedBriefing);
   const sections = asArray(document.sections);
-  const displaySections = sections.filter((value) => asRecord(value).title !== '总览');
+  const displaySections = sections.filter((value) => asRecord(value).title !== 'Trace replay');
   const modelTraces = readModelTraces(tracePath, raw);
 
   return {
@@ -117,16 +117,16 @@ function buildReplayData(raw: Record<string, unknown>) {
     limitation: raw.limitation,
     user: raw.user,
     thread: raw.thread,
-    selectedToolCall: {
-      id: selectedToolCall.id,
-      toolName: selectedToolCall.toolName,
-      status: selectedToolCall.status,
-      createdAt: selectedToolCall.createdAt,
-      toolArgs: selectedToolCall.toolArgs,
+    selectedtoolCall: {
+      id: selectedtoolCall.id,
+      toolName: selectedtoolCall.toolName,
+      status: selectedtoolCall.status,
+      createdAt: selectedtoolCall.createdAt,
+      toolArgs: selectedtoolCall.toolArgs,
     },
     latestUserMessage: latestUser || null,
     latestAssistantMessage: latestAssistant || null,
-    request: selectedToolCall.toolArgs || {},
+    request: selectedtoolCall.toolArgs || {},
     plannerTrace,
     subagents,
     toolCalls,
@@ -184,11 +184,11 @@ const raw = JSON.parse(readFileSync(inputPath, 'utf8')) as Record<string, unknow
 const replayData = buildReplayData(raw);
 
 const html = `<!doctype html>
-<html lang="zh-CN">
+<html lang="en-US">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>总裁秘书晨报 Trace 动态复现</title>
+  <title>Executive AssistantTrace replay Trace Trace replay</title>
   <style>
     :root {
       --bg: #f6f7f9;
@@ -765,22 +765,22 @@ const html = `<!doctype html>
   <div class="app">
     <header>
       <div class="title">
-        <h1>总裁秘书晨报 Trace 动态复现</h1>
-        <p id="subtitle">使用历史日志复现，不会调用任何接口。</p>
+        <h1>Executive AssistantTrace replay Trace Trace replay</h1>
+        <p id="subtitle">Trace replay, Trace replay.</p>
       </div>
       <div class="controls">
-        <button class="btn primary" id="startBtn">更新晨报</button>
-        <button class="btn ghost" id="prevBtn">上一步</button>
-        <button class="btn ghost" id="nextBtn">下一步</button>
-        <button class="btn ghost" id="pauseBtn" disabled>暂停</button>
-        <button class="btn ghost" id="resetBtn">重置</button>
-        <label class="speed">播放速度 <input id="speedInput" type="range" min="80" max="1400" value="420" /></label>
+        <button class="btn primary" id="startBtn">Trace replay</button>
+        <button class="btn ghost" id="prevBtn">Trace replay</button>
+        <button class="btn ghost" id="nextBtn">Trace replay</button>
+        <button class="btn ghost" id="pauseBtn" disabled>Trace replay</button>
+        <button class="btn ghost" id="resetBtn">Trace replay</button>
+        <label class="speed">Trace replay <input id="speedInput" type="range" min="80" max="1400" value="420" /></label>
       </div>
     </header>
 
     <aside>
       <section class="card meta">
-        <h2>账户与运行</h2>
+        <h2>Trace replay</h2>
         <div class="kv" id="meta"></div>
       </section>
       <section class="stats" id="stats"></section>
@@ -790,7 +790,7 @@ const html = `<!doctype html>
     <main>
       <section class="card runbar">
         <div>
-          <p class="status-line" id="statusLine">等待点击“更新晨报”。</p>
+          <p class="status-line" id="statusLine">Trace replay"Trace replay".</p>
           <div class="progress"><span id="progressFill"></span></div>
         </div>
         <span class="badge" id="runStatus">READY</span>
@@ -799,14 +799,14 @@ const html = `<!doctype html>
       <section class="card canvas-panel">
         <div class="canvas-head">
           <div>
-            <h2>Canvas 调用栈时序图</h2>
-            <p>横向是时间，纵向是调用栈。外层函数在未完成前保持 RUNNING；大模型调用按函数节点展示。</p>
+            <h2>Canvas Trace replay</h2>
+            <p>Trace replay, Trace replay.Trace replayCompleteTrace replay RUNNING; Trace replay.</p>
           </div>
           <div class="canvas-legend">
-            <span class="legend-item"><span class="legend-dot" style="background:#dbeafe"></span>代码函数</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#ede9fe"></span>大模型函数</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#dcfce7"></span>完成</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#fee2e2"></span>失败</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#dbeafe"></span>Trace replay</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#ede9fe"></span>Trace replay</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#dcfce7"></span>Complete</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#fee2e2"></span>failed</span>
           </div>
         </div>
         <div class="canvas-wrap" id="canvasWrap">
@@ -817,33 +817,33 @@ const html = `<!doctype html>
 
       <div class="grid">
         <section class="card panel">
-          <h2>调用链路播放</h2>
+          <h2>Trace replay</h2>
           <div class="timeline" id="timeline"></div>
         </section>
         <section class="card panel">
-          <h2>子 Agent 与工具</h2>
+          <h2>Trace replay Agent Trace replaytool</h2>
           <div class="agents" id="agents"></div>
-          <h2 style="margin-top:16px">大模型调用</h2>
+          <h2 style="margin-top:16px">Trace replay</h2>
           <div class="tool-list" id="models"></div>
-          <h2 style="margin-top:16px">工具调用明细</h2>
+          <h2 style="margin-top:16px">toolTrace replay</h2>
           <div class="tool-list" id="tools"></div>
         </section>
       </div>
 
       <section class="card panel" style="margin-top:16px">
-        <h2>最终晨报模块</h2>
+        <h2>Trace replay</h2>
         <div class="sections" id="sections"></div>
       </section>
     </main>
 
     <section class="detail">
-      <h2 id="detailTitle">输入 / 输出检查器</h2>
-      <p class="summary" id="detailSummary">点击左侧步骤、子 agent、工具调用或晨报条目查看当时记录的输入输出。</p>
+      <h2 id="detailTitle">Trace replay / Trace replay</h2>
+      <p class="summary" id="detailSummary">Trace replay, Trace replay agent, toolTrace replay.</p>
       <div class="tabs">
-        <button id="tabCode" class="active">函数调用</button>
-        <button id="tabInput">输入 / 可观测上下文</button>
-        <button id="tabOutput">输出 / 可观测结果</button>
-        <button id="tabRaw">原始 JSON</button>
+        <button id="tabCode" class="active">Trace replay</button>
+        <button id="tabInput">Trace replay / Trace replay</button>
+        <button id="tabOutput">Trace replay / Trace replay</button>
+        <button id="tabRaw">Trace replay JSON</button>
       </div>
       <div class="jsonbox" id="jsonBox"></div>
       <aside class="explain" id="explainBox"></aside>
@@ -917,37 +917,37 @@ const html = `<!doctype html>
       return '';
     };
     const shortDate = (value) => {
-      if (!value) return '未知';
+      if (!value) return 'Trace replay';
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) return value;
-      return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+      return date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai', hour12: false });
     };
     const modelPurposeLabels = {
-      planner: '动态 planner',
-      wechat_source_selector: '微信源选择',
-      web_search_collect: '联网搜索 Step1',
-      web_search_summarize: '联网搜索 Step2',
-      web_search_structure: '联网搜索 Step3',
-      wechat_article_selector: '微信文章初筛',
-      wechat_article_insight: '微信逐篇摘要',
-      briefing_summary: '晨报摘要',
-      structure_informationSummary: '结构化信息汇总',
-      structure_todayTodo: '结构化今日to do',
-      structure_twinRecommendation: '结构化分身推荐',
-      aggregate_structured_briefing: '聚合结构化晨报',
-      generate_reply: '秘书最终回复',
-      unknown_model_call: '未知模型调用'
+      planner: 'Trace replay planner',
+      wechat_source_selector: 'Trace replay',
+      web_search_collect: 'Trace replay Step1',
+      web_search_summarize: 'Trace replay Step2',
+      web_search_structure: 'Trace replay Step3',
+      wechat_article_selector: 'Trace replay',
+      wechat_article_insight: 'Trace replay',
+      briefing_summary: 'Trace replay',
+      structure_informationSummary: 'Trace replayInformation Digest',
+      structure_todayTodo: 'Trace replayToday To-Dos',
+      structure_twinRecommendation: 'Trace replayTwin Recommendations',
+      aggregate_structured_briefing: 'AggregateTrace replay',
+      generate_reply: 'Trace replay',
+      unknown_model_call: 'Trace replay'
     };
     const callKind = (step) => {
       const id = step?.id || '';
       if (id === 'plan_subagents' || id === 'generate_briefing_summary' || id.startsWith('structure_') || id === 'aggregate_structured_briefing' || id === 'generate_reply') {
-        return { key: 'model', label: '大模型' };
+        return { key: 'model', label: 'Trace replay' };
       }
-      if (id === 'call_wechat_agent' || id === 'call_web_search') return { key: 'mixed', label: '混合编排' };
-      if (id === 'persist_briefing') return { key: 'db', label: '数据库写入' };
-      if (id === 'load_context' || id === 'merge_results') return { key: 'code', label: '代码函数' };
-      if (id.includes('gmail') || id.includes('feishu') || id.includes('xiaohongshu')) return { key: 'code', label: '代码跳过' };
-      return { key: 'code', label: '代码函数' };
+      if (id === 'call_wechat_agent' || id === 'call_web_search') return { key: 'mixed', label: 'Trace replay' };
+      if (id === 'persist_briefing') return { key: 'db', label: 'Trace replay' };
+      if (id === 'load_context' || id === 'merge_results') return { key: 'code', label: 'Trace replay' };
+      if (id.includes('gmail') || id.includes('feishu') || id.includes('xiaohongshu')) return { key: 'code', label: 'Trace replaySkipped' };
+      return { key: 'code', label: 'Trace replay' };
     };
     const modelPurposesForStep = (step) => {
       const id = step?.id || '';
@@ -984,8 +984,8 @@ const html = `<!doctype html>
     };
     const plannerMetaFromStep = (step) => {
       const detail = String(step?.detail || '');
-      const sourceMatch = detail.match(/Planner来源：([^ ]+)/);
-      const reasonMatch = detail.match(/Planner降级原因：(.+)$/);
+      const sourceMatch = detail.match(/PlannerSource: ([^ ]+)/);
+      const reasonMatch = detail.match(/PlannerTrace replay: (.+)$/);
       return {
         plannerSource: sourceMatch?.[1] || null,
         fallbackReason: reasonMatch?.[1] || null,
@@ -995,34 +995,34 @@ const html = `<!doctype html>
     const canvasBadgesForStep = (step, index) => {
       const id = step?.id || '';
       const meta = plannerMetaFromStep(step);
-      if (id === 'load_context') return ['代码固定', 'DB上下文', '非完整入参'];
+      if (id === 'load_context') return ['Trace replay', 'DBTrace replay', 'Trace replay'];
       if (id === 'plan_subagents') {
-        if (meta.isFallback) return ['LLM失败', 'fallback规则', '正则+上下文'];
-        return ['LLM planner', step.status === 'RUNNING' ? '等待模型' : 'plan产物'];
+        if (meta.isFallback) return ['LLMfailed', 'fallbackTrace replay', 'Trace replay+Trace replay'];
+        return ['LLM planner', step.status === 'RUNNING' ? 'Trace replay' : 'planTrace replay'];
       }
-      if (id === 'call_wechat_agent') return ['固定阶段', '内部小决策器', '并发'];
-      if (id === 'call_web_search') return ['工具+LLM', '联网', '动态意图'];
-      if (id.includes('xiaohongshu') || id.includes('gmail') || id.includes('feishu')) return ['能力未接入', 'SKIPPED'];
-      if (id === 'merge_results') return ['代码合并', '内存变量'];
-      if (id === 'generate_briefing_summary') return ['LLM摘要', '业务上下文'];
-      if (id.startsWith('structure_')) return ['LLM结构化', '模块输出'];
-      if (id === 'aggregate_structured_briefing') return ['LLM聚合', '标题/总述'];
-      if (id === 'persist_briefing') return ['DB upsert', '落库'];
-      if (id === 'generate_reply') return ['LLM回复', '写消息'];
-      return ['trace事件'];
+      if (id === 'call_wechat_agent') return ['Trace replay', 'Trace replay', 'Trace replay'];
+      if (id === 'call_web_search') return ['tool+LLM', 'Trace replay', 'Trace replay'];
+      if (id.includes('xiaohongshu') || id.includes('gmail') || id.includes('feishu')) return ['Trace replay', 'SKIPPED'];
+      if (id === 'merge_results') return ['Trace replay', 'Trace replay'];
+      if (id === 'generate_briefing_summary') return ['LLMTrace replay', 'Trace replay'];
+      if (id.startsWith('structure_')) return ['LLMTrace replay', 'Trace replay'];
+      if (id === 'aggregate_structured_briefing') return ['LLMAggregate', 'Trace replay/Trace replay'];
+      if (id === 'persist_briefing') return ['DB upsert', 'Trace replay'];
+      if (id === 'generate_reply') return ['LLMTrace replay', 'Trace replay'];
+      return ['traceTrace replay'];
     };
     const canvasBadgesForModel = (trace) => {
-      if (trace.purpose === 'planner') return ['system固定', 'user上下文', 'JSON输出'];
-      if (trace.purpose === 'wechat_source_selector') return ['源选择器', '动态task+sources'];
-      if (trace.purpose === 'wechat_article_selector') return ['文章初筛', '候选列表'];
-      if (trace.purpose === 'wechat_article_insight') return ['逐篇摘要', '并发x5'];
-      if (trace.purpose === 'web_search_collect') return ['搜索规划', 'web tool'];
-      if (trace.purpose === 'web_search_summarize') return ['搜索摘要'];
-      if (trace.purpose === 'web_search_structure') return ['搜索结构化'];
-      if (trace.purpose === 'briefing_summary') return ['晨报摘要'];
-      if (String(trace.purpose || '').startsWith('structure_')) return ['模块结构化'];
-      if (trace.purpose === 'aggregate_structured_briefing') return ['聚合校验'];
-      if (trace.purpose === 'generate_reply') return ['最终回复'];
+      if (trace.purpose === 'planner') return ['systemTrace replay', 'userTrace replay', 'JSONTrace replay'];
+      if (trace.purpose === 'wechat_source_selector') return ['Trace replay', 'Trace replaytask+sources'];
+      if (trace.purpose === 'wechat_article_selector') return ['Trace replay', 'Trace replay'];
+      if (trace.purpose === 'wechat_article_insight') return ['Trace replay', 'Trace replayx5'];
+      if (trace.purpose === 'web_search_collect') return ['Trace replay', 'web tool'];
+      if (trace.purpose === 'web_search_summarize') return ['Trace replay'];
+      if (trace.purpose === 'web_search_structure') return ['Trace replay'];
+      if (trace.purpose === 'briefing_summary') return ['Trace replay'];
+      if (String(trace.purpose || '').startsWith('structure_')) return ['Trace replay'];
+      if (trace.purpose === 'aggregate_structured_briefing') return ['AggregateTrace replay'];
+      if (trace.purpose === 'generate_reply') return ['Trace replay'];
       return ['LLM'];
     };
     const compactText = (value, limit = 180) => {
@@ -1047,41 +1047,41 @@ const html = `<!doctype html>
       const system = (trace?.messages || []).find((item) => item.role === 'system')?.content || '';
       if (trace?.purpose === 'planner') {
         return [
-          sourceCard('固定prompt', 'system prompt', system, '代码写死的 planner 角色和输出规则。'),
-          sourceCard('用户请求', 'userQuery', userJson?.userQuery, '来自前端用户消息。'),
-          sourceCard('系统偏好', 'executiveSystemPrompt', userJson?.executiveSystemPrompt, '来自总裁秘书配置，影响 planner 选择。'),
-          sourceCard('DB上下文', 'accountContext', userJson?.accountContext, '来自 loadExecutiveContext 的账户上下文摘要。'),
-          sourceCard('代码生成', 'availableSkills', userJson?.availableSkills?.map((item) => ({ skillId: item.skillId, available: item.available, implemented: item.implemented })), '由 skill registry + 当前账户上下文生成。'),
+          sourceCard('Trace replayprompt', 'system prompt', system, 'Trace replay planner Trace replay.'),
+          sourceCard('Trace replay', 'userQuery', userJson?.userQuery, 'Trace replay.'),
+          sourceCard('Trace replay', 'executiveSystemPrompt', userJson?.executiveSystemPrompt, 'Trace replayExecutive AssistantTrace replay, Trace replay planner Trace replay.'),
+          sourceCard('DBTrace replay', 'accountContext', userJson?.accountContext, 'Trace replay loadExecutiveContext Trace replay.'),
+          sourceCard('Trace replay', 'availableSkills', userJson?.availableSkills?.map((item) => ({ skillId: item.skillId, available: item.available, implemented: item.implemented })), 'Trace replay skill registry + Trace replay.'),
         ];
       }
       if (trace?.purpose === 'wechat_source_selector') {
         return [
-          sourceCard('固定prompt', 'system prompt', system, '代码写死的微信公众号源选择原则。'),
-          sourceCard('上层任务', 'task.objective', userJson?.task?.objective, '来自总裁秘书 planner/fallback 生成的 taskSpec。'),
-          sourceCard('上层任务', 'task.sourceSelectionCriteria', userJson?.task?.sourceSelectionCriteria, '来自 buildWechatTaskSpec；这次没有显式带完整 executiveSystemPrompt。'),
-          sourceCard('代码默认', 'task.timeWindow', userJson?.task?.timeWindow, 'resolveTaskSpec 生成的滚动时间窗口。'),
-          sourceCard('DB公众号源', 'sources', userJson?.sources?.map((item) => ({ name: item.name, domains: item.domains, topics: item.topics })), '来自 investorWechatSource 表和 profile/inferProfile。'),
+          sourceCard('Trace replayprompt', 'system prompt', system, 'Trace replayWeChat Official AccountsTrace replay.'),
+          sourceCard('Trace replay', 'task.objective', userJson?.task?.objective, 'Trace replayExecutive Assistant planner/fallback Trace replay taskSpec.'),
+          sourceCard('Trace replay', 'task.sourceSelectionCriteria', userJson?.task?.sourceSelectionCriteria, 'Trace replay buildWechatTaskSpec; Trace replay executiveSystemPrompt.'),
+          sourceCard('Trace replaydefault', 'task.timeWindow', userJson?.task?.timeWindow, 'resolveTaskSpec Trace replay.'),
+          sourceCard('DBTrace replay', 'sources', userJson?.sources?.map((item) => ({ name: item.name, domains: item.domains, topics: item.topics })), 'Trace replay investorWechatSource Trace replay profile/inferProfile.'),
         ];
       }
       if (trace?.purpose === 'wechat_article_selector') {
         return [
-          sourceCard('固定prompt', 'system prompt', system, '代码写死的文章初筛规则。'),
-          sourceCard('上层任务', 'task', userJson?.task, '同一个微信 taskSpec。'),
-          sourceCard('工具结果', 'articles', userJson?.articles?.slice?.(0, 8), '来自 listArticlesByAccount 拉取并去重排序后的候选文章。'),
-          sourceCard('代码配置', 'maxSelected', userJson?.maxSelected, 'SELECTED_DETAIL_LIMIT。'),
+          sourceCard('Trace replayprompt', 'system prompt', system, 'Trace replay.'),
+          sourceCard('Trace replay', 'task', userJson?.task, 'Trace replay taskSpec.'),
+          sourceCard('toolTrace replay', 'articles', userJson?.articles?.slice?.(0, 8), 'Trace replay listArticlesByAccount Trace replay.'),
+          sourceCard('Trace replay', 'maxSelected', userJson?.maxSelected, 'SELECTED_DETAIL_LIMIT.'),
         ];
       }
       if (trace?.purpose === 'wechat_article_insight') {
         return [
-          sourceCard('固定prompt', 'system prompt', system, '代码写死的逐篇摘要规则。'),
-          sourceCard('用户请求', 'executiveRequest', userJson?.executiveRequest, '来自本轮用户消息。'),
-          sourceCard('上层任务', 'task', userJson?.task, '微信 taskSpec。'),
-          sourceCard('文章输入', 'article', userJson?.article, '来自文章初筛结果 + 详情正文摘录。'),
+          sourceCard('Trace replayprompt', 'system prompt', system, 'Trace replay.'),
+          sourceCard('Trace replay', 'executiveRequest', userJson?.executiveRequest, 'Trace replay.'),
+          sourceCard('Trace replay', 'task', userJson?.task, 'Trace replay taskSpec.'),
+          sourceCard('Trace replay', 'article', userJson?.article, 'Trace replay + Trace replay.'),
         ];
       }
       return [
-        sourceCard('固定prompt', 'system prompt', system, '模型角色/规则。'),
-        sourceCard('动态输入', 'user JSON/text', userJson || (trace?.messages || []).find((item) => item.role === 'user')?.content, '模型 user message。'),
+        sourceCard('Trace replayprompt', 'system prompt', system, 'Trace replay/Trace replay.'),
+        sourceCard('Trace replay', 'user JSON/text', userJson || (trace?.messages || []).find((item) => item.role === 'user')?.content, 'Trace replay user message.'),
       ];
     };
     const inputSourcesForStep = (step, index) => {
@@ -1089,60 +1089,60 @@ const html = `<!doctype html>
       const relatedModels = modelCallsForStep(step);
       if (id === 'load_context') {
         return [
-          sourceCard('函数参数', 'investorId', data.user?.id, '传给 loadExecutiveContext 的账户 id。'),
-          sourceCard('DB上下文', 'user/thread', { user: data.user?.email, threadId: data.thread?.id }, '从本次 raw audit 可观测。'),
-          sourceCard('DB上下文', 'wechatSources', data.wechatSources.map((item) => item.displayName), '来自 investorWechatSource。'),
-          sourceCard('可观测结果', 'plannerTrace payload', step.payload, 'RUNNING 事件没有 payload；SUCCESS 事件有摘要。'),
+          sourceCard('Trace replay', 'investorId', data.user?.id, 'Trace replay loadExecutiveContext Trace replay id.'),
+          sourceCard('DBTrace replay', 'user/thread', { user: data.user?.email, threadId: data.thread?.id }, 'Trace replay raw audit Trace replay.'),
+          sourceCard('DBTrace replay', 'wechatSources', data.wechatSources.map((item) => item.displayName), 'Trace replay investorWechatSource.'),
+          sourceCard('Trace replay', 'plannerTrace payload', step.payload, 'RUNNING Trace replay payload; SUCCESS Trace replay.'),
         ];
       }
       if (id === 'plan_subagents') {
         const plannerJson = parseModelUserJson(relatedModels[0]);
         return [
-          sourceCard('用户请求', 'userQuery', data.request?.userQuery, '来自点击更新晨报后的用户消息。'),
-          sourceCard('系统偏好', 'executiveSystemPrompt', plannerJson?.executiveSystemPrompt || data.executiveAgentConfig?.systemPrompt, '传给 planner 的总裁秘书偏好。'),
-          sourceCard('DB上下文', 'accountContext', plannerJson?.accountContext, '由 loadExecutiveContext 生成后传入 planner。'),
-          sourceCard('代码生成', 'availableSkills', plannerJson?.availableSkills?.map((item) => ({ skillId: item.skillId, available: item.available })), 'skill registry + 账户可用性。'),
-          sourceCard('fallback', 'plannerMeta', plannerMetaFromStep(step), '如果 LLM 失败，代码 fallbackExecutivePlan 接管。'),
+          sourceCard('Trace replay', 'userQuery', data.request?.userQuery, 'Trace replay.'),
+          sourceCard('Trace replay', 'executiveSystemPrompt', plannerJson?.executiveSystemPrompt || data.executiveAgentConfig?.systemPrompt, 'Trace replay planner Trace replayExecutive AssistantTrace replay.'),
+          sourceCard('DBTrace replay', 'accountContext', plannerJson?.accountContext, 'Trace replay loadExecutiveContext Trace replay planner.'),
+          sourceCard('Trace replay', 'availableSkills', plannerJson?.availableSkills?.map((item) => ({ skillId: item.skillId, available: item.available })), 'skill registry + Trace replay.'),
+          sourceCard('fallback', 'plannerMeta', plannerMetaFromStep(step), 'Trace replay LLM failed, Trace replay fallbackExecutivePlan Trace replay.'),
         ];
       }
       if (id === 'call_wechat_agent') {
         const sourceSelector = data.modelTraces.find((trace) => trace.purpose === 'wechat_source_selector');
         const sourceJson = parseModelUserJson(sourceSelector);
         return [
-          sourceCard('上层任务', 'wechat taskSpec', sourceJson?.task, '来自 planner/fallback buildWechatTaskSpec。'),
-          sourceCard('DB公众号源', 'sources', sourceJson?.sources?.map((item) => ({ name: item.name, domains: item.domains, topics: item.topics })), '传给微信源选择器的公众号画像。'),
-          sourceCard('工具/Provider', 'selected agent debug', data.subagents.find((item) => item.agentType === 'WECHAT')?.debug, '微信 agent 执行后的可观测 debug。'),
-          sourceCard('LLM内部阶段', 'model calls', relatedModels.map((trace) => ({ purpose: trace.purpose, status: trace.status })), '源选择、文章初筛、逐篇摘要。'),
+          sourceCard('Trace replay', 'wechat taskSpec', sourceJson?.task, 'Trace replay planner/fallback buildWechatTaskSpec.'),
+          sourceCard('DBTrace replay', 'sources', sourceJson?.sources?.map((item) => ({ name: item.name, domains: item.domains, topics: item.topics })), 'Trace replay.'),
+          sourceCard('tool/Provider', 'selected agent debug', data.subagents.find((item) => item.agentType === 'WECHAT')?.debug, 'Trace replay agent Trace replay debug.'),
+          sourceCard('LLMTrace replay', 'model calls', relatedModels.map((trace) => ({ purpose: trace.purpose, status: trace.status })), 'Trace replay, Trace replay, Trace replay.'),
         ];
       }
       if (id === 'call_web_search') {
         return [
-          sourceCard('渠道任务', 'channelInstruction / historical userQuery', data.request?.userQuery, '历史日志里可能仍是原始用户请求；当前代码会先把多渠道编排请求收敛成联网搜索渠道任务。'),
-          sourceCard('代码生成', 'webSearchIntent', step.payload?.webSearchIntent || step.payload, '当前代码由 buildWebSearchChannelInstruction + executiveSystemPrompt 生成，只要求公开互联网搜索信息汇总素材。历史日志按当时 raw input 展示。'),
-          sourceCard('LLM/工具', 'model calls', relatedModels.map((trace) => ({ purpose: trace.purpose, status: trace.status })), '搜索、摘要、结构化。'),
+          sourceCard('Trace replay', 'channelInstruction / historical userQuery', data.request?.userQuery, 'Trace replay; Trace replay.'),
+          sourceCard('Trace replay', 'webSearchIntent', step.payload?.webSearchIntent || step.payload, 'Trace replay buildWebSearchChannelInstruction + executiveSystemPrompt Trace replay, Trace replayInformation DigestTrace replay.Trace replay raw input Trace replay.'),
+          sourceCard('LLM/tool', 'model calls', relatedModels.map((trace) => ({ purpose: trace.purpose, status: trace.status })), 'Trace replay, Trace replay, Trace replay.'),
         ];
       }
       if (id === 'merge_results') {
         return [
-          sourceCard('上游结果', 'subagentResults', data.subagents.map((item) => ({ agentType: item.agentType, itemCount: item.briefingItems?.length || 0 })), '微信/搜索等 agent 输出。'),
-          sourceCard('内存变量', 'baseBriefing', 'context.baseBriefing', '未逐字节持久化，来自 loadExecutiveContext。'),
+          sourceCard('Trace replay', 'subagentResults', data.subagents.map((item) => ({ agentType: item.agentType, itemCount: item.briefingItems?.length || 0 })), 'Trace replay/Trace replay agent Trace replay.'),
+          sourceCard('Trace replay', 'baseBriefing', 'context.baseBriefing', 'Trace replay, Trace replay loadExecutiveContext.'),
         ];
       }
       if (id === 'persist_briefing') {
         return [
-          sourceCard('最终文档', 'document', { dateKey: data.document.dateKey, title: data.document.title, sections: data.document.sections?.map((section) => ({ title: section.title, items: section.items?.length || 0 })) }, 'buildDocument 输出。'),
-          sourceCard('DB key', 'investorId_dateKey', { investorId: data.user?.id, dateKey: data.document.dateKey }, 'prisma.upsert 唯一键。'),
+          sourceCard('Trace replay', 'document', { dateKey: data.document.dateKey, title: data.document.title, sections: data.document.sections?.map((section) => ({ title: section.title, items: section.items?.length || 0 })) }, 'buildDocument Trace replay.'),
+          sourceCard('DB key', 'investorId_dateKey', { investorId: data.user?.id, dateKey: data.document.dateKey }, 'prisma.upsert Trace replay.'),
         ];
       }
       return [
-        sourceCard('trace事件', 'step', { id: step.id, status: step.status, detail: step.detail, payload: step.payload }, 'plannerTrace 中可观测到的事件。'),
-        sourceCard('关联LLM', 'model calls', relatedModels.map((trace) => ({ purpose: trace.purpose, status: trace.status })), '如果为空，说明这一步主要是代码/DB/tool。'),
+        sourceCard('traceTrace replay', 'step', { id: step.id, status: step.status, detail: step.detail, payload: step.payload }, 'plannerTrace Trace replay.'),
+        sourceCard('Trace replayLLM', 'model calls', relatedModels.map((trace) => ({ purpose: trace.purpose, status: trace.status })), 'Trace replay, Trace replay/DB/tool.'),
       ];
     };
     const inputSourcesForParent = (node) => [
-      sourceCard('外层函数', node.title, node.codeTrace, 'Canvas 父级函数节点。它本身不是持久化 span，而是根据代码路径和当前播放进度推断。'),
-      sourceCard('共享输入', 'request', data.request, '点击更新晨报后进入外层函数的用户请求。'),
-      sourceCard('账户上下文', 'user/thread', { user: data.user, thread: data.thread }, '外层函数读取并传入下游的账户和会话上下文。')
+      sourceCard('Trace replay', node.title, node.codeTrace, 'Canvas Trace replay.Trace replay span, Trace replay.'),
+      sourceCard('Trace replay', 'request', data.request, 'Trace replay.'),
+      sourceCard('Trace replay', 'user/thread', { user: data.user, thread: data.thread }, 'Trace replay.')
     ];
     function activeCanvasInputSubject() {
       if (state.canvasFocus?.kind === 'step' && data.plannerTrace[state.canvasFocus.index]) {
@@ -1163,24 +1163,24 @@ const html = `<!doctype html>
       const panel = $('canvasInputs');
       if (!panel) return;
       const subject = activeCanvasInputSubject();
-      let title = '当前节点输入来源';
+      let title = 'Trace replay';
       let sources = [];
       if (subject.type === 'step') {
-        title = '当前节点输入来源：步骤 ' + (subject.index + 1) + ' · ' + (subject.step.title || subject.step.id);
+        title = 'Trace replaySource: Trace replay ' + (subject.index + 1) + ' · ' + (subject.step.title || subject.step.id);
         sources = inputSourcesForStep(subject.step, subject.index);
       } else if (subject.type === 'model') {
         const label = modelPurposeLabels[subject.trace.purpose] || subject.trace.purpose;
-        title = '当前节点输入来源：LLM · ' + label;
+        title = 'Trace replaySource: LLM · ' + label;
         sources = inputSourcesForModel(subject.trace);
       } else if (subject.type === 'parent') {
-        title = '当前节点输入来源：函数 · ' + subject.node.title;
+        title = 'Trace replaySource: Trace replay · ' + subject.node.title;
         sources = inputSourcesForParent(subject.node);
       } else {
-        title = '当前节点输入来源：请求入口';
+        title = 'Trace replaySource: Trace replay';
         sources = [
-          sourceCard('前端请求', 'userQuery', data.request?.userQuery, '点击“更新晨报”提交的用户请求。本页面只复现历史日志。'),
-          sourceCard('账户', 'user', data.user, '当前复现使用的账户。'),
-          sourceCard('工具参数', 'selectedToolCall.toolArgs', data.selectedToolCall?.toolArgs, '历史工具调用记录里的参数。')
+          sourceCard('Trace replay', 'userQuery', data.request?.userQuery, 'Trace replay"Trace replay"Trace replay.Trace replay.'),
+          sourceCard('Trace replay', 'user', data.user, 'Trace replay.'),
+          sourceCard('toolTrace replay', 'selectedtoolCall.toolArgs', data.selectedtoolCall?.toolArgs, 'Trace replaytoolTrace replay.')
         ];
       }
       panel.innerHTML = '<h3>' + escapeHtml(title) + '</h3>' +
@@ -1195,18 +1195,18 @@ const html = `<!doctype html>
       panel.querySelectorAll('.input-source').forEach((el) => {
         el.addEventListener('click', () => {
           const source = sources[Number(el.dataset.sourceIndex)];
-          setDetail('输入来源: ' + source.label, source.note || '', {
+          setDetail('Trace replay: ' + source.label, source.note || '', {
             kind: source.kind,
             label: source.label,
             value: source.rawValue,
             compactValue: source.value,
             note: source.note
           }, {
-            usedAs: '该输入会进入当前画布节点对应的函数参数、模型 user/system message，或作为下游拼接上下文。'
-          }, source, { key: 'code', label: '输入来源' }, {
+            usedAs: 'Trace replay, Trace replay user/system message, Trace replay.'
+          }, source, { key: 'code', label: 'Trace replay' }, {
             producedBy: source.kind,
-            usedByNext: [source.note || '见当前节点输入来源说明'],
-            persistence: '如果是 raw trace 捕获的模型 message，会保存在 .debug/openrouter-traces；如果只是代码局部变量且未审计，则只能用最近可观测值复原。'
+            usedByNext: [source.note || 'Trace replay'],
+            persistence: 'Trace replay raw trace Trace replay message, Trace replaySaveTrace replay .debug/openrouter-traces; Trace replay, Trace replay.'
           });
         });
       });
@@ -1252,29 +1252,29 @@ const html = `<!doctype html>
       const id = step?.id || '';
       if (id === 'structure_briefing_json') {
         return {
-          prefix: '包含 ',
-          label: '父步骤包含子步骤',
-          note: '这是父步骤的 inclusive duration，已经包含信息汇总、今日to do、分身推荐三个结构化子步骤和后续聚合耗时，不能再和这些子步骤相加。'
+          prefix: 'Includes ',
+          label: 'Trace replay',
+          note: 'Trace replay inclusive duration, Trace replayInformation Digest, Today To-Dos, Twin RecommendationsTrace replayAggregateTrace replay, Trace replay.'
         };
       }
       if (id === 'structure_informationSummary' || id === 'structure_todayTodo' || id === 'structure_twinRecommendation') {
         return {
-          prefix: '自身 ',
-          label: '并行子步骤自身耗时',
-          note: '这是并行结构化子步骤自己的耗时；同级结构化模块同时启动，整体等待最慢的一个完成。'
+          prefix: 'Trace replay ',
+          label: 'Trace replay',
+          note: 'Trace replay; Trace replay, Trace replayComplete.'
         };
       }
       if (id === 'aggregate_structured_briefing') {
         return {
-          prefix: '自身 ',
-          label: '结构化聚合自身耗时',
-          note: '这是三个结构化子步骤全部结束后，聚合 agent 生成标题和总述的自身耗时。'
+          prefix: 'Trace replay ',
+          label: 'Trace replayAggregateTrace replay',
+          note: 'Trace replayAllTrace replay, Aggregate agent Trace replay.'
         };
       }
       return {
         prefix: '',
-        label: '步骤自身耗时',
-        note: '这是该 step id 从 RUNNING 到最终状态的耗时。'
+        label: 'Trace replay',
+        note: 'Trace replay step id Trace replay RUNNING Trace replay.'
       };
     };
     const stepDurationDisplayInfo = (step, index) => {
@@ -1315,94 +1315,94 @@ const html = `<!doctype html>
         durationSemantics: duration.semantics?.label,
         isAppendOnlyTraceEvent: finalEvent !== step,
         note: finalEvent !== step
-          ? 'plannerTrace 是追加式事件日志；这条记录保留当时状态，后面同 id 记录才代表该步骤最终状态。' + (duration.semantics?.note ? ' ' + duration.semantics.note : '')
-          : '这是该 step id 在 trace 中的最后一条事件。' + (duration.semantics?.note ? ' ' + duration.semantics.note : '')
+          ? 'plannerTrace Trace replay; Trace replay, Trace replay id Trace replay.' + (duration.semantics?.note ? ' ' + duration.semantics.note : '')
+          : 'Trace replay step id Trace replay trace Trace replay.' + (duration.semantics?.note ? ' ' + duration.semantics.note : '')
       };
       if (id === 'load_context') {
         return {
           ...base,
-          producedBy: '代码函数 loadExecutiveContext / loadBriefing 查询数据库并组装内存对象',
-          usedByNext: ['动态 planner 的 accountContext', 'buildBriefingSummary 的 internalFacts/baseBriefing', 'mergeResults 的基础晨报'],
-          persistence: '不单独落库；只作为本轮内存上下文存在。关键摘要会间接进入 executive_assistant_runs.plannerTrace/result 和最终 executive_briefings。'
+          producedBy: 'Trace replay loadExecutiveContext / loadBriefing Trace replay',
+          usedByNext: ['Trace replay planner Trace replay accountContext', 'buildBriefingSummary Trace replay internalFacts/baseBriefing', 'mergeResults Trace replay'],
+          persistence: 'Trace replay; Trace replay.Trace replay executive_assistant_runs.plannerTrace/result Trace replay executive_briefings.'
         };
       }
       if (id === 'plan_subagents') {
         return {
           ...base,
-          producedBy: '大模型 EXECUTIVE_PLANNER，失败时使用 fallbackExecutivePlan',
-          usedByNext: ['决定调用哪些 skill/subagent', '生成每个 step', '构造 wechatTaskSpec/webSearchIntent'],
-          persistence: 'planner 和 plannerTrace 会持续写入 executive_assistant_runs；最终 toolResult 也会保留 plannerTrace。'
+          producedBy: 'Trace replay EXECUTIVE_PLANNER, failedTrace replay fallbackExecutivePlan',
+          usedByNext: ['Trace replay skill/subagent', 'Trace replaystep', 'Trace replay wechatTaskSpec/webSearchIntent'],
+          persistence: 'planner Trace replay plannerTrace Trace replay executive_assistant_runs; Trace replay toolResult Trace replay plannerTrace.'
         };
       }
       if (id === 'call_wechat_agent') {
         return {
           ...base,
-          producedBy: '混合编排：代码查询公众号源和微信 provider，多个模型负责筛源/筛文章/逐篇摘要',
-          usedByNext: ['subagentResults[].briefingItems 进入 merge_results', 'toolCalls 进入审计', 'debug 用于排查采集数量'],
-          persistence: '子 agent 结果最终写入 executive_assistant_runs.result.subagents/toolCalls；其 briefingItems 进入 executive_briefings.sources/sections。'
+          producedBy: 'Trace replay: Trace replay provider, Trace replay/Trace replay/Trace replay',
+          usedByNext: ['subagentResults[].briefingItems Trace replay merge_results', 'toolCalls Trace replay', 'debug Trace replay'],
+          persistence: 'Trace replay agent Trace replay executive_assistant_runs.result.subagents/toolCalls; Trace replay briefingItems Trace replay executive_briefings.sources/sections.'
         };
       }
       if (id === 'call_web_search') {
         return {
           ...base,
-          producedBy: '混合编排：OpenRouter web_search/web_fetch 工具 + Step2/Step3 模型结构化',
-          usedByNext: ['WEB_SEARCH briefingItems 进入 merge_results', 'citations/findings/searchLog 进入 toolCalls/debug'],
-          persistence: '搜索结果摘要写入 executive_assistant_runs.result.subagents/toolCalls；最终被选中的条目进入 executive_briefings。完整 raw 模型输入输出来自 .debug/openrouter-traces。'
+          producedBy: 'Trace replay: OpenRouter web_search/web_fetch tool + Step2/Step3 Trace replay',
+          usedByNext: ['WEB_SEARCH briefingItems Trace replay merge_results', 'citations/findings/searchLog Trace replay toolCalls/debug'],
+          persistence: 'Trace replay executive_assistant_runs.result.subagents/toolCalls; Trace replay executive_briefings.Trace replay raw Trace replay .debug/openrouter-traces.'
         };
       }
       if (id === 'merge_results') {
         return {
           ...base,
-          producedBy: '代码函数 mergeBriefingWithItems',
-          usedByNext: ['buildBriefingSummary 的 briefing 输入', 'buildDocument 的总览内容'],
-          persistence: '不单独落库；合并后的结果随 run result 和最终 briefing document 保存。'
+          producedBy: 'Trace replay mergeBriefingWithItems',
+          usedByNext: ['buildBriefingSummary Trace replay briefing Trace replay', 'buildDocument Trace replay'],
+          persistence: 'Trace replay; Trace replay run result Trace replay briefing document Save.'
         };
       }
       if (id === 'generate_briefing_summary') {
         return {
           ...base,
-          producedBy: '大模型 EXECUTIVE 生成摘要',
-          usedByNext: ['三个结构化子 agent 的 generatedSummary 输入', '最终回复参考'],
-          persistence: '摘要本身不作为单独字段落库；聚合后 summary 会进入 executive_briefings.summary。完整 prompt/output 在 modelCalls 中。'
+          producedBy: 'Trace replay EXECUTIVE Trace replay',
+          usedByNext: ['Trace replay agent Trace replay generatedSummary Trace replay', 'Trace replay'],
+          persistence: 'Trace replay; AggregateTrace replay summary Trace replay executive_briefings.summary.Trace replay prompt/output Trace replay modelCalls Trace replay.'
         };
       }
       if (id.startsWith('structure_')) {
         return {
           ...base,
-          producedBy: '大模型 EXECUTIVE_STRUCTURER，单模块结构化；失败时 fallbackStructuredModule 降级',
-          usedByNext: ['aggregate_structured_briefing 校验', 'buildDocument 组装 sections'],
-          persistence: '模块 items 最终进入 executive_briefings.sections；完整 prompt/output 在 modelCalls 中。'
+          producedBy: 'Trace replay EXECUTIVE_STRUCTURER, Trace replay; failedTrace replay fallbackStructuredModule Trace replay',
+          usedByNext: ['aggregate_structured_briefing Trace replay', 'buildDocument Trace replay sections'],
+          persistence: 'Trace replay items Trace replay executive_briefings.sections; Trace replay prompt/output Trace replay modelCalls Trace replay.'
         };
       }
       if (id === 'aggregate_structured_briefing') {
         return {
           ...base,
-          producedBy: '大模型 EXECUTIVE_STRUCTURER 聚合 agent',
+          producedBy: 'Trace replay EXECUTIVE_STRUCTURER Aggregate agent',
           usedByNext: ['buildDocument.title', 'buildDocument.summary', 'persist_briefing'],
-          persistence: 'title/summary 写入 executive_briefings；完整 prompt/output 在 modelCalls 中。'
+          persistence: 'title/summary Trace replay executive_briefings; Trace replay prompt/output Trace replay modelCalls Trace replay.'
         };
       }
       if (id === 'persist_briefing') {
         return {
           ...base,
-          producedBy: '代码函数 prisma.executiveBriefing.upsert',
-          usedByNext: ['前端 GET/轮询完成后展示 persistedBriefing', '下次打开页面作为已持久化晨报'],
-          persistence: '落库到 executive_briefings，唯一键是 investorId + dateKey。'
+          producedBy: 'Trace replay prisma.executiveBriefing.upsert',
+          usedByNext: ['Trace replay GET/Trace replayCompleteTrace replay persistedBriefing', 'Trace replay'],
+          persistence: 'Trace replay executive_briefings, Trace replay investorId + dateKey.'
         };
       }
       if (id === 'generate_reply') {
         return {
           ...base,
-          producedBy: '大模型 EXECUTIVE 生成最终秘书回复',
-          usedByNext: ['写入 AgentMessage', '前端聊天/复现页面展示'],
-          persistence: 'assistant message 写入 agent_messages；executionSnapshot 压缩后写入 message.meta。完整 prompt/output 在 modelCalls 中。'
+          producedBy: 'Trace replay EXECUTIVE Trace replay',
+          usedByNext: ['Trace replay AgentMessage', 'Trace replay/Trace replay'],
+          persistence: 'assistant message Trace replay agent_messages; executionSnapshot Trace replay message.meta.Trace replay prompt/output Trace replay modelCalls Trace replay.'
         };
       }
       return {
         ...base,
-        producedBy: '代码路径或动态 planner 生成的步骤',
-        usedByNext: ['视具体 step id 而定'],
-        persistence: '至少会作为 plannerTrace 事件写入 executive_assistant_runs。'
+        producedBy: 'Trace replay planner Trace replay',
+        usedByNext: ['Trace replay step id Trace replay'],
+        persistence: 'Trace replay plannerTrace Trace replay executive_assistant_runs.'
       };
     };
     const contextCallInput = () => ({
@@ -1421,17 +1421,17 @@ const html = `<!doctype html>
           {
             function: 'executeExecutiveAssistantRun',
             file: codeLocation.asyncRun,
-            role: '异步 run 包装层：claim run、读取 request、持久化 plannerTrace/result'
+            role: 'Trace replay run Trace replay: claim run, Trace replay request, Trace replay plannerTrace/result'
           },
           {
             function: 'runExecutiveAssistantTurn',
             file: codeLocation.routeRun,
-            role: '秘书一轮对话主流程：写用户消息、调用晨报更新、写工具审计、生成回复'
+            role: 'Trace replay: Trace replay, Trace replay, Trace replaytoolTrace replay, Generate reply'
           },
           {
             function: 'updateTodayExecutiveBriefing',
             file: codeLocation.updateBriefing,
-            role: '晨报更新主 orchestrator；多数 planner step 都在这个函数内部发生'
+            role: 'Trace replay orchestrator; Trace replay planner step Trace replay'
           }
         ],
         outerFunctionObservedInput: contextCallInput(),
@@ -1497,12 +1497,12 @@ const html = `<!doctype html>
             planPayloadPersistedInPlannerTrace: step.payload || null,
             relatedRawModelCalls: modelIoForStep(step).outputs,
             fallbackPlanRuleSummary: [
-              'fallbackExecutivePlan 不是单一固定 JSON；它按规则生成。',
-              '先根据 userQuery 判断 updateBriefing。',
-              '根据 userQuery/executiveSystemPrompt 判断 useWebSearch。',
-              '如果更新晨报且账户有公众号源，则加入 wechat_articles。',
-              '如果 updateBriefing=true，则加入 persist_briefing。',
-              'internal_briefing 和 chat_reply 每轮都会加入。'
+              'fallbackExecutivePlan Trace replay JSON; Trace replay.',
+              'Trace replay userQuery Decide updateBriefing.',
+              'Trace replay userQuery/executiveSystemPrompt Decide useWebSearch.',
+              'Trace replay, Trace replay wechat_articles.',
+              'Trace replay updateBriefing=true, Trace replay persist_briefing.',
+              'internal_briefing Trace replay chat_reply Trace replay.'
             ]
           },
           returnedVariable: 'plan: ExecutiveTurnPlan',
@@ -1580,7 +1580,7 @@ const html = `<!doctype html>
             observedArguments: {
               briefing: 'context.baseBriefing (full object not persisted as exact local variable)',
               briefingItems: data.subagents.flatMap((item) => item.briefingItems),
-              suffix: '本次晨报已合并 ' + data.subagents.flatMap((item) => item.briefingItems).length + ' 条子Agent信息。'
+              suffix: 'Trace replay ' + data.subagents.flatMap((item) => item.briefingItems).length + ' Trace replayAgentTrace replay.'
             }
           },
           directChildCalls: [
@@ -1726,12 +1726,12 @@ const html = `<!doctype html>
             {
               function: 'executeExecutiveAssistantRun',
               file: codeLocation.asyncRun,
-              role: '异步 run 包装层'
+              role: 'Trace replay run Trace replay'
             },
             {
               function: 'runExecutiveAssistantTurn',
               file: codeLocation.routeRun,
-              role: '秘书一轮对话主流程；generate_reply 在 updateTodayExecutiveBriefing 返回之后执行'
+              role: 'Trace replay; generate_reply Trace replay updateTodayExecutiveBriefing Trace replay'
             }
           ],
           currentOuterCall: {
@@ -1950,7 +1950,7 @@ const html = `<!doctype html>
 
     function setModelDetail(trace) {
       const label = modelPurposeLabels[trace.purpose] || trace.purpose;
-      setDetail('大模型调用: ' + label, '模型：' + trace.model + '；类型：' + trace.type + '；耗时：' + (trace.durationMs || '未知') + 'ms', {
+      setDetail('Trace replay: ' + label, 'Trace replay: ' + trace.model + '; Trace replay: ' + trace.type + '; Trace replay: ' + (trace.durationMs || 'Trace replay') + 'ms', {
         messages: trace.messages,
         tools: trace.tools,
         maxTokens: trace.maxTokens
@@ -1959,10 +1959,10 @@ const html = `<!doctype html>
         rawMessage: trace.rawMessage,
         rawCompletion: trace.rawCompletion,
         error: trace.error
-      }, trace, { key: 'model', label: '大模型函数' }, {
-        producedBy: '.debug/openrouter-traces JSONL 捕获的 OpenRouter 调用',
-        usedByNext: ['调用方代码解析 output/rawMessage 后生成 planner、briefingItems、sections 或最终回复'],
-        persistence: '这类完整 prompt/completion 当前来自本地 debug trace；数据库审计通常只保存被解析后的业务结果。'
+      }, trace, { key: 'model', label: 'Trace replay' }, {
+        producedBy: '.debug/openrouter-traces JSONL Trace replay OpenRouter Trace replay',
+        usedByNext: ['Trace replay output/rawMessage Trace replay planner, briefingItems, sections Trace replay'],
+        persistence: 'Trace replay prompt/completion Trace replay debug trace; Trace replaySaveTrace replay.'
       }, {
         currentOuterCall: {
           function: 'createChatCompletion / createJsonChatCompletion',
@@ -2016,11 +2016,11 @@ const html = `<!doctype html>
           w: spanW,
           h: 68,
           title: 'executeExecutiveAssistantRun',
-          subtitle: '异步 run 包装层',
+          subtitle: 'Trace replay run Trace replay',
           status: runStatus,
           durationLabel: overallDuration.label,
-          badges: ['代码固定', '异步run', '写run状态'],
-          codeTrace: { function: 'executeExecutiveAssistantRun', file: codeLocation.asyncRun, callStackRole: 'claim run、读取 request、持久化 plannerTrace/result' }
+          badges: ['Trace replay', 'Trace replayrun', 'Trace replayrunTrace replay'],
+          codeTrace: { function: 'executeExecutiveAssistantRun', file: codeLocation.asyncRun, callStackRole: 'claim run, Trace replay request, Trace replay plannerTrace/result' }
         },
         {
           kind: 'parent',
@@ -2029,11 +2029,11 @@ const html = `<!doctype html>
           w: Math.max(230, spanW - 32),
           h: 68,
           title: 'runExecutiveAssistantTurn',
-          subtitle: '秘书一轮对话主流程',
+          subtitle: 'Trace replay',
           status: runStatus,
           durationLabel: overallDuration.label,
-          badges: ['代码固定', '写消息', '调晨报'],
-          codeTrace: { function: 'runExecutiveAssistantTurn', file: codeLocation.routeRun, callStackRole: '写用户消息、调用晨报更新、写工具审计、生成回复' }
+          badges: ['Trace replay', 'Trace replay', 'Trace replay'],
+          codeTrace: { function: 'runExecutiveAssistantTurn', file: codeLocation.routeRun, callStackRole: 'Trace replay, Trace replay, Trace replaytoolTrace replay, Generate reply' }
         },
         {
           kind: 'parent',
@@ -2042,11 +2042,11 @@ const html = `<!doctype html>
           w: Math.max(200, spanW - 64),
           h: 68,
           title: 'updateTodayExecutiveBriefing',
-          subtitle: '晨报更新 orchestrator',
+          subtitle: 'Trace replayUpdate orchestrator',
           status: updateStatus,
           durationLabel: overallDuration.label,
-          badges: ['代码固定流程', '编排器', 'plannerTrace'],
-          codeTrace: { function: 'updateTodayExecutiveBriefing', file: codeLocation.updateBriefing, callStackRole: '读取上下文、规划、调用子 agent、合并、落库' }
+          badges: ['Trace replay', 'Trace replay', 'plannerTrace'],
+          codeTrace: { function: 'updateTodayExecutiveBriefing', file: codeLocation.updateBriefing, callStackRole: 'Trace replay, Trace replay, Trace replay agent, Trace replay, Trace replay' }
         }
       ];
       parentNodes.forEach((node) => {
@@ -2065,7 +2065,7 @@ const html = `<!doctype html>
       }
       ctx.fillStyle = '#64748b';
       ctx.font = '12px Inter, sans-serif';
-      ctx.fillText('外层函数未结束时保持 RUNNING；父步骤耗时包含子步骤，并行子步骤耗时不可相加。', 20, height - 12);
+      ctx.fillText('Trace replay RUNNING; Trace replay, Trace replay.', 20, height - 12);
 
       const structureIds = new Set([
         'structure_briefing_json',
@@ -2088,15 +2088,15 @@ const html = `<!doctype html>
           y: 258,
           w: (maxIndex - minIndex + 1) * colW - 12,
           h: 128,
-          title: 'structure_briefing_json 父步骤',
-          subtitle: '包含三个并行结构化子步骤，随后进入聚合；子步骤耗时不要与父步骤相加。',
+          title: 'structure_briefing_json Trace replay',
+          subtitle: 'Trace replay, Trace replayAggregate; Trace replay.',
           status: finalEventForStep(visibleSteps[structureParentIndex], structureParentIndex).status,
           durationLabel: parentDuration.label,
           stepIndex: structureParentIndex,
           codeTrace: {
             function: 'buildStructuredBriefing',
             file: codeLocation.structured,
-            callStackRole: '父步骤：Promise.all 并行运行三个结构化模块，再调用聚合 agent。'
+            callStackRole: 'Trace replay: Promise.all Trace replay, Trace replayAggregate agent.'
           }
         };
         drawStructureGroup(ctx, groupNode);
@@ -2170,8 +2170,8 @@ const html = `<!doctype html>
             y: 400 + modelLimit * 58,
             w: 164,
             h: 40,
-            title: '+' + (modelCalls.length - modelLimit) + ' 次 LLM',
-            subtitle: '点击看本步骤详情',
+            title: '+' + (modelCalls.length - modelLimit) + ' Trace replay LLM',
+            subtitle: 'Trace replay',
             status: 'RUNNING',
             durationLabel: modelDurationSumLabel(modelCalls.slice(modelLimit)),
             palette: { bg: '#f5f3ff', border: '#a78bfa', text: '#5b21b6' }
@@ -2196,7 +2196,7 @@ const html = `<!doctype html>
         state.canvasFocus = { kind: 'step', index };
         const step = data.plannerTrace[index];
         const io = deriveStepIO(step, index);
-        setDetail('步骤 ' + (index + 1) + ': ' + (step.title || step.id), step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
+        setDetail('Trace replay ' + (index + 1) + ': ' + (step.title || step.id), step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
         renderCallCanvas();
         return;
       }
@@ -2210,7 +2210,7 @@ const html = `<!doctype html>
         state.canvasFocus = { kind: 'structureGroup', node };
         const step = data.plannerTrace[node.stepIndex];
         const duration = stepDurationDisplayInfo(step, node.stepIndex);
-        setDetail('父步骤: ' + node.title, node.subtitle, {
+        setDetail('Trace replay: ' + node.title, node.subtitle, {
           parentFunction: node.codeTrace,
           parentStep: step,
           childSteps: data.plannerTrace.filter((item) =>
@@ -2219,25 +2219,25 @@ const html = `<!doctype html>
         }, {
           duration: duration.label,
           durationSemantics: duration.semantics,
-          note: '父步骤耗时已经包含并行结构化子步骤和聚合步骤。整体等待最慢子步骤完成，再继续聚合。',
-        }, node, { key: 'code', label: '父步骤容器' }, {
+          note: 'Trace replayAggregateTrace replay.Trace replayComplete, Trace replayAggregate.',
+        }, node, { key: 'code', label: 'Trace replay' }, {
           eventStatus: step.status,
           finalStatusForSameStepId: finalEventForStep(step, node.stepIndex).status,
           duration: duration.label,
           durationSemantics: duration.semantics?.label,
-          producedBy: 'buildStructuredBriefing 父函数',
-          usedByNext: ['等待三个结构化模块完成', '调用 aggregate_structured_briefing', '生成最终 document.sections'],
-          persistence: '父步骤本身作为 plannerTrace 的 structure_briefing_json 事件落库；子步骤分别以自己的 step id 追加落库。'
+          producedBy: 'buildStructuredBriefing Trace replay',
+          usedByNext: ['Trace replayComplete', 'Trace replay aggregate_structured_briefing', 'Trace replay document.sections'],
+          persistence: 'Trace replay plannerTrace Trace replay structure_briefing_json Trace replay; Trace replay step id Trace replay.'
         }, node.codeTrace);
         renderCallCanvas();
         return;
       }
       if (node.kind === 'parent') {
         state.canvasFocus = { kind: 'parent', node };
-        setDetail('函数: ' + node.title, node.subtitle, node.codeTrace, { status: node.status }, node.codeTrace, { key: 'code', label: '代码函数' }, {
-          producedBy: 'Canvas 调用栈中的外层函数节点',
-          usedByNext: ['包裹并调度下层函数调用'],
-          persistence: '这个父级函数状态由 plannerTrace 播放进度推断；不是单独落库的 span。'
+        setDetail('Trace replay: ' + node.title, node.subtitle, node.codeTrace, { status: node.status }, node.codeTrace, { key: 'code', label: 'Trace replay' }, {
+          producedBy: 'Canvas Trace replay',
+          usedByNext: ['Trace replay'],
+          persistence: 'Trace replay plannerTrace Trace replay; Trace replay span.'
         }, node.codeTrace);
         renderCallCanvas();
       }
@@ -2253,7 +2253,7 @@ const html = `<!doctype html>
 
     function deriveStepIO(step, index) {
       const id = step.id || '';
-      const toolArgs = data.selectedToolCall.toolArgs || {};
+      const toolArgs = data.selectedtoolCall.toolArgs || {};
       const explanation = usageForStep(step, index);
       if (id === 'load_context') {
         return {
@@ -2261,16 +2261,16 @@ const html = `<!doctype html>
           callType: callKind(step),
           relatedModelCalls: [],
           input: {
-            provenance: '代码函数 load_context 的精确函数调用参数未被单独持久化；以下是本次 raw audit 中可观测到、会影响该函数执行的上下文。',
+            provenance: 'Trace replay load_context Trace replay; Trace replay raw audit Trace replay, Trace replay.',
             rawFunctionInvocationInputPersisted: false,
             nearestObservedInputsFromAudit: {
               user: data.user,
               thread: data.thread,
-              selectedToolCallArgs: data.selectedToolCall.toolArgs
+              selectedtoolCallArgs: data.selectedtoolCall.toolArgs
             }
           },
           output: {
-            provenance: '这是 load_context 之后在 raw audit / 导出数据中可观测到的上下文结果，不等同于函数 return value 的逐字节快照。',
+            provenance: 'Trace replay load_context Trace replay raw audit / Trace replay, Trace replay return value Trace replay.',
             rawPlannerTraceEvent: step,
             exportedContextRows: {
               executiveAgentConfig: data.executiveAgentConfig,
@@ -2289,7 +2289,7 @@ const html = `<!doctype html>
           callType: callKind(step),
           relatedModelCalls,
           input: {
-            selectedToolCallArgs: toolArgs,
+            selectedtoolCallArgs: toolArgs,
             rawModelInputs: modelIo.inputs
           },
           output: {
@@ -2312,15 +2312,15 @@ const html = `<!doctype html>
             rawSubagentFunctionInputPersisted: false,
             nearestObservedInputsFromAudit: {
               mode: 'briefing',
-              selectedToolCallArgs: toolArgs,
+              selectedtoolCallArgs: toolArgs,
               sources: data.wechatSources
             },
             rawModelInputs: modelIo.inputs
           },
           output: {
             rawPlannerTraceEvent: step,
-            rawSubagentResultFromToolResult: agent || null,
-            rawToolCallsForWechat: data.toolCalls.filter((tool) => String(tool.toolName || '').toLowerCase().includes('wechat')),
+            rawSubagentResultFromtoolResult: agent || null,
+            rawtoolCallsForWechat: data.toolCalls.filter((tool) => String(tool.toolName || '').toLowerCase().includes('wechat')),
             rawModelOutputs: modelIo.outputs
           },
           explanation
@@ -2338,15 +2338,15 @@ const html = `<!doctype html>
             rawSubagentFunctionInputPersisted: false,
             nearestObservedInputsFromAudit: {
               mode: 'briefing',
-              selectedToolCallArgs: toolArgs,
+              selectedtoolCallArgs: toolArgs,
               plannerTracePayload: step.payload || null
             },
             rawModelInputs: modelIo.inputs
           },
           output: {
             rawPlannerTraceEvent: step,
-            rawSubagentResultFromToolResult: agent || null,
-            rawToolCallsForWebSearch: data.toolCalls.filter((tool) => String(tool.toolName || '').toLowerCase().includes('web')),
+            rawSubagentResultFromtoolResult: agent || null,
+            rawtoolCallsForWebSearch: data.toolCalls.filter((tool) => String(tool.toolName || '').toLowerCase().includes('web')),
             rawModelOutputs: modelIo.outputs
           },
           explanation
@@ -2394,7 +2394,7 @@ const html = `<!doctype html>
           relatedModelCalls,
           input: {
             latestUserMessage: data.latestUserMessage,
-            selectedToolCallArgs: toolArgs,
+            selectedtoolCallArgs: toolArgs,
             rawModelInputs: modelIo.inputs
           },
           output: {
@@ -2412,7 +2412,7 @@ const html = `<!doctype html>
         callType: callKind(step),
         relatedModelCalls,
         input: {
-          selectedToolCallArgs: toolArgs,
+          selectedtoolCallArgs: toolArgs,
           rawModelInputs: modelIo.inputs
         },
         output: {
@@ -2426,16 +2426,16 @@ const html = `<!doctype html>
     function setDetail(title, summary, input, output, raw, callType, explanation, codeTrace) {
       state.selected = { title, summary, input, output, raw, callType, explanation, codeTrace };
       $('detailTitle').textContent = title;
-      const typeText = callType ? \`调用类型：\${callType.label}。 \` : '';
-      $('detailSummary').textContent = typeText + (summary || '查看本节点的持久化输入输出。');
+      const typeText = callType ? \`Trace replay: \${callType.label}. \` : '';
+      $('detailSummary').textContent = typeText + (summary || 'Trace replay.');
       renderJson();
       renderExplanation();
     }
 
     function renderJson() {
       if (!state.selected) {
-        $('jsonBox').innerHTML = '<div class="json-tree"><div class="json-leaf">点击“更新晨报”开始播放，或点选任意节点查看详情。</div></div>';
-        $('explainBox').innerHTML = '<strong>机制解读（非原始日志）</strong><p>这里会显示我对当前节点用途和下游影响的解释，和上面的原始 JSON 分开。</p>';
+        $('jsonBox').innerHTML = '<div class="json-tree"><div class="json-leaf">Trace replay"Trace replay"Trace replay, Trace replay.</div></div>';
+        $('explainBox').innerHTML = '<strong>Trace replay (Trace replay)</strong><p>Trace replay, Trace replay JSON Trace replay.</p>';
         return;
       }
       $('tabCode').classList.toggle('active', state.tab === 'code');
@@ -2444,7 +2444,7 @@ const html = `<!doctype html>
       $('tabRaw').classList.toggle('active', state.tab === 'raw');
       const value =
         state.tab === 'code'
-          ? state.selected.codeTrace || { note: '当前节点没有对应的代码函数映射。' }
+          ? state.selected.codeTrace || { note: 'Trace replay.' }
           : state.tab === 'input'
             ? state.selected.input
             : state.tab === 'output'
@@ -2456,51 +2456,51 @@ const html = `<!doctype html>
     function renderExplanation() {
       const explanation = state.selected?.explanation;
       if (!explanation) {
-        $('explainBox').innerHTML = '<strong>机制解读（非原始日志）</strong><p>当前节点没有额外注释；上方 JSON 是日志里能看到的原始或最近似原始记录。</p>';
+        $('explainBox').innerHTML = '<strong>Trace replay (Trace replay)</strong><p>Trace replay; Trace replay JSON Trace replay.</p>';
         return;
       }
-      const usedByNext = Array.isArray(explanation.usedByNext) ? explanation.usedByNext.join('；') : explanation.usedByNext;
+      const usedByNext = Array.isArray(explanation.usedByNext) ? explanation.usedByNext.join('; ') : explanation.usedByNext;
       const rows = [
-        ['事件状态', explanation.eventStatus],
-        ['最终状态', explanation.finalStatusForSameStepId],
-        ['耗时', explanation.duration],
-        ['耗时口径', explanation.durationSemantics],
-        ['日志形态', explanation.note],
-        ['由谁产生', explanation.producedBy],
-        ['后续怎么用', usedByNext],
-        ['暂存/落库位置', explanation.persistence]
+        ['Trace replay', explanation.eventStatus],
+        ['Trace replay', explanation.finalStatusForSameStepId],
+        ['Trace replay', explanation.duration],
+        ['Trace replay', explanation.durationSemantics],
+        ['Trace replay', explanation.note],
+        ['Trace replay', explanation.producedBy],
+        ['Trace replay', usedByNext],
+        ['Trace replay/Trace replay', explanation.persistence]
       ].filter(([, value]) => value !== undefined && value !== null && value !== '');
-      $('explainBox').innerHTML = '<strong>机制解读（非原始日志）</strong><dl>' + rows.map(([key, value]) => \`<div><dt>\${escapeHtml(key)}</dt><dd>\${escapeHtml(value)}</dd></div>\`).join('') + '</dl>';
+      $('explainBox').innerHTML = '<strong>Trace replay (Trace replay)</strong><dl>' + rows.map(([key, value]) => \`<div><dt>\${escapeHtml(key)}</dt><dd>\${escapeHtml(value)}</dd></div>\`).join('') + '</dl>';
     }
 
     function renderMeta() {
       const user = data.user || {};
       const thread = data.thread || {};
-      const call = data.selectedToolCall || {};
-      $('subtitle').textContent = \`账户 \${user.email || '未知'}，复现 \${shortDate(call.createdAt)} 的最近一次晨报更新 trace。\`;
+      const call = data.selectedtoolCall || {};
+      $('subtitle').textContent = \`Trace replay \${user.email || 'Trace replay'}, Trace replay \${shortDate(call.createdAt)} Trace replayUpdate trace.\`;
       $('meta').innerHTML = [
-        ['账户', user.email || '未知'],
-        ['用户 ID', user.id || '未知'],
-        ['线程', thread.id || '未知'],
-        ['工具调用', call.toolName || '未知'],
-        ['运行状态', call.status || '未知'],
-        ['执行时间', shortDate(call.createdAt)],
-        ['导出时间', shortDate(data.exportedAt)]
+        ['Trace replay', user.email || 'Trace replay'],
+        ['Trace replay ID', user.id || 'Trace replay'],
+        ['Trace replay', thread.id || 'Trace replay'],
+        ['toolTrace replay', call.toolName || 'Trace replay'],
+        ['Trace replay', call.status || 'Trace replay'],
+        ['Trace replay', shortDate(call.createdAt)],
+        ['Trace replay', shortDate(data.exportedAt)]
       ].map(([k, v]) => \`<div><span>\${escapeHtml(k)}</span><span>\${escapeHtml(v)}</span></div>\`).join('');
       const stats = [
-        ['步骤', data.stats.plannerTraceCount],
-        ['子 Agent', data.stats.subagentCount],
-        ['大模型调用', data.stats.modelCallCount],
-        ['工具调用', data.stats.toolCallCount],
-        ['信息源条目', data.stats.sourceCount]
+        ['Trace replay', data.stats.plannerTraceCount],
+        ['Trace replay Agent', data.stats.subagentCount],
+        ['Trace replay', data.stats.modelCallCount],
+        ['toolTrace replay', data.stats.toolCallCount],
+        ['Trace replay', data.stats.sourceCount]
       ];
       $('stats').innerHTML = stats.map(([label, value]) => \`<div class="stat"><strong>\${escapeHtml(value)}</strong><span>\${escapeHtml(label)}</span></div>\`).join('');
       const navItems = [
-        ['timeline', '调用链路'],
-        ['agents', '子 Agent'],
-        ['tools', '工具调用'],
-        ['briefing', '最终晨报'],
-        ['raw', '完整审计摘要']
+        ['timeline', 'Trace replay'],
+        ['agents', 'Trace replay Agent'],
+        ['tools', 'toolTrace replay'],
+        ['briefing', 'Trace replay'],
+        ['raw', 'Trace replay']
       ];
       $('nav').innerHTML = navItems.map(([id, label]) => \`<button data-view="\${id}" class="\${state.view === id ? 'active' : ''}">\${label}</button>\`).join('');
       $('nav').querySelectorAll('button').forEach((button) => {
@@ -2508,16 +2508,16 @@ const html = `<!doctype html>
           state.view = button.dataset.view;
           if (state.view === 'raw') {
             setDetail(
-              '完整审计摘要',
+              'Trace replay',
               data.limitation || '',
-              { selectedToolCallArgs: data.selectedToolCall.toolArgs },
+              { selectedtoolCallArgs: data.selectedtoolCall.toolArgs },
               { stats: data.stats },
               data.rawAudit,
-              { key: 'code', label: '原始导出' },
+              { key: 'code', label: 'Trace replay' },
               {
-                producedBy: 'scripts/export-executive-run-audit.ts 从本地数据库导出的原始审计对象',
-                usedByNext: ['本静态 HTML 页面用于复现展示'],
-                persistence: '页面内嵌 JSON；不会回写数据库，也不会调用接口。'
+                producedBy: 'scripts/export-executive-run-audit.ts Trace replay',
+                usedByNext: ['Trace replay HTML Trace replay'],
+                persistence: 'Trace replay JSON; Trace replay, Trace replay.'
               }
             );
           }
@@ -2536,10 +2536,10 @@ const html = `<!doctype html>
         const finalCls = statusClass(finalEvent.status);
         const duration = stepDurationDisplayInfo(step, index);
         return \`<article class="step \${cls}" data-index="\${index}" style="\${visible ? '' : 'opacity:.38'}">
-          <h3><span>\${index + 1}. \${escapeHtml(step.title || step.id)}</span><span class="badge \${cls}">事件 \${escapeHtml(visible ? step.status : 'PENDING')}</span></h3>
-          <p><span class="kind \${kind.key}">\${escapeHtml(kind.label)}</span> \${modelCallsForStep(step).length ? \`<span class="kind model">\${modelCallsForStep(step).length} 次模型调用</span>\` : ''}</p>
-          <p><span class="badge \${finalCls}">最终 \${escapeHtml(finalEvent.status || step.status)}</span> \${duration.label ? \`<span class="badge">耗时 \${escapeHtml(duration.label)}</span>\` : ''} \${finalEvent !== step ? '后续同一步骤已更新状态' : '该步骤最终事件'}</p>
-          <p>\${escapeHtml(visible ? (step.detail || step.error || step.description || '') : '等待执行')}</p>
+          <h3><span>\${index + 1}. \${escapeHtml(step.title || step.id)}</span><span class="badge \${cls}">Trace replay \${escapeHtml(visible ? step.status : 'PENDING')}</span></h3>
+          <p><span class="kind \${kind.key}">\${escapeHtml(kind.label)}</span> \${modelCallsForStep(step).length ? \`<span class="kind model">\${modelCallsForStep(step).length} Trace replay</span>\` : ''}</p>
+          <p><span class="badge \${finalCls}">Trace replay \${escapeHtml(finalEvent.status || step.status)}</span> \${duration.label ? \`<span class="badge">Trace replay \${escapeHtml(duration.label)}</span>\` : ''} \${finalEvent !== step ? 'Trace replay' : 'Trace replay'}</p>
+          <p>\${escapeHtml(visible ? (step.detail || step.error || step.description || '') : 'Trace replayPending')}</p>
         </article>\`;
       }).join('');
       $('timeline').querySelectorAll('.step').forEach((el) => {
@@ -2548,7 +2548,7 @@ const html = `<!doctype html>
           state.canvasFocus = { kind: 'step', index };
           const step = data.plannerTrace[index];
           const io = deriveStepIO(step, index);
-          setDetail(\`步骤 \${index + 1}: \${step.title || step.id}\`, step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
+          setDetail(\`Trace replay \${index + 1}: \${step.title || step.id}\`, step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
           renderCallCanvas();
         });
       });
@@ -2559,13 +2559,13 @@ const html = `<!doctype html>
         const cls = agent.briefingItems.length > 0 ? 'success' : 'skipped';
         return \`<article class="agent" data-agent="\${escapeHtml(agent.agentType)}">
           <strong>\${escapeHtml(agent.agentType)}</strong>
-          <span>\${agent.briefingItems.length} 条 briefingItems · debug: \${Object.keys(agent.debug || {}).length} 个字段</span>
+          <span>\${agent.briefingItems.length} Trace replay briefingItems · debug: \${Object.keys(agent.debug || {}).length} Trace replay</span>
         </article>\`;
-      }).join('') || '<div class="empty">没有实际执行的子 Agent。</div>';
+      }).join('') || '<div class="empty">Trace replay Agent.</div>';
       $('agents').querySelectorAll('.agent').forEach((el) => {
         el.addEventListener('click', () => {
           const agent = data.subagents.find((item) => item.agentType === el.dataset.agent);
-          setDetail(\`子 Agent: \${agent.agentType}\`, agent.answer || '', {
+          setDetail(\`Trace replay Agent: \${agent.agentType}\`, agent.answer || '', {
             rawSubagentInvocationInputPersisted: false,
             nearestObservedInputsFromAudit: {
               userQuery: data.request?.userQuery,
@@ -2576,30 +2576,30 @@ const html = `<!doctype html>
             itemCount: agent.briefingItems.length,
             briefingItems: agent.briefingItems,
             debug: agent.debug
-          }, agent, { key: 'mixed', label: '子 Agent 结果' }, {
-            producedBy: \`\${agent.agentType} 子 agent 的执行结果，来自 selectedToolCall.toolResult.subagents\`,
-            usedByNext: ['merge_results 合并晨报候选信息', '最终 executive_briefings.sections/sources'],
-            persistence: '已作为 selectedToolCall.toolResult 的一部分落库；async run 中也会进入 executive_assistant_runs.result。'
+          }, agent, { key: 'mixed', label: 'Trace replay Agent Trace replay' }, {
+            producedBy: \`\${agent.agentType} Trace replay agent Trace replay, Trace replay selectedtoolCall.toolResult.subagents\`,
+            usedByNext: ['merge_results Trace replay', 'Trace replay executive_briefings.sections/sources'],
+            persistence: 'Trace replay selectedtoolCall.toolResult Trace replay; async run Trace replay executive_assistant_runs.result.'
           });
         });
       });
     }
 
-    function renderTools() {
+    function rendertools() {
       $('tools').innerHTML = data.toolCalls.map((tool, index) => {
         const cls = statusClass(tool.status);
         return \`<article class="tool" data-index="\${index}">
           <strong>\${tool.index}. \${escapeHtml(tool.toolName)}</strong>
           <span class="badge \${cls}">\${escapeHtml(tool.status)}</span>
         </article>\`;
-      }).join('') || '<div class="empty">没有工具调用。</div>';
+      }).join('') || '<div class="empty">Trace replaytoolTrace replay.</div>';
       $('tools').querySelectorAll('.tool').forEach((el) => {
         el.addEventListener('click', () => {
           const tool = data.toolCalls[Number(el.dataset.index)];
-          setDetail(\`工具调用: \${tool.toolName}\`, \`状态：\${tool.status}\`, tool.args, tool.result, tool, { key: 'code', label: '工具/代码调用' }, {
-            producedBy: 'agent_tool_calls 或 selectedToolCall.toolResult.toolCalls 中记录的工具调用审计',
-            usedByNext: ['对应 agent 的 debug/briefingItems', '最终晨报候选来源'],
-            persistence: '工具调用参数和结果已随审计日志保存；是否另有业务表取决于具体 tool。'
+          setDetail(\`toolTrace replay: \${tool.toolName}\`, \`Trace replay: \${tool.status}\`, tool.args, tool.result, tool, { key: 'code', label: 'tool/Trace replay' }, {
+            producedBy: 'agent_tool_calls Trace replay selectedtoolCall.toolResult.toolCalls Trace replaytoolTrace replay',
+            usedByNext: ['Trace replay agent Trace replay debug/briefingItems', 'Trace replay'],
+            persistence: 'toolTrace replaySave; Trace replay tool.'
           });
         });
       });
@@ -2614,13 +2614,13 @@ const html = `<!doctype html>
           <span class="badge \${cls}">\${escapeHtml(trace.status)}</span>
           <span>\${escapeHtml(trace.type)} · \${escapeHtml(trace.model)} · \${escapeHtml(shortDate(trace.timestamp))}</span>
         </article>\`;
-      }).join('') || '<div class="empty">没有找到 OpenRouter raw trace。</div>';
+      }).join('') || '<div class="empty">Trace replay OpenRouter raw trace.</div>';
       $('models').querySelectorAll('.tool').forEach((el) => {
         el.addEventListener('click', () => {
           const trace = data.modelTraces[Number(el.dataset.index)];
           state.canvasFocus = { kind: 'model', traceIndex: Number(el.dataset.index) };
           const label = modelPurposeLabels[trace.purpose] || trace.purpose;
-          setDetail(\`大模型调用: \${label}\`, \`模型：\${trace.model}；类型：\${trace.type}；耗时：\${trace.durationMs || '未知'}ms\`, {
+          setDetail(\`Trace replay: \${label}\`, \`Trace replay: \${trace.model}; Trace replay: \${trace.type}; Trace replay: \${trace.durationMs || 'Trace replay'}ms\`, {
             messages: trace.messages,
             tools: trace.tools,
             maxTokens: trace.maxTokens
@@ -2629,10 +2629,10 @@ const html = `<!doctype html>
             rawMessage: trace.rawMessage,
             rawCompletion: trace.rawCompletion,
             error: trace.error
-          }, trace, { key: 'model', label: '大模型' }, {
-            producedBy: '.debug/openrouter-traces JSONL 捕获的 OpenRouter 调用',
-            usedByNext: ['调用方代码解析 output/rawMessage 后生成 planner、briefingItems、sections 或最终回复'],
-            persistence: '这类完整 prompt/completion 当前来自本地 debug trace；数据库审计通常只保存被解析后的业务结果。'
+          }, trace, { key: 'model', label: 'Trace replay' }, {
+            producedBy: '.debug/openrouter-traces JSONL Trace replay OpenRouter Trace replay',
+            usedByNext: ['Trace replay output/rawMessage Trace replay planner, briefingItems, sections Trace replay'],
+            persistence: 'Trace replay prompt/completion Trace replay debug trace; Trace replaySaveTrace replay.'
           });
           renderCallCanvas();
         });
@@ -2644,13 +2644,13 @@ const html = `<!doctype html>
       $('sections').innerHTML = sections.map((section, sectionIndex) => {
         const items = section.items || [];
         return \`<section class="section">
-          <header><h3>\${escapeHtml(section.title)}</h3><span class="badge">\${items.length} 条</span></header>
+          <header><h3>\${escapeHtml(section.title)}</h3><span class="badge">\${items.length} Trace replay</span></header>
           <div class="items">
             \${items.map((item, itemIndex) => \`<article class="item" data-section="\${sectionIndex}" data-item="\${itemIndex}">
-              <h4>\${escapeHtml(item.title || '未命名')}</h4>
+              <h4>\${escapeHtml(item.title || 'Trace replay')}</h4>
               <p>\${escapeHtml((item.summary || '').slice(0, 180))}</p>
               <p>\${escapeHtml(item.source || '')}\${item.url ? ' · ' + escapeHtml(item.url) : ''}</p>
-            </article>\`).join('') || '<div class="empty">没有条目。</div>'}
+            </article>\`).join('') || '<div class="empty">Trace replay.</div>'}
           </div>
         </section>\`;
       }).join('');
@@ -2658,13 +2658,13 @@ const html = `<!doctype html>
         el.addEventListener('click', () => {
           const section = sections[Number(el.dataset.section)];
         const item = (section.items || [])[Number(el.dataset.item)];
-          setDetail(\`晨报条目: \${item.title || section.title}\`, item.summary || '', {
+          setDetail(\`Trace replay: \${item.title || section.title}\`, item.summary || '', {
             section: section.title,
             sourceCount: data.document.sources.length
-          }, item, { section, item }, { key: 'code', label: '展示数据' }, {
-            producedBy: '结构化晨报 document.sections 中的条目',
-            usedByNext: ['前端晨报页面展示', '后续用户阅读、追问或决策分身推荐'],
-            persistence: '最终落在 executive_briefings.sections；来源引用落在 executive_briefings.sources。'
+          }, item, { section, item }, { key: 'code', label: 'Trace replay' }, {
+            producedBy: 'Trace replay document.sections Trace replay',
+            usedByNext: ['Trace replay', 'Trace replay, Trace replayTwin Recommendations'],
+            persistence: 'Trace replay executive_briefings.sections; Trace replay executive_briefings.sources.'
           });
         });
       });
@@ -2676,16 +2676,16 @@ const html = `<!doctype html>
       const pct = total ? Math.round((done / total) * 100) : 0;
       $('progressFill').style.width = pct + '%';
       if (state.index < 0) {
-        $('statusLine').textContent = '等待点击“更新晨报”。';
+        $('statusLine').textContent = 'Trace replay"Trace replay".';
         $('runStatus').textContent = 'READY';
         $('runStatus').className = 'badge';
       } else if (state.index >= total - 1 && !state.playing) {
-        $('statusLine').textContent = '复现完成：已展示这次历史晨报更新的完整持久化调用链路。';
+        $('statusLine').textContent = 'Trace replayComplete: Trace replay.';
         $('runStatus').textContent = 'SUCCESS';
         $('runStatus').className = 'badge success';
       } else {
         const current = data.plannerTrace[state.index];
-        $('statusLine').textContent = current?.detail || current?.title || '正在播放历史 trace。';
+        $('statusLine').textContent = current?.detail || current?.title || 'Trace replay trace.';
         const cls = statusClass(current?.status || 'RUNNING');
         $('runStatus').textContent = current?.status || 'RUNNING';
         $('runStatus').className = 'badge ' + cls;
@@ -2702,7 +2702,7 @@ const html = `<!doctype html>
       state.paused = false;
       $('startBtn').disabled = false;
       $('pauseBtn').disabled = true;
-      $('pauseBtn').textContent = '暂停';
+      $('pauseBtn').textContent = 'Trace replay';
     }
 
     function selectPlannerIndex(index) {
@@ -2711,16 +2711,16 @@ const html = `<!doctype html>
       state.index = Math.max(-1, Math.min(total - 1, index));
       if (state.index < 0) {
         state.canvasFocus = null;
-        setDetail('请求输入', '点击“更新晨报”会提交这个用户请求；本页面只使用历史日志复现。', data.request, { note: '未调用接口，未创建新任务。' }, data.rawAudit, { key: 'code', label: '前端请求' }, {
-          producedBy: '历史 selectedToolCall.toolArgs',
-          usedByNext: ['播放复现入口'],
-          persistence: '页面内嵌历史日志；不会调用接口。'
+        setDetail('Trace replay', 'Trace replay"Trace replay"Trace replay; Trace replay.', data.request, { note: 'Trace replay, Trace replay.' }, data.rawAudit, { key: 'code', label: 'Trace replay' }, {
+          producedBy: 'Trace replay selectedtoolCall.toolArgs',
+          usedByNext: ['Trace replay'],
+          persistence: 'Trace replay; Trace replay.'
         });
       } else {
         state.canvasFocus = { kind: 'step', index: state.index };
         const step = data.plannerTrace[state.index];
         const io = deriveStepIO(step, state.index);
-        setDetail(\`步骤 \${state.index + 1}: \${step.title || step.id}\`, step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
+        setDetail(\`Trace replay \${state.index + 1}: \${step.title || step.id}\`, step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
       }
       renderPlayback();
     }
@@ -2740,7 +2740,7 @@ const html = `<!doctype html>
         state.canvasFocus = { kind: 'step', index: state.index };
         const step = data.plannerTrace[state.index];
         const io = deriveStepIO(step, state.index);
-        setDetail(\`步骤 \${state.index + 1}: \${step.title || step.id}\`, step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
+        setDetail(\`Trace replay \${state.index + 1}: \${step.title || step.id}\`, step.detail || step.error || step.description, io.input, io.output, { step, relatedModelCalls: io.relatedModelCalls }, io.callType, io.explanation, io.codeTrace);
         renderPlayback();
         state.timer = window.setTimeout(tick, Number($('speedInput').value));
       } else {
@@ -2760,11 +2760,11 @@ const html = `<!doctype html>
       state.canvasFocus = null;
       $('startBtn').disabled = true;
       $('pauseBtn').disabled = false;
-      $('pauseBtn').textContent = '暂停';
-      setDetail('请求输入', '点击“更新晨报”后前端提交给后台的固定提示词。', data.request, { runId: '(历史日志复现，无实际新建 run)' }, data.selectedToolCall, { key: 'code', label: '前端请求' }, {
-        producedBy: '前端“更新晨报”按钮提交的用户请求；本页面使用历史日志复现',
-        usedByNext: ['POST /api/investor/executive-assistant?async=1', '后台创建 run 并执行 planner'],
-        persistence: '真实运行中会进入 AgentMessage/AgentToolCall/ExecutiveAssistantRun；本页面不会创建新记录。'
+      $('pauseBtn').textContent = 'Trace replay';
+      setDetail('Trace replay', 'Trace replay"Trace replay"Trace replay.', data.request, { runId: '(Trace replay, Trace replay run)' }, data.selectedtoolCall, { key: 'code', label: 'Trace replay' }, {
+        producedBy: 'Trace replay"Trace replay"Trace replay; Trace replay',
+        usedByNext: ['POST /api/investor/executive-assistant?async=1', 'Trace replay run Trace replay planner'],
+        persistence: 'Trace replayRunningTrace replay AgentMessage/AgenttoolCall/ExecutiveAssistantRun; Trace replay.'
       });
       renderPlayback();
       state.timer = window.setTimeout(tick, 260);
@@ -2773,7 +2773,7 @@ const html = `<!doctype html>
     function pause() {
       if (!state.playing) return;
       state.paused = !state.paused;
-      $('pauseBtn').textContent = state.paused ? '继续' : '暂停';
+      $('pauseBtn').textContent = state.paused ? 'Trace replay' : 'Trace replay';
       if (!state.paused) {
         state.timer = window.setTimeout(tick, Number($('speedInput').value));
       }
@@ -2787,11 +2787,11 @@ const html = `<!doctype html>
       state.canvasFocus = null;
       $('startBtn').disabled = false;
       $('pauseBtn').disabled = true;
-      $('pauseBtn').textContent = '暂停';
-      setDetail('请求输入', '点击“更新晨报”会提交这个用户请求；本页面只使用历史日志复现。', data.request, { note: '未调用接口，未创建新任务。' }, data.rawAudit, { key: 'code', label: '前端请求' }, {
-        producedBy: '历史 selectedToolCall.toolArgs',
-        usedByNext: ['播放复现入口'],
-        persistence: '页面内嵌历史日志；不会调用接口。'
+      $('pauseBtn').textContent = 'Trace replay';
+      setDetail('Trace replay', 'Trace replay"Trace replay"Trace replay; Trace replay.', data.request, { note: 'Trace replay, Trace replay.' }, data.rawAudit, { key: 'code', label: 'Trace replay' }, {
+        producedBy: 'Trace replay selectedtoolCall.toolArgs',
+        usedByNext: ['Trace replay'],
+        persistence: 'Trace replay; Trace replay.'
       });
       renderPlayback();
     }
@@ -2811,7 +2811,7 @@ const html = `<!doctype html>
     renderMeta();
     renderAgents();
     renderModels();
-    renderTools();
+    rendertools();
     renderSections();
     reset();
   </script>

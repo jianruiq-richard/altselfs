@@ -8,7 +8,7 @@ import { createChatCompletion, createJsonChatCompletion, getOpenRouterModel, typ
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import {
   appendThreadMessage,
-  appendToolCall,
+  appendtoolCall,
   ensureThread,
   getLatestThreadWithMessages,
   toClientMessages,
@@ -25,7 +25,7 @@ type ClientMessage = {
 };
 
 type PlannerAction = 'search_notes' | 'get_note_detail' | 'get_user_notes' | 'clarify';
-type ToolPlan = {
+type toolPlan = {
   action: PlannerAction;
   reason?: string;
   args?: {
@@ -39,20 +39,20 @@ type ToolPlan = {
 const DEFAULT_SKILL_SET = [
   {
     skill: 'xhs_search_notes',
-    description: '按关键词抓取小红书笔记列表，适合赛道动态、竞品内容监控、声量观察。',
-    trigger: '用户询问某赛道关键词近期有什么内容、爆文、趋势',
+    description: 'message, message, message, message.',
+    trigger: 'message, message, message',
     source: 'Spider_XHS.apis.xhs_pc_apis.search_some_note',
   },
   {
     skill: 'xhs_get_note_detail',
-    description: '抓取单篇笔记详情（标题、正文、作者、互动数据），适合深挖单条内容。',
-    trigger: '用户给出小红书笔记链接并要求解读',
+    description: 'message (message, message, message, message), message.',
+    trigger: 'message',
     source: 'Spider_XHS.apis.xhs_pc_apis.get_note_info',
   },
   {
     skill: 'xhs_get_user_notes',
-    description: '抓取某账号全部笔记（可截断数量），适合竞品账号投放和内容策略跟踪。',
-    trigger: '用户给出账号主页链接并要求分析近期发布',
+    description: 'messageaccountsAllmessage (message), messageaccountsmessage.',
+    trigger: 'messageaccountsmessage',
     source: 'Spider_XHS.apis.xhs_pc_apis.get_user_all_notes',
   },
 ];
@@ -80,9 +80,9 @@ function extractJsonObject(raw: string): string | null {
   return null;
 }
 
-function safeParsePlan(raw: string): ToolPlan {
+function safeParsePlan(raw: string): toolPlan {
   try {
-    const parsed = JSON.parse(extractJsonObject(raw) ?? raw) as Partial<ToolPlan>;
+    const parsed = JSON.parse(extractJsonObject(raw) ?? raw) as Partial<toolPlan>;
     const allowed = new Set<PlannerAction>(['search_notes', 'get_note_detail', 'get_user_notes', 'clarify']);
     const action = allowed.has(parsed.action as PlannerAction) ? (parsed.action as PlannerAction) : 'clarify';
     const limit = typeof parsed.args?.limit === 'number' ? Math.max(1, Math.min(30, Math.round(parsed.args.limit))) : undefined;
@@ -107,48 +107,48 @@ function buildPlannerPrompt(input: { userQuery: string; messages: ClientMessage[
     .map((message, i) => `${i + 1}. [${message.role}] ${message.content}`)
     .join('\n');
   return [
-    '你是小红书工具规划器，只返回 JSON。',
-    '根据用户意图选择 action，并补全 args。',
-    'action 候选：',
-    '1) search_notes: 关键词搜索笔记列表',
-    '2) get_note_detail: 抓单篇笔记详情（需要 noteUrl）',
-    '3) get_user_notes: 抓账号笔记列表（需要 userUrl）',
-    '4) clarify: 信息不足时追问',
+    'messagetoolmessage, message JSON.',
+    'message action, message args.',
+    'action message: ',
+    '1) search_notes: message',
+    '2) get_note_detail: message (message noteUrl)',
+    '3) get_user_notes: messageaccountsmessage (message userUrl)',
+    '4) clarify: message',
     'JSON Schema:',
     '{',
     '  "action":"search_notes|get_note_detail|get_user_notes|clarify",',
-    '  "reason":"简要原因",',
+    '  "reason":"message",',
     '  "args":{',
-    '    "query":"关键词，可选",',
-    '    "noteUrl":"笔记链接，可选",',
-    '    "userUrl":"用户主页链接，可选",',
+    '    "query":"message, message",',
+    '    "noteUrl":"message, message",',
+    '    "userUrl":"message, message",',
     '    "limit":10',
     '  }',
     '}',
-    `用户问题：${input.userQuery}`,
-    `最近对话：\n${history || '无'}`,
+    `message: ${input.userQuery}`,
+    `message: \n${history || 'message'}`,
   ].join('\n');
 }
 
 function buildSystemPrompt(customPrompt?: string | null) {
   const lines = [
-    '你是投资人的小红书AI员工（Claude Code Agent）。',
-    '你会优先调用 Spider_XHS 的技能能力，再基于返回数据给出结论。',
-    '输出要求：',
-    '1) 先给3条关键结论，再给证据，再给可执行动作。',
-    '2) 不编造数据，缺信息就明确说明。',
-    '3) 对竞品监控优先关注：新发布、推广行为、声量变化。',
+    'messageAI teammate (Claude Code Agent).',
+    'message Spider_XHS message, message.',
+    'message: ',
+    '1) message3message, message, message.',
+    '2) message, message.',
+    '3) message: message, message, message.',
     '',
-    '已沉淀技能（来自 external_solutions/Spider_XHS）：',
-    ...DEFAULT_SKILL_SET.map((item) => `- ${item.skill}: ${item.description}（触发: ${item.trigger}）`),
+    'messageLearnmessage (message external_solutions/Spider_XHS): ',
+    ...DEFAULT_SKILL_SET.map((item) => `- ${item.skill}: ${item.description} (message: ${item.trigger})`),
   ];
   if (customPrompt?.trim()) {
-    lines.push('', '用户追加技能调教：', customPrompt.trim());
+    lines.push('', 'message: ', customPrompt.trim());
   }
   return lines.join('\n');
 }
 
-async function runSpiderSkill(plan: ToolPlan, cookies: string) {
+async function runSpiderSkill(plan: toolPlan, cookies: string) {
   const remoteEndpoint = process.env.XHS_SPIDER_ENDPOINT;
   if (remoteEndpoint) {
     const res = await fetch(remoteEndpoint, {
@@ -185,11 +185,11 @@ async function runSpiderSkill(plan: ToolPlan, cookies: string) {
   }
   const raw = (stdout || '').trim();
   if (!raw) {
-    throw new Error('Spider_XHS 返回为空');
+    throw new Error('Spider_XHS message');
   }
   const parsed = JSON.parse(raw) as { ok?: boolean; error?: string };
   if (parsed.ok === false) {
-    throw new Error(parsed.error || 'Spider_XHS 执行失败');
+    throw new Error(parsed.error || 'Spider_XHS Execution failed');
   }
   return parsed;
 }
@@ -204,7 +204,7 @@ async function upsertXhsIntegration(input: {
     where: { investorId_provider: { investorId, provider: XHS_PROVIDER } },
     update: {
       status: 'CONNECTED',
-      accountName: '小红书助手',
+      accountName: 'Xiaohongshu Assistant',
       ...(typeof customPrompt === 'string' ? { assistantCustomPrompt: customPrompt } : {}),
       ...(typeof cookies === 'string' ? { accessToken: cookies || null } : {}),
     },
@@ -212,7 +212,7 @@ async function upsertXhsIntegration(input: {
       investorId,
       provider: XHS_PROVIDER,
       status: 'CONNECTED',
-      accountName: '小红书助手',
+      accountName: 'Xiaohongshu Assistant',
       assistantCustomPrompt: customPrompt || null,
       accessToken: typeof cookies === 'string' ? cookies || null : null,
     },
@@ -259,7 +259,7 @@ export async function PUT(req: NextRequest) {
   const customPrompt = typeof body?.customPrompt === 'string' ? body.customPrompt.trim() : '';
   const cookies = typeof body?.cookies === 'string' ? body.cookies.trim() : undefined;
   if (customPrompt.length > MAX_CUSTOM_PROMPT_LENGTH) {
-    return NextResponse.json({ error: `调教内容最多 ${MAX_CUSTOM_PROMPT_LENGTH} 字符` }, { status: 400 });
+    return NextResponse.json({ error: `message ${MAX_CUSTOM_PROMPT_LENGTH} message` }, { status: 400 });
   }
 
   const integration = await upsertXhsIntegration({ investorId: investor.id, customPrompt, cookies });
@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
   const messages = normalizeMessages(body?.messages);
   const latest = messages[messages.length - 1];
   if (!latest || latest.role !== 'user') {
-    return NextResponse.json({ error: '最后一条消息必须是用户消息' }, { status: 400 });
+    return NextResponse.json({ error: 'messagemessagesmessage' }, { status: 400 });
   }
 
   const [integration, thread] = await Promise.all([
@@ -301,7 +301,7 @@ export async function POST(req: NextRequest) {
   const cookies = integration?.accessToken || process.env.XHS_COOKIES || '';
   const endpointConfigured = Boolean(process.env.XHS_SPIDER_ENDPOINT);
   if (!cookies && !endpointConfigured) {
-    const reply = '小红书能力未配置：缺少用户 Cookie（或全局 XHS_COOKIES），且未配置远端 XHS_SPIDER_ENDPOINT。';
+    const reply = 'message: message Cookie (message XHS_COOKIES), message XHS_SPIDER_ENDPOINT.';
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({
       threadId: thread.id,
@@ -310,7 +310,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  let plan: ToolPlan = { action: 'clarify', reason: 'default', args: {} };
+  let plan: toolPlan = { action: 'clarify', reason: 'default', args: {} };
   try {
     const plannerMessages: ChatMessage[] = [
       { role: 'system', content: buildPlannerPrompt({ userQuery: latest.content, messages }) },
@@ -321,7 +321,7 @@ export async function POST(req: NextRequest) {
       getOpenRouterModel('XHS_PLANNER')
     );
     plan = safeParsePlan(plannerRaw);
-    await appendToolCall({
+    await appendtoolCall({
       threadId: thread.id,
       toolName: 'xhs_planner',
       toolArgs: { userQuery: latest.content },
@@ -332,7 +332,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (plan.action === 'clarify') {
-    const reply = '我需要更具体的信息才能执行小红书技能。请提供关键词、笔记链接或账号主页链接。';
+    const reply = 'message.message, messageaccountsmessage.';
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({
       threadId: thread.id,
@@ -346,7 +346,7 @@ export async function POST(req: NextRequest) {
   let reply = '';
   try {
     toolResult = await runSpiderSkill(plan, cookies);
-    await appendToolCall({
+    await appendtoolCall({
       threadId: thread.id,
       toolName: `xhs_${plan.action}`,
       toolArgs: plan.args || {},
@@ -358,10 +358,10 @@ export async function POST(req: NextRequest) {
       {
         role: 'user',
         content: [
-          `用户问题：${latest.content}`,
-          `执行动作：${plan.action}`,
-          `技能返回：${JSON.stringify(toolResult, null, 2)}`,
-          '请输出：3条结论 + 证据 + 可执行动作。',
+          `message: ${latest.content}`,
+          `message: ${plan.action}`,
+          `message: ${JSON.stringify(toolResult, null, 2)}`,
+          'message: 3message + message + message.',
         ].join('\n\n'),
       },
     ];
@@ -384,7 +384,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    reply = `小红书技能调用失败：${detail}`;
+    reply = `messagefailed: ${detail}`;
   }
 
   await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });

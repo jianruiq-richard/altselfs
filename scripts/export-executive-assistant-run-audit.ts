@@ -88,7 +88,7 @@ async function main() {
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
     },
-    selectedToolCall: {
+    selectedtoolCall: {
       id: run.id,
       toolName: 'executive_dynamic_planner',
       status: run.status,

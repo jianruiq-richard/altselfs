@@ -20,7 +20,7 @@
             requestId: data.requestId,
             payload: payload || {
               ok: false,
-              error: chrome.runtime.lastError?.message || '浏览器扩展无响应',
+              error: chrome.runtime.lastError?.message || 'Browser extension did not respond',
             },
           },
           event.origin

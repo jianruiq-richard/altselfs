@@ -30,19 +30,19 @@ const AUTH_HEADER = process.env.WXRANK_AUTH_HEADER || 'X-API-KEY';
 const AUTH_FIELD = process.env.WXRANK_AUTH_FIELD || 'key';
 
 const DEFINITIONS: EndpointDefinition[] = [
-  { key: 'searchMpByKeyword', label: '关键词搜索公众号', method: 'POST', defaultPath: '/weixin/getsu' },
-  { key: 'searchMpBySosuo', label: '搜一搜搜公众号', method: 'POST', defaultPath: '/weixin/getsu' },
-  { key: 'getMpHistoryPosts', label: '获取公众号历史发文列表', method: 'POST', defaultPath: '/weixin/getps' },
-  { key: 'getMpHistoryPostsByBiz', label: '获取公众号历史发文列表（biz兜底）', method: 'POST', defaultPath: '/weixin/getpc' },
-  { key: 'getMpSubjectInfo', label: '获取公众号主体信息', method: 'POST', defaultPath: '/weixin/getinfo' },
-  { key: 'getMpBaseInfo', label: '获取公众号基础信息', method: 'POST', defaultPath: '/weixin/getbiz' },
-  { key: 'getArticleDetailTextRich', label: '获取文章详情（正文）', method: 'POST', defaultPath: '/weixin/artinfo' },
-  { key: 'getArticleInfoBatch', label: '获取文章指标/信息', method: 'POST', defaultPath: '/weixin/getrk' },
-  { key: 'getArticleComments', label: '获取文章留言列表', method: 'POST', defaultPath: '/weixin/getcm' },
-  { key: 'searchWechatArticlesDatabase', label: '搜索微信文章（数据库）', method: 'POST', defaultPath: '/weixin/getso' },
-  { key: 'searchWechatRealtimeMode1', label: '微信搜一搜实时搜文章 mode1', method: 'POST', defaultPath: '/weixin/getso' },
-  { key: 'searchWechatRealtimeMode2', label: '微信搜一搜实时搜文章 mode2', method: 'POST', defaultPath: '/weixin/getso' },
-  { key: 'convertMpArticleUrl', label: '公众号文章链接转换', method: 'POST', defaultPath: '/weixin/artinfo' },
+  { key: 'searchMpByKeyword', label: 'Search official accounts by keyword', method: 'POST', defaultPath: '/weixin/getsu' },
+  { key: 'searchMpBySosuo', label: 'Search WeChat official accounts', method: 'POST', defaultPath: '/weixin/getsu' },
+  { key: 'getMpHistoryPosts', label: 'Get official account article history', method: 'POST', defaultPath: '/weixin/getps' },
+  { key: 'getMpHistoryPostsByBiz', label: 'Get official account article history (bizcontent)', method: 'POST', defaultPath: '/weixin/getpc' },
+  { key: 'getMpSubjectInfo', label: 'Get official account entity information', method: 'POST', defaultPath: '/weixin/getinfo' },
+  { key: 'getMpBaseInfo', label: 'Get official account profile', method: 'POST', defaultPath: '/weixin/getbiz' },
+  { key: 'getArticleDetailTextRich', label: 'Get article details (body)', method: 'POST', defaultPath: '/weixin/artinfo' },
+  { key: 'getArticleInfoBatch', label: 'Get article metrics/info', method: 'POST', defaultPath: '/weixin/getrk' },
+  { key: 'getArticleComments', label: 'Get article comments', method: 'POST', defaultPath: '/weixin/getcm' },
+  { key: 'searchWechatArticlesDatabase', label: 'Search WeChat articles (database)', method: 'POST', defaultPath: '/weixin/getso' },
+  { key: 'searchWechatRealtimeMode1', label: 'Realtime WeChat article search mode 1', method: 'POST', defaultPath: '/weixin/getso' },
+  { key: 'searchWechatRealtimeMode2', label: 'Realtime WeChat article search mode 2', method: 'POST', defaultPath: '/weixin/getso' },
+  { key: 'convertMpArticleUrl', label: 'Convert official account article URL', method: 'POST', defaultPath: '/weixin/artinfo' },
 ];
 
 function parseOverrides() {
@@ -182,18 +182,18 @@ export function listWxrankEndpointDefinitions() {
 
 export async function callWxrankEndpoint(key: WxrankEndpointKey, params: AnyRecord = {}) {
   if (!isWxrankReady()) {
-    throw new Error('WXRANK_API_KEY 未配置');
+    throw new Error('WXRANK_API_KEY is not configured');
   }
 
   const endpoint = DEFINITIONS.find((item) => item.key === key);
   if (!endpoint) {
-    throw new Error(`未知 wxrank 接口: ${key}`);
+    throw new Error(`Unknown wxrank endpoint: ${key}`);
   }
 
   const overrides = parseOverrides();
   const path = overrides[key] || endpoint.defaultPath;
   if (!path) {
-    throw new Error(`WXRANK_ENDPOINT_OVERRIDES 缺少接口路径: ${key}`);
+    throw new Error(`WXRANK_ENDPOINT_OVERRIDES is missing an endpoint path: ${key}`);
   }
 
   const authParams = appendAuthToParams(params);
@@ -313,7 +313,7 @@ export const WxrankRaw = {
 
     return {
       code: 1001,
-      msg: 'biz、wxid 或文章链接不能为空',
+      msg: 'biz, wxid, or article URL is required',
       data: { list: [] },
     };
   },

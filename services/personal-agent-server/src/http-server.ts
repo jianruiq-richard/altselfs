@@ -6,10 +6,10 @@ import type { MemoryReviewJobStore } from './memory-review-queue.js';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
 import type { PersonalMainAgent } from './main-agent.js';
-import { runWebSearchTool } from './tools/web-search.js';
-import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
-import { isPersonalDataTool, runPersonalDataTool } from './tools/personal-data.js';
-import { runSandboxExecTool, type SandboxExecContext } from './tools/sandbox-exec.js';
+import { runWebSearchtool } from './tools/web-search.js';
+import { getRapidApiQuotaSnapshots, isRapidApiCompetitortool, runRapidApiCompetitortool } from './tools/rapidapi-competitor.js';
+import { isPersonalDatatool, runPersonalDatatool } from './tools/personal-data.js';
+import { runSandboxExectool, type SandboxExecContext } from './tools/sandbox-exec.js';
 import {
   disablePersonalConnection,
   listPersonalConnections,
@@ -37,7 +37,7 @@ import {
   touchAgentRunHeartbeat,
   type PersistedAgentTurnInput,
 } from './agent-context-store.js';
-import { cancelActiveRun, getActiveRunToolScope, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
+import { cancelActiveRun, getActiveRuntoolScope, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
 import type { AgentEvent, TurnStartRequest } from './types.js';
 
@@ -303,7 +303,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         if (!isLoopbackRequest(req)) return json(res, 403, { error: 'Forbidden' });
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
-        const resultText = await runWebSearchTool(body, config);
+        const resultText = await runWebSearchtool(body, config);
         return json(res, 200, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: !resultText.includes('"error"'),
@@ -315,7 +315,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         if (!isLoopbackRequest(req)) return json(res, 403, { error: 'Forbidden' });
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
-        const resultText = await runReadArtifactTool(body, config);
+        const resultText = await runReadArtifacttool(body, config);
         return json(res, 200, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: !resultText.includes('"error"'),
@@ -328,8 +328,8 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
         const toolName = typeof body.toolName === 'string' ? body.toolName.trim() : '';
-        if (!isRapidApiCompetitorTool(toolName)) return json(res, 400, { error: `Unsupported competitor data tool: ${toolName}` });
-        const resultText = await runRapidApiCompetitorTool(toolName, body.arguments, config);
+        if (!isRapidApiCompetitortool(toolName)) return json(res, 400, { error: `Unsupported competitor data tool: ${toolName}` });
+        const resultText = await runRapidApiCompetitortool(toolName, body.arguments, config);
         return json(res, 200, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: !resultText.includes('"error"'),
@@ -342,12 +342,12 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
         const toolName = typeof body.toolName === 'string' ? body.toolName.trim() : '';
-        if (!isPersonalDataTool(toolName)) return json(res, 400, { error: `Unsupported personal data tool: ${toolName}` });
+        if (!isPersonalDatatool(toolName)) return json(res, 400, { error: `Unsupported personal data tool: ${toolName}` });
         const context = isRecord(body._context) ? body._context : {};
         const investorId = readRequiredBodyString(context, 'investorId');
         const runId = typeof context.runId === 'string' && context.runId.trim() ? context.runId.trim() : undefined;
-        const runToolScope = runId ? getActiveRunToolScope(runId) : null;
-        if (runToolScope?.personalDataToolNames && !runToolScope.personalDataToolNames.includes(toolName)) {
+        const runtoolScope = runId ? getActiveRuntoolScope(runId) : null;
+        if (runtoolScope?.personalDatatoolNames && !runtoolScope.personalDatatoolNames.includes(toolName)) {
           return json(res, 200, {
             contentItems: [
               {
@@ -356,14 +356,14 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
                   source: 'personal-data-tools',
                   error: `Personal data tool ${toolName} is not enabled for this turn by connector selection.`,
                   toolName,
-                  enabledTools: runToolScope.personalDataToolNames,
+                  enabledtools: runtoolScope.personalDatatoolNames,
                 }, null, 2),
               },
             ],
             success: false,
           });
         }
-        const resultText = await runPersonalDataTool(toolName, body.arguments, config, {
+        const resultText = await runPersonalDatatool(toolName, body.arguments, config, {
           investorId,
           userId: typeof context.userId === 'string' && context.userId.trim() ? context.userId.trim() : investorId,
           threadId: typeof context.threadId === 'string' && context.threadId.trim() ? context.threadId.trim() : undefined,
@@ -381,7 +381,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
         const { argumentsValue, context } = parseSandboxExecBridgeBody(body);
-        const resultText = await runSandboxExecTool(argumentsValue, config, context);
+        const resultText = await runSandboxExectool(argumentsValue, config, context);
         return json(res, 200, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: !resultText.includes('"error"'),
@@ -442,7 +442,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           }
           if (isAgentRunCancelledError(error)) {
             return json(res, 499, {
-              error: '已停止本次执行。',
+              error: 'instructionStopinstruction.',
               cancelled: true,
               runId: persisted?.runId,
             });
@@ -621,7 +621,7 @@ function streamTurnStart(
         result: {
           runId: persisted?.runId,
           cancelled: isAgentRunCancelledError(error),
-          error: isAgentRunCancelledError(error) ? '已停止本次执行。' : error instanceof Error ? error.message : String(error),
+          error: isAgentRunCancelledError(error) ? 'instructionStopinstruction.' : error instanceof Error ? error.message : String(error),
         },
       });
     } finally {
@@ -1310,7 +1310,7 @@ async function diskResource(pathname: string, label: string) {
   }
 }
 
-async function runReadArtifactTool(body: Record<string, unknown>, config: ServerConfig) {
+async function runReadArtifacttool(body: Record<string, unknown>, config: ServerConfig) {
   const requestedPath = typeof body.path === 'string' ? body.path.trim() : '';
   const maxChars = typeof body.maxChars === 'number' && Number.isFinite(body.maxChars)
     ? Math.max(1000, Math.min(Math.floor(body.maxChars), 60000))

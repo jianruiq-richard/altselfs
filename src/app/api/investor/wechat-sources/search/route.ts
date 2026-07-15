@@ -15,14 +15,14 @@ export async function GET(req: NextRequest) {
 
   const keyword = String(req.nextUrl.searchParams.get('keyword') || '').trim();
   if (!keyword) {
-    return NextResponse.json({ error: '请输入关键词' }, { status: 400 });
+    return NextResponse.json({ error: 'message' }, { status: 400 });
   }
 
   if (!isWechatProviderReady()) {
     const provider = getWechatDataProviderLabel();
     const requiredEnv = getWechatProviderRequiredEnv();
     return NextResponse.json(
-      { error: `第三方公众号搜索未配置（provider=${provider}，缺少 ${requiredEnv}）` },
+      { error: `message (provider=${provider}, message ${requiredEnv})` },
       { status: 400 }
     );
   }
@@ -32,6 +32,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, candidates });
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown';
-    return NextResponse.json({ error: `搜索失败：${detail}` }, { status: 500 });
+    return NextResponse.json({ error: `messagefailed: ${detail}` }, { status: 500 });
   }
 }

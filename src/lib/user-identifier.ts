@@ -12,7 +12,7 @@ export function isFallbackEmail(email: string | null | undefined): boolean {
 
 export function displayEmail(email: string | null | undefined): string {
   if (!email || isFallbackEmail(email)) {
-    return '未绑定邮箱';
+    return 'Not connectedEmail';
   }
   return email;
 }

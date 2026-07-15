@@ -3,7 +3,7 @@ import { isRecord } from '../util.js';
 export type ProjectedCodexEvent = {
   finalText?: string;
   assistantDelta?: string;
-  isToolIteration?: boolean;
+  istoolIteration?: boolean;
 };
 
 export function projectCodexNotification(message: Record<string, unknown>): ProjectedCodexEvent {
@@ -26,7 +26,7 @@ export function projectCodexNotification(message: Record<string, unknown>): Proj
       (itemType === 'message' && role === 'assistant');
     return {
       finalText: isAssistantMessage && text ? text : undefined,
-      isToolIteration:
+      istoolIteration:
         itemType.includes('command') ||
         itemType.includes('tool') ||
         itemType.includes('file') ||

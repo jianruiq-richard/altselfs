@@ -134,7 +134,7 @@ function normalizeRouterDecision(value, profiles) {
 }
 function fallbackRouterDecision(input, reason) {
     const message = input.message;
-    const engineering = /代码|修改|修复|部署|git|文件|脚本|终端|shell|build|lint|测试|canvas|API|数据库|Prisma|Next/i.test(message);
+    const engineering = /instruction|instruction|instruction|instruction|git|instruction|instruction|instruction|shell|build|lint|instruction|canvas|API|instruction|Prisma|Next/i.test(message);
     if (engineering && input.availableProfiles.some((profile) => profile.id === 'codex-engineering')) {
         return {
             route: 'agent',
@@ -144,7 +144,7 @@ function fallbackRouterDecision(input, reason) {
             confidence: 0.55,
         };
     }
-    const competitive = /竞品|竞争对手|竞争格局|增长|获客|用户量|访问量|营收|ARR|收入|增速|市场份额|SEO|PPC|关键词|外链|backlink|流量|渠道|投放|广告|semrush|similarweb|competitor|competitive|acquisition|growth|revenue|traffic/i.test(message);
+    const competitive = /instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|ARR|instruction|instruction|instruction|SEO|PPC|instruction|instruction|backlink|instruction|instruction|instruction|instruction|semrush|similarweb|competitor|competitive|acquisition|growth|revenue|traffic/i.test(message);
     if (competitive && input.availableProfiles.some((profile) => profile.id === 'codex-competitive-intelligence')) {
         return {
             route: 'agent',
@@ -154,7 +154,7 @@ function fallbackRouterDecision(input, reason) {
             confidence: 0.58,
         };
     }
-    const general = /搜索|联网|查一下|研究|分析|讨论|帮我想|总结|资料|外界|新闻|信息|趋势|计划|方案|建议|推荐|今天|今日|最新|为什么|怎么|如何/i.test(message);
+    const general = /instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|instruction|Today|instruction|instruction|instruction|instruction/i.test(message);
     if (general && input.availableProfiles.some((profile) => profile.id === 'codex-general')) {
         return {
             route: 'agent',

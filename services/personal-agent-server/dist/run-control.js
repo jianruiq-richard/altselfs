@@ -12,6 +12,7 @@ const cancelledRuns = new Map();
 export function registerActiveRun(input) {
     activeRuns.set(input.runId, {
         ...input,
+        personalDatatoolNames: input.personalDatatoolNames ? [...input.personalDatatoolNames] : undefined,
         startedAt: nowIso(),
     });
     if (cancelledRuns.has(input.runId)) {
@@ -22,6 +23,14 @@ export function registerActiveRun(input) {
             // The process may have already exited.
         }
     }
+}
+export function getActiveRuntoolScope(runId) {
+    const active = activeRuns.get(runId);
+    if (!active)
+        return null;
+    return {
+        personalDatatoolNames: active.personalDatatoolNames ? [...active.personalDatatoolNames] : undefined,
+    };
 }
 export function unregisterActiveRun(runId) {
     activeRuns.delete(runId);

@@ -47,7 +47,7 @@ Request:
 {
   "userId": "user_123",
   "threadId": "thread_abc",
-  "message": "帮我修改后台 trace canvas",
+  "message": "Localized documentation trace canvas",
   "allowedAgents": ["codex"]
 }
 ```
@@ -393,7 +393,7 @@ Main-agent memory path:
 ```bash
 curl --noproxy '*' -s http://127.0.0.1:8787/v1/turns/start \
   -H 'content-type: application/json' \
-  -d '{"userId":"local-test-user","threadId":"local-test-thread","message":"记住：我喜欢看每一步的原始输入输出。"}'
+  -d '{"userId":"local-test-user","threadId":"local-test-thread","message":"Localized documentation: Localized documentation."}'
 ```
 
 Codex child-agent path:
@@ -401,7 +401,7 @@ Codex child-agent path:
 ```bash
 curl --noproxy '*' -s http://127.0.0.1:8787/v1/turns/start \
   -H 'content-type: application/json' \
-  -d '{"userId":"local-test-user","threadId":"local-codex-thread","message":"请帮我搜集一下今日关于OPC相关的行业或者技术信息。"}'
+  -d '{"userId":"local-test-user","threadId":"local-codex-thread","message":"Localized documentationTodayLocalized documentationOPCLocalized documentationTechnicalLocalized documentation."}'
 ```
 
 Current MVP behavior:

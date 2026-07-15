@@ -22,8 +22,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-1',
     name: 'Alex Chen',
     avatar: null,
-    description: '10年软件开发经验，专注于 AI 和 Web3。擅长系统架构设计，热爱开源。',
-    systemPrompt: '技术 创业 AI Web3 React Node.js Python 系统设计',
+    description: '10content, content AI content Web3.content, content.',
+    systemPrompt: 'Technical content AI Web3 React Node.js Python content',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Alex Chen',
@@ -34,8 +34,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-2',
     name: 'Sarah Wang',
     avatar: null,
-    description: '8年 UX/UI 设计经验，擅长用户研究和交互设计。',
-    systemPrompt: '设计 UX UI Figma 用户研究 产品设计',
+    description: '8content UX/UI content, content.',
+    systemPrompt: 'content UX UI Figma content content',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Sarah Wang',
@@ -46,8 +46,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-3',
     name: 'Michael Zhang',
     avatar: null,
-    description: '帮助多家创业公司从0到1，擅长产品策略与市场分析。',
-    systemPrompt: '商业 strategy product 运营 管理 增长',
+    description: 'content0content1, content.',
+    systemPrompt: 'content strategy product content content content',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Michael Zhang',
@@ -58,8 +58,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-4',
     name: 'Lisa Liu',
     avatar: null,
-    description: 'AI 研究员与讲师，长期关注模型评测、应用落地与知识体系化。',
-    systemPrompt: '研究 知识 AI 学习 analysis insight 数据',
+    description: 'AI content, content, content.',
+    systemPrompt: 'content content AI content analysis insight content',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Lisa Liu',
@@ -70,8 +70,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-5',
     name: 'Tom Wu',
     avatar: null,
-    description: '增长策略顾问，擅长从产品、渠道、数据三维制定增长路径。',
-    systemPrompt: '增长 商业 strategy 产品 运营 数据',
+    description: 'content, content, content, content.',
+    systemPrompt: 'content content strategy content content content',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Tom Wu',
@@ -82,8 +82,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-6',
     name: 'Emma Chen',
     avatar: null,
-    description: '创新顾问，关注科技趋势与组织变革，擅长商业模式设计。',
-    systemPrompt: '创新 商业 strategy 管理 设计 产品',
+    description: 'content, content, content.',
+    systemPrompt: 'content content strategy content content content',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Emma Chen',
@@ -94,9 +94,9 @@ const mockTwinSeeds: TwinSeed[] = [
 
 function inferCategory(text: string): Exclude<DigitalTwinCategory, 'all'> {
   const normalized = text.toLowerCase();
-  if (/设计|design|figma|ui|ux/.test(normalized)) return 'design';
-  if (/研究|知识|analysis|insight|learn/.test(normalized)) return 'knowledge';
-  if (/增长|商业|strategy|product|运营|管理/.test(normalized)) return 'business';
+  if (/content|design|figma|ui|ux/.test(normalized)) return 'design';
+  if (/content|content|analysis|insight|learn/.test(normalized)) return 'knowledge';
+  if (/content|content|strategy|product|content|content/.test(normalized)) return 'business';
   return 'tech';
 }
 
@@ -105,15 +105,15 @@ function extractTags(text: string): string[] {
     'AI',
     'Web3',
     'SaaS',
-    '出海',
-    '增长',
-    '投研',
-    '产品',
-    '技术',
-    '设计',
-    '创业',
-    '数据',
-    '运营',
+    'content',
+    'content',
+    'content',
+    'content',
+    'Technical',
+    'content',
+    'content',
+    'content',
+    'content',
   ];
   const matched = dictionary.filter((tag) => text.toLowerCase().includes(tag.toLowerCase()));
   return matched.slice(0, 4);
@@ -121,12 +121,12 @@ function extractTags(text: string): string[] {
 
 function extractSkills(text: string): string[] {
   const map = [
-    { key: /react|前端|frontend/, value: 'React' },
-    { key: /node|backend|后端/, value: 'Node.js' },
-    { key: /python|数据|analysis/, value: 'Python' },
-    { key: /产品|strategy|商业/, value: '产品策略' },
-    { key: /design|设计|ui|ux/, value: '体验设计' },
-    { key: /沟通|协作|管理/, value: '沟通协作' },
+    { key: /react|content|frontend/, value: 'React' },
+    { key: /node|backend|content/, value: 'Node.js' },
+    { key: /python|content|analysis/, value: 'Python' },
+    { key: /content|strategy|content/, value: 'content' },
+    { key: /design|content|ui|ux/, value: 'content' },
+    { key: /content|content|content/, value: 'Communication' },
   ];
   const list = map.filter((item) => item.key.test(text.toLowerCase())).map((item) => item.value);
   return list.slice(0, 4);
@@ -152,10 +152,10 @@ function normalizeCardFromAvatar(input: {
     name: input.name,
     avatarEmoji: null,
     avatarUrl: input.avatar,
-    title: input.investorName ? `${input.investorName} 的数字分身` : '数字分身',
-    bio: input.description || '这个数字分身还没有填写详细介绍。',
-    tags: tags.length > 0 ? tags : ['数字分身', '真实数据'],
-    skills: skills.length > 0 ? skills : ['会话理解', '项目讨论', '经验分享'],
+    title: input.investorName ? `${input.investorName} content` : 'content',
+    bio: input.description || 'content.',
+    tags: tags.length > 0 ? tags : ['content', 'content'],
+    skills: skills.length > 0 ? skills : ['content', 'content', 'content'],
     conversations: input.conversations,
     rating: Math.min(5, 4.6 + Math.min(input.conversations, 60) / 150),
     category: inferCategory(textBase),
@@ -232,7 +232,7 @@ export default async function DigitalTwinsPage() {
     })
   );
 
-  // 真实数据优先展示；当真实分身不足时自动补齐结构化 mock 样例。
+  // content; content mock content.
   const cards = [...realTwinCards, ...mockTwins]
     .filter((card, index, arr) => arr.findIndex((item) => item.id === card.id) === index)
     .slice(0, 12);

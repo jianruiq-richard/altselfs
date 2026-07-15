@@ -28,7 +28,7 @@ export default async function Home() {
               href="/sign-in"
               className="rounded-full border border-[#f3d7aa]/35 px-4 py-2 text-sm font-medium text-[#fff8ee]/90 transition-colors hover:bg-[#fff3df]/10"
             >
-              登录
+              Sign in
             </Link>
           </nav>
 
@@ -37,10 +37,10 @@ export default async function Home() {
               Decision OS for high-agency minds
             </p>
             <h1 className="max-w-2xl text-4xl font-semibold leading-tight text-[#fff8ee] sm:text-6xl sm:leading-tight">
-              每个人的决策 OS
+              The Decision OS for every operator
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-[#fff0dc]/82 sm:text-xl sm:leading-9">
-              Altselfs 为你构建一个真正懂你的 AI 决策分身，连接飞书、Gmail、会议纪要、公众号和 ChatGPT 里的工作 context，帮你筛信号、排优先级、做判断。
+              Altselfs content AI content, content, Gmail, content, content ChatGPT contentWork context, content, content, contentDecide.
             </p>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -48,34 +48,34 @@ export default async function Home() {
                 href="/sign-up?method=phone"
                 className="inline-flex justify-center rounded-full bg-[#fff4df] px-7 py-3 text-sm font-semibold text-[#2b1a10] shadow-sm transition-colors hover:bg-white"
               >
-                创建我的 Altselfs
+                Create my Altselfs
               </Link>
               <Link
                 href="/sign-in"
                 className="inline-flex justify-center rounded-full border border-[#f3d7aa]/35 px-7 py-3 text-sm font-semibold text-[#fff8ee] transition-colors hover:bg-[#fff3df]/10"
               >
-                已有账号登录
+                contentaccountsSign in
               </Link>
             </div>
           </div>
 
           <div className="grid gap-4 rounded-2xl border border-[#f3d7aa]/20 bg-[#21150f]/58 p-4 text-[#fff8ee] shadow-2xl shadow-black/25 backdrop-blur-md sm:grid-cols-3 sm:p-5">
             <div className="border-t border-[#f3d7aa]/35 pt-4 sm:border-t-0 sm:pt-0">
-              <p className="text-sm font-semibold text-[#fffaf2]">跨平台 Context</p>
+              <p className="text-sm font-semibold text-[#fffaf2]">Cross-platform context</p>
               <p className="mt-2 text-sm leading-6 text-[#f8e7cc]/82">
-                聚合散落在十几个工具里的信息、讨论、待办和反馈。
+                Aggregatecontenttoolcontent, content, content.
               </p>
             </div>
             <div className="border-t border-[#f3d7aa]/35 pt-4 sm:border-t-0 sm:border-l sm:pl-5 sm:pt-0">
               <p className="text-sm font-semibold text-[#fffaf2]">Decision Copilot</p>
               <p className="mt-2 text-sm leading-6 text-[#f8e7cc]/82">
-                每天给出最重要的 3 件事，以及对应判断依据。
+                content 3 content, contentDecidecontent.
               </p>
             </div>
             <div className="border-t border-[#f3d7aa]/35 pt-4 sm:border-t-0 sm:border-l sm:pl-5 sm:pt-0">
-              <p className="text-sm font-semibold text-[#fffaf2]">个人决策偏好</p>
+              <p className="text-sm font-semibold text-[#fffaf2]">Personal decision preferences</p>
               <p className="mt-2 text-sm leading-6 text-[#f8e7cc]/82">
-                每次反馈都会沉淀为你的判断框架，越用越懂你。
+                contentLearncontentDecidecontent, content.
               </p>
             </div>
           </div>
@@ -89,30 +89,30 @@ export default async function Home() {
               Product System
             </p>
             <h2 className="mt-4 text-3xl font-semibold leading-tight text-stone-950 sm:text-4xl">
-              不是第二个聊天工具，而是你的工作决策层。
+              Not another chat tool. Your operating layer for work decisions.
             </h2>
             <p className="mt-5 text-base leading-8 text-stone-600">
-              Altselfs 不停留在“模仿你说话”。它围绕真实工作 context 建立判断闭环，让 AI 从信息处理走向决策辅助。
+              Altselfs goes beyond mimicking how you talk. It builds a feedback loop around real work context so AI can move from information processing to decision support.
             </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-[#ded2c2] bg-[#fffaf2] p-5 shadow-sm">
-              <p className="text-sm font-semibold text-stone-950">01 · 聚合</p>
+              <p className="text-sm font-semibold text-stone-950">01 · Aggregate</p>
               <p className="mt-3 text-sm leading-6 text-stone-600">
-                连接工作工具，把碎片信息整理成可追踪的决策 case。
+                contentWorktool, content case.
               </p>
             </div>
             <div className="rounded-lg border border-[#ded2c2] bg-[#fffaf2] p-5 shadow-sm">
-              <p className="text-sm font-semibold text-stone-950">02 · 判断</p>
+              <p className="text-sm font-semibold text-stone-950">02 · Decide</p>
               <p className="mt-3 text-sm leading-6 text-stone-600">
-                基于你的偏好和历史反馈，给出优先级、风险和行动建议。
+                content, content, content.
               </p>
             </div>
             <div className="rounded-lg border border-[#ded2c2] bg-[#fffaf2] p-5 shadow-sm">
-              <p className="text-sm font-semibold text-stone-950">03 · 沉淀</p>
+              <p className="text-sm font-semibold text-stone-950">03 · Learn</p>
               <p className="mt-3 text-sm leading-6 text-stone-600">
-                把批改、采纳和忽略沉淀成个人决策偏好网络。
+                content, contentLearncontentPersonal decision preferencescontent.
               </p>
             </div>
           </div>

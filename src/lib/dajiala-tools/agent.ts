@@ -50,7 +50,7 @@ export async function resolveWechatAccountsByKeyword(keyword: string) {
   const query = keyword.trim();
   if (!query) return [];
   if (!isDajialaReady()) {
-    throw new Error('DAJIALA_API_KEY 未配置');
+    throw new Error('DAJIALA_API_KEY is not configured');
   }
 
   const [primary, fallback] = await Promise.all([

@@ -1,47 +1,47 @@
 # AltSelfs XiaoHongShu Connector
 
-这个扩展只做一件事：帮助 `altselfs` 在用户明确点击授权后，读取当前浏览器里的小红书登录态，并交给站内的小红书助手使用。
+Localized documentation: Localized documentation `altselfs` Localized documentation, Localized documentationSign inLocalized documentation, Localized documentationXiaohongshu AssistantLocalized documentation.
 
-## 本地加载
+## Localized documentation
 
-1. 打开 Chrome 的 `chrome://extensions`
-2. 开启右上角“开发者模式”
-3. 点击“加载已解压的扩展程序”
-4. 选择当前目录 `extensions/xhs-connector`
+1. Localized documentation Chrome Localized documentation `chrome://extensions`
+2. Localized documentation"Localized documentation"
+3. Localized documentation"Localized documentation"
+4. Localized documentation `extensions/xhs-connector`
 
-## 本地调试
+## Localized documentation
 
-当前允许注入的站点：
+Localized documentation: 
 
 - `http://localhost:3000/*`
 - `https://*.vercel.app/*`
 
-如果你的正式域名不是 `vercel.app`，需要把域名加入 [manifest.json](/Users/richardjian/work/altselfs/extensions/xhs-connector/manifest.json:1) 的 `host_permissions` 和 `content_scripts.matches`。
+Localized documentation `vercel.app`, Localized documentation [manifest.json](/Users/richardjian/work/altselfs/extensions/xhs-connector/manifest.json:1) Localized documentation `host_permissions` Localized documentation `content_scripts.matches`.
 
-当前默认会尝试读取这些小红书域名下的 Cookie：
+Localized documentationdefaultLocalized documentation Cookie: 
 
 - `https://xiaohongshu.com/*`
 - `https://*.xiaohongshu.com/*`
 
-## 使用方式
+## Localized documentation
 
-1. 在同一个浏览器里登录小红书
-2. 登录 `altselfs`
-3. 打开工作台里的“小红书助手”卡片，或进入 `/investor/chat/xiaohongshu`
-4. 点击“连接浏览器扩展”
+1. Localized documentationSign inLocalized documentation
+2. Sign in `altselfs`
+3. Localized documentationWorkLocalized documentation"Xiaohongshu Assistant"Localized documentation, Localized documentation `/investor/chat/xiaohongshu`
+4. Localized documentation"Localized documentation"
 
-如果授权失败，可以点击页面里的“运行诊断”，查看扩展当前实际读到的 Cookie 名称和域名分布。
+Localized documentationfailed, Localized documentation"Localized documentation", Localized documentation Cookie Localized documentation.
 
-如果你刚修改或重新加载了扩展，记得在 `chrome://extensions` 里点一次刷新，然后把 `altselfs` 页面也刷新一次。
+Localized documentation, Localized documentation `chrome://extensions` Localized documentation, Localized documentation `altselfs` Localized documentation.
 
-## 当前能力
+## Localized documentation
 
-- 检测扩展是否安装
-- 读取当前浏览器的小红书 Cookie
-- 尝试读取当前账号昵称
+- Localized documentation
+- Localized documentation Cookie
+- Localized documentationaccountsDisplay name
 
-## 后续建议
+## Localized documentation
 
-- 增加“授权过期提醒”
-- 增加“自动刷新授权”
-- 增加“只同步必要 Cookie”的精细化策略
+- Localized documentation"Localized documentation"
+- Localized documentation"Localized documentation"
+- Localized documentation"Localized documentation Cookie"Localized documentation

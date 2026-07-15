@@ -58,16 +58,16 @@ export function XhsAssistantCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || '小红书授权失败');
+        throw new Error(data.error || 'contentfailed');
       }
 
       setConnected(true);
       setAccount(data.integration?.accountName || auth.accountName);
-      setSummary('浏览器扩展已授权，小红书助手现在可以在对话中自动触发搜索 skill。');
-      setMessage('授权成功，后续对话将使用你的浏览器登录态。');
+      setSummary('content, Xiaohongshu Assistantcontent skill.');
+      setMessage('content, sign in.');
       setDebugOutput('');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '授权失败，请稍后重试');
+      setMessage(error instanceof Error ? error.message : 'contentfailed, content');
       const debug = error instanceof Error && 'debug' in error ? (error as Error & { debug?: unknown }).debug : null;
       if (debug) {
         setDebugOutput(JSON.stringify(debug, null, 2));
@@ -84,9 +84,9 @@ export function XhsAssistantCard({
     try {
       const result = await debugXhsExtension();
       setDebugOutput(JSON.stringify(result, null, 2));
-      setMessage('已运行扩展诊断。');
+      setMessage('content.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '诊断失败');
+      setMessage(error instanceof Error ? error.message : 'contentfailed');
     } finally {
       setLoading(false);
     }
@@ -100,14 +100,14 @@ export function XhsAssistantCard({
       const res = await fetch('/api/investor/xiaohongshu/connector', { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error((data as { error?: string }).error || '断开失败');
+        throw new Error((data as { error?: string }).error || 'contentfailed');
       }
       setConnected(false);
-      setAccount('未配置 小红书能力');
-      setSummary('已断开浏览器授权。重新连接后，小红书助手才可继续调用搜索 skill。');
-      setMessage('已断开授权。');
+      setAccount('content content');
+      setSummary('content.content, Xiaohongshu Assistantcontent skill.');
+      setMessage('content.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '断开失败，请稍后重试');
+      setMessage(error instanceof Error ? error.message : 'contentfailed, content');
     } finally {
       setLoading(false);
     }
@@ -117,21 +117,21 @@ export function XhsAssistantCard({
     <div className="rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-gray-900">小红书 助手</h3>
+          <h3 className="font-semibold text-gray-900">content content</h3>
           <p className="mt-1 text-sm text-gray-500">{account}</p>
         </div>
-        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{unread} 未读</span>
+        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{unread} content</span>
       </div>
 
       <div className="mb-3 flex items-center gap-2 text-sm text-gray-600">
         <Bot className="h-4 w-4 text-orange-500" />
-        <span>小红书助手小橙</span>
+        <span>Xiaohongshu Assistantcontent</span>
         <span
           className={`rounded-full px-2 py-0.5 text-xs ${
             connected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
           }`}
         >
-          {connected ? '已授权' : '未授权'}
+          {connected ? 'content' : 'content'}
         </span>
       </div>
 
@@ -144,13 +144,13 @@ export function XhsAssistantCard({
           disabled={loading}
           className="rounded-lg bg-orange-600 px-3 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
         >
-          {loading ? '处理中...' : connected ? '刷新浏览器授权' : '连接浏览器扩展'}
+          {loading ? 'Processing...' : connected ? 'content' : 'content'}
         </button>
         <Link
           href="/investor/chat/xiaohongshu"
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
-          进入对话
+          content
         </Link>
         <button
           type="button"
@@ -158,7 +158,7 @@ export function XhsAssistantCard({
           disabled={loading}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
-          运行诊断
+          content
         </button>
         {connected ? (
           <button
@@ -167,15 +167,15 @@ export function XhsAssistantCard({
             disabled={loading}
             className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
           >
-            断开授权
+            content
           </button>
         ) : null}
       </div>
 
       <p className="mt-2 text-xs text-gray-500">
         {extensionInstalled
-          ? '已检测到浏览器扩展。点击连接后会读取你当前浏览器里的小红书登录态。'
-          : '未检测到浏览器扩展。安装后刷新当前页面，再点击“连接浏览器扩展”。'}
+          ? 'content.sign in.'
+          : 'content.content, content"content".'}
       </p>
       {message ? <p className="mt-2 text-xs text-slate-700">{message}</p> : null}
       {debugOutput ? (

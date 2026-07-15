@@ -162,7 +162,7 @@ export async function PUT(
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2022') {
       return NextResponse.json(
         {
-          error: '数据库字段缺失，请先执行最新迁移后再重试',
+          error: 'message, message',
           code: 'DB_MIGRATION_REQUIRED',
         },
         { status: 409 }

@@ -17,7 +17,7 @@ export function projectCodexNotification(message) {
             (itemType === 'message' && role === 'assistant');
         return {
             finalText: isAssistantMessage && text ? text : undefined,
-            isToolIteration: itemType.includes('command') ||
+            istoolIteration: itemType.includes('command') ||
                 itemType.includes('tool') ||
                 itemType.includes('file') ||
                 itemType.includes('mcp'),

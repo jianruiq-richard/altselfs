@@ -8,122 +8,122 @@ import { resolveHiredTeamKeys, TEAM_KEYS } from '@/lib/team-library';
 const mockTalents = [
   {
     id: 'gmail-assistant',
-    name: 'Gmail助手',
-    description: '自动整理收件箱，识别高优先级邮件并生成回复建议。',
-    tags: ['邮件分类', '优先级判断', '摘要生成'],
+    name: 'Gmail Assistant',
+    description: 'Automatically organize your inbox, identify high-priority emails, and draft reply suggestions.',
+    tags: ['Email triage', 'Priority decisions', 'Summary generation'],
     type: 'real',
-    category: '信息处理运营',
-    price: '免费',
+    category: 'Information Operations',
+    price: 'Free',
     rating: 4.8,
     hires: 12453,
   },
   {
     id: 'feishu-assistant',
-    name: '飞书助手',
-    description: '聚合团队消息、会议纪要与待办事项。',
-    tags: ['消息归纳', '会议提要', '待办提取'],
+    name: 'Lark Assistant',
+    description: 'Aggregate team messages, meeting notes, and action items.',
+    tags: ['Message synthesis', 'Meeting brief', 'Action-item extraction'],
     type: 'real',
-    category: '信息处理运营',
-    price: '免费',
+    category: 'Information Operations',
+    price: 'Free',
     rating: 4.9,
     hires: 8932,
   },
   {
     id: 'wechat-assistant',
-    name: '公众号助手',
-    description: '跟踪公众号更新，提炼关键信息并沉淀知识点。',
-    tags: ['内容摘要', '趋势跟踪', '知识沉淀'],
+    name: 'WeChat Assistant',
+    description: 'Track WeChat Official Account updates, extract key information, and retain useful knowledge.',
+    tags: ['Content summaries', 'Trend tracking', 'Knowledge capture'],
     type: 'real',
-    category: '信息处理运营',
-    price: '免费',
+    category: 'Information Operations',
+    price: 'Free',
     rating: 4.7,
     hires: 15678,
   },
   {
     id: 'xiaohongshu-assistant',
-    name: '小红书助手',
-    description: '跟踪小红书内容热点，提炼趋势变化并沉淀选题方向。',
-    tags: ['热点追踪', '笔记分析', '趋势洞察'],
+    name: 'Xiaohongshu Assistant',
+    description: 'Track Xiaohongshu content trends, identify shifts, and surface content opportunities.',
+    tags: ['Trend tracking', 'Note analysis', 'Trend insights'],
     type: 'real',
-    category: '信息处理运营',
-    price: '免费',
+    category: 'Information Operations',
+    price: 'Free',
     rating: 4.7,
     hires: 9642,
   },
   {
     id: 'pm-agent',
-    name: '产品策略顾问',
-    description: '演示态：用于概念展示，后续可接入实际推理流程。',
-    tags: ['路线图规划', '需求拆解', '优先级评估'],
+    name: 'Product Strategy Advisor',
+    description: 'Demo: content, content.',
+    tags: ['Roadmap planning', 'Requirement breakdown', 'Priority assessment'],
     type: 'demo',
-    category: '工程开发',
-    price: '¥399/月（演示）',
+    category: 'Engineering',
+    price: '¥399/content (Demo)',
     rating: 4.7,
     hires: 412,
   },
   {
     id: 'discord-assistant',
-    name: 'Discord助手',
-    description: '演示态：整理 Discord 社区讨论与关键事件。',
-    tags: ['社区管理', '讨论总结', '关键事件'],
+    name: 'Discord Assistant',
+    description: 'Demo: content Discord contentKey events.',
+    tags: ['Community management', 'Discussion summaries', 'Key events'],
     type: 'demo',
-    category: '营销运营',
-    price: '¥199/月（演示）',
+    category: 'Marketing Operations',
+    price: '¥199/content (Demo)',
     rating: 4.5,
     hires: 321,
   },
   {
     id: 'facebook-assistant',
-    name: 'Facebook助手',
-    description: '演示态：监控 Facebook 动态并识别互动信号。',
-    tags: ['动态追踪', '互动分析', '内容整理'],
+    name: 'Facebook Assistant',
+    description: 'Demo: content Facebook content.',
+    tags: ['Activity tracking', 'Engagement analysis', 'Content organization'],
     type: 'demo',
-    category: '营销运营',
-    price: '¥199/月（演示）',
+    category: 'Marketing Operations',
+    price: '¥199/content (Demo)',
     rating: 4.4,
     hires: 255,
   },
   {
     id: 'instagram-assistant',
-    name: 'Instagram助手',
-    description: '演示态：管理 Instagram 内容与粉丝互动。',
-    tags: ['内容分析', '粉丝互动', '趋势发现'],
+    name: 'Instagram Assistant',
+    description: 'Demo: content Instagram contentAudience engagement.',
+    tags: ['Content analysis', 'Audience engagement', 'Trend discovery'],
     type: 'demo',
-    category: '营销运营',
-    price: '¥199/月（演示）',
+    category: 'Marketing Operations',
+    price: '¥199/content (Demo)',
     rating: 4.6,
     hires: 367,
   },
   {
     id: 'tiktok-assistant',
-    name: 'TikTok助手',
-    description: '演示态：跟踪短视频热点并输出创意方向。',
-    tags: ['视频分析', '热点追踪', '创意灵感'],
+    name: 'TikTok Assistant',
+    description: 'Demo: content.',
+    tags: ['Video analysis', 'Trend tracking', 'Creative ideas'],
     type: 'demo',
-    category: '营销运营',
-    price: '¥199/月（演示）',
+    category: 'Marketing Operations',
+    price: '¥199/content (Demo)',
     rating: 4.5,
     hires: 402,
   },
   {
     id: 'growth-agent',
-    name: '增长运营专家',
-    description: '演示态：用于概念展示，后续接入增长分析数据。',
-    tags: ['漏斗分析', '转化优化', '活动策划'],
+    name: 'Growth Operations Specialist',
+    description: 'Demo: content, content.',
+    tags: ['Funnel analysis', 'Conversion optimization', 'Campaign planning'],
     type: 'demo',
-    category: '营销运营',
-    price: '¥399/月（演示）',
+    category: 'Marketing Operations',
+    price: '¥399/content (Demo)',
     rating: 4.8,
     hires: 287,
   },
   {
     id: 'qa-agent',
-    name: '对话质检员',
-    description: '演示态：用于概念展示，后续接入会话质量评分。',
-    tags: ['对话评分', '风险提示', '改进建议'],
+    name: 'Conversation QA Analyst',
+    description: 'Demo: content, content.',
+    tags: ['Conversation scoring', 'Risk alerts', 'Improvement suggestions'],
     type: 'demo',
-    category: '工程开发',
-    price: '¥199/月（演示）',
+    category: 'Engineering',
+    price: '¥199/content (Demo)',
     rating: 4.6,
     hires: 198,
   },
@@ -190,53 +190,53 @@ export default async function AITalentPage() {
   const departmentPackages = [
     {
       id: TEAM_KEYS.EXECUTIVE_OFFICE,
-      name: '总裁办',
-      description: '负责晨报、跨部门节奏和重点事项调度。',
+      name: 'Executive Office',
+      description: 'Owns briefings, cross-team cadence, and priority coordination.',
       gradient: 'from-purple-500 to-pink-600',
       icon: Code2,
-      price: '免费',
-      originalPrice: '免费',
+      price: 'Free',
+      originalPrice: 'Free',
       discount: null as string | null,
-      members: ['总裁秘书Momo（默认）'],
+      members: ['Executive Assistant Momo (default)'],
       popular: false,
       hired: hiredTeamKeys.has(TEAM_KEYS.EXECUTIVE_OFFICE),
     },
     {
       id: TEAM_KEYS.INFO_OPS,
-      name: '信息处理运营部门',
-      description: '负责外部消息接入、摘要、竞品监控与信息分发。',
+      name: 'Information Operations',
+      description: 'Owns external message intake, summaries, competitive monitoring, and information distribution.',
       gradient: 'from-blue-500 to-purple-600',
       icon: Mail,
-      price: '免费',
-      originalPrice: '免费',
+      price: 'Free',
+      originalPrice: 'Free',
       discount: null as string | null,
-      members: ['信息助手小明（默认）'],
+      members: ['Information Operations Assistant (default)'],
       popular: true,
       hired: hiredTeamKeys.has(TEAM_KEYS.INFO_OPS),
     },
     {
       id: TEAM_KEYS.ENGINEERING,
-      name: '研发团队',
-      description: '负责数字分身、策略迭代与会话质量优化。',
+      name: 'Engineering',
+      description: 'Owns digital twins, strategy iteration, and conversation quality optimization.',
       gradient: 'from-green-500 to-teal-600',
       icon: Code2,
-      price: '免费',
-      originalPrice: '免费',
+      price: 'Free',
+      originalPrice: 'Free',
       discount: null as string | null,
-      members: ['研发助手Alpha（默认）'],
+      members: ['Engineering AssistantAlpha (default)'],
       popular: false,
       hired: hiredTeamKeys.has(TEAM_KEYS.ENGINEERING),
     },
     {
       id: TEAM_KEYS.MARKETING_OPS,
-      name: '营销运营部门',
-      description: '负责投放监控、声量追踪与渠道推广执行。',
+      name: 'Marketing Operations',
+      description: 'Owns campaign monitoring, share-of-voice tracking, and channel execution.',
       gradient: 'from-orange-500 to-red-600',
       icon: Megaphone,
-      price: '免费',
-      originalPrice: '免费',
+      price: 'Free',
+      originalPrice: 'Free',
       discount: null as string | null,
-      members: ['营销助手Beta（默认）'],
+      members: ['Marketing AssistantBeta (default)'],
       popular: false,
       hired: hiredTeamKeys.has(TEAM_KEYS.MARKETING_OPS),
     },
@@ -260,8 +260,8 @@ export default async function AITalentPage() {
   return (
     <FigmaShell
       homeHref="/dashboard"
-      title="AI人才大厅"
-      subtitle="雇佣AI员工，组建你的专属团队"
+      title="AI Talent Hub"
+      subtitle="Hire AI teammates and build your dedicated team"
     >
       <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6">
         <div className="mb-5 flex flex-col gap-4 md:flex-row">
@@ -271,23 +271,23 @@ export default async function AITalentPage() {
               <input
                 readOnly
                 value=""
-                placeholder="搜索AI员工或部门..."
+                placeholder="Search AI teammates or departments..."
                 className="w-full rounded-xl border border-gray-300 px-9 py-2.5 text-sm text-gray-700 placeholder:text-gray-400"
               />
             </div>
           </div>
           <div className="flex gap-2">
             <button type="button" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white">
-              部门团队
+              Department Teams
             </button>
             <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700">
-              单个雇佣
+              Individual Hiring
             </button>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {['全部', '信息处理运营', '工程开发', '营销运营'].map((tab, index) => (
+          {['All', 'Information Operations', 'Engineering', 'Marketing Operations'].map((tab, index) => (
             <button
               key={tab}
               type="button"
@@ -303,8 +303,8 @@ export default async function AITalentPage() {
 
       <div className="mb-8">
         <div className="mb-4">
-          <h2 className="text-xl font-bold text-gray-900">部门团队套餐</h2>
-          <p className="text-sm text-gray-600">一键雇佣整个部门，更高效更优惠</p>
+          <h2 className="text-xl font-bold text-gray-900">Department Packages</h2>
+          <p className="text-sm text-gray-600">Hire an entire department at once for better efficiency and value</p>
         </div>
 
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -314,7 +314,7 @@ export default async function AITalentPage() {
                 className={`relative rounded-2xl border bg-white p-6 ${pkg.popular ? 'border-blue-500' : 'border-gray-200'}`}
               >
                 {pkg.popular ? (
-                  <span className="absolute -top-3 left-5 rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">最热门</span>
+                  <span className="absolute -top-3 left-5 rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">Most popular</span>
                 ) : null}
                 <div className="mb-3 flex items-center gap-3">
                   <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${pkg.gradient}`}>
@@ -326,7 +326,7 @@ export default async function AITalentPage() {
                 <p className="mt-1 text-sm text-gray-600">{pkg.description}</p>
 
                 <div className="mt-4">
-                  <p className="mb-2 text-sm font-medium text-gray-700">包含 {pkg.members.length} 名员工：</p>
+                  <p className="mb-2 text-sm font-medium text-gray-700">Includes {pkg.members.length} team members: </p>
                   <div className="space-y-1">
                     {pkg.members.map((name) => (
                       <div key={name} className="flex items-center gap-2 text-sm text-gray-700">
@@ -358,7 +358,7 @@ export default async function AITalentPage() {
                         : 'bg-blue-600 text-white hover:bg-blue-700'
                     }`}
                   >
-                    {pkg.hired ? '已雇佣（点击取消）' : '雇佣整个部门'}
+                    {pkg.hired ? 'Hired (click to cancel)' : 'Hire entire department'}
                   </button>
                 </form>
               </div>
@@ -368,21 +368,21 @@ export default async function AITalentPage() {
 
         <div>
           <div className="mb-4">
-            <h2 className="text-xl font-bold text-gray-900">单个雇佣</h2>
-            <p className="text-sm text-gray-600">根据需求选择特定的AI员工</p>
+            <h2 className="text-xl font-bold text-gray-900">Individual Hiring</h2>
+            <p className="text-sm text-gray-600">Choose specific AI teammates for your needs</p>
           </div>
 
           <div className="mb-6 grid gap-4 md:grid-cols-3">
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
-              <p className="text-sm text-gray-500">已启用AI员工</p>
+              <p className="text-sm text-gray-500">Enabled AI teammates</p>
               <p className="mt-2 text-3xl font-bold text-gray-900">{enabled.size}</p>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
-              <p className="text-sm text-gray-500">数字分身数量</p>
+              <p className="text-sm text-gray-500">Digital twin count</p>
               <p className="mt-2 text-3xl font-bold text-gray-900">{dbUser.avatars.length}</p>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
-              <p className="text-sm text-gray-500">演示态岗位</p>
+              <p className="text-sm text-gray-500">Demo roles</p>
               <p className="mt-2 text-3xl font-bold text-gray-900">{mockTalents.filter((t) => t.type === 'demo').length}</p>
             </div>
           </div>
@@ -407,7 +407,7 @@ export default async function AITalentPage() {
                           : 'bg-slate-100 text-slate-700'
                     }`}
                   >
-                    {isEnabled ? '已启用' : talent.type === 'demo' ? '演示态' : '可启用'}
+                    {isEnabled ? 'Enabled' : talent.type === 'demo' ? 'Demo' : 'Available'}
                   </span>
                 </div>
                 <div className="mb-2 flex items-center justify-between">
@@ -417,7 +417,7 @@ export default async function AITalentPage() {
                     <span>{talent.rating}</span>
                   </div>
                 </div>
-                <p className="mb-2 text-xs text-gray-500">{talent.hires.toLocaleString()} 次雇佣 · {talent.category}</p>
+                <p className="mb-2 text-xs text-gray-500">{talent.hires.toLocaleString()} hires · {talent.category}</p>
                 <p className="mt-2 text-sm text-gray-600">{talent.description}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {talent.tags.map((tag) => (
@@ -434,7 +434,7 @@ export default async function AITalentPage() {
                       isEnabled ? 'border border-gray-300 text-gray-700 hover:bg-gray-50' : 'bg-blue-600 text-white hover:bg-blue-700'
                     }`}
                   >
-                    {isEnabled ? '已启用' : '雇佣'}
+                    {isEnabled ? 'Enabled' : 'Hire'}
                   </button>
                 </div>
               </div>

@@ -80,14 +80,14 @@ type ExecutiveRunPollResult = {
   pollIntervalMs?: number;
 };
 
-const defaultBriefingTitles = ['信息汇总', '今日to do', '分身推荐'];
+const defaultBriefingTitles = ['Information Digest', 'Today To-Dos', 'Twin Recommendations'];
 
 const plannerStatusLabel: Record<PlannerStepStatus, string> = {
-  PENDING: '待执行',
-  RUNNING: '执行中',
-  SUCCESS: '完成',
-  ERROR: '错误',
-  SKIPPED: '跳过',
+  PENDING: 'Pending',
+  RUNNING: 'Running',
+  SUCCESS: 'Complete',
+  ERROR: 'Error',
+  SKIPPED: 'Skipped',
 };
 
 const plannerStatusClass: Record<PlannerStepStatus, string> = {
@@ -99,9 +99,9 @@ const plannerStatusClass: Record<PlannerStepStatus, string> = {
 };
 
 export const EXECUTIVE_UPDATE_BRIEFING_PROMPT =
-  '更新今天的晨报，请调用可用子agent，尤其是微信公众号助手、邮件助手、飞书助手和小红书助手，并重新汇总当天信息。请按照“信息汇总、今日to do、分身推荐”三个模块整理：信息汇总覆盖所有消息渠道的重要信号；今日to do要从所有渠道里提取可执行事项并按红色P0、黄色P1、绿色P2排序；分身推荐给出值得我用个人决策分身进一步讨论或匹配的人/事。';
+  'content, contentagent, contentWeChat Official Accountscontent, content, Lark AssistantcontentXiaohongshu Assistant, content.content"Information Digest, Today To-Dos, Twin Recommendations"content: Information Digestcontent; Today To-DoscontentRed P0, Yellow P1, Green P2content; Twin Recommendationscontent/content.';
 
-const dayTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+const dayTimeFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'numeric',
   day: 'numeric',
   hour: '2-digit',
@@ -119,25 +119,25 @@ function moduleKey(title: string, index: number) {
 }
 
 function defaultPriorityLabel(priority: 'high' | 'medium' | 'low') {
-  if (priority === 'high') return '红色P0';
-  if (priority === 'medium') return '黄色P1';
-  return '绿色P2';
+  if (priority === 'high') return 'Red P0';
+  if (priority === 'medium') return 'Yellow P1';
+  return 'Green P2';
 }
 
 function defaultBriefingModules(briefing?: ExecutiveDailyBriefingView): BriefingModule[] {
   const taskItems = (briefing?.priorityTasks || []).map((task) => ({
     title: `${defaultPriorityLabel(task.priority)} ${task.task}`,
-    summary: `截止：${task.deadline}。来源：${task.assignedBy}`,
+    summary: `Due: ${task.deadline}.Source: ${task.assignedBy}`,
     source: task.assignedBy,
     publishedAt: briefing?.generatedTime,
   }));
 
   return defaultBriefingTitles.map((title, index) => {
-    if (title === '今日to do') {
+    if (title === 'Today To-Dos') {
       return {
         key: moduleKey(title, index),
         title,
-        content: taskItems.length > 0 ? '基于当前已接入渠道和账户状态整理的今日待办。' : '更新晨报后，总裁秘书会从所有消息渠道里提取今日待办。',
+        content: taskItems.length > 0 ? 'contentTodaycontent.' : 'content, Executive AssistantcontentTodaycontent.',
         items: taskItems.length > 0 ? taskItems : undefined,
       };
     }
@@ -146,9 +146,9 @@ function defaultBriefingModules(briefing?: ExecutiveDailyBriefingView): Briefing
       key: moduleKey(title, index),
       title,
       content:
-        title === '信息汇总'
-          ? '点击“更新信息”后，总裁秘书会重新汇总公众号、Gmail、飞书、小红书等渠道的重要信息。'
-          : '更新晨报后，这里会展示适合用个人决策分身继续讨论、跟进或匹配的人/事。',
+        title === 'Information Digest'
+          ? 'content"Update briefing"content, Executive Assistantcontent, Gmail, content, content.'
+          : 'content, content, content/content.',
     };
   });
 }
@@ -162,13 +162,13 @@ function normalizeBriefingModules(sections: unknown, briefing?: ExecutiveDailyBr
     .map((section, index) => {
       if (!isRecord(section) || typeof section.title !== 'string') return null;
       const title = section.title.trim();
-      if (!title || title === '总览') return null;
+      if (!title || title === 'content') return null;
 
       const rawItems = Array.isArray(section.items) ? section.items : [];
       return {
         key: moduleKey(title, index),
         title,
-        content: typeof section.content === 'string' && section.content.trim() ? section.content : '暂无明确内容。',
+        content: typeof section.content === 'string' && section.content.trim() ? section.content : 'content.',
         items: rawItems
           .map((item) => {
             if (!isRecord(item)) return null;
@@ -197,7 +197,7 @@ function clampText(value: string, maxLength: number) {
 }
 
 function formatDateTime(value?: string) {
-  if (!value) return '今日';
+  if (!value) return 'Today';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return dayTimeFormatter.format(date);
@@ -240,7 +240,7 @@ function getCurrentProgress(trace: PlannerTraceItem[]) {
 }
 
 function getProgressText(progress: PlannerTraceItem | null) {
-  if (!progress) return '已提交任务，正在等待后台开始处理';
+  if (!progress) return 'Task submitted. Waiting for background processing to start.';
   return progress.detail || progress.error || progress.title;
 }
 
@@ -249,8 +249,8 @@ function sleep(ms: number) {
 }
 
 function getRunPollErrorMessage(data: ExecutiveRunPollResult, status: number) {
-  const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : '查询任务状态失败';
-  return `查询任务状态失败（HTTP ${status}）：${detail}`;
+  const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : 'Failed to check task status';
+  return `Failed to check task status (HTTP ${status}): ${detail}`;
 }
 
 async function waitForExecutiveRun(runId: string, onUpdate?: (run: ExecutiveRunPollResult) => void) {
@@ -274,7 +274,7 @@ async function waitForExecutiveRun(runId: string, onUpdate?: (run: ExecutiveRunP
     if (data.status === 'SUCCESS' || data.status === 'ERROR') return data;
     await sleep(typeof data.pollIntervalMs === 'number' ? data.pollIntervalMs : 3000);
   }
-  throw new Error('晨报执行仍未完成，请稍后刷新查看结果');
+  throw new Error('contentComplete, content');
 }
 
 function normalizeImageUrls(item: BriefingItem | undefined) {
@@ -300,10 +300,10 @@ function normalizeBriefingEntries(
 ): BriefingFeedEntry[] {
   return modules.flatMap((module, index) => {
     const categoryKey = module.key;
-    const compact = module.title === '信息汇总' || module.title === '今日to do' || module.title === '分身推荐';
+    const compact = module.title === 'Information Digest' || module.title === 'Today To-Dos' || module.title === 'Twin Recommendations';
     const insight = briefing.externalInsights?.find((item) => item.category.includes(module.title));
     const fallbackTitle = module.title;
-    const fallbackSummary = insight?.content || module.content || '今日暂无新的资讯更新。';
+    const fallbackSummary = insight?.content || module.content || 'Todaycontent.';
     const rawItems =
       module.items && module.items.length > 0
         ? module.items
@@ -311,7 +311,7 @@ function normalizeBriefingEntries(
             {
               title: fallbackTitle,
               summary: fallbackSummary,
-              source: insight?.source || '总裁秘书Momo',
+              source: insight?.source || 'Executive Assistant Momo',
               publishedAt: persistedBriefing?.updatedAt || briefing.generatedTime,
               imageUrls: [],
             },
@@ -322,7 +322,7 @@ function normalizeBriefingEntries(
       categoryKey,
       title: compact ? item.title || fallbackTitle : clampText(item.title || fallbackTitle, 60),
       summary: compact ? item.summary || fallbackSummary : clampText(item.summary || fallbackSummary, 140),
-      source: item.source || insight?.source || '总裁秘书Momo',
+      source: item.source || insight?.source || 'Executive Assistant Momo',
       url: item.url,
       publishedAt: item.publishedAt || persistedBriefing?.updatedAt || briefing.generatedTime,
       imageUrls: normalizeImageUrls(item),
@@ -336,10 +336,10 @@ function initialBriefingTab(persistedBriefing: PersistedExecutiveBriefingView | 
 }
 
 function getTodoPriorityDisplay(title: string) {
-  const matched = /^(红色P0|黄色P1|绿色P2)\s+(.+)$/.exec(title);
+  const matched = /^(Red P0|Yellow P1|Green P2)\s+(.+)$/.exec(title);
   if (!matched) return { title };
   const [, level, restTitle] = matched;
-  const tone = level === '红色P0' ? 'bg-red-500' : level === '黄色P1' ? 'bg-amber-400' : 'bg-emerald-500';
+  const tone = level === 'Red P0' ? 'bg-red-500' : level === 'Yellow P1' ? 'bg-amber-400' : 'bg-emerald-500';
 
   return {
     title: restTitle,
@@ -377,7 +377,7 @@ function PreviewCarousel({
           <img
             key={`${title}-${index}`}
             src={image}
-            alt={`${title} 预览图 ${index + 1}`}
+            alt={`${title} preview image ${index + 1}`}
             className="h-full w-full shrink-0 object-cover"
           />
         ))}
@@ -463,7 +463,7 @@ export function ExecutiveDailyBriefingBrowser({
   const hasMore = visibleCount < visibleEntries.length;
   const compactEntries = renderedEntries.length > 0 && renderedEntries.every((entry) => entry.compact);
   const activeTab = briefingTabs.find((tab) => tab.key === activeBriefingTab);
-  const hideHeaderSummary = compactEntries || activeTab?.label === '今日to do' || activeTab?.label === '分身推荐';
+  const hideHeaderSummary = compactEntries || activeTab?.label === 'Today To-Dos' || activeTab?.label === 'Twin Recommendations';
 
   useEffect(() => {
     setVisibleCount(20);
@@ -508,7 +508,7 @@ export function ExecutiveDailyBriefingBrowser({
   const applyRunResult = useCallback((run: ExecutiveRunPollResult) => {
     const data = isRecord(run.result) ? run.result : {};
     if (run.status === 'ERROR') {
-      setError(run.error || (typeof data.error === 'string' ? data.error : '更新信息失败'));
+      setError(run.error || (typeof data.error === 'string' ? data.error : 'Update failed'));
       return;
     }
 
@@ -531,7 +531,7 @@ export function ExecutiveDailyBriefingBrowser({
         });
         applyRunResult(run);
       } catch (err) {
-        setError(err instanceof Error ? `更新信息失败：${err.message}` : '更新信息失败，请稍后重试');
+        setError(err instanceof Error ? `Update failed: ${err.message}` : 'Update failed, content');
       } finally {
         activeRunIdRef.current = null;
         setActiveRunId(null);
@@ -557,16 +557,16 @@ export function ExecutiveDailyBriefingBrowser({
       });
       const data = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
       if (!res.ok) {
-        setError(typeof data.error === 'string' ? data.error : '停止任务失败');
+        setError(typeof data.error === 'string' ? data.error : 'Failed to stop task');
         return;
       }
       activeRunIdRef.current = null;
       setActiveRunId(null);
       setInternalUpdating(false);
       setCurrentProgress(null);
-      setError('已停止本次更新。');
+      setError('This update has been stopped.');
     } catch (err) {
-      setError(err instanceof Error ? `停止任务失败：${err.message}` : '停止任务失败，请稍后重试');
+      setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task, content');
     } finally {
       setStoppingRun(false);
     }
@@ -630,7 +630,7 @@ export function ExecutiveDailyBriefingBrowser({
 
       const startData = (await res.json().catch(() => ({}))) as ExecutiveRunPollResult;
       if (!res.ok || typeof startData.runId !== 'string') {
-        setError(typeof startData.error === 'string' ? startData.error : '更新信息失败');
+        setError(typeof startData.error === 'string' ? startData.error : 'Update failed');
         return;
       }
 
@@ -642,7 +642,7 @@ export function ExecutiveDailyBriefingBrowser({
       });
       applyRunResult(run);
     } catch (err) {
-      setError(err instanceof Error ? `更新信息失败：${err.message}` : '更新信息失败，请稍后重试');
+      setError(err instanceof Error ? `Update failed: ${err.message}` : 'Update failed, content');
     } finally {
       activeRunIdRef.current = null;
       setActiveRunId(null);
@@ -658,7 +658,7 @@ export function ExecutiveDailyBriefingBrowser({
   const progressKey = currentProgress
     ? `${currentProgress.id}-${currentProgress.status}-${currentProgress.timestamp || currentProgress.detail || currentProgress.error || ''}`
     : 'waiting-for-background-run';
-  const headerButtonLabel = headerActionLabel || (updateDisabled ? '演示数据' : isUpdating ? '更新中...' : '更新信息');
+  const headerButtonLabel = headerActionLabel || (updateDisabled ? 'Demo data' : isUpdating ? 'Updating...' : 'Update briefing');
 
   return (
     <div className={`${className} relative overflow-visible rounded-[1.75rem] border border-[#e1d2bf] bg-[#f9f4ec] text-stone-950 shadow-[0_28px_70px_rgba(73,48,31,0.10)]`}>
@@ -685,7 +685,7 @@ export function ExecutiveDailyBriefingBrowser({
                 disabled={stoppingRun}
                 className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-white/80 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {stoppingRun ? '停止中...' : '停止'}
+                {stoppingRun ? 'Stopping...' : 'Stop'}
               </button>
             ) : null}
             <button
@@ -699,11 +699,11 @@ export function ExecutiveDailyBriefingBrowser({
             <button
               type="button"
               onClick={() =>
-                requestPrompt('请基于今天的 Decision Briefing，和我的个人决策分身一起讨论：哪些信息最重要、今天应该先做什么、哪些判断需要进一步验证。')
+                requestPrompt('content Decision Briefing, content: content, content, contentDecidecontent.')
               }
               className="inline-flex items-center justify-center rounded-xl border border-[#d9c5af] bg-white/70 px-4 py-2.5 text-sm font-semibold text-[#6b3d1d] transition hover:bg-white hover:text-[#4f2b15]"
             >
-              与分身进行讨论
+              Discuss with my twin
             </button>
           </div>
         </div>
@@ -755,7 +755,7 @@ export function ExecutiveDailyBriefingBrowser({
           {renderedEntries.map((entry) => {
             const hasImages = Boolean(entry.imageUrls?.length);
             const isCompact = Boolean(entry.compact);
-            const isTodoTab = activeTab?.label === '今日to do';
+            const isTodoTab = activeTab?.label === 'Today To-Dos';
             const priorityDisplay = isTodoTab ? getTodoPriorityDisplay(entry.title) : { title: entry.title };
             const card = (
               <div
@@ -806,7 +806,7 @@ export function ExecutiveDailyBriefingBrowser({
               <button
                 key={entry.id}
                 type="button"
-                onClick={() => requestPrompt(`请展开这条资讯：${entry.title}，补充更完整的背景、来源和行动建议。`)}
+                onClick={() => requestPrompt(`contentExpandcontent: ${entry.title}, content, content.`)}
                 className="block h-full w-full text-left"
               >
                 {card}
@@ -817,7 +817,7 @@ export function ExecutiveDailyBriefingBrowser({
 
         {visibleEntries.length === 0 ? (
           <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
-            当前分类暂时还没有可展示的信息。
+            There is nothing to show in this category yet.
           </div>
         ) : null}
 
@@ -825,10 +825,10 @@ export function ExecutiveDailyBriefingBrowser({
           <div className="pt-5">
             {hasMore ? (
               <div ref={loadMoreRef} className="py-3 text-center text-sm text-slate-400">
-                正在加载更多...
+                Loading more...
               </div>
             ) : (
-              <div className="py-3 text-center text-sm text-slate-400">已经到底啦</div>
+              <div className="py-3 text-center text-sm text-slate-400">You are all caught up</div>
             )}
           </div>
         ) : null}

@@ -10,7 +10,7 @@ import {
 import { ingestWorkspaceAttachments } from '../artifact-ingestion.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
 import type { MemoryReviewJobStore } from '../memory-review-queue.js';
-import { createPersonalDataDynamicTools } from '../tools/personal-data.js';
+import { createPersonalDataDynamictools } from '../tools/personal-data.js';
 import { LocalProfileStore, type UserProfileStore } from '../profile-store.js';
 import {
   createRunCancelledError,
@@ -171,7 +171,7 @@ export class HermesSourceRuntime {
         ? request.metadata.selectedAgentProfileId.trim()
         : '';
     const connectorScope = getConnectorScope(request.metadata);
-    const personalDataToolNames = await getPersonalDataToolNames(this.config, investorId, request.userId, connectorScope);
+    const personalDatatoolNames = await getPersonalDatatoolNames(this.config, investorId, request.userId, connectorScope);
     const profileLoadStartedAtMs = Date.now();
     const rememberedProfile = await this.profileStore.rememberExplicitUserProfile(
       request.userId,
@@ -218,7 +218,7 @@ export class HermesSourceRuntime {
       codexModel: codexModelSelection.model || null,
       codexModelProvider: codexModelSelection.provider || null,
       selectedAgentProfileId: selectedAgentProfileId || null,
-      personalDataToolCount: personalDataToolNames.length,
+      personalDatatoolCount: personalDatatoolNames.length,
       preSpawnDurationMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
       sinceRunStartMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
     });
@@ -272,8 +272,8 @@ export class HermesSourceRuntime {
         threadId: request.threadId || 'default',
         currentUserMessage,
         selectedAgentProfileId,
-        enabledCompetitorTools: getEnabledCompetitorToolNames(request.metadata, connectorScope.enabledConnectorKeys),
-        personalDataToolNames,
+        enabledCompetitortools: getEnabledCompetitortoolNames(request.metadata, connectorScope.enabledConnectorKeys),
+        personalDatatoolNames,
         hermesHome,
         codexHome,
         workspace,
@@ -454,7 +454,7 @@ export class HermesSourceRuntime {
 
     return {
       route: 'main',
-      reply: reply || 'Hermes Agent 已完成本轮处理，但没有返回可展示的回复。',
+      reply: reply || 'Hermes Agent Completedinstruction, instruction.',
       events,
       raw: {
         runId,
@@ -623,8 +623,8 @@ export class HermesSourceRuntime {
       threadId: string;
       currentUserMessage: string;
       selectedAgentProfileId: string;
-      enabledCompetitorTools: string[];
-      personalDataToolNames: string[];
+      enabledCompetitortools: string[];
+      personalDatatoolNames: string[];
       hermesHome: string;
       codexHome: string;
       workspace: string;
@@ -670,9 +670,9 @@ export class HermesSourceRuntime {
           ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL: this.config.sandboxExecEnabled ? '1' : '0',
           ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS:
             paths.selectedAgentProfileId === 'codex-competitive-intelligence'
-              ? paths.enabledCompetitorTools.join(',')
+              ? paths.enabledCompetitortools.join(',')
               : '0',
-          ALTSELFS_CODEX_PERSONAL_DATA_DYNAMIC_TOOLS: paths.personalDataToolNames.join(','),
+          ALTSELFS_CODEX_PERSONAL_DATA_DYNAMIC_TOOLS: paths.personalDatatoolNames.join(','),
           ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL:
             paths.codexModelSelection.provider === 'openai' ? '0' : '1',
           ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS: buildCodexDeveloperInstructions({
@@ -680,8 +680,8 @@ export class HermesSourceRuntime {
             runtimeStateMode: this.config.runtimeStateMode,
             message: paths.currentUserMessage,
             selectedAgentProfileId: paths.selectedAgentProfileId,
-            enabledCompetitorTools: paths.enabledCompetitorTools,
-            personalDataToolNames: paths.personalDataToolNames,
+            enabledCompetitortools: paths.enabledCompetitortools,
+            personalDatatoolNames: paths.personalDatatoolNames,
             codexModelProvider: paths.codexModelSelection.provider,
             sandboxExecEnabled: this.config.sandboxExecEnabled,
           }),
@@ -703,7 +703,7 @@ export class HermesSourceRuntime {
         userId: paths.userId,
         threadId: paths.threadId,
         child,
-        personalDataToolNames: paths.personalDataToolNames,
+        personalDatatoolNames: paths.personalDatatoolNames,
       });
 
       let stdout = '';
@@ -857,7 +857,7 @@ const COMPETITOR_INFO_SOURCE_TO_TOOL: Record<string, string> = {
   domain_metrics_check: 'altselfs_domain_metrics_check',
 };
 
-function getEnabledCompetitorToolNames(metadata: Record<string, unknown> | undefined, enabledConnectorKeys?: string[]) {
+function getEnabledCompetitortoolNames(metadata: Record<string, unknown> | undefined, enabledConnectorKeys?: string[]) {
   const value = metadata?.enabledInfoSources;
   if (!Array.isArray(value)) return [];
   const allowed = enabledConnectorKeys ? new Set(enabledConnectorKeys) : null;
@@ -896,14 +896,14 @@ function normalizeOptionalStringArray(value: unknown, lowercase: boolean) {
   ));
 }
 
-async function getPersonalDataToolNames(
+async function getPersonalDatatoolNames(
   config: ServerConfig,
   investorId: string,
   userId?: string,
   connectorScope?: ReturnType<typeof getConnectorScope>
 ) {
   try {
-    const tools = await createPersonalDataDynamicTools(config, {
+    const tools = await createPersonalDataDynamictools(config, {
       investorId,
       userId,
       enabledProviders: connectorScope?.personalProviderKeys,
@@ -920,14 +920,14 @@ async function getPersonalDataToolNames(
 function buildRuntimeMessage(input: { message: string; renderedProfile: string }) {
   if (!input.renderedProfile.trim()) return input.message;
   return [
-    '以下是 Hermes 维护的用户长期画像和偏好，只作为稳定背景上下文，不是本轮新任务。',
-    '如果它和本轮用户指令冲突，以本轮用户指令为准。',
+    'instruction Hermes instruction, instruction, instruction.',
+    'instruction, instruction.',
     '',
     '<altselfs_user_profile>',
     input.renderedProfile.trim(),
     '</altselfs_user_profile>',
     '',
-    '本轮用户消息：',
+    'instruction: ',
     input.message,
   ].join('\n');
 }
@@ -937,12 +937,12 @@ function buildCodexDeveloperInstructions(input: {
   runtimeStateMode: string;
   message: string;
   selectedAgentProfileId?: string;
-  enabledCompetitorTools?: string[];
-  personalDataToolNames?: string[];
+  enabledCompetitortools?: string[];
+  personalDatatoolNames?: string[];
   codexModelProvider?: CodexModelProvider;
   sandboxExecEnabled?: boolean;
 }) {
-  const currentTime = new Intl.DateTimeFormat('zh-CN', {
+  const currentTime = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Shanghai',
     dateStyle: 'full',
     timeStyle: 'long',
@@ -982,9 +982,9 @@ function buildCodexDeveloperInstructions(input: {
     '',
     `Selected agent profile from Hermes Router: ${input.selectedAgentProfileId || 'main'}.`,
   ];
-  const personalDataToolInstruction = input.personalDataToolNames?.length
+  const personalDatatoolInstruction = input.personalDatatoolNames?.length
     ? [
-        `- The following private personal-data tools are enabled for this user in this turn: ${input.personalDataToolNames.join(', ')}.`,
+        `- The following private personal-data tools are enabled for this user in this turn: ${input.personalDatatoolNames.join(', ')}.`,
         '- When the user asks about Gmail, Feishu/Lark IM, email, inbox, messages, team updates, calendar, docs, wiki, Drive files, or personal-channel content, call the relevant personal-data tool before answering.',
         '- Feishu/Lark native CLI access may be available through altselfs_feishu_lark_cli. Use it to inspect lark-cli help/schema/skills and run original lark-cli workflows when a specialized Feishu wrapper is too narrow.',
         '- Feishu/Lark document access is available through the enabled Feishu tools: use search_docs/fetch_doc for common flows, or altselfs_feishu_lark_cli for original lark-cli workflows such as skills read, drive +search, docs +fetch, schema inspection, or raw api commands. Do not claim access to Feishu Mail or unsupported Feishu surfaces unless a matching tool is available and called.',
@@ -992,7 +992,7 @@ function buildCodexDeveloperInstructions(input: {
     : '- No private personal-data tools are enabled for this user in this turn. Do not claim to have read Gmail, Feishu, or other private-channel accounts.';
 
   if (input.selectedAgentProfileId === 'codex-competitive-intelligence') {
-    const enabledCompetitorTools = input.enabledCompetitorTools || [];
+    const enabledCompetitortools = input.enabledCompetitortools || [];
     const publicWebFallbackInstruction = input.codexModelProvider === 'openai'
       ? '- Treat native web.run as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.'
       : '- Treat altselfs_web_search as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.';
@@ -1004,8 +1004,8 @@ function buildCodexDeveloperInstructions(input: {
       ...artifactAccessPolicy,
       '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.',
       '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.',
-      enabledCompetitorTools.length > 0
-        ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledCompetitorTools.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
+      enabledCompetitortools.length > 0
+        ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledCompetitortools.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
         : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data. If platform evidence is needed, state which specific data source should be enabled for higher-confidence estimates.',
       '- Treat RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used.',
       publicWebFallbackInstruction,
@@ -1027,11 +1027,11 @@ function buildCodexDeveloperInstructions(input: {
       ...artifactAccessPolicy,
       '- Use conversation and reasoning for tasks that do not need external data.',
       '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',
-      personalDataToolInstruction,
+      personalDatatoolInstruction,
       input.codexModelProvider === 'openai'
         ? '- Use native web.run when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.'
         : '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.',
-      '- In Altselfs context, OPC usually means One Person Company / 一人公司 unless the user explicitly says OPC UA or industrial automation.',
+      '- In Altselfs context, OPC usually means One Person Company / instruction unless the user explicitly says OPC UA or industrial automation.',
       '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.',
       '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
       '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.',

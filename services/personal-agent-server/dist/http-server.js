@@ -3,14 +3,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { renderProductizationPage } from './productization-page.js';
 import { isRecord } from './util.js';
-import { runWebSearchTool } from './tools/web-search.js';
-import { getRapidApiQuotaSnapshots, isRapidApiCompetitorTool, runRapidApiCompetitorTool } from './tools/rapidapi-competitor.js';
-import { isPersonalDataTool, runPersonalDataTool } from './tools/personal-data.js';
-import { runSandboxExecTool } from './tools/sandbox-exec.js';
+import { runWebSearchtool } from './tools/web-search.js';
+import { getRapidApiQuotaSnapshots, isRapidApiCompetitortool, runRapidApiCompetitortool } from './tools/rapidapi-competitor.js';
+import { isPersonalDatatool, runPersonalDatatool } from './tools/personal-data.js';
+import { runSandboxExectool } from './tools/sandbox-exec.js';
 import { disablePersonalConnection, listPersonalConnections, upsertFeishuCliConnection, upsertFeishuOAuthConnection, upsertGmailOAuthConnection, upsertMetaOAuthConnection, updateFeishuConnectionFeaturePackages, } from './personal-data-store.js';
 import { completeFeishuCliAuthorization, continueFeishuCliAuthorization, DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, startFeishuCliAuthorization, } from './feishu-cli.js';
 import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
-import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
+import { cancelActiveRun, getActiveRuntoolScope, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
 const ASYNC_TURN_POLL_INTERVAL_MS = 3000;
 export function createHttpServer(agent, config, memoryReviewQueue) {
@@ -279,7 +279,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 const body = await readJsonBody(req);
                 if (!isRecord(body))
                     return json(res, 400, { error: 'JSON body must be an object' });
-                const resultText = await runWebSearchTool(body, config);
+                const resultText = await runWebSearchtool(body, config);
                 return json(res, 200, {
                     contentItems: [{ type: 'inputText', text: resultText }],
                     success: !resultText.includes('"error"'),
@@ -293,7 +293,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 const body = await readJsonBody(req);
                 if (!isRecord(body))
                     return json(res, 400, { error: 'JSON body must be an object' });
-                const resultText = await runReadArtifactTool(body, config);
+                const resultText = await runReadArtifacttool(body, config);
                 return json(res, 200, {
                     contentItems: [{ type: 'inputText', text: resultText }],
                     success: !resultText.includes('"error"'),
@@ -308,9 +308,9 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 if (!isRecord(body))
                     return json(res, 400, { error: 'JSON body must be an object' });
                 const toolName = typeof body.toolName === 'string' ? body.toolName.trim() : '';
-                if (!isRapidApiCompetitorTool(toolName))
+                if (!isRapidApiCompetitortool(toolName))
                     return json(res, 400, { error: `Unsupported competitor data tool: ${toolName}` });
-                const resultText = await runRapidApiCompetitorTool(toolName, body.arguments, config);
+                const resultText = await runRapidApiCompetitortool(toolName, body.arguments, config);
                 return json(res, 200, {
                     contentItems: [{ type: 'inputText', text: resultText }],
                     success: !resultText.includes('"error"'),
@@ -325,15 +325,33 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 if (!isRecord(body))
                     return json(res, 400, { error: 'JSON body must be an object' });
                 const toolName = typeof body.toolName === 'string' ? body.toolName.trim() : '';
-                if (!isPersonalDataTool(toolName))
+                if (!isPersonalDatatool(toolName))
                     return json(res, 400, { error: `Unsupported personal data tool: ${toolName}` });
                 const context = isRecord(body._context) ? body._context : {};
                 const investorId = readRequiredBodyString(context, 'investorId');
-                const resultText = await runPersonalDataTool(toolName, body.arguments, config, {
+                const runId = typeof context.runId === 'string' && context.runId.trim() ? context.runId.trim() : undefined;
+                const runtoolScope = runId ? getActiveRuntoolScope(runId) : null;
+                if (runtoolScope?.personalDatatoolNames && !runtoolScope.personalDatatoolNames.includes(toolName)) {
+                    return json(res, 200, {
+                        contentItems: [
+                            {
+                                type: 'inputText',
+                                text: JSON.stringify({
+                                    source: 'personal-data-tools',
+                                    error: `Personal data tool ${toolName} is not enabled for this turn by connector selection.`,
+                                    toolName,
+                                    enabledtools: runtoolScope.personalDatatoolNames,
+                                }, null, 2),
+                            },
+                        ],
+                        success: false,
+                    });
+                }
+                const resultText = await runPersonalDatatool(toolName, body.arguments, config, {
                     investorId,
                     userId: typeof context.userId === 'string' && context.userId.trim() ? context.userId.trim() : investorId,
                     threadId: typeof context.threadId === 'string' && context.threadId.trim() ? context.threadId.trim() : undefined,
-                    runId: typeof context.runId === 'string' && context.runId.trim() ? context.runId.trim() : undefined,
+                    runId,
                 });
                 return json(res, 200, {
                     contentItems: [{ type: 'inputText', text: resultText }],
@@ -349,7 +367,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 if (!isRecord(body))
                     return json(res, 400, { error: 'JSON body must be an object' });
                 const { argumentsValue, context } = parseSandboxExecBridgeBody(body);
-                const resultText = await runSandboxExecTool(argumentsValue, config, context);
+                const resultText = await runSandboxExectool(argumentsValue, config, context);
                 return json(res, 200, {
                     contentItems: [{ type: 'inputText', text: resultText }],
                     success: !resultText.includes('"error"'),
@@ -412,7 +430,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     }
                     if (isAgentRunCancelledError(error)) {
                         return json(res, 499, {
-                            error: '已停止本次执行。',
+                            error: 'instructionStopinstruction.',
                             cancelled: true,
                             runId: persisted?.runId,
                         });
@@ -580,7 +598,7 @@ function streamTurnStart(res, agent, request, config) {
                 result: {
                     runId: persisted?.runId,
                     cancelled: isAgentRunCancelledError(error),
-                    error: isAgentRunCancelledError(error) ? '已停止本次执行。' : error instanceof Error ? error.message : String(error),
+                    error: isAgentRunCancelledError(error) ? 'instructionStopinstruction.' : error instanceof Error ? error.message : String(error),
                 },
             });
         }
@@ -1219,7 +1237,7 @@ async function diskResource(pathname, label) {
         };
     }
 }
-async function runReadArtifactTool(body, config) {
+async function runReadArtifacttool(body, config) {
     const requestedPath = typeof body.path === 'string' ? body.path.trim() : '';
     const maxChars = typeof body.maxChars === 'number' && Number.isFinite(body.maxChars)
         ? Math.max(1000, Math.min(Math.floor(body.maxChars), 60000))

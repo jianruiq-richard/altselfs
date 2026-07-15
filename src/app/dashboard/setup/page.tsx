@@ -30,7 +30,7 @@ export default function SetupPage({
   const handleSetup = useCallback(async () => {
     if (!user) return;
     if (normalizedRole === 'candidate' && (!nickname.trim() || !phone.trim() || !wechatId.trim())) {
-      setError('请先填写昵称、联系电话和微信号');
+      setError('contentDisplay name, PhonecontentWeChat ID');
       return;
     }
 
@@ -62,11 +62,11 @@ export default function SetupPage({
         router.refresh();
       } else {
         const data = await response.json().catch(() => ({}));
-        setError(data.error || '账户设置失败，请稍后重试');
+        setError(data.error || 'contentSettingsfailed, content');
       }
     } catch (error) {
       console.error('Error:', error);
-      setError('网络错误，请稍后重试');
+      setError('Network error. Please try again later.');
     } finally {
       setIsLoading(false);
     }
@@ -94,10 +94,10 @@ export default function SetupPage({
             Altselfs
           </p>
           <h1 className="mb-4 text-2xl font-semibold text-stone-950">
-            正在初始化你的 Decision OS
+            content Decision OS
           </h1>
           <p className="mb-8 text-sm leading-6 text-stone-600">
-            正在创建你的基础账户和默认 AI 决策分身
+            contentdefault AI content
           </p>
 
           {error && (
@@ -107,33 +107,33 @@ export default function SetupPage({
           {normalizedRole === 'candidate' && (
             <div className="space-y-3 mb-6 text-left">
               <div>
-                <label className="mb-1 block text-sm text-stone-700">昵称 *</label>
+                <label className="mb-1 block text-sm text-stone-700">Display name *</label>
                 <input
                   type="text"
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   className="w-full rounded-xl border border-[#d8c8b5] bg-white px-3 py-2 text-stone-950 outline-none focus:border-[#7a451f]"
-                  placeholder="请输入你的昵称"
+                  placeholder="contentDisplay name"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm text-stone-700">联系电话 *</label>
+                <label className="mb-1 block text-sm text-stone-700">Phone *</label>
                 <input
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="w-full rounded-xl border border-[#d8c8b5] bg-white px-3 py-2 text-stone-950 outline-none focus:border-[#7a451f]"
-                  placeholder="请输入手机号或电话"
+                  placeholder="content"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm text-stone-700">微信号 *</label>
+                <label className="mb-1 block text-sm text-stone-700">WeChat ID *</label>
                 <input
                   type="text"
                   value={wechatId}
                   onChange={(e) => setWechatId(e.target.value)}
                   className="w-full rounded-xl border border-[#d8c8b5] bg-white px-3 py-2 text-stone-950 outline-none focus:border-[#7a451f]"
-                  placeholder="请输入微信号"
+                  placeholder="contentWeChat ID"
                 />
               </div>
             </div>
@@ -145,11 +145,11 @@ export default function SetupPage({
               disabled={isLoading}
               className="w-full rounded-xl bg-[#7a451f] px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLoading ? '设置中...' : '确认并继续'}
+              {isLoading ? 'Settingscontent...' : 'content'}
             </button>
           ) : (
             <div className="w-full rounded-xl border border-[#ead8bd] bg-white px-4 py-3 text-sm text-stone-600">
-              {isLoading ? '正在创建账户...' : '正在进入 Decision OS 工作台...'}
+              {isLoading ? 'content...' : 'content Decision OS Workcontent...'}
             </div>
           )}
         </div>

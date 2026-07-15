@@ -92,43 +92,43 @@ export default async function InvestorDashboardPage() {
   const infoOpsAssistants = [
     {
       key: 'wechat',
-      type: '公众号',
-      account: dbUser.wechatSources.length > 0 ? `${dbUser.wechatSources.length} 个公众号` : '未录入公众号',
+      type: 'content',
+      account: dbUser.wechatSources.length > 0 ? `${dbUser.wechatSources.length} content` : 'content',
       unread: dbUser.wechatSources.length,
-      agentName: '公众号助手小智',
+      agentName: 'WeChat Assistantcontent',
       connected: dbUser.wechatSources.length > 0,
       summary:
         dbUser.wechatSources[0]?.description ||
         (dbUser.wechatSources.length > 0
-          ? `已录入 ${dbUser.wechatSources.length} 个公众号，最新源：${dbUser.wechatSources[0].displayName}`
-          : '暂无摘要，录入公众号后可自动生成摘要。'),
+          ? `content ${dbUser.wechatSources.length} content, content: ${dbUser.wechatSources[0].displayName}`
+          : 'content, content.'),
     },
     {
       key: 'xiaohongshu',
-      type: '小红书',
-      account: xiaohongshu?.accountName || '未配置 小红书能力',
+      type: 'content',
+      account: xiaohongshu?.accountName || 'content content',
       unread: xiaohongshu?.snapshots[0] ? 1 : 0,
-      agentName: '小红书助手小橙',
+      agentName: 'Xiaohongshu Assistantcontent',
       connected: Boolean(xiaohongshu),
-      summary: xiaohongshu?.snapshots[0]?.summary || '暂无摘要，可在信息处理运营部门中通过对话触发 Spider_XHS 技能。',
+      summary: xiaohongshu?.snapshots[0]?.summary || 'content, contentInformation Operationscontent Spider_XHS content.',
     },
     {
       key: 'gmail',
       type: 'Gmail',
-      account: gmail?.accountEmail || '未绑定 Gmail',
+      account: gmail?.accountEmail || 'Not connected Gmail',
       unread: gmail?.snapshots[0] ? 1 : 0,
-      agentName: '邮件助手小明',
+      agentName: 'Email Assistant',
       connected: Boolean(gmail),
-      summary: gmail?.snapshots[0]?.summary || '暂无摘要，绑定后可自动生成邮件摘要。',
+      summary: gmail?.snapshots[0]?.summary || 'content, Connectcontent.',
     },
     {
       key: 'feishu',
-      type: '飞书',
-      account: feishu?.accountEmail || '未绑定 飞书',
+      type: 'content',
+      account: feishu?.accountEmail || 'Not connected content',
       unread: feishu?.snapshots[0] ? 1 : 0,
-      agentName: '飞书助手小红',
+      agentName: 'Lark Assistantcontent',
       connected: Boolean(feishu),
-      summary: feishu?.snapshots[0]?.summary || '暂无摘要，绑定后可自动生成协作摘要。',
+      summary: feishu?.snapshots[0]?.summary || 'content, Connectcontent.',
     },
   ] as const;
 
@@ -144,10 +144,10 @@ export default async function InvestorDashboardPage() {
   const efficiency = `${Math.min(95, 60 + dbUser.integrations.length * 8 + dbUser.wechatSources.length * 2)}%`;
 
   const stats = [
-    { label: '今日处理', value: totalProcessed, change: '+12%', icon: Mail, color: 'text-[#8a4d22]' },
-    { label: '未读信息', value: unreadInfo, change: '-8%', icon: MessageCircle, color: 'text-emerald-700' },
-    { label: '生成摘要', value: generatedSummaries, change: '+23%', icon: FileText, color: 'text-[#b77a3d]' },
-    { label: '效率提升', value: efficiency, change: '+5%', icon: TrendingUp, color: 'text-[#c78b45]' },
+    { label: 'Todaycontent', value: totalProcessed, change: '+12%', icon: Mail, color: 'text-[#8a4d22]' },
+    { label: 'content', value: unreadInfo, change: '-8%', icon: MessageCircle, color: 'text-emerald-700' },
+    { label: 'content', value: generatedSummaries, change: '+23%', icon: FileText, color: 'text-[#b77a3d]' },
+    { label: 'content', value: efficiency, change: '+5%', icon: TrendingUp, color: 'text-[#c78b45]' },
   ] as const;
 
   const infoOpsSummaryBlocks = infoOpsAssistants.map((assistant) => ({
@@ -156,14 +156,14 @@ export default async function InvestorDashboardPage() {
     agentName: assistant.agentName,
     title:
       assistant.key === 'wechat'
-        ? '公众号动态精选'
+        ? 'content'
         : assistant.key === 'xiaohongshu'
-          ? '小红书热点精选'
+          ? 'content'
           : assistant.key === 'gmail'
-            ? '今日重要邮件摘要'
-            : '团队协作更新',
+            ? 'Todaycontent'
+            : 'content',
     summary: assistant.summary,
-    time: '刚刚',
+    time: 'content',
     priority: assistant.connected ? 'medium' : 'low',
   }));
 
@@ -184,42 +184,42 @@ export default async function InvestorDashboardPage() {
   const teamCards = [
     {
       key: TEAM_KEYS.EXECUTIVE_OFFICE,
-      name: '总裁办',
+      name: 'Executive Office',
       color: 'bg-purple-50 text-purple-600',
       employees: isExecutiveHired ? 1 : 0,
-      status: isExecutiveHired ? '已雇佣' : '未雇佣',
+      status: isExecutiveHired ? 'contentHire' : 'contentHire',
       statusClass: isExecutiveHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
-      linkLabel: isExecutiveHired ? '总裁秘书Momo' : '去 AI 人才大厅雇佣',
+      linkLabel: isExecutiveHired ? 'Executive Assistant Momo' : 'content AI contentHire',
       linkHref: isExecutiveHired ? '/investor/chat/100' : '/ai-talent',
     },
     {
       key: TEAM_KEYS.INFO_OPS,
-      name: '信息处理运营部门',
+      name: 'Information Operations',
       color: 'bg-blue-50 text-blue-600',
       employees: isInfoOpsHired ? Math.max(1, infoOpsAssistants.length) : 0,
-      status: isInfoOpsHired ? '已雇佣' : '未雇佣',
+      status: isInfoOpsHired ? 'contentHire' : 'contentHire',
       statusClass: isInfoOpsHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
-      linkLabel: isInfoOpsHired ? '进入部门管理' : '去 AI 人才大厅雇佣',
+      linkLabel: isInfoOpsHired ? 'contentDepartment Management' : 'content AI contentHire',
       linkHref: isInfoOpsHired ? '/investor/info-ops' : '/ai-talent',
     },
     {
       key: TEAM_KEYS.ENGINEERING,
-      name: '研发团队',
+      name: 'Engineering',
       color: 'bg-green-50 text-green-600',
       employees: isEngineeringHired ? Math.max(1, dbUser.avatars.length || 1) : 0,
-      status: isEngineeringHired ? '已雇佣' : '未雇佣',
+      status: isEngineeringHired ? 'contentHire' : 'contentHire',
       statusClass: isEngineeringHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
-      linkLabel: isEngineeringHired ? '管理分身' : '去 AI 人才大厅雇佣',
+      linkLabel: isEngineeringHired ? 'content' : 'content AI contentHire',
       linkHref: isEngineeringHired ? '/avatar' : '/ai-talent',
     },
     {
       key: TEAM_KEYS.MARKETING_OPS,
-      name: '营销运营团队',
+      name: 'Marketing Operations',
       color: 'bg-orange-50 text-orange-600',
       employees: isMarketingHired ? 1 : 0,
-      status: isMarketingHired ? '已雇佣' : '未雇佣',
+      status: isMarketingHired ? 'contentHire' : 'contentHire',
       statusClass: isMarketingHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
-      linkLabel: isMarketingHired ? '默认员工已配置' : '去 AI 人才大厅雇佣',
+      linkLabel: isMarketingHired ? 'defaultteammatecontent' : 'content AI contentHire',
       linkHref: '/ai-talent',
     },
   ] as const;
@@ -271,15 +271,15 @@ export default async function InvestorDashboardPage() {
 
       <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-stone-950 sm:text-3xl">Decision OS 工作台</h1>
-          <p className="mt-2 max-w-3xl text-sm text-stone-500 sm:text-base">欢迎回来，这是你的跨渠道信息、分身和今日行动概览</p>
+          <h1 className="text-2xl font-bold text-stone-950 sm:text-3xl">Decision OS Workcontent</h1>
+          <p className="mt-2 max-w-3xl text-sm text-stone-500 sm:text-base">content, content, contentTodaycontentOverview</p>
         </div>
         <div className="shrink-0 self-start">
           <Link
             href="/avatar"
             className="inline-flex items-center rounded-xl bg-[#8a4d22] px-4 py-2 text-sm font-semibold text-white hover:bg-[#743f1b]"
           >
-            管理分身
+            content
           </Link>
         </div>
       </div>
@@ -291,12 +291,12 @@ export default async function InvestorDashboardPage() {
               <Sparkles className="h-6 w-6 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold text-stone-950 sm:text-2xl">我的决策分身</h2>
-              <p className="text-sm text-stone-500">持续学习你的工作场景、判断框架和协作偏好</p>
+              <h2 className="text-xl font-bold text-stone-950 sm:text-2xl">content</h2>
+              <p className="text-sm text-stone-500">contentWorkcontent, Decidecontent</p>
             </div>
           </div>
           <Link href="/avatar" className="inline-flex items-center justify-center rounded-xl bg-[#8a4d22] px-4 py-3 text-sm font-semibold text-white hover:bg-[#743f1b] sm:py-2">
-            管理分身
+            content
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </div>
@@ -304,7 +304,7 @@ export default async function InvestorDashboardPage() {
         <div className="mt-6 grid gap-6 md:grid-cols-3">
           <div className="text-center">
             <div className="mb-1 text-3xl font-bold text-[#8a4d22]">{completion}%</div>
-            <p className="text-sm text-stone-600">完整度</p>
+            <p className="text-sm text-stone-600">Completion</p>
           </div>
           <div className="text-center">
             <div className="mb-1 text-3xl font-bold text-[#b77a3d]">{tokens.toLocaleString()}</div>
@@ -312,7 +312,7 @@ export default async function InvestorDashboardPage() {
           </div>
           <div className="text-center">
             <div className="mb-1 text-3xl font-bold text-emerald-700">{learnedSkills}</div>
-            <p className="text-sm text-stone-600">已学习信号源</p>
+            <p className="text-sm text-stone-600">content</p>
           </div>
         </div>
       </div>
@@ -320,16 +320,16 @@ export default async function InvestorDashboardPage() {
       <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h2 className="text-xl font-bold text-gray-900">我的 AI 团队</h2>
-            <p className="text-sm text-gray-500">按部门组织的 AI 员工团队</p>
+            <h2 className="text-xl font-bold text-gray-900">content AI content</h2>
+            <p className="text-sm text-gray-500">content AI teammatecontent</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Link href="/ai-talent" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
               <Briefcase className="mr-1 h-4 w-4" />
-              雇佣员工
+              Hireteammate
             </Link>
             <Link href="/accounts" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
-              管理部门
+              content
               <ArrowRight className="ml-1 h-4 w-4" />
             </Link>
           </div>
@@ -342,7 +342,7 @@ export default async function InvestorDashboardPage() {
                 <Users className="h-5 w-5" />
                 <div className="flex items-center gap-2">
                   <span className={`rounded px-2 py-0.5 text-xs ${team.statusClass}`}>{team.status}</span>
-                  <span className="rounded bg-white px-2 py-0.5 text-xs">{team.employees} 员工</span>
+                  <span className="rounded bg-white px-2 py-0.5 text-xs">{team.employees} teammate</span>
                 </div>
               </div>
               <h3 className="font-semibold">{team.name}</h3>
@@ -357,11 +357,11 @@ export default async function InvestorDashboardPage() {
       <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h2 className="text-xl font-bold text-gray-900">信息处理运营部门</h2>
-            <p className="text-sm text-gray-500">外部消息助手统一归入本部门管理</p>
+            <h2 className="text-xl font-bold text-gray-900">Information Operations</h2>
+            <p className="text-sm text-gray-500">External Message AssistantscontentDepartment Management</p>
           </div>
           <Link href="/investor/info-ops" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
-            进入部门管理
+            contentDepartment Management
             <ArrowRight className="ml-1 h-4 w-4" />
           </Link>
         </div>
@@ -371,19 +371,19 @@ export default async function InvestorDashboardPage() {
             <div key={assistant.key} className="rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300">
               <div className="mb-3 flex items-start justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{assistant.type} 助手</h3>
+                  <h3 className="font-semibold text-gray-900">{assistant.type} content</h3>
                   <p className="mt-1 text-sm text-gray-500">{assistant.account}</p>
                 </div>
-                <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{assistant.unread} 未读</span>
+                <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{assistant.unread} content</span>
               </div>
               <div className="mb-3 flex items-center gap-2 text-sm text-gray-600">
                 <Bot className="h-4 w-4 text-blue-600" />
                 <span>{assistant.agentName}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600">信息处理运营部门</span>
+                <span className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600">Information Operations</span>
                 <Link href={`/investor/info-ops?assistant=${assistant.key}`} className="text-sm font-medium text-blue-600 hover:text-blue-700">
-                  进入管理
+                  content
                 </Link>
               </div>
             </div>
@@ -394,11 +394,11 @@ export default async function InvestorDashboardPage() {
       <div className="rounded-2xl border border-gray-200 bg-white p-6">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h2 className="text-xl font-bold text-gray-900">最近摘要</h2>
-            <p className="text-sm text-gray-500">模块化摘要视图，可持续扩展更多团队</p>
+            <h2 className="text-xl font-bold text-gray-900">Latest summary</h2>
+            <p className="text-sm text-gray-500">content, content</p>
           </div>
           <Link href="/messages" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
-            查看全部
+            contentAll
             <ArrowRight className="ml-1 h-4 w-4" />
           </Link>
         </div>
@@ -406,8 +406,8 @@ export default async function InvestorDashboardPage() {
         <div className="space-y-6">
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-900">信息处理运营部门摘要</h3>
-              <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{infoOpsSummaryBlocks.length} 条</span>
+              <h3 className="text-base font-semibold text-gray-900">Information Operationscontent</h3>
+              <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{infoOpsSummaryBlocks.length} content</span>
             </div>
             <div className="space-y-3">
               {infoOpsSummaryBlocks.map((summary) => (
@@ -428,11 +428,11 @@ export default async function InvestorDashboardPage() {
 
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-900">研发团队摘要</h3>
-              <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">待接入</span>
+              <h3 className="text-base font-semibold text-gray-900">Engineeringcontent</h3>
+              <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">content</span>
             </div>
             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-              该子模块预留中，后续接入研发团队摘要后自动展示。
+              content, contentEngineeringcontent.
             </div>
           </section>
         </div>

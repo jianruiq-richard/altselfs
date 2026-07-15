@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
           data: {
             candidateId: user.id,
             avatarId: avatarId,
-            title: `与 ${avatar.name} 的对话`,
+            title: `message ${avatar.name} message`,
           },
           include: {
             messages: {
@@ -123,7 +123,7 @@ export async function GET(req: NextRequest) {
         data: {
           candidateId: user.id,
           avatarId: avatarId,
-          title: `与 ${avatar.name} 的对话`,
+          title: `message ${avatar.name} message`,
         },
         include: {
           messages: {

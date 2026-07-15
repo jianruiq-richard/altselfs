@@ -212,7 +212,7 @@ export async function upsertFeishuOAuthConnection(config, input) {
         userId: input.userId,
         capabilityKey: 'feishu',
         capabilityType: 'oauth_account',
-        displayName: '飞书',
+        displayName: 'instruction',
     });
     const accountId = input.accountId.trim();
     if (!accountId)
@@ -303,7 +303,7 @@ export async function upsertFeishuCliConnection(config, input) {
         userId: input.userId,
         capabilityKey: 'feishu',
         capabilityType: 'oauth_account',
-        displayName: '飞书',
+        displayName: 'instruction',
     });
     const accountId = input.accountId.trim();
     if (!accountId)
@@ -497,7 +497,7 @@ export async function updatePersonalCredentialPayload(config, input) {
         input.payload.expiresAt || null,
     ]);
 }
-export async function recordPersonalToolCallAudit(config, input) {
+export async function recordPersonaltoolCallAudit(config, input) {
     try {
         const pool = await getPersonalDataPool(config);
         await pool.query([

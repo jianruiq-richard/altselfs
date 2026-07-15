@@ -35,7 +35,7 @@ export async function POST(
   });
 
   if (!integration || !integration.accessToken) {
-    return NextResponse.json({ error: '请先绑定账户' }, { status: 400 });
+    return NextResponse.json({ error: 'messageConnectmessage' }, { status: 400 });
   }
 
   try {
@@ -89,6 +89,6 @@ export async function POST(
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown';
-    return NextResponse.json({ error: `刷新摘要失败：${detail}` }, { status: 500 });
+    return NextResponse.json({ error: `Refresh summaryfailed: ${detail}` }, { status: 500 });
   }
 }

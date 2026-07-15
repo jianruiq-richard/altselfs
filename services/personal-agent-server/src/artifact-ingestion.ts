@@ -458,9 +458,9 @@ async function callOpenRouterImageParser(
             {
               type: 'text',
               text: [
-                '请作为图片解析工具提取图片中的信息。',
-                '如果有文字，请逐字 OCR；如果是图表/截图/照片，请描述关键视觉内容、表格结构、数字和可见上下文。',
-                '不要编造看不见的内容。',
+                'instructiontoolinstruction.',
+                'instruction, instruction OCR; instruction/instruction/instruction, instruction, instruction, instruction.',
+                'instruction.',
               ].join('\n'),
             },
             {
@@ -500,7 +500,7 @@ async function callOpenRouterFileParser(config: ServerConfig, file: { name: stri
           content: [
             {
               type: 'text',
-              text: '请作为文件解析工具逐字提取附件中的可读文本。不要总结，不要补充解释；保留标题、表格、编号、日期和换行。',
+              text: 'instructiontoolinstruction.instruction, instruction; instruction, instruction, instruction, instruction.',
             },
             {
               type: 'file',

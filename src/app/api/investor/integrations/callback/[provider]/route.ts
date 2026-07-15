@@ -20,22 +20,22 @@ function redirectWithResult(req: NextRequest, provider: string, status: string, 
 }
 
 function toFriendlyError(provider: 'gmail' | 'feishu', detail: string) {
-  const label = provider === 'gmail' ? 'Gmail' : '飞书';
+  const label = provider === 'gmail' ? 'Gmail' : 'message';
   const normalized = detail.toLowerCase();
 
   if (normalized.includes('fetch failed') || normalized.includes('econn') || normalized.includes('enotfound') || normalized.includes('etimedout')) {
-    return `${label} 服务暂时不可达，请检查网络/VPN后重试。`;
+    return `${label} message, message/VPNmessage.`;
   }
   if (normalized.includes('redirect_uri_mismatch')) {
-    return `${label} 回调地址不匹配，请检查 OAuth 回调 URI 配置。`;
+    return `${label} message, message OAuth message URI message.`;
   }
   if (normalized.includes('invalid_grant') || normalized.includes('missing required parameter')) {
-    return `${label} 授权码无效或已过期，请重新点击“绑定${label}”。`;
+    return `${label} message, message"Connect${label}".`;
   }
   if (normalized.includes('missing environment variable')) {
-    return `${label} 平台配置未完成，请联系管理员检查环境变量。`;
+    return `${label} messageComplete, message.`;
   }
-  return `${label} 绑定失败，请稍后重试或联系管理员。`;
+  return `${label} connection failed, message.`;
 }
 
 export async function GET(
@@ -59,13 +59,13 @@ export async function GET(
   const stateCookie = req.cookies.get(`oauth_state_${provider}`)?.value;
 
   if (error) {
-    return redirectWithResult(req, provider, 'error', `授权失败：${error}`);
+    return redirectWithResult(req, provider, 'error', `messagefailed: ${error}`);
   }
   if (!state || !stateCookie || state !== stateCookie) {
-    return redirectWithResult(req, provider, 'error', '授权状态校验失败，请重试');
+    return redirectWithResult(req, provider, 'error', 'messagefailed, message');
   }
   if (!code) {
-    return redirectWithResult(req, provider, 'error', '缺少授权码');
+    return redirectWithResult(req, provider, 'error', 'message');
   }
 
   try {

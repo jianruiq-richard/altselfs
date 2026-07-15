@@ -258,8 +258,8 @@ if (codexAppServerSession.includes(importsAfter)) {
 
 codexAppServerSession = readFileSync(codexAppServerSessionPath, "utf8");
 
-const dynamicToolHelpersMarker = `def _altselfs_dynamic_tools() -> list[dict[str, Any]]:`;
-const dynamicToolHelpers = `
+const dynamictoolHelpersMarker = `def _altselfs_dynamic_tools() -> list[dict[str, Any]]:`;
+const dynamictoolHelpers = `
 _ALTSELFS_WEB_SEARCH_TOOL = {
     "namespace": None,
     "name": "altselfs_web_search",
@@ -509,7 +509,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "args": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Arguments after lark-cli. Examples: drive +search --as user --query 商业数据 --json; skills read lark-doc references/lark-doc-fetch.md; api GET /open-apis/drive/v1/files. Do not include the lark-cli binary name.",
+                    "description": "Arguments after lark-cli. Examples: drive +search --as user --query instruction --json; skills read lark-doc references/lark-doc-fetch.md; api GET /open-apis/drive/v1/files. Do not include the lark-cli binary name.",
                 },
                 "timeoutMs": {"type": "number", "description": "Optional timeout in milliseconds, default lark-cli timeout, capped at 120000."},
                 "accountId": {"type": "string", "description": "Optional Altselfs connection id. Required when multiple Feishu accounts are connected."},
@@ -571,7 +571,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
         "name": "altselfs_feishu_recent_messages",
         "description": (
             "Best-effort scan of recent Feishu/Lark IM messages across visible chats "
-            "for a connected account. Use for questions like today's Feishu messages, "
+            "for a connected account. Use for questions like today Feishu messages, "
             "team updates, and pending follow-ups. Access may be partial when app "
             "scopes, chat settings, or bot membership limit a chat."
         ),
@@ -595,7 +595,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
         "description": (
             "Search Feishu/Lark IM messages across chats with the user-authorized "
             "lark-cli profile. Prefer this for questions about a person, keyword, "
-            "today's messages, mentions, or follow-ups because it does not require "
+            "today messages, mentions, or follow-ups because it does not require "
             "a prior chat list."
         ),
         "inputSchema": {
@@ -644,7 +644,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
         "name": "altselfs_feishu_today_calendar",
         "description": (
             "Read the authorized user's Feishu/Lark calendar agenda for a date window "
-            "with lark-cli. Use for today's meetings, schedule, and time commitments."
+            "with lark-cli. Use for today meetings, schedule, and time commitments."
         ),
         "inputSchema": {
             "type": "object",
@@ -957,13 +957,13 @@ _STDERR_TAIL_LINES = 12
 const helpersEndAnchor = `# Permission profile mapping mirrors the docstring in PR proposal:`;
 
 if (
-  codexAppServerSession.includes(dynamicToolHelpersMarker) &&
+  codexAppServerSession.includes(dynamictoolHelpersMarker) &&
   codexAppServerSession.includes("_call_altselfs_personal_data_tool_bridge") &&
   codexAppServerSession.includes("altselfs_feishu_lark_cli")
 ) {
   console.log("Hermes Codex dynamic tool helper patch already applied.");
   console.log(codexAppServerSessionPath);
-} else if (codexAppServerSession.includes(dynamicToolHelpersMarker)) {
+} else if (codexAppServerSession.includes(dynamictoolHelpersMarker)) {
   const helperStart = codexAppServerSession.indexOf("_ALTSELFS_WEB_SEARCH_TOOL = {");
   const helperEnd = codexAppServerSession.indexOf(helpersEndAnchor);
   if (helperStart < 0 || helperEnd < 0 || helperEnd <= helperStart) {
@@ -971,7 +971,7 @@ if (
     console.error(codexAppServerSessionPath);
     process.exit(1);
   }
-  codexAppServerSession = `${codexAppServerSession.slice(0, helperStart)}${dynamicToolHelpers}${codexAppServerSession.slice(helperEnd)}`;
+  codexAppServerSession = `${codexAppServerSession.slice(0, helperStart)}${dynamictoolHelpers}${codexAppServerSession.slice(helperEnd)}`;
   writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
   console.log("Hermes Codex dynamic tool helper patch upgraded.");
   console.log(codexAppServerSessionPath);
@@ -980,7 +980,7 @@ if (
   console.error(codexAppServerSessionPath);
   process.exit(1);
 } else {
-  codexAppServerSession = codexAppServerSession.replace(helpersAnchor, `${helpersAnchor}${dynamicToolHelpers}`);
+  codexAppServerSession = codexAppServerSession.replace(helpersAnchor, `${helpersAnchor}${dynamictoolHelpers}`);
   writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
   console.log("Hermes Codex dynamic tool helper patch applied.");
   console.log(codexAppServerSessionPath);
@@ -1026,14 +1026,14 @@ const threadParamsBefore = `        params: dict[str, Any] = {"cwd": self._cwd}
 const threadParamsPreviousPatch = `        params: dict[str, Any] = {"cwd": self._cwd}
         dynamic_tools = _altselfs_dynamic_tools()
         if dynamic_tools:
-            params["dynamicTools"] = dynamic_tools
+            params["dynamictools"] = dynamic_tools
         result = self._client.request("thread/start", params, timeout=15)
 `;
 
 const threadParamsBlockAfter = `        params: dict[str, Any] = {"cwd": self._cwd}
         dynamic_tools = _altselfs_dynamic_tools()
         if dynamic_tools:
-            params["dynamicTools"] = dynamic_tools
+            params["dynamictools"] = dynamic_tools
         if os.environ.get("ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT", "false").lower() in {"1", "true", "yes", "on"}:
             params["environments"] = []
         developer_instructions = os.environ.get("ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS", "").strip()
@@ -1050,7 +1050,7 @@ const threadParamsAfter = `${threadParamsBlockAfter}        result = self._clien
 function hasCompleteThreadStartPatch(source) {
   return (
     source.includes('        dynamic_tools = _altselfs_dynamic_tools()') &&
-    source.includes('            params["dynamicTools"] = dynamic_tools') &&
+    source.includes('            params["dynamictools"] = dynamic_tools') &&
     source.includes("ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT") &&
     source.includes("ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS") &&
     source.includes("ALTSELFS_CODEX_PERSONALITY") &&
@@ -1143,8 +1143,8 @@ if (codexAppServerSession.includes(toolCallBranchAfter)) {
 
 codexAppServerSession = readFileSync(codexAppServerSessionPath, "utf8");
 
-const dynamicToolMethodMarker = `    def _handle_dynamic_tool_call(self, rid: Any, params: dict) -> None:`;
-const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, params: dict) -> None:
+const dynamictoolMethodMarker = `    def _handle_dynamic_tool_call(self, rid: Any, params: dict) -> None:`;
+const dynamictoolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, params: dict) -> None:
         if self._client is None:
             return
         namespace = params.get("namespace") or ""
@@ -1231,34 +1231,34 @@ const dynamicToolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
 
 `;
 
-const dynamicToolMethodAnchor = `    def _decide_exec_approval(self, params: dict) -> str:
+const dynamictoolMethodAnchor = `    def _decide_exec_approval(self, params: dict) -> str:
 `;
 
 if (
-  codexAppServerSession.includes(dynamicToolMethodMarker) &&
+  codexAppServerSession.includes(dynamictoolMethodMarker) &&
   codexAppServerSession.includes("is_personal_data = (") &&
   codexAppServerSession.includes("altselfs_feishu_lark_cli")
 ) {
   console.log("Hermes Codex dynamic tool handler patch already applied.");
   console.log(codexAppServerSessionPath);
-} else if (codexAppServerSession.includes(dynamicToolMethodMarker)) {
-  const methodStart = codexAppServerSession.indexOf(dynamicToolMethodMarker);
-  const methodEnd = codexAppServerSession.indexOf(dynamicToolMethodAnchor);
+} else if (codexAppServerSession.includes(dynamictoolMethodMarker)) {
+  const methodStart = codexAppServerSession.indexOf(dynamictoolMethodMarker);
+  const methodEnd = codexAppServerSession.indexOf(dynamictoolMethodAnchor);
   if (methodStart < 0 || methodEnd < 0 || methodEnd <= methodStart) {
     console.error("Could not find the Hermes Codex dynamic tool handler block to upgrade.");
     console.error(codexAppServerSessionPath);
     process.exit(1);
   }
-  codexAppServerSession = `${codexAppServerSession.slice(0, methodStart)}${dynamicToolMethod}${codexAppServerSession.slice(methodEnd)}`;
+  codexAppServerSession = `${codexAppServerSession.slice(0, methodStart)}${dynamictoolMethod}${codexAppServerSession.slice(methodEnd)}`;
   writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
   console.log("Hermes Codex dynamic tool handler patch upgraded.");
   console.log(codexAppServerSessionPath);
-} else if (!codexAppServerSession.includes(dynamicToolMethodAnchor)) {
+} else if (!codexAppServerSession.includes(dynamictoolMethodAnchor)) {
   console.error("Could not find the Hermes Codex dynamic tool handler insertion point.");
   console.error(codexAppServerSessionPath);
   process.exit(1);
 } else {
-  codexAppServerSession = codexAppServerSession.replace(dynamicToolMethodAnchor, `${dynamicToolMethod}${dynamicToolMethodAnchor}`);
+  codexAppServerSession = codexAppServerSession.replace(dynamictoolMethodAnchor, `${dynamictoolMethod}${dynamictoolMethodAnchor}`);
   writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
   console.log("Hermes Codex dynamic tool handler patch applied.");
   console.log(codexAppServerSessionPath);
@@ -1266,21 +1266,21 @@ if (
 
 codexAppServerSession = readFileSync(codexAppServerSessionPath, "utf8");
 
-const postToolQuietTimeoutBefore = `        post_tool_quiet_timeout: float = 90.0,
+const posttoolQuietTimeoutBefore = `        post_tool_quiet_timeout: float = 90.0,
 `;
 
-const postToolQuietTimeoutAfter = `        post_tool_quiet_timeout: float = 300.0,
+const posttoolQuietTimeoutAfter = `        post_tool_quiet_timeout: float = 300.0,
 `;
 
-if (codexAppServerSession.includes(postToolQuietTimeoutAfter)) {
+if (codexAppServerSession.includes(posttoolQuietTimeoutAfter)) {
   console.log("Hermes Codex post-tool quiet timeout patch already applied.");
   console.log(codexAppServerSessionPath);
-} else if (!codexAppServerSession.includes(postToolQuietTimeoutBefore)) {
+} else if (!codexAppServerSession.includes(posttoolQuietTimeoutBefore)) {
   console.error("Could not find the Hermes Codex post-tool quiet timeout default to patch.");
   console.error(codexAppServerSessionPath);
   process.exit(1);
 } else {
-  codexAppServerSession = codexAppServerSession.replace(postToolQuietTimeoutBefore, postToolQuietTimeoutAfter);
+  codexAppServerSession = codexAppServerSession.replace(posttoolQuietTimeoutBefore, posttoolQuietTimeoutAfter);
   writeFileSync(codexAppServerSessionPath, codexAppServerSession, "utf8");
   console.log("Hermes Codex post-tool quiet timeout patch applied.");
   console.log(codexAppServerSessionPath);

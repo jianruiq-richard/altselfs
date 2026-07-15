@@ -588,9 +588,9 @@ function digestGmailMessage(message: GmailMessageFull): GmailMessageDigest {
   return {
     id: message.id,
     threadId: message.threadId || null,
-    subject: headerValue(headers, 'Subject') || '无主题',
-    from: headerValue(headers, 'From') || '未知发件人',
-    to: headerValue(headers, 'To') || '未知收件人',
+    subject: headerValue(headers, 'Subject') || 'content',
+    from: headerValue(headers, 'From') || 'content',
+    to: headerValue(headers, 'To') || 'content',
     date: headerValue(headers, 'Date') || '',
     snippet: (message.snippet || '').trim(),
     bodyText: extractBodyText(message.payload),
@@ -772,25 +772,25 @@ function summarizeGmailDigests(
   const important = digests.filter((m) => m.status.important).length;
 
   const latestLines = digests.slice(0, 8).map((m, idx) => {
-    const attach = m.attachments.length > 0 ? ` | 附件 ${m.attachments.length}` : '';
+    const attach = m.attachments.length > 0 ? ` | content ${m.attachments.length}` : '';
     const status = [
-      m.status.unread ? '未读' : null,
-      m.status.important ? '重要' : null,
-      m.status.starred ? '星标' : null,
+      m.status.unread ? 'content' : null,
+      m.status.important ? 'content' : null,
+      m.status.starred ? 'content' : null,
     ].filter(Boolean).join('/');
     const statusText = status ? ` | ${status}` : '';
-    return `${idx + 1}. ${m.subject}（${m.from}）${statusText}${attach}`;
+    return `${idx + 1}. ${m.subject} (${m.from})${statusText}${attach}`;
   });
 
   const summary = [
-    `Gmail 账户 ${profile.emailAddress} 概览：`,
-    `已抓取邮件 ${digests.length} 封（全部模式${hasMore ? `，达到上限 ${maxMessages}` : ''}）。`,
-    `未读 ${unread}，重要 ${important}，收件箱 ${inbox}，已发送 ${sent}。`,
-    `含附件邮件 ${withAttachments} 封，附件总数 ${totalAttachments}。`,
-    '最近邮件：',
-    ...(latestLines.length > 0 ? latestLines : ['暂无邮件数据。']),
+    `Gmail content ${profile.emailAddress} Overview: `,
+    `content ${digests.length} content (Allcontent${hasMore ? `, content ${maxMessages}` : ''}).`,
+    `content ${unread}, content ${important}, content ${inbox}, contentSend ${sent}.`,
+    `content ${withAttachments} content, content ${totalAttachments}.`,
+    'content: ',
+    ...(latestLines.length > 0 ? latestLines : ['content.']),
     hasMore
-      ? `提示：当前为了稳定性仅同步到 ${maxMessages} 封，可通过环境变量 GMAIL_SYNC_MAX_MESSAGES 提高上限。`
+      ? `content: content ${maxMessages} content, content GMAIL_SYNC_MAX_MESSAGES content.`
       : '',
   ]
     .filter(Boolean)
@@ -841,14 +841,14 @@ export async function buildFeishuSummary(accessToken: string) {
   const info = await fetchFeishuUserInfo(accessToken);
 
   const summary = [
-    `飞书账户 ${info.name || info.en_name || '未命名用户'} 已绑定。`,
-    `当前已获取基础身份信息（open_id: ${info.open_id || '未知'}）。`,
-    '如需生成飞书邮件摘要，请在飞书应用后台继续开通 Mail 读取权限后再刷新摘要。',
+    `content ${info.name || info.en_name || 'content'} Connected.`,
+    `contentRolecontent (open_id: ${info.open_id || 'content'}).`,
+    'content, content Mail contentRefresh summary.',
   ].join('\n');
 
   return {
     accountEmail: info.email || null,
-    accountName: info.name || info.en_name || '飞书用户',
+    accountName: info.name || info.en_name || 'content',
     summary,
     raw: info,
   };

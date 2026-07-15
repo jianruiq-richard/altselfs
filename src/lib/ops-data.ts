@@ -120,12 +120,12 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
   ];
 
   const summary: OpsMetric[] = [
-    { label: '用户数', value: String(appStats.userCount), detail: `${appStats.investorCount} 投资人 / ${appStats.candidateCount} 候选人`, status: 'ok' },
-    { label: '近 7 日消息', value: String(appStats.recentMessageCount), detail: '产品聊天消息，不含 agent context 表', status: 'ok' },
-    { label: 'OpenRouter 余额', value: openRouter.balance, detail: openRouter.note || openRouter.usage, status: openRouter.status },
+    { label: 'content', value: String(appStats.userCount), detail: `${appStats.investorCount} content / ${appStats.candidateCount} content`, status: 'ok' },
+    { label: 'content 7 content', value: String(appStats.recentMessageCount), detail: 'content, content agent context content', status: 'ok' },
+    { label: 'OpenRouter content', value: openRouter.balance, detail: openRouter.note || openRouter.usage, status: openRouter.status },
     {
-      label: 'Agent 服务',
-      value: agentSnapshot.connected ? '已接入' : '未接入',
+      label: 'Agent content',
+      value: agentSnapshot.connected ? 'content' : 'content',
       detail: agentSnapshot.note,
       status: agentSnapshot.connected ? 'ok' : 'unknown',
     },
@@ -142,9 +142,9 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
     users,
     alerts,
     notes: [
-      '一期已接入 Clerk 管理权限、主库统计、OpenRouter credits、可选 Agent server 磁盘快照。',
-      '用户 token 成本目前用消息字符数估算；下一步需要在每次 LLM/tool 调用后写 ops_usage_events 才能做到精确计费。',
-      'Supabase、Vercel、阿里云已接入轻量 API 采集；Supabase 配额优先读 API，读不到时使用 limit env。',
+      'content Clerk content, content, OpenRouter credits, content Agent server content.',
+      'content token content; content LLM/tool content ops_usage_events content.',
+      'Supabase, Vercel, content API content; Supabase content API, content limit env.',
     ],
   };
 }
@@ -219,12 +219,12 @@ async function getAppStats() {
     databaseResource: {
       provider: databaseDescriptor.provider,
       resource: databaseDescriptor.resource,
-      used: databaseSize ? formatBytes(databaseSize) : '未知',
-      total: '需接入云厂商配额',
+      used: databaseSize ? formatBytes(databaseSize) : 'content',
+      total: 'content',
       percent: null,
       status: databaseSize ? 'ok' as const : 'unknown' as const,
       updatedAt: new Date().toISOString(),
-      note: databaseSize ? `数据库配额 · 来自 pg_database_size(current_database()) · ${databaseDescriptor.host}` : '当前数据库不支持容量读取或查询失败',
+      note: databaseSize ? `content · content pg_database_size(current_database()) · ${databaseDescriptor.host}` : 'contentfailed',
       metadata: {
         usedBytes: databaseSize,
       },
@@ -318,11 +318,11 @@ async function getOpenRouterAccount(): Promise<ApiAccountSnapshot> {
         provider: 'OpenRouter',
         account: 'Platform key',
         fingerprint: fingerprint(apiKey),
-        balance: '读取失败',
+        balance: 'contentfailed',
         usage: `HTTP ${response.status}`,
         status: 'warning',
         updatedAt: new Date().toISOString(),
-        note: 'OpenRouter credits API 返回异常',
+        note: 'OpenRouter credits API content',
       };
     }
 
@@ -334,19 +334,19 @@ async function getOpenRouterAccount(): Promise<ApiAccountSnapshot> {
       provider: 'OpenRouter',
       account: 'Platform key',
       fingerprint: fingerprint(apiKey),
-      balance: balance === null ? '未知' : formatUsd(balance),
-      usage: totalUsage === null ? '未知' : `已用 ${formatUsd(totalUsage)}`,
+      balance: balance === null ? 'content' : formatUsd(balance),
+      usage: totalUsage === null ? 'content' : `content ${formatUsd(totalUsage)}`,
       status: balance === null ? 'unknown' : balance < 5 ? 'critical' : balance < 20 ? 'warning' : 'ok',
       updatedAt: new Date().toISOString(),
-      note: totalCredits === null ? 'credits API 未返回 total_credits' : `总额度 ${formatUsd(totalCredits)}`,
+      note: totalCredits === null ? 'credits API content total_credits' : `content ${formatUsd(totalCredits)}`,
     };
   } catch (error) {
     return {
       provider: 'OpenRouter',
       account: 'Platform key',
       fingerprint: fingerprint(apiKey),
-      balance: '读取失败',
-      usage: '未知',
+      balance: 'contentfailed',
+      usage: 'content',
       status: 'warning',
       updatedAt: new Date().toISOString(),
       note: error instanceof Error ? error.message : String(error),
@@ -358,7 +358,7 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
   const baseUrl = process.env.OPS_AGENT_BASE_URL?.trim();
   const token = process.env.OPS_AGENT_TOKEN?.trim();
   if (!baseUrl || !token) {
-    return { connected: false, note: '配置 OPS_AGENT_BASE_URL 和 OPS_AGENT_TOKEN 后显示 ECS/workspace 磁盘', resources: [], userResources: [], apiAccounts: [] };
+    return { connected: false, note: 'content OPS_AGENT_BASE_URL content OPS_AGENT_TOKEN content ECS/workspace content', resources: [], userResources: [], apiAccounts: [] };
   }
 
   try {
@@ -368,7 +368,7 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
     });
     const data = await response.json().catch(() => null) as unknown;
     if (!response.ok || !isRecord(data)) {
-      return { connected: false, note: `Agent ops 接口 HTTP ${response.status}`, resources: [], userResources: [], apiAccounts: [] };
+      return { connected: false, note: `Agent ops content HTTP ${response.status}`, resources: [], userResources: [], apiAccounts: [] };
     }
     const resources = Array.isArray(data.resources)
       ? data.resources
@@ -377,8 +377,8 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
           .map((item): ResourceSnapshot => ({
             provider: 'Agent ECS',
             resource: String(item.resource || 'unknown'),
-            used: typeof item.usedBytes === 'number' ? formatBytes(item.usedBytes) : '未知',
-            total: typeof item.totalBytes === 'number' ? formatBytes(item.totalBytes) : '未知',
+            used: typeof item.usedBytes === 'number' ? formatBytes(item.usedBytes) : 'content',
+            total: typeof item.totalBytes === 'number' ? formatBytes(item.totalBytes) : 'content',
             percent: typeof item.percent === 'number' ? item.percent : null,
             status: statusFromPercent(typeof item.percent === 'number' ? item.percent : null),
             updatedAt: typeof data.collectedAt === 'string' ? data.collectedAt : new Date().toISOString(),
@@ -406,14 +406,14 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
           provider: typeof item.provider === 'string' ? item.provider : 'Agent API',
           account: typeof item.account === 'string' ? item.account : 'unknown',
           fingerprint: typeof item.fingerprint === 'string' ? item.fingerprint : 'ECS',
-          balance: typeof item.balance === 'string' ? item.balance : '未知',
-          usage: typeof item.usage === 'string' ? item.usage : '未知',
+          balance: typeof item.balance === 'string' ? item.balance : 'content',
+          usage: typeof item.usage === 'string' ? item.usage : 'content',
           status: isOpsStatus(item.status) ? item.status : 'unknown',
           updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : new Date().toISOString(),
           note: typeof item.note === 'string' ? item.note : undefined,
         }))
       : [];
-    return { connected: true, note: '来自 personal-agent-server /internal/ops/snapshot', resources, userResources, apiAccounts };
+    return { connected: true, note: 'content personal-agent-server /internal/ops/snapshot', resources, userResources, apiAccounts };
   } catch (error) {
     return { connected: false, note: error instanceof Error ? error.message : String(error), resources: [], userResources: [], apiAccounts: [] };
   }
@@ -459,12 +459,12 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
         resources.push({
           provider: 'Supabase API',
           resource: `Project ${projectRef}`,
-          used: '读取失败',
+          used: 'contentfailed',
           total: `HTTP ${response.status}`,
           percent: null,
           status: 'warning',
           updatedAt: now,
-          note: 'Supabase Management API 返回异常',
+          note: 'Supabase Management API content',
         });
       }
     } catch (error) {
@@ -474,12 +474,12 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
     resources.push({
       provider: 'Supabase API',
       resource: 'Project metadata',
-      used: '已配置 token',
-      total: '缺项目 ref',
+      used: 'content token',
+      total: 'content ref',
       percent: null,
       status: 'unknown',
       updatedAt: now,
-      note: '补充 SUPABASE_PROJECT_REF 后可读取项目和套餐信息',
+      note: 'content SUPABASE_PROJECT_REF content',
     });
   }
 
@@ -487,15 +487,15 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
   if (storageBytes !== null || storageLimit !== null || token) {
     resources.push({
       provider: 'Supabase',
-      resource: 'Object Storage / bucket 文件',
-      used: storageBytes === null ? '未知' : formatBytes(storageBytes),
-      total: storageLimit === null ? '需配置套餐上限' : formatBytes(storageLimit),
+      resource: 'Object Storage / bucket content',
+      used: storageBytes === null ? 'content' : formatBytes(storageBytes),
+      total: storageLimit === null ? 'content' : formatBytes(storageLimit),
       percent: storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null,
       status: statusFromPercent(storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null),
       updatedAt: now,
       note: storageBytes === null
-        ? '文件存储配额，不是数据库；当前没有 bucket 文件或无法读取 storage.objects'
-        : `文件存储用量，来自 storage.objects metadata.size${storageLimitSource ? ` · 上限来自 ${storageLimitSource}` : ''}`,
+        ? 'content, content; content bucket content storage.objects'
+        : `content, content storage.objects metadata.size${storageLimitSource ? ` · content ${storageLimitSource}` : ''}`,
     });
   }
 
@@ -566,7 +566,7 @@ function mergeAppDatabaseResource(resource: ResourceSnapshot, supabase: Supabase
     note: [
       resource.note,
       supabase.projectNote,
-      supabase.databaseLimitSource ? `上限来自 ${supabase.databaseLimitSource}` : null,
+      supabase.databaseLimitSource ? `content ${supabase.databaseLimitSource}` : null,
     ].filter(Boolean).join(' · '),
   };
 }
@@ -596,19 +596,19 @@ function rapidApiAccountsFromAgent(agentSnapshot: AgentSnapshot) {
 
 function describeDatabaseUrl() {
   const raw = process.env.DATABASE_URL?.trim().replace(/^['"]|['"]$/g, '');
-  if (!raw) return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL 未配置' };
+  if (!raw) return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL content' };
   try {
     const url = new URL(raw);
     const host = url.hostname;
     if (host.includes('supabase.co') || host.includes('supabase.com')) {
-      return { provider: 'Supabase', resource: 'Postgres database / App 业务数据', host };
+      return { provider: 'Supabase', resource: 'Postgres database / App content', host };
     }
     if (host.includes('rds.aliyuncs.com')) {
-      return { provider: 'Aliyun RDS', resource: 'Postgres database / App 业务数据', host };
+      return { provider: 'Aliyun RDS', resource: 'Postgres database / App content', host };
     }
     return { provider: 'PostgreSQL', resource: 'App database', host };
   } catch {
-    return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL 解析失败' };
+    return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL contentfailed' };
   }
 }
 
@@ -660,12 +660,12 @@ async function getVercelResources(): Promise<ResourceSnapshot[]> {
     return [{
       provider: 'Vercel',
       resource: 'Project',
-      used: '已配置 token',
-      total: '缺项目 ID',
+      used: 'content token',
+      total: 'content ID',
       percent: null,
       status: 'unknown',
       updatedAt: new Date().toISOString(),
-      note: '补充 VERCEL_PROJECT_ID；团队项目再补 VERCEL_TEAM_ID',
+      note: 'content VERCEL_PROJECT_ID; content VERCEL_TEAM_ID',
     }];
   }
 
@@ -687,18 +687,18 @@ async function getVercelResources(): Promise<ResourceSnapshot[]> {
         percent: null,
         status: 'ok',
         updatedAt: now,
-        note: typeof project.updatedAt === 'number' ? `updated ${new Date(project.updatedAt).toISOString()}` : '来自 Vercel Project API',
+        note: typeof project.updatedAt === 'number' ? `updated ${new Date(project.updatedAt).toISOString()}` : 'content Vercel Project API',
       });
     } else {
       resources.push({
         provider: 'Vercel',
         resource: `Project ${target}`,
-        used: '读取失败',
+        used: 'contentfailed',
         total: `HTTP ${projectResponse.status}`,
         percent: null,
         status: 'warning',
         updatedAt: now,
-        note: '检查 VERCEL_PROJECT_ID / VERCEL_TEAM_ID / token scope',
+        note: 'content VERCEL_PROJECT_ID / VERCEL_TEAM_ID / token scope',
       });
     }
 
@@ -716,7 +716,7 @@ async function getVercelResources(): Promise<ResourceSnapshot[]> {
     resources.push({
       provider: 'Vercel',
       resource: 'Recent deployments',
-      used: latest ? String(latest.state || 'unknown') : '无部署',
+      used: latest ? String(latest.state || 'unknown') : 'content',
       total: `${deployments.length} recent`,
       percent: null,
       status: latest && latest.state === 'ERROR' ? 'critical' : deploymentsResponse.ok ? 'ok' : 'warning',
@@ -738,12 +738,12 @@ async function getAliyunResources(): Promise<ResourceSnapshot[]> {
     return [{
       provider: 'Aliyun',
       resource: 'API credentials',
-      used: accessKeySecret ? 'AccessKeySecret 已配置' : '缺 AccessKeySecret',
-      total: regionId ? regionId : '缺 RegionId',
+      used: accessKeySecret ? 'AccessKeySecret content' : 'content AccessKeySecret',
+      total: regionId ? regionId : 'content RegionId',
       percent: null,
       status: 'unknown',
       updatedAt: new Date().toISOString(),
-      note: '补充 ALIYUN_ACCESS_KEY_SECRET 和 ALIYUN_REGION_ID 后可查询 ECS/RDS',
+      note: 'content ALIYUN_ACCESS_KEY_SECRET content ALIYUN_REGION_ID content ECS/RDS',
     }];
   }
 
@@ -757,12 +757,12 @@ async function getAliyunResources(): Promise<ResourceSnapshot[]> {
     resources.push({
       provider: 'Aliyun',
       resource: 'ECS / RDS',
-      used: '已配置凭证',
+      used: 'content',
       total: regionId,
       percent: null,
       status: 'unknown',
       updatedAt: new Date().toISOString(),
-      note: '补充 ALIYUN_ECS_DISK_IDS 或 ALIYUN_RDS_INSTANCE_ID 后可显示指定资源',
+      note: 'content ALIYUN_ECS_DISK_IDS content ALIYUN_RDS_INSTANCE_ID content',
     });
   }
   return resources;
@@ -780,7 +780,7 @@ function mergeEcsDiskResources(agentResources: ResourceSnapshot[], aliyunResourc
     return {
       ...agent,
       provider: 'ECS',
-      note: `云盘 ${diskName} / ${device} / ${size} / ${cloudStatus}`,
+      note: `content ${diskName} / ${device} / ${size} / ${cloudStatus}`,
       metadata: {
         ...(agent.metadata || {}),
         aliyunDiskId: stringValue(disk.metadata?.diskId) || null,
@@ -827,7 +827,7 @@ async function getAliyunEcsDisks(credentials: AliyunCredentials): Promise<Resour
         percent: null,
         status: 'unknown',
         updatedAt: new Date().toISOString(),
-        note: 'DescribeDisks 未返回磁盘；检查 ALIYUN_ECS_DISK_IDS / ALIYUN_ECS_INSTANCE_ID',
+        note: 'DescribeDisks content; content ALIYUN_ECS_DISK_IDS / ALIYUN_ECS_INSTANCE_ID',
       }];
     }
     return disks.map((disk) => {
@@ -837,11 +837,11 @@ async function getAliyunEcsDisks(credentials: AliyunCredentials): Promise<Resour
         provider: 'Aliyun',
         resource: `ECS disk ${String(disk.DiskName || disk.DiskId || 'unknown')}`,
         used: status,
-        total: sizeGiB === null ? '未知' : `${sizeGiB} GiB provisioned`,
+        total: sizeGiB === null ? 'content' : `${sizeGiB} GiB provisioned`,
         percent: null,
         status: status === 'In_use' || status === 'Available' ? 'ok' : 'unknown',
         updatedAt: new Date().toISOString(),
-        note: String(disk.Device || disk.Type || '来自 ECS DescribeDisks'),
+        note: String(disk.Device || disk.Type || 'content ECS DescribeDisks'),
         metadata: {
           kind: 'ecs_disk',
           device: typeof disk.Device === 'string' ? disk.Device : null,
@@ -872,12 +872,12 @@ async function getAliyunRdsInstance(credentials: AliyunCredentials): Promise<Res
       return [{
         provider: 'Aliyun',
         resource: `RDS ${instanceId}`,
-        used: '读取失败',
-        total: '无属性',
+        used: 'contentfailed',
+        total: 'content',
         percent: null,
         status: 'warning',
         updatedAt: new Date().toISOString(),
-        note: 'DescribeDBInstanceAttribute 未返回实例属性',
+        note: 'DescribeDBInstanceAttribute content',
       }];
     }
     const totalGiB = readNumber(attr.DBInstanceStorage);
@@ -888,7 +888,7 @@ async function getAliyunRdsInstance(credentials: AliyunCredentials): Promise<Res
       provider: 'Aliyun',
       resource: `RDS ${String(attr.DBInstanceDescription || instanceId)}`,
       used: usedBytes === null ? String(attr.DBInstanceStatus || 'unknown') : formatBytes(usedBytes),
-      total: totalGiB === null ? '未知' : `${totalGiB} GiB provisioned`,
+      total: totalGiB === null ? 'content' : `${totalGiB} GiB provisioned`,
       percent,
       status: percent === null ? (attr.DBInstanceStatus === 'Running' ? 'ok' : 'unknown') : statusFromPercent(percent),
       updatedAt: new Date().toISOString(),
@@ -906,11 +906,11 @@ function staticKeyStatus(provider: string, envKey: string): ApiAccountSnapshot {
     provider,
     account: envKey,
     fingerprint: fingerprint(value),
-    balance: '未接入余额 API',
-    usage: '待埋点统计',
+    balance: 'content API',
+    usage: 'content',
     status: 'unknown',
     updatedAt: new Date().toISOString(),
-    note: 'key 已配置，但该供应商的一期余额拉取尚未接入',
+    note: 'key content, content',
   };
 }
 
@@ -970,12 +970,12 @@ function staticResourceStatus(provider: string, resource: string, envKey: string
   return {
     provider,
     resource,
-    used: configured ? '待采集' : '未配置',
-    total: configured ? '待采集' : '未配置',
+    used: configured ? 'content' : 'content',
+    total: configured ? 'content' : 'content',
     percent: null,
     status: 'unknown',
     updatedAt: new Date().toISOString(),
-    note: configured ? `${envKey} 已配置，待接入管理 API` : `配置 ${envKey} 后接入`,
+    note: configured ? `${envKey} content, content API` : `content ${envKey} content`,
   };
 }
 
@@ -983,12 +983,12 @@ function missingAccount(provider: string, envKey: string): ApiAccountSnapshot {
   return {
     provider,
     account: envKey,
-    fingerprint: '未配置',
-    balance: '未知',
-    usage: '未知',
+    fingerprint: 'content',
+    balance: 'content',
+    usage: 'content',
     status: 'unknown',
     updatedAt: new Date().toISOString(),
-    note: `缺少 ${envKey}`,
+    note: `content ${envKey}`,
   };
 }
 
@@ -996,20 +996,20 @@ function buildAlerts(apiAccounts: ApiAccountSnapshot[], resources: ResourceSnaps
   const alerts: Array<{ severity: OpsStatus; title: string; detail: string }> = [];
   for (const account of apiAccounts) {
     if (account.status === 'critical' || account.status === 'warning') {
-      alerts.push({ severity: account.status, title: `${account.provider} 需要关注`, detail: `${account.balance} · ${account.note || account.usage}` });
+      alerts.push({ severity: account.status, title: `${account.provider} content`, detail: `${account.balance} · ${account.note || account.usage}` });
     }
   }
   for (const resource of resources) {
     if (resource.status === 'critical' || resource.status === 'warning') {
-      alerts.push({ severity: resource.status, title: `${resource.provider} ${resource.resource} 容量偏高`, detail: `${resource.used} / ${resource.total}` });
+      alerts.push({ severity: resource.status, title: `${resource.provider} ${resource.resource} content`, detail: `${resource.used} / ${resource.total}` });
     }
   }
   const topUser = users[0];
   if (topUser && topUser.estimatedTokens > 100_000) {
     alerts.push({
       severity: 'warning',
-      title: '存在高用量用户',
-      detail: `${topUser.email} 估算 ${topUser.estimatedTokens.toLocaleString()} tokens`,
+      title: 'content',
+      detail: `${topUser.email} content ${topUser.estimatedTokens.toLocaleString()} tokens`,
     });
   }
   return alerts;
@@ -1069,7 +1069,7 @@ function apiErrorResource(provider: string, resource: string, error: unknown): R
   return {
     provider,
     resource,
-    used: '读取失败',
+    used: 'contentfailed',
     total: 'API error',
     percent: null,
     status: 'warning',
@@ -1083,7 +1083,7 @@ function formatUsd(value: number) {
 }
 
 function formatBytes(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes < 0) return '未知';
+  if (!Number.isFinite(bytes) || bytes < 0) return 'content';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let index = 0;

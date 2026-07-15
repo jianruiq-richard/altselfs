@@ -4,7 +4,7 @@ import { createChatCompletion, createJsonChatCompletion, getOpenRouterModelCandi
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import {
   appendThreadMessage,
-  appendToolCall,
+  appendtoolCall,
   ensureThread,
   getLatestThreadWithMessages,
   toClientMessages,
@@ -136,10 +136,10 @@ function safeParsePlan(raw: string): GmailPlan {
 }
 
 function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | null, raw: unknown) {
-  const providerLabel = provider === 'gmail' ? 'Gmail' : '飞书';
+  const providerLabel = provider === 'gmail' ? 'Gmail' : 'message';
   const lines: string[] = [];
-  lines.push(`当前渠道：${providerLabel}`);
-  lines.push(`最近摘要：${summary || '暂无摘要，请先点击“刷新摘要”。'}`);
+  lines.push(`message: ${providerLabel}`);
+  lines.push(`Latest summary: ${summary || 'message, message"Refresh summary".'}`);
 
   if (provider === 'gmail' && raw && typeof raw === 'object') {
     const r = raw as {
@@ -174,13 +174,13 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
       }>;
     };
     if (r.profile?.emailAddress) {
-      lines.push(`邮箱账号：${r.profile.emailAddress}`);
+      lines.push(`Emailaccounts: ${r.profile.emailAddress}`);
     }
     if (typeof r.profile?.messagesTotal === 'number') {
-      lines.push(`总邮件数：${r.profile.messagesTotal}`);
+      lines.push(`message: ${r.profile.messagesTotal}`);
     }
     if (typeof r.profile?.threadsTotal === 'number') {
-      lines.push(`总线程数：${r.profile.threadsTotal}`);
+      lines.push(`message: ${r.profile.threadsTotal}`);
     }
 
     if (Array.isArray(r.allMessages) && r.allMessages.length > 0) {
@@ -190,24 +190,24 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
       const withAttachments = r.allMessages.filter((m) => (m.attachments?.length || 0) > 0).length;
       const withBody = r.allMessages.filter((m) => Boolean((m.bodyText || '').trim())).length;
       lines.push(
-        `全量同步邮件：${total} 封（未读 ${unread}，重要 ${important}，含附件 ${withAttachments}${r.hasMore ? `，已达上限 ${r.maxMessages || 'N/A'}` : ''}）`
+        `message: ${total} message (message ${unread}, message ${important}, message ${withAttachments}${r.hasMore ? `, message ${r.maxMessages || 'N/A'}` : ''})`
       );
-      lines.push(`正文同步状态：已同步 ${withBody}/${total} 封邮件正文。`);
+      lines.push(`message: message ${withBody}/${total} message.`);
 
       const top = r.allMessages.slice(0, 12).map((m, idx) => {
-        const subject = (m.subject || '无主题').trim();
-        const from = (m.from || '未知发件人').trim();
+        const subject = (m.subject || 'message').trim();
+        const from = (m.from || 'message').trim();
         const snippet = (m.snippet || '').trim().slice(0, 120);
         const bodyPreview = (m.bodyText || '').replace(/\s+/g, ' ').trim().slice(0, 220);
         const status = [
-          m.status?.unread ? '未读' : null,
-          m.status?.important ? '重要' : null,
-          m.status?.starred ? '星标' : null,
-          m.status?.inbox ? '收件箱' : null,
-          m.status?.sent ? '已发送' : null,
-          m.status?.draft ? '草稿' : null,
-          m.status?.trash ? '垃圾箱' : null,
-          m.status?.spam ? '垃圾邮件' : null,
+          m.status?.unread ? 'message' : null,
+          m.status?.important ? 'message' : null,
+          m.status?.starred ? 'message' : null,
+          m.status?.inbox ? 'message' : null,
+          m.status?.sent ? 'messageSend' : null,
+          m.status?.draft ? 'message' : null,
+          m.status?.trash ? 'message' : null,
+          m.status?.spam ? 'message' : null,
         ]
           .filter(Boolean)
           .join('/');
@@ -217,35 +217,35 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
                 .slice(0, 4)
                 .map((a) => `${a.filename || 'unnamed'}(${a.mimeType || 'unknown'},${a.size || 0}B)`)
                 .join(', ')
-            : '无';
+            : 'message';
         return [
-          `${idx + 1}. ${subject}（${from}）`,
-          `   时间：${m.receivedAt || m.date || '未知'} | 状态：${status || '普通'}`,
-          `   附件：${attachSummary}`,
-          `   片段：${snippet || '无'}`,
-          `   正文预览：${bodyPreview || '无'}`,
+          `${idx + 1}. ${subject} (${from})`,
+          `   message: ${m.receivedAt || m.date || 'message'} | message: ${status || 'message'}`,
+          `   message: ${attachSummary}`,
+          `   message: ${snippet || 'message'}`,
+          `   message: ${bodyPreview || 'message'}`,
         ].join('\n');
       });
 
-      lines.push(`最近邮件详情：\n${top.join('\n')}`);
+      lines.push(`message: \n${top.join('\n')}`);
 
       const fullBodyItems = r.allMessages
         .filter((m) => Boolean((m.bodyText || '').trim()))
         .slice(0, 3)
         .map((m, idx) => {
-          const subject = (m.subject || '无主题').trim();
-          const from = (m.from || '未知发件人').trim();
+          const subject = (m.subject || 'message').trim();
+          const from = (m.from || 'message').trim();
           const body = (m.bodyText || '').replace(/\s+/g, ' ').trim().slice(0, 6000);
           return [
-            `[全文${idx + 1}] ${subject}（${from}）`,
-            `时间：${m.receivedAt || m.date || '未知'}`,
-            `正文全文（截断上限6000字符）：`,
-            body || '无',
+            `[message${idx + 1}] ${subject} (${from})`,
+            `message: ${m.receivedAt || m.date || 'message'}`,
+            `message (message6000message): `,
+            body || 'message',
           ].join('\n');
         });
 
       if (fullBodyItems.length > 0) {
-        lines.push(`可深读正文：\n${fullBodyItems.join('\n\n')}`);
+        lines.push(`message: \n${fullBodyItems.join('\n\n')}`);
       }
     }
   }
@@ -254,23 +254,23 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
 }
 
 function buildSystemPrompt(provider: 'gmail' | 'feishu', customPrompt?: string | null) {
-  const providerLabel = provider === 'gmail' ? 'Gmail' : '飞书';
+  const providerLabel = provider === 'gmail' ? 'Gmail' : 'message';
   const base = [
-    `你是投资人的“${providerLabel} 消息AI员工”。`,
-    '你的工作是：',
-    '1) 基于已提供的渠道数据回答问题并给出清晰下一步建议；',
-    '2) 主动按优先级梳理待处理事项（高/中/低）；',
-    '3) 输出尽量简洁，默认中文，优先给可执行建议。',
-    '限制：',
-    '1) 只能使用上下文中给出的信息，不要编造未给出的邮件/消息；',
-    '2) 信息不足时明确指出缺失项，并提示用户点击“刷新摘要”；',
-    '3) 当用户要求写回复时，给出可直接复制的草稿。',
-    '4) 若上下文中出现“正文同步状态：已同步 X/Y”，且 X>0，不要再声称“正文未同步”。',
+    `message"${providerLabel} messageAI teammate".`,
+    'messageWorkmessage: ',
+    '1) message; ',
+    '2) message (message/message/message); ',
+    '3) message, defaultmessage, message.',
+    'message: ',
+    '1) message, message/message; ',
+    '2) message, message"Refresh summary"; ',
+    '3) message, message.',
+    '4) message"message: message X/Y", message X>0, message"message".',
   ];
 
   const normalized = customPrompt?.trim();
   if (normalized) {
-    base.push('用户自定义调教要求：');
+    base.push('message: ');
     base.push(normalized);
   }
 
@@ -279,49 +279,49 @@ function buildSystemPrompt(provider: 'gmail' | 'feishu', customPrompt?: string |
 
 function buildRealtimePlannerPrompt(conversation: ClientMessage[], customPrompt?: string | null) {
   const blocks = [
-    '你是 Gmail 实时代理的工具调度器。你的唯一任务是选择下一步要调用的 Gmail API。',
-    '你必须只返回 JSON，不要输出任何其他文字。',
-    '可选 action：',
-    '1) list_recent: 拉取最近邮件（无需 query）',
-    '2) list_unread: 拉取未读邮件（无需 query）',
-    '3) search_messages: 按 query 搜索邮件',
-    '4) read_message: 按 messageId 读取单封邮件正文',
-    '5) send_email: 发送邮件',
-    '6) snapshot_answer: 不需要 API，直接基于现有聊天回复',
-    '7) clarify: 信息不足，先问澄清问题',
+    'message Gmail messagetoolmessage.message Gmail API.',
+    'message JSON, message.',
+    'message action: ',
+    '1) list_recent: message (message query)',
+    '2) list_unread: message (message query)',
+    '3) search_messages: message query message',
+    '4) read_message: message messageId message',
+    '5) send_email: Sendmessage',
+    '6) snapshot_answer: message API, message',
+    '7) clarify: message, message',
     '',
     'JSON schema:',
     '{',
     '  "action": "list_recent|list_unread|search_messages|read_message|send_email|snapshot_answer|clarify",',
-    '  "reason": "短原因",',
+    '  "reason": "message",',
     '  "args": {',
     '    "maxResults": 1-20,',
-    '    "query": "搜索语句",',
-    '    "messageId": "邮件ID",',
-    '    "to": "收件人邮箱",',
-    '    "cc": "抄送邮箱(可选)",',
-    '    "bcc": "密送邮箱(可选)",',
-    '    "subject": "主题",',
-    '    "body": "正文"',
+    '    "query": "message",',
+    '    "messageId": "messageID",',
+    '    "to": "messageEmail",',
+    '    "cc": "messageEmail(message)",',
+    '    "bcc": "messageEmail(message)",',
+    '    "subject": "message",',
+    '    "body": "message"',
     '  }',
     '}',
     '',
-    '规则：',
-    '- 用户明确要求“查某封邮件/看正文”时优先 read_message。',
-    '- 用户要求“搜索/筛选某主题”时用 search_messages。',
-    '- 用户要求“发邮件/回邮件”且给出收件人+内容时用 send_email。',
-    '- 缺关键参数就用 clarify。',
+    'message: ',
+    '- message"message/message"message read_message.',
+    '- message"message/message"message search_messages.',
+    '- message"message/message"message+message send_email.',
+    '- message clarify.',
     '',
   ];
 
   if (customPrompt?.trim()) {
-    blocks.push('用户给你的调教偏好（必须尽量遵循）：');
+    blocks.push('message (message): ');
     blocks.push(customPrompt.trim());
     blocks.push('');
   }
 
   blocks.push(
-    '最近对话：',
+    'message: ',
     ...conversation.map((m, idx) => `${idx + 1}. [${m.role}] ${m.content}`)
   );
 
@@ -338,23 +338,23 @@ async function buildRealtimeFinalReply(input: {
     {
       role: 'system',
       content: [
-        '你是投资人的 Gmail 实时代理。',
-        '你已经拿到了工具执行结果，请给出最终答复。',
-        '要求：',
-        '1) 简洁中文。',
-        '2) 如果是邮件列表，请按优先级输出并附上 messageId（用于下一轮 read_message）。',
-        '3) 如果是读取单封邮件，给“关键信息摘要 + 下一步建议 + 可回复草稿(如适用)”。',
-        '4) 如果是发信成功，明确返回发送成功和 messageId。',
-        '5) 不要编造工具结果中不存在的信息。',
-        input.customPrompt?.trim() ? `用户自定义调教要求：\n${input.customPrompt.trim()}` : '',
+        'message Gmail message.',
+        'messagetoolmessage, message.',
+        'message: ',
+        '1) message.',
+        '2) message, message messageId (message read_message).',
+        '3) message, message"messageSummary + message + message(message)".',
+        '4) message, messageSendmessage messageId.',
+        '5) messagetoolmessage.',
+        input.customPrompt?.trim() ? `message: \n${input.customPrompt.trim()}` : '',
       ].join('\n'),
     },
     {
       role: 'user',
       content: [
-        `用户对话（最近）：${JSON.stringify(input.userMessages.slice(-8))}`,
-        `工具决策：${JSON.stringify(input.plan)}`,
-        `工具结果：${JSON.stringify(input.toolResult)}`,
+        `message (message): ${JSON.stringify(input.userMessages.slice(-8))}`,
+        `toolmessage: ${JSON.stringify(input.plan)}`,
+        `toolmessage: ${JSON.stringify(input.toolResult)}`,
       ].join('\n\n'),
     },
   ];
@@ -395,7 +395,7 @@ async function resolveInvestorAndProvider(
   if (!integration) {
     return {
       error: NextResponse.json(
-        { error: `请先绑定${provider === 'gmail' ? 'Gmail' : '飞书'}账号` },
+        { error: `messageConnect${provider === 'gmail' ? 'Gmail' : 'message'}accounts` },
         { status: 400 }
       ),
     } as const;
@@ -481,7 +481,7 @@ async function executeGmailPlan(accessToken: string, plan: GmailPlan) {
     case 'search_messages': {
       const query = String(args.query || '').trim();
       if (!query) {
-        return { action: 'clarify', error: '缺少搜索条件，请补充关键词或 Gmail 查询语法。' };
+        return { action: 'clarify', error: 'message, message Gmail message.' };
       }
       const maxResults = Math.max(1, Math.min(Number(args.maxResults || 8), 20));
       const items = await searchGmailMessages(accessToken, { query, maxResults, includeSpamTrash: false });
@@ -490,7 +490,7 @@ async function executeGmailPlan(accessToken: string, plan: GmailPlan) {
     case 'read_message': {
       const messageId = String(args.messageId || '').trim();
       if (!messageId) {
-        return { action: 'clarify', error: '缺少 messageId，请先让我列出邮件并选择一封。' };
+        return { action: 'clarify', error: 'message messageId, message.' };
       }
       const item = await getGmailMessageById(accessToken, messageId);
       return { action: plan.action, item };
@@ -500,7 +500,7 @@ async function executeGmailPlan(accessToken: string, plan: GmailPlan) {
       const subject = String(args.subject || '').trim();
       const body = String(args.body || '').trim();
       if (!to || !subject || !body) {
-        return { action: 'clarify', error: '发信缺少必要参数（to/subject/body）。' };
+        return { action: 'clarify', error: 'message (to/subject/body).' };
       }
       const sent = await sendGmailMessage(accessToken, {
         to,
@@ -570,7 +570,7 @@ export async function POST(
     .slice(-20);
 
   if (messages.length === 0) {
-    return NextResponse.json({ error: '缺少对话内容' }, { status: 400 });
+    return NextResponse.json({ error: 'message' }, { status: 400 });
   }
 
   const thread = await ensureThread({
@@ -602,7 +602,7 @@ export async function POST(
 
     const aiMessages: ChatMessage[] = [
       { role: 'system', content: buildSystemPrompt(provider, customPrompt) },
-      { role: 'system', content: `渠道上下文：\n${context}` },
+      { role: 'system', content: `message: \n${context}` },
       ...messages,
     ];
 
@@ -611,13 +611,13 @@ export async function POST(
       await appendThreadMessage({
         threadId: thread.id,
         role: 'ASSISTANT',
-        content: result.content || '已收到，但暂无回复。',
+        content: result.content || 'Received, but no reply is available yet.',
         meta: { model: result.model },
       });
       return NextResponse.json({ reply: result.content, model: result.model, threadId: thread.id });
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'unknown';
-      return NextResponse.json({ error: `AI回复失败：${detail}` }, { status: 500 });
+      return NextResponse.json({ error: `AImessagefailed: ${detail}` }, { status: 500 });
     }
   }
 
@@ -627,7 +627,7 @@ export async function POST(
     const plannerMessages: ChatMessage[] = [
       {
         role: 'system',
-        content: '你是严格 JSON 规划器。只输出 JSON 对象。',
+        content: 'message JSON message.message JSON message.',
       },
       {
         role: 'user',
@@ -637,7 +637,7 @@ export async function POST(
 
     const planner = await runMailAgentJson(plannerMessages);
     const plan = safeParsePlan(planner.content);
-    await appendToolCall({
+    await appendtoolCall({
       threadId: thread.id,
       messageId: userMessageId,
       toolName: 'gmail_planner',
@@ -646,7 +646,7 @@ export async function POST(
       toolResult: { plan, model: planner.model },
     });
     const toolResult = await executeGmailPlan(accessToken, plan);
-    await appendToolCall({
+    await appendtoolCall({
       threadId: thread.id,
       messageId: userMessageId,
       toolName: `gmail_${plan.action}`,
@@ -656,7 +656,7 @@ export async function POST(
     });
 
     if ((toolResult as { action?: string }).action === 'clarify') {
-      const clarify = (toolResult as { error?: string; note?: string }).error || '请补充更具体的操作目标。';
+      const clarify = (toolResult as { error?: string; note?: string }).error || 'message.';
       await appendThreadMessage({
         threadId: thread.id,
         role: 'ASSISTANT',
@@ -671,8 +671,8 @@ export async function POST(
         {
           role: 'system',
           content: [
-            '你是投资人的 Gmail 助手。基于当前对话直接回答，不调用工具。',
-            customPrompt?.trim() ? `用户自定义调教要求：\n${customPrompt.trim()}` : '',
+            'message Gmail message.message, messageCall tool.',
+            customPrompt?.trim() ? `message: \n${customPrompt.trim()}` : '',
           ].join('\n'),
         },
         ...messages,
@@ -680,7 +680,7 @@ export async function POST(
       await appendThreadMessage({
         threadId: thread.id,
         role: 'ASSISTANT',
-        content: result.content || '已收到，但暂无回复。',
+        content: result.content || 'Received, but no reply is available yet.',
         meta: { model: result.model, plan },
       });
       return NextResponse.json({ reply: result.content, planner: plan, toolResult, model: result.model, threadId: thread.id });
@@ -696,7 +696,7 @@ export async function POST(
     await appendThreadMessage({
       threadId: thread.id,
       role: 'ASSISTANT',
-      content: final.content || '已收到，但暂无回复。',
+      content: final.content || 'Received, but no reply is available yet.',
       meta: {
         plannerModel: planner.model,
         responderModel: final.model,
@@ -720,11 +720,11 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            '当前 Gmail 授权范围不足以执行该操作（例如发信）。请在投资人面板点击“重新绑定 Gmail”后重试。',
+            'message Gmail message (message).message"Reconnect Gmail"message.',
         },
         { status: 400 }
       );
     }
-    return NextResponse.json({ error: `AI代理执行失败：${detail}` }, { status: 500 });
+    return NextResponse.json({ error: `AImessageExecution failed: ${detail}` }, { status: 500 });
   }
 }

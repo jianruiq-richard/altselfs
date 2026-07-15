@@ -41,13 +41,13 @@ export class PostgresUserProfileStore {
         const content = extractExplicitProfileContent(message);
         if (!content)
             return null;
-        return this.saveProfileEntry(userId, content, threadId, '用户明确要求长期记住这条偏好或画像信息', 0.98);
+        return this.saveProfileEntry(userId, content, threadId, 'The user explicitly asked to remember this long-term preference or profile detail', 0.98);
     }
     async saveReviewedUserProfile(userId, content, threadId, reason) {
         const normalized = content.trim();
         if (!normalized)
             return null;
-        return this.saveProfileEntry(userId, normalized, threadId, reason || 'Hermes memory review 识别出的长期用户画像或偏好', 0.8);
+        return this.saveProfileEntry(userId, normalized, threadId, reason || 'Long-term user profile or preference identified by Hermes memory review', 0.8);
     }
     async saveProfileEntry(userId, content, threadId, reason, confidence) {
         const pool = await getPostgresPool(this.config);
@@ -172,7 +172,7 @@ function rowToProfileEntry(row) {
         id: String(row.id || ''),
         userId: String(row.user_id || ''),
         content: String(row.content || ''),
-        reason: '来自 PostgreSQL 用户画像存储',
+        reason: 'From PostgreSQL user profile storage',
         sourceThreadId: typeof row.source_thread_id === 'string' ? row.source_thread_id : undefined,
         createdAt: dateishToIso(row.created_at),
         updatedAt: dateishToIso(row.updated_at),
@@ -199,13 +199,13 @@ function rowToMemoryReviewJob(row) {
     };
 }
 function extractExplicitProfileContent(message) {
-    const match = message.match(/(?:^|[。！？\n]\s*)(?:请你?|帮我)?(?:记住|请记住|以后记得|帮我记住)(?:[：:\s]+)(?<content>[\s\S]+)/u);
+    const match = message.match(/(?:^|[.!?\n]\s*)(?:instruction?|instruction)?(?:instruction|instruction|instruction|instruction)(?:[: :\s]+)(?<content>[\s\S]+)/u);
     let content = match?.groups?.content?.trim();
     if (!content)
         return '';
-    content = content.replace(/(?:请)?只回复[：:].*$/s, '').trim();
-    content = content.replace(/(?:请)?回复[：:].*$/s, '').trim();
-    content = content.replace(/^(这个偏好|这条偏好|这件事)[：:\s]*/u, '').trim();
+    content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
+    content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
+    content = content.replace(/^(instruction|instruction|instruction)[: :\s]*/u, '').trim();
     return content;
 }
 function dateishToIso(value) {

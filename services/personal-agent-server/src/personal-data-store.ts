@@ -382,7 +382,7 @@ export async function upsertFeishuOAuthConnection(config: ServerConfig, input: {
     userId: input.userId,
     capabilityKey: 'feishu',
     capabilityType: 'oauth_account',
-    displayName: '飞书',
+    displayName: 'instruction',
   });
   const accountId = input.accountId.trim();
   if (!accountId) throw new Error('Feishu accountId is required.');
@@ -496,7 +496,7 @@ export async function upsertFeishuCliConnection(config: ServerConfig, input: {
     userId: input.userId,
     capabilityKey: 'feishu',
     capabilityType: 'oauth_account',
-    displayName: '飞书',
+    displayName: 'instruction',
   });
   const accountId = input.accountId.trim();
   if (!accountId) throw new Error('Feishu accountId is required.');
@@ -739,7 +739,7 @@ export async function updatePersonalCredentialPayload(config: ServerConfig, inpu
   );
 }
 
-export async function recordPersonalToolCallAudit(config: ServerConfig, input: {
+export async function recordPersonaltoolCallAudit(config: ServerConfig, input: {
   investorId: string;
   userId: string;
   threadId?: string;

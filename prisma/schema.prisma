@@ -27,31 +27,31 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // 投资人创建的分身
+  // comment
   avatars Avatar[]
 
-  // 人选发起的聊天
+  // comment
   chatsAsCandidate Chat[] @relation("CandidateChats")
 
-  // 投资人外部账户集成
+  // comment
   integrations InvestorIntegration[]
 
-  // 投资人维护的公众号源
+  // comment
   wechatSources InvestorWechatSource[]
 
-  // 投资人 AI 员工会话
+  // comment AI teammatecomment
   agentThreads AgentThread[]
 
-  // 投资人团队雇佣状态
+  // commentHirecomment
   teamHires InvestorTeamHire[]
 
-  // 投资人 AI 员工配置
+  // comment AI teammatecomment
   agentConfigs InvestorAgentConfig[]
 
-  // 总裁秘书每日晨报
+  // Executive Assistantcomment
   executiveBriefings ExecutiveBriefing[]
 
-  // 总裁秘书异步执行记录
+  // Executive Assistantcomment
   executiveAssistantRuns ExecutiveAssistantRun[]
 
   @@index([email], map: "users_email_idx")
@@ -123,7 +123,7 @@ model AgentThread {
   investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
 
   messages  AgentMessage[]
-  toolCalls AgentToolCall[]
+  toolCalls AgenttoolCall[]
 
   @@index([investorId, agentType, updatedAt])
   @@map("agent_threads")
@@ -139,13 +139,13 @@ model AgentMessage {
   threadId String
   thread   AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
-  toolCalls AgentToolCall[]
+  toolCalls AgenttoolCall[]
 
   @@index([threadId, createdAt])
   @@map("agent_messages")
 }
 
-model AgentToolCall {
+model AgenttoolCall {
   id         String   @id @default(cuid())
   toolName   String
   status     String   @default("SUCCESS")
@@ -244,18 +244,18 @@ model Avatar {
   id          String       @id @default(cuid())
   name        String
   description String?
-  avatar      String?      // 头像URL
-  systemPrompt String     // AI 系统提示词
+  avatar      String?      // commentURL
+  systemPrompt String     // AI comment
   status      String @default("ACTIVE")
   isPublic    Boolean @default(true)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  // 所属投资人
+  // comment
   investorId String
   investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
 
-  // 与此分身的聊天
+  // comment
   chats Chat[]
 
   @@map("avatars")
@@ -265,7 +265,7 @@ model Chat {
   id        String     @id @default(cuid())
   title     String?
   status    String @default("ACTIVE")
-  summary   String?    // AI 生成的聊天总结
+  summary   String?    // AI comment
   qualificationStatus String @default("PENDING") // PENDING | NEEDS_INFO | QUALIFIED | REJECTED
   qualificationScore Int @default(0) // 0-100
   qualificationReason String?
@@ -274,15 +274,15 @@ model Chat {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  // 人选
+  // comment
   candidateId String
   candidate   User   @relation("CandidateChats", fields: [candidateId], references: [id], onDelete: Cascade)
 
-  // 对应的分身
+  // comment
   avatarId String
   avatar   Avatar @relation(fields: [avatarId], references: [id], onDelete: Cascade)
 
-  // 聊天消息
+  // comment
   messages Message[]
 
   @@index([candidateId, avatarId, status])
@@ -293,10 +293,10 @@ model Chat {
 model Message {
   id        String   @id @default(cuid())
   content   String
-  role      String   // "user" 或 "assistant"
+  role      String   // "user" comment "assistant"
   createdAt DateTime @default(now())
 
-  // 所属聊天
+  // comment
   chatId String
   chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
 

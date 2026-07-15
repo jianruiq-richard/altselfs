@@ -69,7 +69,7 @@ export class PostgresUserProfileStore implements UserProfileStore {
       userId,
       content,
       threadId,
-      '用户明确要求长期记住这条偏好或画像信息',
+      'The user explicitly asked to remember this long-term preference or profile detail',
       0.98
     );
   }
@@ -81,7 +81,7 @@ export class PostgresUserProfileStore implements UserProfileStore {
       userId,
       normalized,
       threadId,
-      reason || 'Hermes memory review 识别出的长期用户画像或偏好',
+      reason || 'Long-term user profile or preference identified by Hermes memory review',
       0.8
     );
   }
@@ -241,7 +241,7 @@ function rowToProfileEntry(row: Record<string, unknown>): UserProfileEntry {
     id: String(row.id || ''),
     userId: String(row.user_id || ''),
     content: String(row.content || ''),
-    reason: '来自 PostgreSQL 用户画像存储',
+    reason: 'From PostgreSQL user profile storage',
     sourceThreadId: typeof row.source_thread_id === 'string' ? row.source_thread_id : undefined,
     createdAt: dateishToIso(row.created_at),
     updatedAt: dateishToIso(row.updated_at),
@@ -271,13 +271,13 @@ function rowToMemoryReviewJob(row: Record<string, unknown>): MemoryReviewJob {
 
 function extractExplicitProfileContent(message: string) {
   const match = message.match(
-    /(?:^|[。！？\n]\s*)(?:请你?|帮我)?(?:记住|请记住|以后记得|帮我记住)(?:[：:\s]+)(?<content>[\s\S]+)/u
+    /(?:^|[.!?\n]\s*)(?:instruction?|instruction)?(?:instruction|instruction|instruction|instruction)(?:[: :\s]+)(?<content>[\s\S]+)/u
   );
   let content = match?.groups?.content?.trim();
   if (!content) return '';
-  content = content.replace(/(?:请)?只回复[：:].*$/s, '').trim();
-  content = content.replace(/(?:请)?回复[：:].*$/s, '').trim();
-  content = content.replace(/^(这个偏好|这条偏好|这件事)[：:\s]*/u, '').trim();
+  content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
+  content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
+  content = content.replace(/^(instruction|instruction|instruction)[: :\s]*/u, '').trim();
   return content;
 }
 

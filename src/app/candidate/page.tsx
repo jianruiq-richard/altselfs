@@ -91,27 +91,27 @@ export default async function CandidateDashboard() {
   });
 
   return (
-    <FigmaShell homeHref="/candidate" title="数字分身大厅" subtitle="与数字分身对话，快速迭代你的项目方案">
+    <FigmaShell homeHref="/candidate" title="Digital Twin Gallery" subtitle="Talk with digital twins and sharpen your pitch faster">
       {dbUser.chatsAsCandidate.length > 0 && (
         <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-5">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">正在聊的会话</h2>
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">Active conversations</h2>
           <div className="grid gap-4 md:grid-cols-2">
             {dbUser.chatsAsCandidate.map((chat) => (
               <div key={chat.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-slate-900">{chat.avatar.name}</h3>
-                    <p className="text-sm text-slate-500">来自 {chat.avatar.investor.name || 'Altselfs 用户'}</p>
+                    <p className="text-sm text-slate-500">content {chat.avatar.investor.name || 'Altselfs user'}</p>
                   </div>
-                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">进行中</span>
+                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Active</span>
                 </div>
                 {chat.messages[0]?.content ? (
-                  <p className="line-clamp-2 text-sm text-slate-600">最近消息：{chat.messages[0].content}</p>
+                  <p className="line-clamp-2 text-sm text-slate-600">Latest message: {chat.messages[0].content}</p>
                 ) : null}
                 <div className="mt-3 flex items-center justify-between">
-                  <p className="text-xs text-slate-500">更新于 {new Date(chat.updatedAt).toLocaleString('zh-CN')}</p>
+                  <p className="text-xs text-slate-500">Updated {new Date(chat.updatedAt).toLocaleString('en-US')}</p>
                   <Link href={`/chat/${chat.avatar.id}`} className="text-sm font-medium text-blue-700 hover:underline">
-                    继续对话
+                    Continue conversation
                   </Link>
                 </div>
               </div>
@@ -122,8 +122,8 @@ export default async function CandidateDashboard() {
 
       {avatars.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-          <h2 className="text-2xl font-bold text-slate-900">暂无可用的数字分身</h2>
-          <p className="mt-2 text-slate-600">请稍后再来查看，Altselfs 用户正在创建他们的数字分身。</p>
+          <h2 className="text-2xl font-bold text-slate-900">No digital twins available</h2>
+          <p className="mt-2 text-slate-600">content, Altselfs usercontent.</p>
         </div>
       ) : (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -138,22 +138,22 @@ export default async function CandidateDashboard() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">{avatar.name}</h3>
-                  <p className="text-sm text-slate-500">来自 {avatar.investor.name || 'Altselfs 用户'}</p>
+                  <p className="text-sm text-slate-500">content {avatar.investor.name || 'Altselfs user'}</p>
                 </div>
               </div>
 
               {avatar.description ? <p className="mt-4 line-clamp-3 text-sm text-slate-600">{avatar.description}</p> : null}
 
               <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-                <span>{avatar._count.chats} 次对话</span>
-                <span>创建于 {new Date(avatar.createdAt).toLocaleDateString('zh-CN')}</span>
+                <span>{avatar._count.chats} content</span>
+                <span>content {new Date(avatar.createdAt).toLocaleDateString('en-US')}</span>
               </div>
 
               <Link
                 href={`/chat/${avatar.id}`}
                 className="mt-5 block rounded-xl bg-emerald-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-emerald-700"
               >
-                开始对话
+                Start conversation
               </Link>
             </div>
           ))}

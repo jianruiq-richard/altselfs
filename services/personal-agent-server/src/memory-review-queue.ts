@@ -340,7 +340,7 @@ function fallbackReviewWithoutModel(job: MemoryReviewJob, reason: string): Memor
     memories: [
       {
         content: explicit,
-        reason: '用户明确要求长期记住这条偏好或画像信息',
+        reason: 'The user explicitly asked to remember this long-term preference or profile detail',
         confidence: 0.98,
       },
     ],
@@ -350,12 +350,12 @@ function fallbackReviewWithoutModel(job: MemoryReviewJob, reason: string): Memor
 
 function extractExplicitMemoryRequest(message: string) {
   const match = message.match(
-    /(?:^|[。！？\n]\s*)(?:请你?|帮我)?(?:记住|请记住|以后记得|帮我记住)(?:[：:\s]+)(?<content>[\s\S]+)/u
+    /(?:^|[.!?\n]\s*)(?:instruction?|instruction)?(?:instruction|instruction|instruction|instruction)(?:[: :\s]+)(?<content>[\s\S]+)/u
   );
   let content = match?.groups?.content?.trim();
   if (!content) return '';
-  content = content.replace(/(?:请)?只回复[：:].*$/s, '').trim();
-  content = content.replace(/(?:请)?回复[：:].*$/s, '').trim();
-  content = content.replace(/^(这个偏好|这条偏好|这件事)[：:\s]*/u, '').trim();
+  content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
+  content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
+  content = content.replace(/^(instruction|instruction|instruction)[: :\s]*/u, '').trim();
   return content;
 }
