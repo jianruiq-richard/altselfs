@@ -123,7 +123,7 @@ model AgentThread {
   investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
 
   messages  AgentMessage[]
-  toolCalls AgenttoolCall[]
+  toolCalls AgentToolCall[]
 
   @@index([investorId, agentType, updatedAt])
   @@map("agent_threads")
@@ -139,13 +139,13 @@ model AgentMessage {
   threadId String
   thread   AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
-  toolCalls AgenttoolCall[]
+  toolCalls AgentToolCall[]
 
   @@index([threadId, createdAt])
   @@map("agent_messages")
 }
 
-model AgenttoolCall {
+model AgentToolCall {
   id         String   @id @default(cuid())
   toolName   String
   status     String   @default("SUCCESS")
