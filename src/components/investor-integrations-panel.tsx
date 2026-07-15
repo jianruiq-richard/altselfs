@@ -61,20 +61,20 @@ const COMPETITIVE_DATA_SOURCE_PROVIDERS = [
 const COMPETITIVE_DATA_SOURCE_SET = new Set<ProviderKey>(COMPETITIVE_DATA_SOURCE_PROVIDERS);
 
 const FEISHU_FEATURE_PACKAGES = [
-  { key: 'messages', label: 'content', description: 'IM content, content/content' },
-  { key: 'contacts', label: 'content', description: 'content, content' },
-  { key: 'calendar', label: 'content', description: 'contentToday/content' },
-  { key: 'docs', label: 'content', description: 'content, content' },
-  { key: 'meetings', label: 'content', description: 'content/content/content, toolcontent' },
+  { key: 'messages', label: 'Messages', description: 'IM history, group chats, and direct messages' },
+  { key: 'contacts', label: 'Contacts', description: 'People and organization directory' },
+  { key: 'calendar', label: 'Calendar', description: 'Today\'s schedule and events' },
+  { key: 'docs', label: 'Docs', description: 'Documents, sheets, and knowledge files' },
+  { key: 'meetings', label: 'Meetings', description: 'Meeting minutes, transcripts, and related tools' },
 ] as const satisfies readonly { key: FeishuFeaturePackage; label: string; description: string }[];
 
 const DEFAULT_FEISHU_FEATURE_PACKAGES: FeishuFeaturePackage[] = ['messages', 'contacts', 'calendar', 'docs'];
 
 const providerLabels: Record<ProviderKey, string> = {
   gmail: 'Gmail',
-  feishu: 'content',
+  feishu: 'Lark',
   meta: 'Instagram / Facebook',
-  xiaohongshu: 'content',
+  xiaohongshu: 'Xiaohongshu',
   similarweb_api1: 'Similarweb API1',
   semrush13: 'Semrush13',
   semrush8: 'Semrush8',
@@ -86,17 +86,17 @@ function providerLabel(provider: ProviderKey) {
 }
 
 const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
-  similarweb_api1: 'content Similarweb content, content, content, content, content, content.',
-  semrush13: 'content, content, content, content, content, content, content.',
-  semrush8: 'content SEO URL traffic content, content, content, content.',
-  domain_metrics_check: 'content Moz, Majestic, Ahrefs content, content DA, DR, content.',
+  similarweb_api1: 'Traffic, rankings, audience, referral, and engagement insights from Similarweb-style APIs.',
+  semrush13: 'Domain overview, SEO traffic, keyword, backlink, and authority metrics.',
+  semrush8: 'URL-level SEO traffic, keywords, backlinks, and ranking insights.',
+  domain_metrics_check: 'Moz, Majestic, Ahrefs, DA, DR, spam score, and link authority metrics.',
 };
 
 const competitiveDataSourceScopes: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
-  similarweb_api1: 'content, content, content, content, content, content, content/content.content.',
-  semrush13: 'content, content, content, content, content, content, AI traffic, content.content URL content.',
-  semrush8: 'Semrush-like rank, content, content, content, content.content, content.',
-  domain_metrics_check: 'DA/PA, Spam Score, Trust Flow, Citation Flow, DR, content, content, content.',
+  similarweb_api1: 'Website traffic, country distribution, audience behavior, referrals, and engagement signals.',
+  semrush13: 'Domain and keyword intelligence, backlink data, authority metrics, and AI traffic signals when available.',
+  semrush8: 'URL rank, keyword, traffic, backlink, and competitor visibility analysis.',
+  domain_metrics_check: 'DA/PA, Spam Score, Trust Flow, Citation Flow, DR, backlinks, and authority checks.',
 };
 
 const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
@@ -143,13 +143,13 @@ function togglePackage(packages: FeishuFeaturePackage[], featurePackage: FeishuF
     : [...packages, featurePackage];
 }
 
-function openFeishuAuthPlaceholder(message = 'contentaccountscontent...', options: { disownOpener?: boolean } = {}) {
+function openFeishuAuthPlaceholder(message = 'Opening Lark account authorization...', options: { disownOpener?: boolean } = {}) {
   if (typeof window === 'undefined') return null;
   const popup = window.open('', '_blank');
   if (!popup) return null;
   try {
     if (options.disownOpener) popup.opener = null;
-    popup.document.title = 'contentaccountscontent';
+    popup.document.title = 'Connecting Lark account';
     popup.document.body.style.cssText = 'font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; padding: 24px; color: #0f172a;';
     popup.document.body.textContent = message;
   } catch {
@@ -271,9 +271,9 @@ export default function InvestorIntegrationsPanel({
 
   const banner = useMemo(() => {
     if (!integrationStatus || !integrationProvider) return null;
-    const providerLabel = providerLabels[integrationProvider as ProviderKey] || 'content';
+    const providerLabel = providerLabels[integrationProvider as ProviderKey] || 'Integration';
     if (integrationStatus === 'pending') {
-      return `${providerLabel} contentComplete: ${integrationDetail || 'contentCompletecontent.'}`;
+      return `${providerLabel} authorization pending: ${integrationDetail || 'Complete the setup in the opened window.'}`;
     }
     if (integrationStatus === 'connected') {
       return `${providerLabel} connected successfully`;
@@ -410,7 +410,7 @@ export default function InvestorIntegrationsPanel({
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error || `Update ${providerLabel(provider)} teammatecontentfailed`);
+          setError(data.error || `Failed to update ${providerLabel(provider)} assistant.`);
           return;
         }
         setCards((prev) =>
@@ -444,7 +444,7 @@ export default function InvestorIntegrationsPanel({
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error || 'contentXiaohongshu Assistantfailed');
+          setError(data.error || 'Failed to enable Xiaohongshu Assistant.');
           return;
         }
         setCards((prev) =>
@@ -520,7 +520,7 @@ export default function InvestorIntegrationsPanel({
     if (hasAddedFeaturePackages(current, next)) {
       setFeishuPackageMessages((prev) => ({
         ...prev,
-        [account.connectionId]: 'content, contentaccounts.',
+        [account.connectionId]: 'New permissions require reauthorization. Redirecting to connect this account again.',
       }));
       window.location.href = `/api/investor/personal-data/feishu/connect?packages=${encodeURIComponent(next.join(','))}`;
       return;
@@ -535,13 +535,13 @@ export default function InvestorIntegrationsPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: data.error || 'Save packagesfailed.' }));
+        setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: data.error || 'Failed to save packages.' }));
         return;
       }
-      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: 'contentSave, Codex contentCall toolcontent.' }));
+      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: 'Saved. Codex can use the updated tool scope.' }));
       await loadPersonalAccounts('feishu');
     } catch {
-      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: 'Network error. Please try again later..' }));
+      setFeishuPackageMessages((prev) => ({ ...prev, [account.connectionId]: 'Network error. Please try again later.' }));
     } finally {
       setFeishuPackageSaving((prev) => ({ ...prev, [account.connectionId]: false }));
     }
@@ -554,7 +554,7 @@ export default function InvestorIntegrationsPanel({
     }
     clearFeishuCliPoll();
     const setupPopup = openFeishuAuthPlaceholder('Opening Lark CLI app setup...', { disownOpener: true });
-    const authPopup = openFeishuAuthPlaceholder('contentComplete, contentaccountscontent...');
+    const authPopup = openFeishuAuthPlaceholder('Waiting for app setup, then opening account authorization...');
     if (!setupPopup) {
       closePreparedPopup(authPopup);
       setFeishuCliMessage('The browser blocked the popup. Allow popups and try again, or open the app setup link manually.');
@@ -563,7 +563,7 @@ export default function InvestorIntegrationsPanel({
     try {
       setupPopup.location.href = feishuCliSetupUrl;
     } catch {
-      setFeishuCliMessage('content CLI contentfailed, content.');
+      setFeishuCliMessage('Failed to open the Lark CLI setup page. Try again manually.');
       return;
     }
     if (authPopup) {
@@ -578,8 +578,8 @@ export default function InvestorIntegrationsPanel({
     setFeishuCliPhase('app_setup');
     setFeishuCliMessage(
       authPopup
-        ? 'content CLI content, accountscontent.Completecontentaccountscontent.'
-        : 'content CLI content; contentaccountscontent, Completecontent.'
+        ? 'Lark CLI setup opened. Complete setup there, then account authorization will open automatically.'
+        : 'Lark CLI setup opened. Complete setup there, then continue account authorization manually.'
     );
     startFeishuCliSetupPolling(authPopup);
   };
@@ -605,7 +605,7 @@ export default function InvestorIntegrationsPanel({
       attempts += 1;
       if (attempts > 120) {
         clearFeishuCliPoll();
-        setFeishuCliMessage('contentaccountscontent.contentCompletecontent, contentComplete binding manually.');
+        setFeishuCliMessage('Account authorization is still pending. If you already approved it, complete binding manually.');
         return;
       }
       void completeFeishuCliBinding({ auto: true, popup });
@@ -645,7 +645,7 @@ export default function InvestorIntegrationsPanel({
         closePreparedPopup(authPopup);
         feishuCliPopupRef.current = null;
         setFeishuCliPhase('connected');
-        setFeishuCliMessage('contentconnected successfully, content lark-cli content.');
+        setFeishuCliMessage('Lark connected successfully with enhanced CLI access.');
         await loadPersonalAccounts('feishu');
         return;
       }
@@ -657,8 +657,8 @@ export default function InvestorIntegrationsPanel({
         setFeishuCliUserCode(typeof data.userCode === 'string' ? data.userCode : '');
         setFeishuCliMessage(
           opened
-            ? 'content CLI contentComplete, contentaccountscontent.contentCompleteConnect.'
-            : 'content CLI contentComplete, contentaccountscontent.'
+            ? 'Lark CLI setup is complete. Account authorization opened; approve it, then complete the connection.'
+            : 'Lark CLI setup is complete. Open account authorization and approve access.'
         );
         if (opened) {
           startFeishuCliCompletionPolling(authPopup);
@@ -701,9 +701,9 @@ export default function InvestorIntegrationsPanel({
       const data = await res.json();
       if (!res.ok) {
         if (options.auto) {
-          setFeishuCliMessage('contentaccountscontent...');
+          setFeishuCliMessage('Waiting for account authorization...');
         } else {
-          setFeishuCliMessage(data.error || 'contentConnectCompletefailed, contentCompletecontent.');
+          setFeishuCliMessage(data.error || 'Connection is not complete yet. Finish authorization first.');
         }
         return;
       }
@@ -711,11 +711,11 @@ export default function InvestorIntegrationsPanel({
       closePreparedPopup(options.popup || feishuCliPopupRef.current);
       feishuCliPopupRef.current = null;
       setFeishuCliPhase('connected');
-      setFeishuCliMessage('contentconnected successfully, content lark-cli content.');
+      setFeishuCliMessage('Lark connected successfully with enhanced CLI access.');
       await loadPersonalAccounts('feishu');
     } catch {
       if (options.auto) {
-        setFeishuCliMessage('contentaccountscontent...');
+        setFeishuCliMessage('Waiting for account authorization...');
       } else {
         setFeishuCliMessage('Network error. Please try again later..');
       }
@@ -741,7 +741,7 @@ export default function InvestorIntegrationsPanel({
             });
       const data = await res.json();
       if (!res.ok) {
-        const detail = data.error || 'Refresh summaryfailed';
+        const detail = data.error || 'Failed to refresh summary.';
         setError(detail);
         if (isPersonalAccountProvider(provider)) {
           setPersonalAccountsChecked((prev) => ({ ...prev, [provider]: true }));
@@ -788,7 +788,7 @@ export default function InvestorIntegrationsPanel({
                   isCompetitiveDataSource(provider)
                     ? card.latestSummary
                     : isPersonalAccountProvider(provider)
-                    ? `${providerLabel(provider)} contentaccountsConnectcontent.`
+                    ? `${providerLabel(provider)} account connection refreshed.`
                     : provider === 'xiaohongshu'
                     ? data.thread?.messages?.length
                       ? String(data.thread.messages[data.thread.messages.length - 1]?.content || card.latestSummary || '')
@@ -871,7 +871,7 @@ export default function InvestorIntegrationsPanel({
     } catch {
       setAssistantChats((prev) => ({
         ...prev,
-        [provider]: [...nextMessages, { role: 'assistant', content: 'Network error. Please try again later..' }],
+        [provider]: [...nextMessages, { role: 'assistant', content: 'Network error. Please try again later.' }],
       }));
     } finally {
       setAssistantLoading((prev) => ({ ...prev, [provider]: false }));
@@ -920,7 +920,7 @@ export default function InvestorIntegrationsPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'SavecontentSettingsfailed');
+        setError(data.error || 'Failed to save settings.');
         return;
       }
 
@@ -937,10 +937,10 @@ export default function InvestorIntegrationsPanel({
 
   const feishuCliMessageIsError =
     feishuCliMessage.includes('failed') ||
+    feishuCliMessage.includes('Failed') ||
     feishuCliMessage.includes('Error') ||
-    feishuCliMessage.includes('content') ||
-    feishuCliMessage.includes('content') ||
-    feishuCliMessage.includes('content');
+    feishuCliMessage.includes('blocked') ||
+    feishuCliMessage.includes('missing');
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 mb-8 shadow-sm">
@@ -948,7 +948,7 @@ export default function InvestorIntegrationsPanel({
         <div>
           <h2 className="text-lg font-semibold text-slate-900">External Message Assistants</h2>
           <p className="text-sm text-slate-600 mt-1">
-            contentConnect Gmail / content / Instagram / Facebook accounts, contenttool.
+            Connect Gmail, Lark, Instagram/Facebook accounts, and competitive data sources so AI teammates can use the right tools.
           </p>
         </div>
       </div>
@@ -965,7 +965,7 @@ export default function InvestorIntegrationsPanel({
             <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
               <p className="text-xs font-semibold text-slate-900">Step 1: Configure your Lark CLI app</p>
               <p className="mt-1 text-xs text-slate-600">
-                contentCompletecontent/content; content, contentaccountscontent.
+                Complete the app setup in Lark, then return here to continue account authorization.
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {feishuCliSetupUrl && (
@@ -991,9 +991,9 @@ export default function InvestorIntegrationsPanel({
 
             {(feishuCliPhase === 'user_auth' || feishuCliAuthUrl) && (
               <div className="rounded-md border border-sky-100 bg-white px-3 py-2">
-                <p className="text-xs font-semibold text-slate-900">content 2 content: contentaccounts</p>
+                <p className="text-xs font-semibold text-slate-900">Step 2: Authorize your Lark account</p>
                 <p className="mt-1 text-xs text-slate-600">
-                  accountscontent; contentCompleteConnect.content, content.
+                  Approve account access, then complete the connection here.
                   {feishuCliUserCode ? ` Enter this verification code when prompted: ${feishuCliUserCode}` : ''}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -1004,7 +1004,7 @@ export default function InvestorIntegrationsPanel({
                       rel="noreferrer"
                       className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
                     >
-                      contentaccountscontent
+                      Open account authorization
                     </a>
                   )}
                   <button
@@ -1051,7 +1051,7 @@ export default function InvestorIntegrationsPanel({
           {personalChecking
             ? 'Checking'
             : personalLoadError
-              ? 'contentfailed'
+              ? 'Failed'
               : displayConnected
                 ? (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? 'Enabled' : 'Connected')
                 : (card.provider === 'xiaohongshu' || isCompetitiveDataSource(card.provider) ? 'Not enabled' : 'Not connected')}
@@ -1062,10 +1062,10 @@ export default function InvestorIntegrationsPanel({
               {personalChecking
                 ? `Checking ${providerLabel(card.provider)} authorization status...`
                 : personalLoadError
-                  ? `${providerLabel(card.provider)} authorization status check failed, contentRefresh status.`
+                  ? `${providerLabel(card.provider)} authorization status check failed. Refresh status to retry.`
                   : isCompetitiveDataSource(card.provider)
                 ? competitiveDataSourceDescriptions[card.provider]
-                : card.accountEmail || card.accountName || 'contentNot connectedaccounts'}
+                : card.accountEmail || card.accountName || 'No connected account'}
             </p>
             {isCompetitiveDataSource(card.provider) && (
               <p className="mt-2 text-xs text-slate-500">
@@ -1079,7 +1079,7 @@ export default function InvestorIntegrationsPanel({
             )}
             {card.provider === 'feishu' && (
               <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xs font-medium text-slate-700">Connectcontentaccountscontent</p>
+                <p className="text-xs font-medium text-slate-700">Capabilities to authorize</p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {FEISHU_FEATURE_PACKAGES.map((item) => (
                     <label key={item.key} className="flex items-start gap-2 rounded-md border border-slate-200 px-2 py-2 text-xs text-slate-700">
@@ -1097,7 +1097,7 @@ export default function InvestorIntegrationsPanel({
                   ))}
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  Connectcontentaccountscontent; content, contentStopcontent Codex contenttool.
+                  Choose the Lark capabilities this account should grant. Removing a package limits the tools Codex can call.
                 </p>
               </div>
             )}
@@ -1118,10 +1118,10 @@ export default function InvestorIntegrationsPanel({
                 ) : personalAccountsFor(card.provider).length === 0 ? (
                   <p className="mt-2 text-sm text-slate-600">
                     {card.provider === 'gmail'
-                      ? 'content Gmail content.Connectcontent AI content Gmail content, contenttool.'
+                      ? 'No Gmail account connected yet. Connect one so the AI teammate can read email context and use Gmail tools.'
                       : card.provider === 'feishu'
-                        ? 'content.Connectcontent AI content, content, contenttool.'
-                        : 'content Instagram / Facebook content.Connectcontent AI content Page, content Instagram contentaccounts, content Page content.'}
+                        ? 'No Lark account connected yet. Connect one so the AI teammate can use selected Lark tools.'
+                        : 'No Instagram or Facebook account connected yet. Connect Meta to authorize Pages and Instagram business assets.'}
                   </p>
                 ) : (
                   <div className="mt-2 space-y-2">
@@ -1149,7 +1149,7 @@ export default function InvestorIntegrationsPanel({
                               </p>
                               {card.provider === 'meta' && account.metadata && (
                                 <p className="mt-1 text-xs text-slate-500">
-                                  Page {account.metadata.pageCount || 0} · Instagram contentaccounts {account.metadata.instagramAccountCount || 0} content
+                                  Pages {account.metadata.pageCount || 0} · Instagram accounts {account.metadata.instagramAccountCount || 0}
                                 </p>
                               )}
                             </div>
@@ -1165,7 +1165,7 @@ export default function InvestorIntegrationsPanel({
 
                           {card.provider === 'feishu' && (
                             <div className="mt-3 border-t border-slate-100 pt-3">
-                              <p className="text-xs font-medium text-slate-700">contentaccountscontent</p>
+                              <p className="text-xs font-medium text-slate-700">Authorized capabilities</p>
                               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                                 {FEISHU_FEATURE_PACKAGES.map((item) => (
                                   <label key={item.key} className="flex items-start gap-2 rounded-md border border-slate-200 px-2 py-2 text-xs text-slate-700">
@@ -1201,7 +1201,7 @@ export default function InvestorIntegrationsPanel({
                                       : 'Save packages'}
                                 </button>
                                 {packageAdded && (
-                                  <span className="text-xs text-amber-700">contentaccounts.</span>
+                                  <span className="text-xs text-amber-700">New capabilities require reauthorization.</span>
                                 )}
                               </div>
                               {feishuPackageMessages[account.connectionId] && (
@@ -1218,7 +1218,7 @@ export default function InvestorIntegrationsPanel({
                               <div className="mt-2 grid gap-2">
                                 {(account.metadata.instagramAccounts || []).slice(0, 5).map((item, index) => (
                                   <div key={`ig-${account.connectionId}-${index}`} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
-                                    Instagram: {String(item.username || item.name || item.id || 'contentaccounts')}
+                                    Instagram: {String(item.username || item.name || item.id || 'Unnamed account')}
                                     {item.pageName ? ` · Page: ${String(item.pageName)}` : ''}
                                   </div>
                                 ))}
@@ -1230,7 +1230,7 @@ export default function InvestorIntegrationsPanel({
                                 ))}
                                 {(account.metadata.instagramAccounts || []).length === 0 && (account.metadata.pages || []).length === 0 && (
                                   <p className="text-xs text-slate-500">
-                                    content Page content Instagram contentaccounts.content Facebook accountscontent Page, content Page content Instagram Business/Creator accounts.
+                                    No authorized Pages or Instagram accounts were returned. Make sure the Facebook account owns a Page linked to an Instagram Business or Creator account.
                                   </p>
                                 )}
                               </div>
@@ -1255,8 +1255,8 @@ export default function InvestorIntegrationsPanel({
                   ? 'Checking...'
                   : card.provider === 'xiaohongshu'
                   ? displayConnected
-                    ? 'EnabledXiaohongshu Assistant'
-                    : 'contentXiaohongshu Assistant'
+                    ? 'Xiaohongshu Assistant enabled'
+                    : 'Enable Xiaohongshu Assistant'
                   : isCompetitiveDataSource(card.provider)
                     ? displayConnected
                       ? `Disable ${providerLabel(card.provider)}`
@@ -1265,7 +1265,7 @@ export default function InvestorIntegrationsPanel({
                     ? isPersonalAccountProvider(card.provider)
                       ? `Connect more ${providerLabel(card.provider)}`
                       : 'Reconnect'
-                    : `Connect${providerLabel(card.provider)}`}
+                    : `Connect ${providerLabel(card.provider)}`}
               </button>
               <button
                 type="button"
@@ -1288,14 +1288,14 @@ export default function InvestorIntegrationsPanel({
                   (isCompetitiveDataSource(card.provider)
                     ? competitiveDataSourceScopes[card.provider]
                     : card.provider === 'gmail'
-                    ? 'Gmail accountscontent AI contenttoolcontent; content, Codex contentaccounts.'
+                    ? 'Connect a Gmail account so the AI teammate can read relevant email context and use Gmail tools.'
                     : card.provider === 'feishu'
-                    ? 'contentaccountscontent AI content lark-cli contenttoolcontent; content, content, content, Codex contentaccounts.'
+                    ? 'Connect a Lark account so the AI teammate can use selected Lark CLI tools for messages, docs, calendar, and meetings.'
                     : card.provider === 'meta'
-                    ? 'Instagram / Facebook accountscontent AI content Meta Graph toolcontent; contentaccounts, content, Page content, Codex contentAuthorized assets.'
+                    ? 'Connect Instagram/Facebook so the AI teammate can use Meta Graph tools for authorized Pages and Instagram assets.'
                     : card.provider === 'xiaohongshu'
                     ? 'No summary yet. You can trigger skill retrieval directly in chat.'
-                    : 'content, Connectcontent"Refresh summary"content.')}
+                    : 'Connect an account, then refresh the summary.')}
               </p>
               {card.latestSummaryAt && (
                 <p className="text-xs text-slate-500 mt-2">
@@ -1343,7 +1343,7 @@ export default function InvestorIntegrationsPanel({
                     }
                   }}
                   disabled={!card.connected}
-                  placeholder={card.connected ? 'Type your question...' : 'contentConnectaccountscontent'}
+                  placeholder={card.connected ? 'Type your question...' : 'Connect an account first'}
                   className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:bg-slate-100"
                 />
                 <button

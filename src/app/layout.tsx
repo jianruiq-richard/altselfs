@@ -3,8 +3,8 @@ import { ClerkProvider } from '@clerk/nextjs';
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Altselfs - content Decision OS",
-  description: "Altselfs content AI content, AggregatecontentWork context, LearnPersonal decision preferences.",
+  title: "Altselfs - Decision OS",
+  description: "Altselfs connects AI teammates with your work context and personal decision preferences.",
 };
 
 export const viewport: Viewport = {

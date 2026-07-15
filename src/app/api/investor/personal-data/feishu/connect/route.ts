@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     const url = new URL('/investor/info-ops', req.url);
     url.searchParams.set('integrationProvider', 'feishu');
     url.searchParams.set('integrationStatus', 'pending');
-    url.searchParams.set('integrationDetail', 'message CLI message, Completemessageaccountsmessage.');
+    url.searchParams.set('integrationDetail', 'Lark CLI setup started. Complete app setup, then authorize your account.');
     url.searchParams.set('feishuPhase', 'app_setup');
     url.searchParams.set('feishuSetupUrl', started.setupUrl);
     const res = NextResponse.redirect(url);
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     const url = new URL('/investor/info-ops', req.url);
     url.searchParams.set('integrationProvider', 'feishu');
     url.searchParams.set('integrationStatus', 'error');
-    url.searchParams.set('integrationDetail', err instanceof Error ? err.message : 'message CLI messagefailed');
+    url.searchParams.set('integrationDetail', err instanceof Error ? err.message : 'Lark CLI setup failed');
     return NextResponse.redirect(url);
   }
 }

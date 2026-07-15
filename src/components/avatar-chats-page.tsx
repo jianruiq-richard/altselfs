@@ -78,7 +78,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
     <FigmaShell
       homeHref="/dashboard"
       title={`${avatar.name} · Conversation history`}
-      subtitle={`content ${avatar.chats.length} content`}
+      subtitle={`${avatar.chats.length} conversations`}
       actions={
         <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
           Back to workspace
@@ -88,7 +88,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
       {avatar.chats.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
           <h2 className="text-2xl font-bold text-slate-900">No conversations yet</h2>
-          <p className="mt-2 text-slate-600">contentStart conversation.</p>
+          <p className="mt-2 text-slate-600">Share your digital twin to start a conversation.</p>
         </div>
       ) : (
         <div className="space-y-5">
@@ -97,7 +97,7 @@ export default async function AvatarChatsPage({ params }: { params: Promise<{ id
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <h3 className="text-lg font-semibold text-gray-900">
-                    {chat.title || `content ${chat.candidate.nickname || chat.candidate.name || 'Anonymous user'} content`}
+                    {chat.title || `Conversation with ${chat.candidate.nickname || chat.candidate.name || 'Anonymous user'}`}
                   </h3>
                   <p className="break-all text-sm text-gray-500">
                     {chat.candidate.nickname || chat.candidate.name || 'Anonymous user'} ({displayEmail(chat.candidate.email)})

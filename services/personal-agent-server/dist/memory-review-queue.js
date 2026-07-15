@@ -294,12 +294,11 @@ function fallbackReviewWithoutModel(job, reason) {
     };
 }
 function extractExplicitMemoryRequest(message) {
-    const match = message.match(/(?:^|[.!?\n]\s*)(?:instruction?|instruction)?(?:instruction|instruction|instruction|instruction)(?:[: :\s]+)(?<content>[\s\S]+)/u);
+    const match = message.match(/(?:^|[.!?\n]\s*)(?:please\s+)?(?:remember|save|store|note)\s+(?:that\s+)?(?<content>[\s\S]+)/iu);
     let content = match?.groups?.content?.trim();
     if (!content)
         return '';
-    content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
-    content = content.replace(/(?:instruction)?instruction[: :].*$/s, '').trim();
-    content = content.replace(/^(instruction|instruction|instruction)[: :\s]*/u, '').trim();
+    content = content.replace(/(?:reason|rationale|source)[:：].*$/is, '').trim();
+    content = content.replace(/^(?:that|this|my preference is|my profile is)[:：\s]*/iu, '').trim();
     return content;
 }

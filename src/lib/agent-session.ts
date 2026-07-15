@@ -5,7 +5,7 @@ export type AgentMessageRole = 'USER' | 'ASSISTANT' | 'TOOL';
 
 function summarizeThreadTitle(content: string) {
   const normalized = content.replace(/\s+/g, ' ').trim();
-  if (!normalized) return 'instruction';
+  if (!normalized) return 'New chat';
   return normalized.length > 28 ? `${normalized.slice(0, 28)}...` : normalized;
 }
 
@@ -67,7 +67,7 @@ export async function createThread(params: {
     data: {
       investorId: params.investorId,
       agentType: params.agentType,
-      title: params.title?.trim() || 'instruction',
+      title: params.title?.trim() || 'New chat',
     },
   });
 }
@@ -177,7 +177,7 @@ export async function appendThreadMessage(params: {
     await prisma.agentThread.updateMany({
       where: {
         id: params.threadId,
-        OR: [{ title: null }, { title: 'instruction' }],
+        OR: [{ title: null }, { title: 'instruction' }, { title: 'New chat' }],
       },
       data: { title: summarizeThreadTitle(params.content) },
     });

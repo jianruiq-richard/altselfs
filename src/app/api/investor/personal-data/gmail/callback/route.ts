@@ -13,18 +13,18 @@ function redirectWithResult(req: NextRequest, status: string, detail?: string) {
 
 function friendlyError(detail: string) {
   const normalized = detail.toLowerCase();
-  if (normalized.includes('redirect_uri_mismatch')) return 'Gmail message, message Google OAuth redirect URI.';
-  if (normalized.includes('invalid_grant')) return 'Gmail message, messageReconnect.';
-  if (normalized.includes('credential vault')) return 'message, message ECS secret.';
-  if (normalized.includes('ops_agent_token')) return 'message internal API message.';
+  if (normalized.includes('redirect_uri_mismatch')) return 'Gmail connection failed. Check the Google OAuth redirect URI.';
+  if (normalized.includes('invalid_grant')) return 'Gmail authorization expired. Reconnect Gmail.';
+  if (normalized.includes('credential vault')) return 'Credential vault is unavailable. Check the ECS secret configuration.';
+  if (normalized.includes('ops_agent_token')) return 'Internal API authorization is missing.';
   if (
     normalized.includes('und_err_connect_timeout') ||
     normalized.includes('connect timeout') ||
     normalized.includes('fetch failed')
   ) {
-    return 'Gmail message, messageSavemessage, message personal-agent-server message.';
+    return 'Gmail connected, but saving the account to personal-agent-server timed out.';
   }
-  return 'Gmail connection failed, message.';
+  return 'Gmail connection failed. Please try again.';
 }
 
 export async function GET(req: NextRequest) {
@@ -36,9 +36,9 @@ export async function GET(req: NextRequest) {
   const error = req.nextUrl.searchParams.get('error');
   const stateCookie = req.cookies.get('oauth_state_personal_gmail')?.value;
 
-  if (error) return redirectWithResult(req, 'error', `messagefailed: ${error}`);
-  if (!state || !stateCookie || state !== stateCookie) return redirectWithResult(req, 'error', 'messagefailed, message');
-  if (!code) return redirectWithResult(req, 'error', 'message');
+  if (error) return redirectWithResult(req, 'error', `Authorization failed: ${error}`);
+  if (!state || !stateCookie || state !== stateCookie) return redirectWithResult(req, 'error', 'OAuth state validation failed. Please reconnect.');
+  if (!code) return redirectWithResult(req, 'error', 'Missing authorization code.');
 
   try {
     const token = await exchangeGoogleReadonlyCode(req.nextUrl.origin, code);

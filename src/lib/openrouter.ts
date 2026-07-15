@@ -256,16 +256,16 @@ function safeParseQualification(raw: string): QualificationResult {
       status: status as QualificationResult['status'],
       score: clampScore(Number(parsed.score ?? 0)),
       needsInvestorReview: Boolean(parsed.needsInvestorReview),
-      reason: String(parsed.reason || 'content'),
-      summary: String(parsed.summary || 'content'),
+      reason: String(parsed.reason || 'No reason provided.'),
+      summary: String(parsed.summary || 'No summary available.'),
     };
   } catch {
     return {
       status: 'NEEDS_INFO',
       score: 0,
       needsInvestorReview: false,
-      reason: 'contentfailed, contentNeeds more informationcontent.',
-      summary: 'content, content.',
+      reason: 'The evaluation response could not be parsed. More information is needed.',
+      summary: 'Unable to generate a reliable summary.',
     };
   }
 }
@@ -612,29 +612,29 @@ export async function evaluateConversation(
   avatarSystemPrompt: string,
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<QualificationResult> {
-  const evaluationPrompt = `content.contentDecidecontent"content"content.
+  const evaluationPrompt = `Evaluate this conversation against the digital twin's system prompt and decide whether the candidate is qualified.
 
-content: 
-1) content system prompt Decidecontent.
-2) Decidecontent: content, content, content, content, content, content.
-3) content JSON, content.
+Instructions:
+1) Use the digital twin system prompt as the evaluation rubric.
+2) Assess relevance, clarity, expertise, consistency, risk, and whether the candidate needs investor review.
+3) Return strict JSON only.
 
-JSONcontent: 
+JSON schema:
 {
   "status": "PENDING|NEEDS_INFO|QUALIFIED|REJECTED",
   "score": 0-100,
   "needsInvestorReview": true/false,
-  "reason": "content, contentDecidecontent",
-  "summary": "content, <=180content, content"
+  "reason": "A concise explanation for the decision",
+  "summary": "A professional summary in 180 words or fewer"
 }
 
-content: 
-- QUALIFIED: content, content
-- NEEDS_INFO: content, content
-- REJECTED: content
-- PENDING: content, contentDecide
+Status guidance:
+- QUALIFIED: The conversation shows strong fit and enough information to proceed.
+- NEEDS_INFO: The conversation is promising but lacks important details.
+- REJECTED: The conversation clearly shows poor fit or high risk.
+- PENDING: The conversation is too early to decide.
 
-content system prompt: 
+Digital twin system prompt:
 ${avatarSystemPrompt}`;
 
   const evaluationMessages: ChatMessage[] = [
@@ -664,34 +664,34 @@ ${avatarSystemPrompt}`;
       status: 'NEEDS_INFO',
       score: 0,
       needsInvestorReview: false,
-      reason: 'content, content.',
-      summary: 'content, content.',
+      reason: 'No model returned a usable evaluation.',
+      summary: 'Unable to evaluate this conversation reliably.',
     };
   }
 
   return safeParseQualification(raw);
 }
 
-// content
+// Model options shown in the product and used by server-side routing.
 export const availableModels = [
   {
     id: "deepseek/deepseek-v3.2",
     name: "DeepSeek V3.2",
-    description: "defaultcontent, content, agentcontent"
+    description: "Default model for balanced chat, reasoning, and agent tasks."
   },
   {
     id: "qwen/qwen3-max",
     name: "Qwen3 Max",
-    description: "content, content, contentJSONcontent"
+    description: "Strong general-purpose model with reliable structured JSON output."
   },
   {
     id: "z-ai/glm-4.6",
     name: "GLM 4.6",
-    description: "contentplanner, toolcontentagentcontent"
+    description: "Useful for planning-heavy workflows and tool-driven agent tasks."
   },
   {
     id: "moonshotai/kimi-k2-thinking",
     name: "Kimi K2 Thinking",
-    description: "content, contentagentcontent"
+    description: "Long-context reasoning model for complex analysis and agent workflows."
   }
 ];

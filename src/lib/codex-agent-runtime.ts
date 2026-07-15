@@ -384,7 +384,7 @@ export async function runCodexAgentLoop(params: RunCodexAgentLoopParams): Promis
   }
 
   if (!finalText) {
-    finalText = 'instructionCompleteinstructiontoolinstruction, instruction.instruction, instruction.';
+    finalText = 'The agent completed its tool calls, but no final response was returned.';
   }
 
   return {

@@ -124,7 +124,7 @@ function parseConnectorScopeJson(value: string) {
   try {
     return normalizeConnectorScope(JSON.parse(value) as unknown);
   } catch {
-    throw Object.assign(new Error('connectorScope message JSON.'), { status: 400 });
+    throw Object.assign(new Error('connectorScope must be valid JSON.'), { status: 400 });
   }
 }
 
@@ -235,7 +235,7 @@ function parseMessagesJson(value: string) {
   try {
     return normalizeMessages(JSON.parse(value) as unknown);
   } catch {
-    throw Object.assign(new Error('messages message JSON.'), { status: 400 });
+    throw Object.assign(new Error('messages must be valid JSON.'), { status: 400 });
   }
 }
 
@@ -319,7 +319,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     form = await req.formData();
   } catch {
     throw Object.assign(
-      new Error('messagefailed: PDF message, message Next message.message npm run dev message; message 20MB message.'),
+      new Error('Upload failed. For PDFs and large files, use the running Next.js server and keep each file under the configured size limit.'),
       { status: 413 }
     );
   }
@@ -334,16 +334,16 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     .filter((value): value is File => typeof File !== 'undefined' && value instanceof File && value.size > 0);
 
   if (files.length > maxFiles) {
-    throw Object.assign(new Error(`message ${maxFiles} attachments.`), { status: 400 });
+    throw Object.assign(new Error(`You can attach up to ${maxFiles} files.`), { status: 400 });
   }
 
   const oversized = files.find((file) => file.size > maxFileBytes);
   if (oversized) {
-    throw Object.assign(new Error(`message ${oversized.name} message.`), { status: 400 });
+    throw Object.assign(new Error(`${oversized.name} exceeds the configured file size limit.`), { status: 400 });
   }
 
   const attachments = await Promise.all(files.map(fileToAttachment));
-  const fallbackMessage = attachments.length > 0 ? 'message.' : '';
+  const fallbackMessage = attachments.length > 0 ? 'Please analyze the attached files.' : '';
   const userMessage = explicitMessage || latestUserMessage(messages) || fallbackMessage;
   const displayUserMessage = displayMessage || latestUserMessage(messages) || userMessage;
 
@@ -487,12 +487,12 @@ async function syncTerminalPersonalAgentRun(params: {
   const reply = terminalRun.status === 'SUCCESS'
     ? (typeof terminalRun.result.reply === 'string' && terminalRun.result.reply.trim()
         ? terminalRun.result.reply.trim()
-        : 'message Agent Completedmessage, message.')
+        : 'Agent run completed, but no reply was returned.')
     : terminalRun.status === 'CANCELLED'
-      ? 'messageStopmessage.'
+      ? 'Run stopped.'
       : terminalRun.status === 'TIMEOUT'
-        ? `message: ${terminalRun.error || 'message'}`
-      : `Execution failed: ${terminalRun.error || 'Sendfailed'}`;
+        ? `Run timed out: ${terminalRun.error || 'Unknown timeout error'}`
+      : `Execution failed: ${terminalRun.error || 'Send failed'}`;
 
   const existingMessages = await prisma.agentMessage.findMany({
     where: {
@@ -516,7 +516,7 @@ async function syncTerminalPersonalAgentRun(params: {
       route: terminalRun.route || (typeof terminalRun.result.route === 'string' ? terminalRun.result.route : undefined),
       raw: terminalRun.result.raw ?? null,
       runId: terminalRun.id,
-      error: terminalRun.status === 'ERROR' ? terminalRun.error || 'Sendfailed' : undefined,
+      error: terminalRun.status === 'ERROR' ? terminalRun.error || 'Send failed' : undefined,
       cancelled: terminalRun.status === 'CANCELLED' || undefined,
       source: 'personal-agent-async',
     },
@@ -650,7 +650,7 @@ export async function GET(req: NextRequest) {
       });
     } catch (error) {
       return NextResponse.json(
-        { error: `message Agent message: ${error instanceof Error ? error.message : String(error)}` },
+        { error: `Personal Agent status check failed: ${error instanceof Error ? error.message : String(error)}` },
         { status: 502 }
       );
     }
@@ -696,7 +696,7 @@ export async function PUT(req: NextRequest) {
   const thread = await createThread({
     investorId: investor.id,
     agentType: PERSONAL_AGENT_TYPE,
-    title: title || 'message',
+    title: title || 'New conversation',
   });
   const sessions = await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE);
 
@@ -717,12 +717,12 @@ export async function POST(req: NextRequest) {
     parsedBody = await parsePostBody(req);
   } catch (error) {
     const status = isRecord(error) && typeof error.status === 'number' ? error.status : 400;
-    const detail = error instanceof Error ? error.message : 'message';
+    const detail = error instanceof Error ? error.message : 'Invalid request';
     return NextResponse.json({ error: detail }, { status });
   }
 
   const { messages, userMessage, displayUserMessage, attachments, codexModel, connectorScope } = parsedBody;
-  if (!userMessage && attachments.length === 0) return NextResponse.json({ error: 'message' }, { status: 400 });
+  if (!userMessage && attachments.length === 0) return NextResponse.json({ error: 'Message or attachment is required.' }, { status: 400 });
 
   const thread = await ensureThread({
     investorId: investor.id,
@@ -806,7 +806,7 @@ export async function POST(req: NextRequest) {
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      return NextResponse.json({ error: `message Agent message: ${detail}` }, { status: 502 });
+      return NextResponse.json({ error: `Personal Agent request failed: ${detail}` }, { status: 502 });
     }
 
     const [page, sessions] = await Promise.all([
@@ -861,12 +861,12 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: `message Agent message: ${detail}` }, { status: 502 });
+    return NextResponse.json({ error: `Personal Agent request failed: ${detail}` }, { status: 502 });
   }
 
   const reply = typeof result.reply === 'string' && result.reply.trim()
     ? result.reply.trim()
-    : 'message Agent Completedmessage, message.';
+    : 'Agent run completed, but no reply was returned.';
 
   await appendThreadMessage({
     threadId: thread.id,
@@ -934,7 +934,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
-      { error: `Stopmessage Agent failed: ${error instanceof Error ? error.message : String(error)}` },
+      { error: `Failed to stop Personal Agent run: ${error instanceof Error ? error.message : String(error)}` },
       { status: 502 }
     );
   }
@@ -1037,10 +1037,10 @@ function streamPersonalAgentTurn(params: {
 
           const reply = typeof finalResult?.reply === 'string' && finalResult.reply.trim()
             ? finalResult.reply.trim()
-            : 'message Agent Completedmessage, message.';
+            : 'Agent run completed, but no reply was returned.';
 
           if (finalResult?.cancelled || finalResult?.error) {
-            const finalErrorMessage = finalResult.error || (finalResult.cancelled ? 'messageStopmessage.' : 'Sendfailed');
+            const finalErrorMessage = finalResult.error || (finalResult.cancelled ? 'Run stopped.' : 'Send failed');
             const persistedErrorReply = finalResult.cancelled ? finalErrorMessage : `Execution failed: ${finalErrorMessage}`;
             await appendThreadMessage({
               threadId: params.threadId,
@@ -1110,7 +1110,7 @@ function streamPersonalAgentTurn(params: {
             type: 'final',
             status: 502,
             data: {
-              error: `message Agent message: ${error instanceof Error ? error.message : String(error)}`,
+              error: `Personal Agent request failed: ${error instanceof Error ? error.message : String(error)}`,
             },
           });
         } finally {

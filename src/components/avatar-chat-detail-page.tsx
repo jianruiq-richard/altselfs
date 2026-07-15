@@ -73,11 +73,11 @@ export default async function AvatarChatDetailPage({
   return (
     <FigmaShell
       homeHref="/dashboard"
-      title={chat.title || `content ${chat.candidate.nickname || chat.candidate.name || 'Anonymous user'} content`}
-      subtitle={`content: ${chat.avatar.name} · content: ${chat.candidate.nickname || chat.candidate.name || 'Anonymous user'} · content: ${chat.messages.length} content`}
+      title={chat.title || `Conversation with ${chat.candidate.nickname || chat.candidate.name || 'Anonymous user'}`}
+      subtitle={`Twin: ${chat.avatar.name} · Visitor: ${chat.candidate.nickname || chat.candidate.name || 'Anonymous user'} · Messages: ${chat.messages.length}`}
       actions={
         <Link href={`/avatar/${id}/chats`} className="text-sm text-blue-700 hover:underline">
-          content
+          Back to conversations
         </Link>
       }
     >
@@ -92,7 +92,7 @@ export default async function AvatarChatDetailPage({
         <div className="max-w-4xl">
           <div className="flex flex-wrap items-center gap-2 text-sm sm:gap-3">
             <span className="text-slate-600">
-              AIcontent: <span className="font-semibold text-slate-900">{chat.qualificationScore}</span>
+              AI score: <span className="font-semibold text-slate-900">{chat.qualificationScore}</span>
             </span>
             <span className={`inline-flex px-2 py-1 rounded-full ${
               chat.qualificationStatus === 'QUALIFIED'
@@ -108,14 +108,14 @@ export default async function AvatarChatDetailPage({
                   : 'Needs more information'}
             </span>
             {chat.needsInvestorReview && (
-              <span className="text-emerald-700 font-medium">content</span>
+              <span className="text-emerald-700 font-medium">Review recommended</span>
             )}
           </div>
           {chat.qualificationReason && (
             <p className="text-sm text-slate-600 mt-1">{chat.qualificationReason}</p>
           )}
           <p className="mt-2 text-xs text-slate-500">
-            Email: {displayEmail(chat.candidate.email)} · content: {chat.candidate.phone || 'Not provided'} · content: {chat.candidate.wechatId || 'Not provided'}
+            Email: {displayEmail(chat.candidate.email)} · Phone: {chat.candidate.phone || 'Not provided'} · WeChat: {chat.candidate.wechatId || 'Not provided'}
           </p>
         </div>
       </div>
@@ -124,7 +124,7 @@ export default async function AvatarChatDetailPage({
         <div className="mx-auto max-w-4xl">
           {chat.messages.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-500">contentconversationscontent</p>
+              <p className="text-gray-500">No messages in this conversation yet.</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -149,7 +149,7 @@ export default async function AvatarChatDetailPage({
                   <div className="flex-1 min-w-0">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                       <span className="font-semibold text-gray-900">
-                        {message.role === 'user' ? chat.candidate.nickname || chat.candidate.name || 'content' : chat.avatar.name}
+                        {message.role === 'user' ? chat.candidate.nickname || chat.candidate.name || 'Anonymous user' : chat.avatar.name}
                       </span>
                       <span className="text-xs text-gray-500">
                         {new Date(message.createdAt).toLocaleString('en-US')}
@@ -169,14 +169,14 @@ export default async function AvatarChatDetailPage({
           <div className="flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
             {chat.candidate.email && !isFallbackEmail(chat.candidate.email) ? (
               <Link
-                href={`mailto:${chat.candidate.email}?subject=${encodeURIComponent(`content: ${chat.title || chat.avatar.name}`)}`}
+                href={`mailto:${chat.candidate.email}?subject=${encodeURIComponent(`Follow-up: ${chat.title || chat.avatar.name}`)}`}
                 className="rounded-xl bg-green-600 px-6 py-3 text-center text-white hover:bg-green-700 sm:py-2"
               >
-                contentEmailcontent
+                Email candidate
               </Link>
             ) : (
               <span className="rounded-lg bg-slate-100 px-6 py-3 text-center text-slate-600 sm:py-2">
-                contentEmail
+                Email unavailable
               </span>
             )}
           </div>

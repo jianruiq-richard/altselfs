@@ -7,16 +7,16 @@ loadEnv({ path: '.env' });
 process.env.OPENROUTER_TRACE_ENABLED = process.env.OPENROUTER_TRACE_ENABLED || 'true';
 
 const email = process.argv[2] || 'jianruiq@gmail.com';
-const query = process.argv.slice(3).join(' ') || 'instructionTodayinstruction, instruction24instruction';
+const query = process.argv.slice(3).join(' ') || 'What happened today in AI agent startups over the last 24 hours?';
 let disconnectPrisma: (() => Promise<void>) | null = null;
 
 function buildSearchIntent(userQuery: string, systemPrompt: string) {
   return [
-    'instruction24instruction, instructionExecutive Assistantinstruction.',
-    `instruction: ${userQuery}`,
-    `Executive Assistantsystem prompt / instruction: ${systemPrompt.slice(0, 1600)}`,
-    'instruction: instruction, OPC, AI agent, vibe coding, AIinstructionTechnicalinstruction, instructiontoolinstruction.',
-    'instruction, Technicalinstruction, instruction, instructionURL.',
+    'Run a 24-hour public web scan for the Executive Assistant.',
+    `User query: ${userQuery}`,
+    `Executive Assistant system prompt / instructions: ${systemPrompt.slice(0, 1600)}`,
+    'Focus: startups, OPC, AI agents, vibe coding, technical releases, and agent tooling.',
+    'Return concise technical signals with source URLs.',
   ].join('\n');
 }
 
@@ -42,24 +42,24 @@ async function main() {
   });
 
   if (!investor) {
-    throw new Error(`instruction: ${email}`);
+    throw new Error(`Investor not found: ${email}`);
   }
 
   const systemPrompt = investor.agentConfigs[0]?.systemPrompt?.trim() || EXECUTIVE_MOMO_SYSTEM_PROMPT;
   const now = new Date();
   const taskSpec = {
-    objective: 'instruction24instruction, instruction.',
+    objective: 'Find high-signal AI agent startup and tooling updates from the last 24 hours.',
     sourceSelectionCriteria: [
       query,
       systemPrompt,
       'AI agent',
       'vibe coding',
-      'instruction',
+      'startup',
       'OPC',
-      'AIinstruction',
-      'instructiontool',
-      'instruction',
-      'instruction',
+      'AI engineering',
+      'agent tooling',
+      'technical release',
+      'funding or customer traction',
     ],
     timeWindow: {
       type: 'rolling_hours' as const,
@@ -67,8 +67,8 @@ async function main() {
       endAt: now.toISOString(),
     },
     returnFormat: {
-      sections: ['instruction', 'Technicalinstruction', 'instruction'],
-      instructions: 'instruction; instruction, instructionURLinstructionURL.',
+      sections: ['Market Signals', 'Technical Updates', 'Action Items'],
+      instructions: 'Prioritize credible sources; include concise summaries and source URLs.',
     },
   };
 

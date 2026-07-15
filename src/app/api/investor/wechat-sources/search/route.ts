@@ -15,14 +15,14 @@ export async function GET(req: NextRequest) {
 
   const keyword = String(req.nextUrl.searchParams.get('keyword') || '').trim();
   if (!keyword) {
-    return NextResponse.json({ error: 'message' }, { status: 400 });
+    return NextResponse.json({ error: 'Keyword is required.' }, { status: 400 });
   }
 
   if (!isWechatProviderReady()) {
     const provider = getWechatDataProviderLabel();
     const requiredEnv = getWechatProviderRequiredEnv();
     return NextResponse.json(
-      { error: `message (provider=${provider}, message ${requiredEnv})` },
+      { error: `WeChat data provider is not configured (provider=${provider}, missing ${requiredEnv}).` },
       { status: 400 }
     );
   }
@@ -32,6 +32,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, candidates });
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown';
-    return NextResponse.json({ error: `messagefailed: ${detail}` }, { status: 500 });
+    return NextResponse.json({ error: `Search failed: ${detail}` }, { status: 500 });
   }
 }

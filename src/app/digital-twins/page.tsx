@@ -22,8 +22,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-1',
     name: 'Alex Chen',
     avatar: null,
-    description: '10content, content AI content Web3.content, content.',
-    systemPrompt: 'Technical content AI Web3 React Node.js Python content',
+    description: 'Senior full-stack engineer with 10 years of experience across AI products, Web3 infrastructure, and developer platforms.',
+    systemPrompt: 'Technical AI Web3 React Node.js Python software architecture',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Alex Chen',
@@ -34,8 +34,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-2',
     name: 'Sarah Wang',
     avatar: null,
-    description: '8content UX/UI content, content.',
-    systemPrompt: 'content UX UI Figma content content',
+    description: 'Product designer with 8 years of UX/UI experience for SaaS dashboards, mobile products, and design systems.',
+    systemPrompt: 'Product design UX UI Figma design systems user research',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Sarah Wang',
@@ -46,8 +46,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-3',
     name: 'Michael Zhang',
     avatar: null,
-    description: 'content0content1, content.',
-    systemPrompt: 'content strategy product content content content',
+    description: 'Product strategist who helps zero-to-one teams define positioning, roadmap tradeoffs, and launch plans.',
+    systemPrompt: 'Product strategy go-to-market roadmap positioning launch planning',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Michael Zhang',
@@ -58,8 +58,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-4',
     name: 'Lisa Liu',
     avatar: null,
-    description: 'AI content, content, content.',
-    systemPrompt: 'content content AI content analysis insight content',
+    description: 'AI research analyst focused on market signals, competitive intelligence, and practical adoption trends.',
+    systemPrompt: 'AI research market analysis insights competitive intelligence',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Lisa Liu',
@@ -70,8 +70,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-5',
     name: 'Tom Wu',
     avatar: null,
-    description: 'content, content, content, content.',
-    systemPrompt: 'content content strategy content content content',
+    description: 'Operations leader with experience in growth systems, workflow design, and cross-functional execution.',
+    systemPrompt: 'Operations strategy growth systems workflow design execution',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Tom Wu',
@@ -82,8 +82,8 @@ const mockTwinSeeds: TwinSeed[] = [
     id: 'mock-6',
     name: 'Emma Chen',
     avatar: null,
-    description: 'content, content, content.',
-    systemPrompt: 'content content strategy content content content',
+    description: 'Content and community strategist specializing in audience research, editorial planning, and creator partnerships.',
+    systemPrompt: 'Content strategy community growth audience research creator partnerships',
     status: 'ACTIVE',
     isPublic: true,
     investorName: 'Emma Chen',
@@ -94,9 +94,9 @@ const mockTwinSeeds: TwinSeed[] = [
 
 function inferCategory(text: string): Exclude<DigitalTwinCategory, 'all'> {
   const normalized = text.toLowerCase();
-  if (/content|design|figma|ui|ux/.test(normalized)) return 'design';
-  if (/content|content|analysis|insight|learn/.test(normalized)) return 'knowledge';
-  if (/content|content|strategy|product|content|content/.test(normalized)) return 'business';
+  if (/design|figma|ui|ux|research|system/.test(normalized)) return 'design';
+  if (/research|analysis|insight|intelligence|learn|knowledge/.test(normalized)) return 'knowledge';
+  if (/strategy|product|market|operations|growth|community|launch/.test(normalized)) return 'business';
   return 'tech';
 }
 
@@ -105,15 +105,15 @@ function extractTags(text: string): string[] {
     'AI',
     'Web3',
     'SaaS',
-    'content',
-    'content',
-    'content',
-    'content',
+    'Product',
+    'Strategy',
+    'Design',
+    'Research',
     'Technical',
-    'content',
-    'content',
-    'content',
-    'content',
+    'Operations',
+    'Growth',
+    'Community',
+    'Frontend',
   ];
   const matched = dictionary.filter((tag) => text.toLowerCase().includes(tag.toLowerCase()));
   return matched.slice(0, 4);
@@ -121,12 +121,12 @@ function extractTags(text: string): string[] {
 
 function extractSkills(text: string): string[] {
   const map = [
-    { key: /react|content|frontend/, value: 'React' },
-    { key: /node|backend|content/, value: 'Node.js' },
-    { key: /python|content|analysis/, value: 'Python' },
-    { key: /content|strategy|content/, value: 'content' },
-    { key: /design|content|ui|ux/, value: 'content' },
-    { key: /content|content|content/, value: 'Communication' },
+    { key: /react|frontend/, value: 'React' },
+    { key: /node|backend|architecture/, value: 'Node.js' },
+    { key: /python|analysis/, value: 'Python' },
+    { key: /product|strategy|roadmap/, value: 'Product strategy' },
+    { key: /design|figma|ui|ux/, value: 'Product design' },
+    { key: /communication|community|content|partnership/, value: 'Communication' },
   ];
   const list = map.filter((item) => item.key.test(text.toLowerCase())).map((item) => item.value);
   return list.slice(0, 4);
@@ -152,10 +152,10 @@ function normalizeCardFromAvatar(input: {
     name: input.name,
     avatarEmoji: null,
     avatarUrl: input.avatar,
-    title: input.investorName ? `${input.investorName} content` : 'content',
-    bio: input.description || 'content.',
-    tags: tags.length > 0 ? tags : ['content', 'content'],
-    skills: skills.length > 0 ? skills : ['content', 'content', 'content'],
+    title: input.investorName ? `${input.investorName}'s Digital Twin` : 'Digital Twin',
+    bio: input.description || 'No bio available yet.',
+    tags: tags.length > 0 ? tags : ['AI', 'Strategy'],
+    skills: skills.length > 0 ? skills : ['Analysis', 'Planning', 'Communication'],
     conversations: input.conversations,
     rating: Math.min(5, 4.6 + Math.min(input.conversations, 60) / 150),
     category: inferCategory(textBase),
@@ -232,7 +232,7 @@ export default async function DigitalTwinsPage() {
     })
   );
 
-  // content; content mock content.
+  // Keep real public twins first, then fill the gallery with polished mock examples.
   const cards = [...realTwinCards, ...mockTwins]
     .filter((card, index, arr) => arr.findIndex((item) => item.id === card.id) === index)
     .slice(0, 12);

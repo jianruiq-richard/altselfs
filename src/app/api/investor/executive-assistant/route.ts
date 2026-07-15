@@ -57,8 +57,8 @@ type StoredExecutiveRunRequest = {
   messages?: ClientMessage[];
 };
 
-const USER_CANCELLED_RUN_ERROR = 'messageStopmessage';
-const STALE_RUN_ERROR = 'message 30 message, message.';
+const USER_CANCELLED_RUN_ERROR = 'Run stopped by user.';
+const STALE_RUN_ERROR = 'This run has been active for more than 30 minutes and was marked stale.';
 
 function buildBriefingContext(briefing: {
   date: string;
@@ -69,25 +69,25 @@ function buildBriefingContext(briefing: {
   priorityTasks: Array<{ priority: 'high' | 'medium' | 'low'; task: string; deadline: string; assignedBy: string }>;
 }) {
   const departmentLines = briefing.departmentOverview
-    .map((item, index) => `${index + 1}. ${item.department} | ${item.status} | message${item.progress}% | ${item.summary}`)
+    .map((item, index) => `${index + 1}. ${item.department} | ${item.status} | progress ${item.progress}% | ${item.summary}`)
     .join('\n');
   const insightLines = briefing.externalInsights
     .map((item, index) => `${index + 1}. ${item.category} | ${item.source} | ${item.content}`)
     .join('\n');
   const taskLines = briefing.priorityTasks
-    .map((item, index) => `${index + 1}. ${item.priority.toUpperCase()} | ${item.task} | message${item.deadline} | message${item.assignedBy}`)
+    .map((item, index) => `${index + 1}. ${item.priority.toUpperCase()} | ${item.task} | due ${item.deadline} | assigned by ${item.assignedBy}`)
     .join('\n');
 
   return [
-    `message: ${briefing.date}`,
-    `message: ${briefing.generatedTime}`,
-    `messageheadline: ${briefing.headline}`,
-    'messageOverview: ',
-    departmentLines || 'message',
-    'message: ',
-    insightLines || 'message',
-    'message: ',
-    taskLines || 'message',
+    `Date: ${briefing.date}`,
+    `Generated at: ${briefing.generatedTime}`,
+    `Headline: ${briefing.headline}`,
+    'Department overview:',
+    departmentLines || 'No department updates.',
+    'External insights:',
+    insightLines || 'No external insights.',
+    'Priority tasks:',
+    taskLines || 'No priority tasks.',
   ].join('\n');
 }
 
@@ -108,7 +108,7 @@ function compactForModel(value: unknown, depth = 0): unknown {
 }
 
 function buildExecutionContext(snapshot?: ExecutiveExecutionSnapshot | null) {
-  if (!snapshot) return 'message.';
+  if (!snapshot) return 'No execution context has been recorded yet.';
   return JSON.stringify(compactForModel(snapshot), null, 2);
 }
 
@@ -152,22 +152,22 @@ async function generateExecutiveReply(
 ) {
   const latest = params.messages[params.messages.length - 1];
   const contextPrompt = [
-    'message.message, message; message, message, messagetoolmessage.',
+    'You are Hermes Agent, the executive assistant. Use the current briefing, execution history, and tools before giving operational guidance.',
     buildBriefingContext(params.briefing),
-    'message.message"message, message, message, message"message.',
+    'Recent execution context:',
     buildExecutionContext(params.getExecutionSnapshot()),
-    'Codex agent loop message: ',
-    '1) message; messagetool, messagetoolmessage, message.',
-    '2) messagetool; toolmessage.',
-    '3) messageUpdate briefing, message, message, message update_today_briefing; message.',
-    '4) message, message, message, message get_current_briefing, get_recent_execution_trace message list_connected_information_channels.',
-    '5) message"message, message, message24message"messageDecidemessage, message get_current_time.',
-    'message: ',
-    '1) message.',
-    '2) message markdown message.',
-    '3) message; message.',
-    '4) defaultmessage, message, message.',
-    '5) message, message: message, message, Skippedmessage, message, message; message.',
+    'Codex agent loop rules:',
+    '1) Think step by step, but only show concise conclusions and actions to the user.',
+    '2) Call tools when they can provide current data or execution history.',
+    '3) If the user asks to update the briefing, use update_today_briefing with evidence and source links.',
+    '4) Use get_current_briefing, get_recent_execution_trace, and list_connected_information_channels when the answer depends on current context.',
+    '5) Use get_current_time before resolving relative date phrases such as today, tomorrow, or the last 24 hours.',
+    'Response rules:',
+    '1) Be direct and practical.',
+    '2) Use clean Markdown when structure helps.',
+    '3) Do not expose raw tool JSON unless the user asks.',
+    '4) When data is unavailable, say what is missing and what the user can provide.',
+    '5) For skipped or failed steps, explain the reason plainly and keep moving.',
   ].join('\n\n');
 
   const tools: CodexAgenttool[] = [
@@ -329,10 +329,10 @@ async function generateExecutiveReply(
           status: event.status === 'SKIPPED' ? 'SKIPPED' : event.status,
           detail:
             event.type === 'model_call'
-              ? `Codexmessage: message ${event.turn} message ${event.status}`
+              ? `Codex model call turn ${event.turn} ${event.status}`
               : event.type === 'tool_call'
-                ? `Codexmessage: ${event.toolName} ${event.status}`
-                : `Codexmessage: message ${event.status}`,
+                ? `Codex tool ${event.toolName} ${event.status}`
+                : `Codex event ${event.status}`,
           timestamp: event.timestamp,
           payload: {
             codexAgentLoop: event,
@@ -617,7 +617,7 @@ async function runExecutiveAssistantTurn(params: {
     step: {
       ...getExecutivePlannerStepDefinition('generate_reply'),
       status: 'RUNNING',
-      detail: 'messageExecutive Assistantmessage.',
+      detail: 'Executive Assistant is generating a reply.',
       timestamp: new Date().toISOString(),
     },
   });
@@ -659,7 +659,7 @@ async function runExecutiveAssistantTurn(params: {
       step: {
         ...getExecutivePlannerStepDefinition('generate_reply'),
         status: 'SUCCESS',
-        detail: 'Executive Assistantmessage.',
+        detail: 'Executive Assistant reply generated.',
         timestamp: new Date().toISOString(),
       },
     });
@@ -678,7 +678,7 @@ async function runExecutiveAssistantTurn(params: {
     return {
       status: 502,
       body: {
-        error: `Executive Assistantmessage: ${detail}`,
+        error: `Executive Assistant failed: ${detail}`,
         threadId: thread.id,
         briefing,
         planner: currentPlanner,
@@ -759,7 +759,7 @@ function streamExecutiveAssistantTurn(params: {
           write({
             type: 'final',
             status: 500,
-            data: { error: `AImessageExecution failed: ${detail}` },
+            data: { error: `AI execution failed: ${detail}` },
           });
         } finally {
           clearInterval(heartbeat);
@@ -812,7 +812,7 @@ async function executeExecutiveAssistantRun(runId: string, investorId: string) {
       where: { id: runId, status: 'RUNNING' },
       data: {
         status: 'ERROR',
-        error: 'message',
+        error: 'Stored run request is missing or invalid.',
         completedAt: new Date(),
       },
     });
@@ -862,8 +862,8 @@ async function executeExecutiveAssistantRun(runId: string, investorId: string) {
       where: { id: runId, status: 'RUNNING' },
       data: {
         status: 'ERROR',
-        error: `AImessageExecution failed: ${detail}`,
-        result: toPrismaJson({ error: `AImessageExecution failed: ${detail}` }),
+        error: `AI execution failed: ${detail}`,
+        result: toPrismaJson({ error: `AI execution failed: ${detail}` }),
         planner: toPrismaJson(planner),
         plannerTrace: toPrismaJson(plannerTrace),
         completedAt: new Date(),
@@ -1107,7 +1107,7 @@ export async function GET(req: NextRequest) {
       await appendThreadMessage({
         threadId: created.id,
         role: 'ASSISTANT',
-        content: `message!messageExecutive Assistant Momo.\n\n${briefing.headline}\n\nmessage: \n1) messageWorkmessage\n2) Todaymessage\n3) message`,
+        content: `Hi, I am Executive Assistant Momo.\n\n${briefing.headline}\n\nI can help with:\n1) Work updates\n2) Today's priorities\n3) Decision support`,
       });
       thread = await getLatestThreadWithMessages(investor.id, EXECUTIVE_AGENT_TYPE);
     }
@@ -1128,7 +1128,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    return routeErrorResponse('message', error);
+    return routeErrorResponse('Load executive assistant', error);
   }
 }
 
@@ -1142,7 +1142,7 @@ export async function PUT(req: NextRequest) {
     const systemPrompt = resetToDefault ? '' : normalizeSystemPrompt(body?.systemPrompt);
 
     if (!resetToDefault && !systemPrompt) {
-      return NextResponse.json({ error: 'system prompt message' }, { status: 400 });
+      return NextResponse.json({ error: 'System prompt is required.' }, { status: 400 });
     }
 
     const saved = await prisma.investorAgentConfig.upsert({
@@ -1189,7 +1189,7 @@ export async function POST(req: NextRequest) {
     const messages = normalizeMessages(body?.messages);
     const latest = messages[messages.length - 1];
     if (!latest || latest.role !== 'user') {
-      return NextResponse.json({ error: 'messagemessagesmessage' }, { status: 400 });
+      return NextResponse.json({ error: 'At least one user message is required.' }, { status: 400 });
     }
 
     const turnParams = {
@@ -1224,7 +1224,7 @@ export async function POST(req: NextRequest) {
     const result = await runExecutiveAssistantTurn(turnParams);
     return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
-    return routeErrorResponse('message', error);
+    return routeErrorResponse('Executive assistant request', error);
   }
 }
 
@@ -1250,6 +1250,6 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return routeErrorResponse('StopmessageDeletemessage', error);
+    return routeErrorResponse('Stop or delete executive assistant session', error);
   }
 }

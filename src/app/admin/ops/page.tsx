@@ -15,12 +15,12 @@ export default async function OpsPage() {
       <div className="mx-auto max-w-7xl px-6 py-8">
         <header className="mb-8 flex flex-col gap-3 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Altselfs content</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-normal">content</h1>
-            <p className="mt-2 text-sm text-slate-500">sign in: {admin.name} · content {formatDateTime(data.collectedAt)}</p>
+            <p className="text-sm font-medium text-slate-500">Altselfs operations</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-normal">Ops Dashboard</h1>
+            <p className="mt-2 text-sm text-slate-500">Signed in as {admin.name} · Collected {formatDateTime(data.collectedAt)}</p>
           </div>
           <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-            content <code>OPS_ADMIN_EMAILS</code> / <code>OPS_ADMIN_CLERK_IDS</code> content
+            Access is controlled by <code>OPS_ADMIN_EMAILS</code> / <code>OPS_ADMIN_CLERK_IDS</code>.
           </div>
         </header>
 
@@ -38,10 +38,10 @@ export default async function OpsPage() {
         </section>
 
         <section className="mt-6 rounded-lg border border-slate-200 bg-white">
-          <SectionTitle title="content" subtitle="content, content." />
+          <SectionTitle title="Alerts" subtitle="Warnings and critical conditions that need attention." />
           <div className="divide-y divide-slate-100">
             {data.alerts.length === 0 ? (
-              <EmptyRow text="content warning / critical content." />
+              <EmptyRow text="No warning or critical alerts." />
             ) : (
               data.alerts.map((alert) => (
                 <div key={`${alert.title}-${alert.detail}`} className="flex items-start justify-between gap-4 px-4 py-3">
@@ -58,15 +58,15 @@ export default async function OpsPage() {
 
         <section className="mt-6 grid gap-6 lg:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-white">
-            <SectionTitle title="API Key / content" subtitle="content key content, content." />
+            <SectionTitle title="API Keys / Credits" subtitle="Configured API keys, balances, and usage status." />
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-medium">content</th>
+                    <th className="px-4 py-3 font-medium">Provider</th>
                     <th className="px-4 py-3 font-medium">Key</th>
-                    <th className="px-4 py-3 font-medium">content</th>
-                    <th className="px-4 py-3 font-medium">content</th>
+                    <th className="px-4 py-3 font-medium">Balance / Usage</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -91,14 +91,14 @@ export default async function OpsPage() {
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white">
-            <SectionTitle title="content" subtitle="Supabase content; ECS contentWorkcontent." />
+            <SectionTitle title="Infrastructure Resources" subtitle="Supabase, ECS, RDS, Vercel, and related capacity signals." />
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-medium">content</th>
-                    <th className="px-4 py-3 font-medium">content</th>
-                    <th className="px-4 py-3 font-medium">content</th>
+                    <th className="px-4 py-3 font-medium">Resource</th>
+                    <th className="px-4 py-3 font-medium">Usage</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -122,21 +122,21 @@ export default async function OpsPage() {
         </section>
 
         <section className="mt-6 rounded-lg border border-slate-200 bg-white">
-          <SectionTitle title="content" subtitle="Token content; content, ECS content Agent workspace content." />
+          <SectionTitle title="User Usage" subtitle="Token estimates, database storage, and Agent workspace footprint by user." />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-medium">content</th>
-                  <th className="px-4 py-3 font-medium">content</th>
-                  <th className="px-4 py-3 font-medium">content</th>
-                  <th className="px-4 py-3 font-medium">Agent content</th>
-                  <th className="px-4 py-3 font-medium">content tokens</th>
+                  <th className="px-4 py-3 font-medium">User</th>
+                  <th className="px-4 py-3 font-medium">Role</th>
+                  <th className="px-4 py-3 font-medium">Messages</th>
+                  <th className="px-4 py-3 font-medium">Agent Messages</th>
+                  <th className="px-4 py-3 font-medium">Estimated tokens</th>
                   <th className="px-4 py-3 font-medium">Supabase DB</th>
                   <th className="px-4 py-3 font-medium">Storage</th>
                   <th className="px-4 py-3 font-medium">Agent RDS</th>
-                  <th className="px-4 py-3 font-medium">ECS content</th>
-                  <th className="px-4 py-3 font-medium">contentActive</th>
+                  <th className="px-4 py-3 font-medium">ECS Disk</th>
+                  <th className="px-4 py-3 font-medium">Last active</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -163,7 +163,7 @@ export default async function OpsPage() {
         </section>
 
         <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-base font-semibold">content</h2>
+          <h2 className="text-base font-semibold">Notes</h2>
           <ul className="mt-3 space-y-2 text-sm text-slate-600">
             {data.notes.map((note) => <li key={note}>{note}</li>)}
           </ul>
@@ -208,8 +208,8 @@ function formatDateTime(value: string) {
 }
 
 function formatBytes(bytes: number | null) {
-  if (bytes === null) return 'content';
-  if (!Number.isFinite(bytes) || bytes < 0) return 'content';
+  if (bytes === null) return 'Unknown';
+  if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let index = 0;

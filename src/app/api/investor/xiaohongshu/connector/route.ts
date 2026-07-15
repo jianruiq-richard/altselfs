@@ -58,14 +58,14 @@ export async function POST(req: NextRequest) {
       : 'browser_extension';
 
   if (!cookies) {
-    return NextResponse.json({ error: 'message Cookie' }, { status: 400 });
+    return NextResponse.json({ error: 'Cookie is required.' }, { status: 400 });
   }
   if (cookies.length > MAX_COOKIES_LENGTH) {
-    return NextResponse.json({ error: `Cookie message (>${MAX_COOKIES_LENGTH})` }, { status: 400 });
+    return NextResponse.json({ error: `Cookie is too long (>${MAX_COOKIES_LENGTH} characters).` }, { status: 400 });
   }
   if (!hasSupportedXhsAuthCookie(cookies)) {
     return NextResponse.json(
-      { error: `Cookie messageSign inmessage, message: ${ACCEPTED_XHS_AUTH_COOKIES.join(' / ')}` },
+      { error: `Cookie does not include a recognized signed-in Xiaohongshu token: ${ACCEPTED_XHS_AUTH_COOKIES.join(' / ')}` },
       { status: 400 }
     );
   }

@@ -35,7 +35,7 @@ export default function ProfilePage() {
         const res = await fetch('/api/user/profile');
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error || 'contentProfilefailed');
+          setError(data.error || 'Failed to load profile');
           return;
         }
         setProfile(data.user);
@@ -66,11 +66,11 @@ export default function ProfilePage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Savefailed');
+        setError(data.error || 'Failed to save profile');
         return;
       }
       setProfile(data.user);
-      setSuccess('Savecontent');
+      setSuccess('Saved');
       router.refresh();
     } catch {
       setError('Network error. Please try again later.');
@@ -90,7 +90,7 @@ export default function ProfilePage() {
   if (!profile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600">contentProfile</p>
+        <p className="text-slate-600">Profile unavailable</p>
       </div>
     );
   }
@@ -121,7 +121,7 @@ export default function ProfilePage() {
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
             className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="contentDisplay name"
+            placeholder="Display name"
           />
         </div>
         <div>
@@ -130,7 +130,7 @@ export default function ProfilePage() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="contentPhone"
+            placeholder="Phone number"
           />
         </div>
         <div>
@@ -139,7 +139,7 @@ export default function ProfilePage() {
             value={wechatId}
             onChange={(e) => setWechatId(e.target.value)}
             className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="contentWeChat ID"
+            placeholder="WeChat ID"
           />
         </div>
 

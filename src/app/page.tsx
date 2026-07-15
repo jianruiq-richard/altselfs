@@ -40,7 +40,7 @@ export default async function Home() {
               The Decision OS for every operator
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-[#fff0dc]/82 sm:text-xl sm:leading-9">
-              Altselfs content AI content, content, Gmail, content, content ChatGPT contentWork context, content, content, contentDecide.
+              Altselfs brings your AI teammates, inboxes, calendars, and work context into one operating layer so ChatGPT can help you decide and act with context.
             </p>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -54,7 +54,7 @@ export default async function Home() {
                 href="/sign-in"
                 className="inline-flex justify-center rounded-full border border-[#f3d7aa]/35 px-7 py-3 text-sm font-semibold text-[#fff8ee] transition-colors hover:bg-[#fff3df]/10"
               >
-                contentaccountsSign in
+                Sign in to my account
               </Link>
             </div>
           </div>
@@ -63,19 +63,19 @@ export default async function Home() {
             <div className="border-t border-[#f3d7aa]/35 pt-4 sm:border-t-0 sm:pt-0">
               <p className="text-sm font-semibold text-[#fffaf2]">Cross-platform context</p>
               <p className="mt-2 text-sm leading-6 text-[#f8e7cc]/82">
-                Aggregatecontenttoolcontent, content, content.
+                Connect the tools and accounts your decisions already depend on.
               </p>
             </div>
             <div className="border-t border-[#f3d7aa]/35 pt-4 sm:border-t-0 sm:border-l sm:pl-5 sm:pt-0">
               <p className="text-sm font-semibold text-[#fffaf2]">Decision Copilot</p>
               <p className="mt-2 text-sm leading-6 text-[#f8e7cc]/82">
-                content 3 content, contentDecidecontent.
+                Turn scattered inputs into clear options, tradeoffs, and next steps.
               </p>
             </div>
             <div className="border-t border-[#f3d7aa]/35 pt-4 sm:border-t-0 sm:border-l sm:pl-5 sm:pt-0">
               <p className="text-sm font-semibold text-[#fffaf2]">Personal decision preferences</p>
               <p className="mt-2 text-sm leading-6 text-[#f8e7cc]/82">
-                contentLearncontentDecidecontent, content.
+                Learn how you make decisions and preserve that context over time.
               </p>
             </div>
           </div>
@@ -100,19 +100,19 @@ export default async function Home() {
             <div className="rounded-lg border border-[#ded2c2] bg-[#fffaf2] p-5 shadow-sm">
               <p className="text-sm font-semibold text-stone-950">01 · Aggregate</p>
               <p className="mt-3 text-sm leading-6 text-stone-600">
-                contentWorktool, content case.
+                Pull signal from your work tools, files, and communication history.
               </p>
             </div>
             <div className="rounded-lg border border-[#ded2c2] bg-[#fffaf2] p-5 shadow-sm">
               <p className="text-sm font-semibold text-stone-950">02 · Decide</p>
               <p className="mt-3 text-sm leading-6 text-stone-600">
-                content, content, content.
+                Compare options, clarify risks, and move from analysis to action.
               </p>
             </div>
             <div className="rounded-lg border border-[#ded2c2] bg-[#fffaf2] p-5 shadow-sm">
               <p className="text-sm font-semibold text-stone-950">03 · Learn</p>
               <p className="mt-3 text-sm leading-6 text-stone-600">
-                content, contentLearncontentPersonal decision preferencescontent.
+                Build a durable memory of your priorities, preferences, and decision style.
               </p>
             </div>
           </div>

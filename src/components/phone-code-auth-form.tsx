@@ -10,16 +10,16 @@ type PhonePasswordAuthFormProps = {
 };
 
 const COUNTRY_CODES = [
-  { code: "+86", label: "content +86" },
-  { code: "+1", label: "content / content +1" },
-  { code: "+44", label: "content +44" },
-  { code: "+61", label: "content +61" },
-  { code: "+65", label: "content +65" },
-  { code: "+81", label: "content +81" },
-  { code: "+82", label: "content +82" },
-  { code: "+852", label: "content +852" },
-  { code: "+853", label: "content +853" },
-  { code: "+886", label: "content +886" },
+  { code: "+1", label: "United States / Canada +1" },
+  { code: "+44", label: "United Kingdom +44" },
+  { code: "+61", label: "Australia +61" },
+  { code: "+65", label: "Singapore +65" },
+  { code: "+81", label: "Japan +81" },
+  { code: "+82", label: "South Korea +82" },
+  { code: "+852", label: "Hong Kong +852" },
+  { code: "+853", label: "Macau +853" },
+  { code: "+886", label: "Taiwan +886" },
+  { code: "+86", label: "China +86" },
 ];
 
 function buildE164Phone(countryCode: string, localNumber: string): string {
@@ -42,21 +42,21 @@ function getErrorMessage(error: unknown): string {
     Array.isArray((error as { errors?: unknown[] }).errors)
   ) {
     const first = (error as { errors: Array<{ longMessage?: string; message?: string }> }).errors[0];
-    return first?.longMessage || first?.message || "contentfailed, content.";
+    return first?.longMessage || first?.message || "Authentication failed. Please try again.";
   }
 
   if (error instanceof Error) {
     return error.message;
   }
 
-  return "contentfailed, content.";
+  return "Authentication failed. Please try again.";
 }
 
 export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: PhonePasswordAuthFormProps) {
   const router = useRouter();
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
-  const [countryCode, setCountryCode] = useState("+86");
+  const [countryCode, setCountryCode] = useState("+1");
   const [localPhoneNumber, setLocalPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -78,7 +78,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
     setError("");
 
     if (mode === "sign-up" && password !== confirmPassword) {
-      setError("content.");
+      setError("Passwords do not match.");
       return;
     }
 
@@ -99,7 +99,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
           return;
         }
 
-        setError("Sign inComplete, contentSettingscontent.");
+        setError("Sign-in is not complete. Check your account settings and try again.");
         return;
       }
 
@@ -115,11 +115,11 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
       }
 
       if (result.unverifiedFields?.includes("phone_number")) {
-        setError("Clerk content.content Dashboard content Phone content Verify at sign-up content.");
+        setError("Phone verification is required. Enable phone verification in Clerk before using this sign-up flow.");
         return;
       }
 
-      setError("Sign upcontentComplete, content Clerk contentSign upSettings.");
+      setError("Sign-up is not complete. Check your Clerk sign-up settings and try again.");
     } catch (submitError) {
       setError(getErrorMessage(submitError));
     } finally {
@@ -132,7 +132,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
       <div className="space-y-4">
         <div>
           <label htmlFor="phone-country" className="block text-sm font-medium text-stone-800">
-            content
+            Phone number
           </label>
           <div className="mt-2 grid grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] gap-2">
             <select
@@ -156,14 +156,14 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
               onChange={(event) => setLocalPhoneNumber(event.target.value)}
               disabled={isSubmitting}
               className="w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-              placeholder="138 0000 0000"
+              placeholder="(555) 123-4567"
             />
           </div>
         </div>
 
         <div>
           <label htmlFor="phone-password" className="block text-sm font-medium text-stone-800">
-            content
+            Password
           </label>
           <input
             id="phone-password"
@@ -173,14 +173,14 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
             onChange={(event) => setPassword(event.target.value)}
             disabled={isSubmitting}
             className="mt-2 w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-            placeholder={mode === "sign-in" ? "content" : "SettingsSign in"}
+            placeholder={mode === "sign-in" ? "Enter your password" : "Create a password"}
           />
         </div>
 
         {mode === "sign-up" ? (
           <div>
             <label htmlFor="phone-confirm-password" className="block text-sm font-medium text-stone-800">
-              content
+              Confirm password
             </label>
             <input
               id="phone-confirm-password"
@@ -190,7 +190,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
               onChange={(event) => setConfirmPassword(event.target.value)}
               disabled={isSubmitting}
               className="mt-2 w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-              placeholder="content"
+              placeholder="Re-enter your password"
             />
           </div>
         ) : null}
@@ -203,7 +203,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
           disabled={!canSubmit}
           className="w-full rounded-lg bg-[#7a451f] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSubmitting ? "content..." : mode === "sign-in" ? "sign in" : "contentSign up"}
+          {isSubmitting ? "Working..." : mode === "sign-in" ? "Sign in" : "Sign up"}
         </button>
       </div>
     </div>

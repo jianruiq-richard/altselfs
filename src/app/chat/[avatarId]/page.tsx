@@ -150,7 +150,7 @@ export default function ChatPage() {
     <FigmaShell
       homeHref="/candidate"
       title={avatar.name}
-      subtitle={`content ${avatar.investor.name || 'Altselfs user'} content`}
+      subtitle={`By ${avatar.investor.name || 'Altselfs user'}`}
       actions={
         <Link href="/candidate" className="text-sm text-blue-700 hover:underline">
           Back to twin gallery
@@ -162,13 +162,13 @@ export default function ChatPage() {
           <div className="mx-auto max-w-3xl space-y-4">
             {messages.length === 0 && (
               <div className="py-8 text-center">
-                <p className="mb-4 text-slate-600">content {avatar.name} content!</p>
+                <p className="mb-4 text-slate-600">Start a conversation with {avatar.name}.</p>
                 <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
-                  <p className="mb-2 font-medium">content: </p>
+                  <p className="mb-2 font-medium">You can ask about:</p>
                   <ul className="space-y-1 text-left">
-                    <li>• content</li>
-                    <li>• content</li>
-                    <li>• content</li>
+                    <li>• Background and working style</li>
+                    <li>• Decision preferences and priorities</li>
+                    <li>• Advice on how to collaborate</li>
                   </ul>
                 </div>
               </div>
@@ -192,7 +192,7 @@ export default function ChatPage() {
             {isSending && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-slate-700 sm:max-w-xs lg:max-w-md">
-                  content...
+                  Thinking...
                 </div>
               </div>
             )}
@@ -204,7 +204,7 @@ export default function ChatPage() {
             <textarea
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="content..."
+              placeholder="Type your message..."
               className="min-h-[7rem] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-0 sm:py-2"
               rows={3}
               onKeyDown={(e) => {
@@ -219,7 +219,7 @@ export default function ChatPage() {
               disabled={!newMessage.trim() || isSending}
               className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:self-end sm:py-2"
             >
-              {isSending ? 'Sendcontent...' : 'Send'}
+              {isSending ? 'Sending...' : 'Send'}
             </button>
           </form>
         </div>

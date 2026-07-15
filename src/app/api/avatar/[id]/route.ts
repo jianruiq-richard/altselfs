@@ -162,7 +162,7 @@ export async function PUT(
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2022') {
       return NextResponse.json(
         {
-          error: 'message, message',
+          error: 'Database migration is required before updating this avatar.',
           code: 'DB_MIGRATION_REQUIRED',
         },
         { status: 409 }

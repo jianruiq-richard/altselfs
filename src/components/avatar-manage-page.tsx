@@ -32,7 +32,7 @@ export default function AvatarManagePage() {
         const response = await fetch(`/api/avatar/${avatarId}`);
         const data = await response.json();
         if (!response.ok) {
-          setError(data.error || 'contentfailed');
+          setError(data.error || 'Failed to load digital twin');
           return;
         }
         setAvatar(data.avatar);
@@ -75,7 +75,7 @@ export default function AvatarManagePage() {
 
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || 'Savefailed');
+        setError(data.error || 'Failed to save digital twin');
         return;
       }
 
@@ -100,7 +100,7 @@ export default function AvatarManagePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <p className="text-slate-700 mb-4">content</p>
+          <p className="text-slate-700 mb-4">Digital twin not found.</p>
           <Link href="/dashboard" className="text-blue-700 hover:underline">
             Back to workspace
           </Link>
@@ -112,8 +112,8 @@ export default function AvatarManagePage() {
   return (
     <FigmaShell
       homeHref="/dashboard"
-      title="content"
-      subtitle="content"
+      title="Manage digital twin"
+      subtitle="Edit your twin profile, avatar, visibility, and system prompt"
       actions={
         <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
           Back to workspace
@@ -135,7 +135,7 @@ export default function AvatarManagePage() {
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">content</label>
+          <label className="mb-2 block text-sm font-medium text-slate-700">Description</label>
           <textarea
             value={avatar.description || ''}
             onChange={(e) => onChange('description', e.target.value)}
@@ -145,7 +145,7 @@ export default function AvatarManagePage() {
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">content URL</label>
+          <label className="mb-2 block text-sm font-medium text-slate-700">Avatar URL</label>
           <input
             type="url"
             value={avatar.avatar || ''}
@@ -153,18 +153,18 @@ export default function AvatarManagePage() {
             placeholder="https://..."
             className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <p className="mt-1 text-xs text-slate-500">content URL content, content.</p>
+          <p className="mt-1 text-xs text-slate-500">Paste a public image URL to update the avatar.</p>
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">content</label>
+          <label className="mb-2 block text-sm font-medium text-slate-700">Status</label>
           <select
             value={avatar.status}
             onChange={(e) => onChange('status', e.target.value)}
             className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="ACTIVE">content</option>
-            <option value="INACTIVE">content</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
           </select>
         </div>
 
@@ -185,14 +185,14 @@ export default function AvatarManagePage() {
             onClick={() => router.back()}
             className="rounded-xl border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-100"
           >
-            content
+            Cancel
           </button>
           <button
             type="submit"
             disabled={isSaving}
             className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
           >
-            {isSaving ? 'Saving...' : 'Savecontent'}
+            {isSaving ? 'Saving...' : 'Save changes'}
           </button>
         </div>
       </form>

@@ -48,15 +48,15 @@ export function FigmaShell({
 
   const navItems = useMemo<NavItem[]>(
     () => [
-      { key: 'home', name: 'Workcontent', href: homeHref, icon: Home },
+      { key: 'home', name: 'Workspace', href: homeHref, icon: Home },
       { key: 'hall', name: 'Digital Twin Gallery', href: '/digital-twins', icon: Users, activePrefixes: ['/candidate', '/chat'] },
       { key: 'my-twin', name: 'My Digital Twin', href: '/avatar', icon: Sparkles, activePrefixes: ['/avatar'] },
       { key: 'talent', name: 'AI Talent Hub', href: '/ai-talent', icon: Briefcase },
-      { key: 'accounts', name: 'Department Management', href: '/accounts', icon: UserCircle },
-      { key: 'messages', name: 'content', href: '/messages', icon: Mail },
+      { key: 'accounts', name: 'Team Management', href: '/accounts', icon: UserCircle },
+      { key: 'messages', name: 'Messages', href: '/messages', icon: Mail },
       {
         key: 'assistant',
-        name: 'AIcontent',
+        name: 'AI Assistant',
         href: '/investor/chat/100',
         icon: MessageSquare,
         activePrefixes: ['/investor/info-ops', '/investor/chat'],
@@ -92,8 +92,8 @@ export function FigmaShell({
     return (
       <div className="grid min-h-screen place-items-center bg-[#f6efe7] px-6 text-center text-stone-700">
         <div>
-          <p className="text-base font-medium text-stone-950">{isLoaded ? 'Sign in' : 'sign in'}</p>
-          <p className="mt-2 text-sm text-stone-500">{isLoaded ? 'sign in...' : 'content...'}</p>
+          <p className="text-base font-medium text-stone-950">{isLoaded ? 'Session expired' : 'Checking your session'}</p>
+          <p className="mt-2 text-sm text-stone-500">{isLoaded ? 'Redirecting to sign in...' : 'Please wait...'}</p>
         </div>
       </div>
     );
@@ -132,11 +132,11 @@ export function FigmaShell({
             <Link href="/profile" className="block rounded-lg px-4 py-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#b77a3d] to-[#5b3725] text-xl font-semibold text-white">
-                  {(user?.fullName || 'content').slice(0, 1)}
+                  {(user?.fullName || 'User').slice(0, 1)}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-base font-medium text-gray-900">
-                    {user?.fullName || 'content'}
+                    {user?.fullName || 'User'}
                   </p>
                   <p className="truncate text-sm text-gray-500">
                     {user?.primaryEmailAddress?.emailAddress || 'user@example.com'}
@@ -150,7 +150,7 @@ export function FigmaShell({
                 className="mt-2 flex w-full items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-[#f5eadc] hover:text-stone-950"
               >
                 <LogOut className="h-4 w-4" />
-                Sign outSign in
+                Sign out
               </button>
             </SignOutButton>
           </div>
@@ -172,10 +172,10 @@ export function FigmaShell({
               className="flex min-w-0 items-center gap-3 rounded-xl border border-[#e4d5c3] bg-[#f6efe7] px-3 py-2 text-left"
             >
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#b77a3d] to-[#5b3725] text-sm font-semibold text-white">
-                {(user?.fullName || 'content').slice(0, 1)}
+                {(user?.fullName || 'User').slice(0, 1)}
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-stone-950">{user?.fullName || 'content'}</p>
+                <p className="truncate text-sm font-medium text-stone-950">{user?.fullName || 'User'}</p>
                 <p className="max-w-[8.5rem] truncate text-xs text-stone-500">{user?.primaryEmailAddress?.emailAddress || 'user@example.com'}</p>
               </div>
             </button>
@@ -191,7 +191,7 @@ export function FigmaShell({
                   className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-stone-700 hover:bg-[#f5eadc] hover:text-stone-950"
                 >
                   <UserCircle className="h-4 w-4" />
-                  content
+                  Edit profile
                 </Link>
                 <SignOutButton redirectUrl="/">
                   <button
@@ -200,7 +200,7 @@ export function FigmaShell({
                     className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-stone-700 hover:bg-[#f5eadc] hover:text-stone-950"
                   >
                     <LogOut className="h-4 w-4" />
-                    Sign outSign in
+                    Sign out
                   </button>
                 </SignOutButton>
               </div>

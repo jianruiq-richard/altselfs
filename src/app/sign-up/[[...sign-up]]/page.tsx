@@ -50,9 +50,9 @@ export default async function Page({
           <section className="flex justify-center lg:justify-end">
             <div className="max-h-[calc(100svh-4rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-[#ead8bd] bg-[#fffaf2] p-4 shadow-2xl shadow-black/20 sm:p-6">
               <div className="mb-4 text-center">
-                <h2 className="text-2xl font-semibold text-stone-950">Sign up Altselfs</h2>
+                <h2 className="text-2xl font-semibold text-stone-950">Create your Altselfs account</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  content, contentEmail / Google Sign up
+                  Start with phone and password, or continue with email or Google.
                 </p>
               </div>
               <div className="mb-4 grid grid-cols-2 gap-2">

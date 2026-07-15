@@ -73,14 +73,14 @@ const completionAreas = [
 ] as const;
 
 const initialSkills = [
-  { id: 1, name: 'Investment Research', level: 'Expert', category: 'Work', description: 'content, contentDecide.' },
-  { id: 2, name: 'Project Evaluation', level: 'Advanced', category: 'Technical', description: 'content.' },
-  { id: 3, name: 'Communication', level: 'Advanced', category: 'Soft skills', description: 'content.' },
+  { id: 1, name: 'Investment Research', level: 'Expert', category: 'Work', description: 'Market research, company analysis, and decision support.' },
+  { id: 2, name: 'Project Evaluation', level: 'Advanced', category: 'Technical', description: 'Evaluates feasibility, constraints, and execution risk.' },
+  { id: 3, name: 'Communication', level: 'Advanced', category: 'Soft skills', description: 'Clear, concise, conclusion-first communication.' },
 ];
 
 const initialKnowledge = [
   { id: 1, title: 'Investment Methodology', content: 'Includes market decisions, team decisions, risk controls, and related principles.', tokens: 2400, type: 'Work' },
-  { id: 2, title: 'Communication Style Guide', content: 'Prefers clear, concise, conclusion-first communication.', tokens: 1600, type: 'content' },
+  { id: 2, title: 'Communication Style Guide', content: 'Prefers clear, concise, conclusion-first communication.', tokens: 1600, type: 'Style' },
 ];
 
 export default function MyDigitalTwinWorkbench({
@@ -272,7 +272,7 @@ export default function MyDigitalTwinWorkbench({
             <form onSubmit={handleSaveAvatar} className="mt-5 space-y-4">
               <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
                 <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-4xl text-white">
-                  {(formData.name || 'content').slice(0, 1)}
+                  {(formData.name || 'Twin').slice(0, 1)}
                 </div>
                 <button
                   type="button"
@@ -290,7 +290,7 @@ export default function MyDigitalTwinWorkbench({
                   value={formData.name}
                   onChange={handleChange}
                   required
-                  placeholder="content: Alex Chen"
+                  placeholder="Example: Alex Chen"
                   className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -302,7 +302,7 @@ export default function MyDigitalTwinWorkbench({
                   rows={2}
                   value={formData.description}
                   onChange={handleChange}
-                  placeholder="content: content & content"
+                  placeholder="Example: Investor, operator, and product strategist"
                   className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -355,7 +355,7 @@ export default function MyDigitalTwinWorkbench({
                   <Users className="h-5 w-5 text-green-600" />
                   Received conversations
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">content</p>
+                <p className="mt-1 text-sm text-gray-500">Recent visitors who interacted with your digital twin</p>
               </div>
               <div className="text-left sm:text-right">
                 <div className="text-3xl font-bold text-green-600">{receivedConversations.length}</div>
@@ -391,7 +391,7 @@ export default function MyDigitalTwinWorkbench({
               className="mt-4 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
               onClick={() => setActiveTab('conversations')}
             >
-              contentAllcontent
+              View all conversations
             </button>
           </div>
         </div>
@@ -415,8 +415,8 @@ export default function MyDigitalTwinWorkbench({
           {receivedConversations.length === 0 ? (
             <div className="py-12 text-center">
               <Users className="mx-auto mb-4 h-12 w-12 text-gray-300" />
-              <h3 className="text-lg font-semibold text-gray-900">content</h3>
-              <p className="mt-1 text-sm text-gray-500">content, content</p>
+              <h3 className="text-lg font-semibold text-gray-900">No conversations yet</h3>
+              <p className="mt-1 text-sm text-gray-500">Share your digital twin to start collecting conversations.</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -435,7 +435,7 @@ export default function MyDigitalTwinWorkbench({
                             conv.status === 'active' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
                           }`}
                         >
-                          {conv.status === 'active' ? 'Active' : 'content'}
+                          {conv.status === 'active' ? 'Active' : 'Completed'}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
@@ -446,13 +446,13 @@ export default function MyDigitalTwinWorkbench({
                         <div className="flex items-center gap-1">
                           <Clock className="h-4 w-4" />
                           <span>
-                            content {new Date(conv.startTime).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            Started {new Date(conv.startTime).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Clock className="h-4 w-4" />
                           <span>
-                            contentActive {new Date(conv.lastActiveTime).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            Last active {new Date(conv.lastActiveTime).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       </div>
@@ -460,7 +460,7 @@ export default function MyDigitalTwinWorkbench({
                   </div>
 
                   <div className="mb-4 rounded-lg bg-gray-50 p-3">
-                    <p className="mb-1 text-xs text-gray-500">content</p>
+                    <p className="mb-1 text-xs text-gray-500">Latest message</p>
                     <p className="text-sm text-gray-900">{conv.lastMessage}</p>
                   </div>
 
@@ -491,12 +491,12 @@ export default function MyDigitalTwinWorkbench({
                         className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2"
                       >
                         <MessageCircle className="mr-2 h-4 w-4" />
-                        content
+                        Open chat
                       </Link>
                     ) : (
                       <button type="button" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 sm:py-2">
                         <MessageCircle className="mr-2 h-4 w-4" />
-                        content
+                        Open chat
                       </button>
                     )}
                   </div>
@@ -512,17 +512,17 @@ export default function MyDigitalTwinWorkbench({
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h2 className="text-xl font-bold text-gray-900">Skills</h2>
-              <p className="text-sm text-gray-500">content, AIcontent</p>
+              <p className="text-sm text-gray-500">Skills your digital twin can use in AI-assisted conversations</p>
             </div>
             <button
               type="button"
               onClick={() =>
-                setSkills((prev) => [...prev, { id: Date.now(), name: 'content (Demo)', level: 'content', category: 'Demo', description: 'content.' }])
+                setSkills((prev) => [...prev, { id: Date.now(), name: 'New skill (Demo)', level: 'Beginner', category: 'Demo', description: 'Add a short description for this skill.' }])
               }
               className="inline-flex items-center rounded-lg bg-[#030213] px-3 py-2 text-sm font-medium text-white hover:bg-black"
             >
               <Plus className="mr-1 h-4 w-4" />
-              Addcontent
+              Add skill
             </button>
           </div>
           <div className="space-y-3">
@@ -551,26 +551,26 @@ export default function MyDigitalTwinWorkbench({
         <div className="rounded-xl border border-gray-200 bg-white p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <h2 className="text-xl font-bold text-gray-900">Knowledge Base (content)</h2>
-              <p className="text-sm text-gray-500">content Figma demo content, content</p>
+              <h2 className="text-xl font-bold text-gray-900">Knowledge Base (demo)</h2>
+              <p className="text-sm text-gray-500">Store references that help your digital twin answer with context.</p>
             </div>
             <button
               type="button"
               onClick={() =>
-                setKnowledge((prev) => [...prev, { id: Date.now(), title: 'content (Demo)', content: 'content.', tokens: 600, type: 'Demo' }])
+                setKnowledge((prev) => [...prev, { id: Date.now(), title: 'New knowledge item (Demo)', content: 'Add notes, principles, or reference material.', tokens: 600, type: 'Demo' }])
               }
               className="inline-flex items-center rounded-lg bg-[#030213] px-3 py-2 text-sm font-medium text-white hover:bg-black"
             >
               <Plus className="mr-1 h-4 w-4" />
-              Addcontent
+              Add item
             </button>
           </div>
 
           <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="font-medium text-blue-900">content {knowledgeTokens.toLocaleString()} tokens</p>
-                <p className="mt-1 text-sm text-blue-700">content, content</p>
+                <p className="font-medium text-blue-900">{knowledgeTokens.toLocaleString()} context tokens</p>
+                <p className="mt-1 text-sm text-blue-700">Used to ground your digital twin’s answers.</p>
               </div>
               <TrendingUp className="h-8 w-8 text-blue-600" />
             </div>
@@ -596,11 +596,11 @@ export default function MyDigitalTwinWorkbench({
       {activeTab === 'personality' ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6">
           <h2 className="text-xl font-bold text-gray-900">Personality</h2>
-          <p className="mt-1 text-sm text-gray-500">content, content</p>
+          <p className="mt-1 text-sm text-gray-500">Capture tone, working style, and communication preferences.</p>
           <div className="mt-4 space-y-3">
-            <textarea rows={3} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="content, content: content, content, content..." />
-            <textarea rows={3} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="content, content: content, content..." />
-            <textarea rows={3} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="content, content: content, content..." />
+            <textarea rows={3} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Communication style, e.g. direct, concise, evidence-driven..." />
+            <textarea rows={3} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Decision style, e.g. risk-aware, fast iteration..." />
+            <textarea rows={3} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Collaboration preferences, e.g. how you like feedback..." />
             <button type="button" className="rounded-lg bg-[#030213] px-4 py-2 text-sm font-medium text-white hover:bg-black">SavePersonality</button>
           </div>
         </div>
@@ -608,13 +608,13 @@ export default function MyDigitalTwinWorkbench({
 
       {activeTab === 'values' ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="text-xl font-bold text-gray-900">Valuescontent</h2>
-          <p className="mt-1 text-sm text-gray-500">contentValues, Life Goalscontent</p>
+          <h2 className="text-xl font-bold text-gray-900">Values</h2>
+          <p className="mt-1 text-sm text-gray-500">Capture your values, goals, and decision boundaries.</p>
           <div className="mt-4 space-y-3">
-            <textarea rows={4} value={bio} onChange={(e) => setBio(e.target.value)} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="contentValues" />
+            <textarea rows={4} value={bio} onChange={(e) => setBio(e.target.value)} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Core values" />
             <textarea rows={4} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Life Goals" />
-            <textarea rows={4} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Workcontent" />
-            <textarea rows={4} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="content" />
+            <textarea rows={4} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Work principles" />
+            <textarea rows={4} className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Non-negotiables" />
             <button type="button" className="rounded-lg bg-[#030213] px-4 py-2 text-sm font-medium text-white hover:bg-black">SaveValues</button>
           </div>
         </div>

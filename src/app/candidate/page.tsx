@@ -101,7 +101,7 @@ export default async function CandidateDashboard() {
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-slate-900">{chat.avatar.name}</h3>
-                    <p className="text-sm text-slate-500">content {chat.avatar.investor.name || 'Altselfs user'}</p>
+                    <p className="text-sm text-slate-500">By {chat.avatar.investor.name || 'Altselfs user'}</p>
                   </div>
                   <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Active</span>
                 </div>
@@ -123,7 +123,7 @@ export default async function CandidateDashboard() {
       {avatars.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
           <h2 className="text-2xl font-bold text-slate-900">No digital twins available</h2>
-          <p className="mt-2 text-slate-600">content, Altselfs usercontent.</p>
+          <p className="mt-2 text-slate-600">No public digital twins are available yet. Check back later.</p>
         </div>
       ) : (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -138,15 +138,15 @@ export default async function CandidateDashboard() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">{avatar.name}</h3>
-                  <p className="text-sm text-slate-500">content {avatar.investor.name || 'Altselfs user'}</p>
+                  <p className="text-sm text-slate-500">By {avatar.investor.name || 'Altselfs user'}</p>
                 </div>
               </div>
 
               {avatar.description ? <p className="mt-4 line-clamp-3 text-sm text-slate-600">{avatar.description}</p> : null}
 
               <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-                <span>{avatar._count.chats} content</span>
-                <span>content {new Date(avatar.createdAt).toLocaleDateString('en-US')}</span>
+                <span>{avatar._count.chats} conversations</span>
+                <span>Created {new Date(avatar.createdAt).toLocaleDateString('en-US')}</span>
               </div>
 
               <Link

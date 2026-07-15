@@ -58,16 +58,16 @@ export function XhsAssistantCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'contentfailed');
+        throw new Error(data.error || 'Connection failed');
       }
 
       setConnected(true);
       setAccount(data.integration?.accountName || auth.accountName);
-      setSummary('content, Xiaohongshu Assistantcontent skill.');
-      setMessage('content, sign in.');
+      setSummary('Connected. The Xiaohongshu Assistant can now use this account.');
+      setMessage('Connected successfully.');
       setDebugOutput('');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'contentfailed, content');
+      setMessage(error instanceof Error ? error.message : 'Connection failed. Please try again.');
       const debug = error instanceof Error && 'debug' in error ? (error as Error & { debug?: unknown }).debug : null;
       if (debug) {
         setDebugOutput(JSON.stringify(debug, null, 2));
@@ -84,9 +84,9 @@ export function XhsAssistantCard({
     try {
       const result = await debugXhsExtension();
       setDebugOutput(JSON.stringify(result, null, 2));
-      setMessage('content.');
+      setMessage('Extension debug information loaded.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'contentfailed');
+      setMessage(error instanceof Error ? error.message : 'Debug check failed');
     } finally {
       setLoading(false);
     }
@@ -100,14 +100,14 @@ export function XhsAssistantCard({
       const res = await fetch('/api/investor/xiaohongshu/connector', { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error((data as { error?: string }).error || 'contentfailed');
+        throw new Error((data as { error?: string }).error || 'Disconnect failed');
       }
       setConnected(false);
-      setAccount('content content');
-      setSummary('content.content, Xiaohongshu Assistantcontent skill.');
-      setMessage('content.');
+      setAccount('Not connected');
+      setSummary('Not connected. Connect Xiaohongshu to enable assistant skills.');
+      setMessage('Disconnected.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'contentfailed, content');
+      setMessage(error instanceof Error ? error.message : 'Disconnect failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -117,21 +117,21 @@ export function XhsAssistantCard({
     <div className="rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-gray-900">content content</h3>
+          <h3 className="font-semibold text-gray-900">Xiaohongshu</h3>
           <p className="mt-1 text-sm text-gray-500">{account}</p>
         </div>
-        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{unread} content</span>
+        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{unread} updates</span>
       </div>
 
       <div className="mb-3 flex items-center gap-2 text-sm text-gray-600">
         <Bot className="h-4 w-4 text-orange-500" />
-        <span>Xiaohongshu Assistantcontent</span>
+        <span>Xiaohongshu Assistant</span>
         <span
           className={`rounded-full px-2 py-0.5 text-xs ${
             connected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
           }`}
         >
-          {connected ? 'content' : 'content'}
+          {connected ? 'Connected' : 'Not connected'}
         </span>
       </div>
 
@@ -144,13 +144,13 @@ export function XhsAssistantCard({
           disabled={loading}
           className="rounded-lg bg-orange-600 px-3 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
         >
-          {loading ? 'Processing...' : connected ? 'content' : 'content'}
+          {loading ? 'Processing...' : connected ? 'Reconnect' : 'Connect'}
         </button>
         <Link
           href="/investor/chat/xiaohongshu"
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
-          content
+          Open assistant
         </Link>
         <button
           type="button"
@@ -158,7 +158,7 @@ export function XhsAssistantCard({
           disabled={loading}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
-          content
+          Debug extension
         </button>
         {connected ? (
           <button
@@ -167,15 +167,15 @@ export function XhsAssistantCard({
             disabled={loading}
             className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
           >
-            content
+            Disconnect
           </button>
         ) : null}
       </div>
 
       <p className="mt-2 text-xs text-gray-500">
         {extensionInstalled
-          ? 'content.sign in.'
-          : 'content.content, content"content".'}
+          ? 'Browser extension detected. Sign in to Xiaohongshu before connecting.'
+          : 'Install the browser extension first, then click "Connect".'}
       </p>
       {message ? <p className="mt-2 text-xs text-slate-700">{message}</p> : null}
       {debugOutput ? (

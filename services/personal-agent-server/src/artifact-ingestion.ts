@@ -458,9 +458,9 @@ async function callOpenRouterImageParser(
             {
               type: 'text',
               text: [
-                'instructiontoolinstruction.',
-                'instruction, instruction OCR; instruction/instruction/instruction, instruction, instruction, instruction.',
-                'instruction.',
+                'You are a document and image extraction tool.',
+                'Extract visible text from the image. Preserve headings, labels, tables, names, dates, amounts, and URLs as accurately as possible.',
+                'Return concise Markdown only.',
               ].join('\n'),
             },
             {
@@ -500,7 +500,7 @@ async function callOpenRouterFileParser(config: ServerConfig, file: { name: stri
           content: [
             {
               type: 'text',
-              text: 'instructiontoolinstruction.instruction, instruction; instruction, instruction, instruction, instruction.',
+              text: 'You are a document extraction tool. Extract the file content faithfully; preserve headings, tables, bullets, names, dates, amounts, and URLs.',
             },
             {
               type: 'file',

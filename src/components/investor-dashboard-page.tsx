@@ -92,25 +92,25 @@ export default async function InvestorDashboardPage() {
   const infoOpsAssistants = [
     {
       key: 'wechat',
-      type: 'content',
-      account: dbUser.wechatSources.length > 0 ? `${dbUser.wechatSources.length} content` : 'content',
+      type: 'WeChat',
+      account: dbUser.wechatSources.length > 0 ? `${dbUser.wechatSources.length} sources` : 'Not connected',
       unread: dbUser.wechatSources.length,
-      agentName: 'WeChat Assistantcontent',
+      agentName: 'WeChat Assistant',
       connected: dbUser.wechatSources.length > 0,
       summary:
         dbUser.wechatSources[0]?.description ||
         (dbUser.wechatSources.length > 0
-          ? `content ${dbUser.wechatSources.length} content, content: ${dbUser.wechatSources[0].displayName}`
-          : 'content, content.'),
+          ? `Tracking ${dbUser.wechatSources.length} WeChat sources. Latest source: ${dbUser.wechatSources[0].displayName}`
+          : 'Not connected. Add sources to start monitoring.'),
     },
     {
       key: 'xiaohongshu',
-      type: 'content',
-      account: xiaohongshu?.accountName || 'content content',
+      type: 'Xiaohongshu',
+      account: xiaohongshu?.accountName || 'Not connected',
       unread: xiaohongshu?.snapshots[0] ? 1 : 0,
-      agentName: 'Xiaohongshu Assistantcontent',
+      agentName: 'Xiaohongshu Assistant',
       connected: Boolean(xiaohongshu),
-      summary: xiaohongshu?.snapshots[0]?.summary || 'content, contentInformation Operationscontent Spider_XHS content.',
+      summary: xiaohongshu?.snapshots[0]?.summary || 'Not connected. Connect the Spider_XHS workflow from Information Operations.',
     },
     {
       key: 'gmail',
@@ -119,16 +119,16 @@ export default async function InvestorDashboardPage() {
       unread: gmail?.snapshots[0] ? 1 : 0,
       agentName: 'Email Assistant',
       connected: Boolean(gmail),
-      summary: gmail?.snapshots[0]?.summary || 'content, Connectcontent.',
+      summary: gmail?.snapshots[0]?.summary || 'Not connected. Connect Gmail to refresh summaries.',
     },
     {
       key: 'feishu',
-      type: 'content',
-      account: feishu?.accountEmail || 'Not connected content',
+      type: 'Lark',
+      account: feishu?.accountEmail || 'Not connected Lark',
       unread: feishu?.snapshots[0] ? 1 : 0,
-      agentName: 'Lark Assistantcontent',
+      agentName: 'Lark Assistant',
       connected: Boolean(feishu),
-      summary: feishu?.snapshots[0]?.summary || 'content, Connectcontent.',
+      summary: feishu?.snapshots[0]?.summary || 'Not connected. Connect Lark to refresh workspace summaries.',
     },
   ] as const;
 
@@ -144,10 +144,10 @@ export default async function InvestorDashboardPage() {
   const efficiency = `${Math.min(95, 60 + dbUser.integrations.length * 8 + dbUser.wechatSources.length * 2)}%`;
 
   const stats = [
-    { label: 'Todaycontent', value: totalProcessed, change: '+12%', icon: Mail, color: 'text-[#8a4d22]' },
-    { label: 'content', value: unreadInfo, change: '-8%', icon: MessageCircle, color: 'text-emerald-700' },
-    { label: 'content', value: generatedSummaries, change: '+23%', icon: FileText, color: 'text-[#b77a3d]' },
-    { label: 'content', value: efficiency, change: '+5%', icon: TrendingUp, color: 'text-[#c78b45]' },
+    { label: 'Today processed', value: totalProcessed, change: '+12%', icon: Mail, color: 'text-[#8a4d22]' },
+    { label: 'Unread signals', value: unreadInfo, change: '-8%', icon: MessageCircle, color: 'text-emerald-700' },
+    { label: 'Generated summaries', value: generatedSummaries, change: '+23%', icon: FileText, color: 'text-[#b77a3d]' },
+    { label: 'Automation efficiency', value: efficiency, change: '+5%', icon: TrendingUp, color: 'text-[#c78b45]' },
   ] as const;
 
   const infoOpsSummaryBlocks = infoOpsAssistants.map((assistant) => ({
@@ -156,14 +156,14 @@ export default async function InvestorDashboardPage() {
     agentName: assistant.agentName,
     title:
       assistant.key === 'wechat'
-        ? 'content'
+        ? 'WeChat digest'
         : assistant.key === 'xiaohongshu'
-          ? 'content'
+          ? 'Xiaohongshu pulse'
           : assistant.key === 'gmail'
-            ? 'Todaycontent'
-            : 'content',
+            ? 'Today’s email'
+            : 'Lark workspace',
     summary: assistant.summary,
-    time: 'content',
+    time: 'Now',
     priority: assistant.connected ? 'medium' : 'low',
   }));
 
@@ -187,9 +187,9 @@ export default async function InvestorDashboardPage() {
       name: 'Executive Office',
       color: 'bg-purple-50 text-purple-600',
       employees: isExecutiveHired ? 1 : 0,
-      status: isExecutiveHired ? 'contentHire' : 'contentHire',
+      status: isExecutiveHired ? 'Hired' : 'Not hired',
       statusClass: isExecutiveHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
-      linkLabel: isExecutiveHired ? 'Executive Assistant Momo' : 'content AI contentHire',
+      linkLabel: isExecutiveHired ? 'Executive Assistant Momo' : 'Hire AI teammate',
       linkHref: isExecutiveHired ? '/investor/chat/100' : '/ai-talent',
     },
     {
@@ -197,9 +197,9 @@ export default async function InvestorDashboardPage() {
       name: 'Information Operations',
       color: 'bg-blue-50 text-blue-600',
       employees: isInfoOpsHired ? Math.max(1, infoOpsAssistants.length) : 0,
-      status: isInfoOpsHired ? 'contentHire' : 'contentHire',
+      status: isInfoOpsHired ? 'Hired' : 'Not hired',
       statusClass: isInfoOpsHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
-      linkLabel: isInfoOpsHired ? 'contentDepartment Management' : 'content AI contentHire',
+      linkLabel: isInfoOpsHired ? 'Open Information Ops' : 'Hire AI teammate',
       linkHref: isInfoOpsHired ? '/investor/info-ops' : '/ai-talent',
     },
     {
@@ -207,9 +207,9 @@ export default async function InvestorDashboardPage() {
       name: 'Engineering',
       color: 'bg-green-50 text-green-600',
       employees: isEngineeringHired ? Math.max(1, dbUser.avatars.length || 1) : 0,
-      status: isEngineeringHired ? 'contentHire' : 'contentHire',
+      status: isEngineeringHired ? 'Hired' : 'Not hired',
       statusClass: isEngineeringHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
-      linkLabel: isEngineeringHired ? 'content' : 'content AI contentHire',
+      linkLabel: isEngineeringHired ? 'Open digital twins' : 'Hire AI teammate',
       linkHref: isEngineeringHired ? '/avatar' : '/ai-talent',
     },
     {
@@ -217,9 +217,9 @@ export default async function InvestorDashboardPage() {
       name: 'Marketing Operations',
       color: 'bg-orange-50 text-orange-600',
       employees: isMarketingHired ? 1 : 0,
-      status: isMarketingHired ? 'contentHire' : 'contentHire',
+      status: isMarketingHired ? 'Hired' : 'Not hired',
       statusClass: isMarketingHired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
-      linkLabel: isMarketingHired ? 'defaultteammatecontent' : 'content AI contentHire',
+      linkLabel: isMarketingHired ? 'Default teammate' : 'Hire AI teammate',
       linkHref: '/ai-talent',
     },
   ] as const;
@@ -271,15 +271,15 @@ export default async function InvestorDashboardPage() {
 
       <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-stone-950 sm:text-3xl">Decision OS Workcontent</h1>
-          <p className="mt-2 max-w-3xl text-sm text-stone-500 sm:text-base">content, content, contentTodaycontentOverview</p>
+          <h1 className="text-2xl font-bold text-stone-950 sm:text-3xl">Decision OS Workspace</h1>
+          <p className="mt-2 max-w-3xl text-sm text-stone-500 sm:text-base">Your operating view for context, teammates, and today’s decision flow.</p>
         </div>
         <div className="shrink-0 self-start">
           <Link
             href="/avatar"
             className="inline-flex items-center rounded-xl bg-[#8a4d22] px-4 py-2 text-sm font-semibold text-white hover:bg-[#743f1b]"
           >
-            content
+            Open my digital twin
           </Link>
         </div>
       </div>
@@ -291,12 +291,12 @@ export default async function InvestorDashboardPage() {
               <Sparkles className="h-6 w-6 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold text-stone-950 sm:text-2xl">content</h2>
-              <p className="text-sm text-stone-500">contentWorkcontent, Decidecontent</p>
+              <h2 className="text-xl font-bold text-stone-950 sm:text-2xl">My Digital Twin</h2>
+              <p className="text-sm text-stone-500">Your work context and decision preferences</p>
             </div>
           </div>
           <Link href="/avatar" className="inline-flex items-center justify-center rounded-xl bg-[#8a4d22] px-4 py-3 text-sm font-semibold text-white hover:bg-[#743f1b] sm:py-2">
-            content
+            Open workspace
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </div>
@@ -312,7 +312,7 @@ export default async function InvestorDashboardPage() {
           </div>
           <div className="text-center">
             <div className="mb-1 text-3xl font-bold text-emerald-700">{learnedSkills}</div>
-            <p className="text-sm text-stone-600">content</p>
+            <p className="text-sm text-stone-600">Learned skills</p>
           </div>
         </div>
       </div>
@@ -320,16 +320,16 @@ export default async function InvestorDashboardPage() {
       <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h2 className="text-xl font-bold text-gray-900">content AI content</h2>
-            <p className="text-sm text-gray-500">content AI teammatecontent</p>
+            <h2 className="text-xl font-bold text-gray-900">AI Teammates</h2>
+            <p className="text-sm text-gray-500">Departments staffed by AI teammates</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Link href="/ai-talent" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
               <Briefcase className="mr-1 h-4 w-4" />
-              Hireteammate
+              Hire teammate
             </Link>
             <Link href="/accounts" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
-              content
+              Team Management
               <ArrowRight className="ml-1 h-4 w-4" />
             </Link>
           </div>
@@ -358,10 +358,10 @@ export default async function InvestorDashboardPage() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-gray-900">Information Operations</h2>
-            <p className="text-sm text-gray-500">External Message AssistantscontentDepartment Management</p>
+            <p className="text-sm text-gray-500">External message assistants and connected channels</p>
           </div>
           <Link href="/investor/info-ops" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
-            contentDepartment Management
+            Manage Information Ops
             <ArrowRight className="ml-1 h-4 w-4" />
           </Link>
         </div>
@@ -371,10 +371,10 @@ export default async function InvestorDashboardPage() {
             <div key={assistant.key} className="rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300">
               <div className="mb-3 flex items-start justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{assistant.type} content</h3>
+                  <h3 className="font-semibold text-gray-900">{assistant.type}</h3>
                   <p className="mt-1 text-sm text-gray-500">{assistant.account}</p>
                 </div>
-                <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{assistant.unread} content</span>
+                <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{assistant.unread} signals</span>
               </div>
               <div className="mb-3 flex items-center gap-2 text-sm text-gray-600">
                 <Bot className="h-4 w-4 text-blue-600" />
@@ -383,7 +383,7 @@ export default async function InvestorDashboardPage() {
               <div className="flex items-center justify-between">
                 <span className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600">Information Operations</span>
                 <Link href={`/investor/info-ops?assistant=${assistant.key}`} className="text-sm font-medium text-blue-600 hover:text-blue-700">
-                  content
+                  Open
                 </Link>
               </div>
             </div>
@@ -395,10 +395,10 @@ export default async function InvestorDashboardPage() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-gray-900">Latest summary</h2>
-            <p className="text-sm text-gray-500">content, content</p>
+            <p className="text-sm text-gray-500">Recent outputs from your operating system</p>
           </div>
           <Link href="/messages" className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-700 hover:bg-gray-50 sm:py-2">
-            contentAll
+            View all
             <ArrowRight className="ml-1 h-4 w-4" />
           </Link>
         </div>
@@ -406,8 +406,8 @@ export default async function InvestorDashboardPage() {
         <div className="space-y-6">
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-900">Information Operationscontent</h3>
-              <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{infoOpsSummaryBlocks.length} content</span>
+              <h3 className="text-base font-semibold text-gray-900">Information Operations</h3>
+              <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{infoOpsSummaryBlocks.length} summaries</span>
             </div>
             <div className="space-y-3">
               {infoOpsSummaryBlocks.map((summary) => (
@@ -428,11 +428,11 @@ export default async function InvestorDashboardPage() {
 
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-900">Engineeringcontent</h3>
-              <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">content</span>
+              <h3 className="text-base font-semibold text-gray-900">Engineering</h3>
+              <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">Coming soon</span>
             </div>
             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-              content, contentEngineeringcontent.
+              No engineering updates yet. Hire or connect an engineering teammate to populate this section.
             </div>
           </section>
         </div>

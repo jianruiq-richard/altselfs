@@ -204,13 +204,13 @@ function safeParsePlan(raw: string): WechattoolPlan {
 
 function buildSystemPrompt(customPrompt?: string | null) {
   const lines = [
-    'messageWeChat Official AccountsAI teammate.',
-    'messagetoolmessage/message/message, message.',
-    'messagetoolmessage, message.',
-    'message, message.',
+    'You are the WeChat Official Accounts AI teammate.',
+    'Use the available tools, article candidates, metrics, details, and comments to answer the user.',
+    'Be concise, source-grounded, and clear about missing data.',
+    'When useful, organize the answer into Signals, Evidence, and Recommended Actions.',
   ];
   if (customPrompt?.trim()) {
-    lines.push('message: ');
+    lines.push('Custom coaching:');
     lines.push(customPrompt.trim());
   }
   return lines.join('\n');
@@ -219,7 +219,7 @@ function buildSystemPrompt(customPrompt?: string | null) {
 function buildPlannerPrompt(input: { userQuery: string; sources: SourceRecord[]; messages: ClientMessage[] }) {
   const sourceText =
     input.sources.length === 0
-      ? 'message'
+      ? 'No sources configured.'
       : input.sources.map((source, i) => `${i + 1}. ${source.displayName} | biz=${source.biz}`).join('\n');
   const history = input.messages
     .slice(-8)
@@ -227,40 +227,40 @@ function buildPlannerPrompt(input: { userQuery: string; sources: SourceRecord[];
     .join('\n');
 
   return [
-    'message, message JSON.',
-    'message action message args, messagetoolmessage.',
-    'action message: ',
-    '1) list_source_articles: message (message/message)',
-    '2) search_global_articles: message',
-    '3) get_article_detail: message',
-    '4) get_article_metrics: message/message',
-    '5) get_article_comments: message (message comment_id)',
-    '6) mixed_analysis: message/message (messagedefault)',
-    '7) clarify: message, message',
+    'Plan the next WeChat Official Accounts tool action. Return strict JSON only.',
+    'Choose the action and arguments that best match the user request.',
+    'Available actions:',
+    '1) list_source_articles: list recent articles from configured sources',
+    '2) search_global_articles: search WeChat articles globally',
+    '3) get_article_detail: fetch article details',
+    '4) get_article_metrics: fetch article engagement metrics',
+    '5) get_article_comments: fetch article comments when a comment_id is available',
+    '6) mixed_analysis: combine listing, detail, and metrics for general analysis',
+    '7) clarify: ask for missing information',
     'JSON Schema:',
     '{',
     '  "action":"list_source_articles|search_global_articles|get_article_detail|get_article_metrics|get_article_comments|mixed_analysis|clarify",',
-    '  "reason":"message",',
+    '  "reason":"why this action is appropriate",',
     '  "args":{',
-    '    "bizList":["message"],',
-    '    "keyword":"message",',
-    '    "dateFrom":"message YYYY-MM-DD",',
-    '    "dateTo":"message YYYY-MM-DD",',
-    '    "targetUrl":"message, message URL",',
-    '    "articleUrls":["message, messageURL"],',
-    '    "commentId":"message, messageIDmessage",',
-    '    "buffer":"message, message",',
-    '    "contentId":"message, messageID (message)",',
-    '    "maxReplyId":"message, messageID (message)",',
+    '    "bizList":["official account biz ID"],',
+    '    "keyword":"search keyword",',
+    '    "dateFrom":"optional YYYY-MM-DD",',
+    '    "dateTo":"optional YYYY-MM-DD",',
+    '    "targetUrl":"target article URL",',
+    '    "articleUrls":["article URL"],',
+    '    "commentId":"comment ID when known",',
+    '    "buffer":"optional pagination buffer",',
+    '    "contentId":"optional content ID",',
+    '    "maxReplyId":"optional max reply ID",',
     '    "offset":0,',
-    `    "maxSources":"message, 1-${MAX_PLAN_SOURCES}",`,
-    `    "maxArticles":"message, 1-${MAX_PLAN_ARTICLES}",`,
+    `    "maxSources":"number, 1-${MAX_PLAN_SOURCES}",`,
+    `    "maxArticles":"number, 1-${MAX_PLAN_ARTICLES}",`,
     '    "realtime":true/false',
     '  }',
     '}',
-    `message: ${input.userQuery}`,
-    `message: \n${sourceText}`,
-    `message: \n${history || 'message'}`,
+    `User request: ${input.userQuery}`,
+    `Configured sources:\n${sourceText}`,
+    `Conversation history:\n${history || 'No prior context.'}`,
   ].join('\n');
 }
 
@@ -295,7 +295,7 @@ function toArticleCandidates(sourceName: string, biz: string, payload: unknown):
     .map((item) => ({
       sourceName,
       biz,
-      title: pickFirstString(item, ['title', 'msg_title', 'name']) || 'message',
+      title: pickFirstString(item, ['title', 'msg_title', 'name']) || '(untitled article)',
       url: pickFirstString(item, ['url', 'article_url', 'link', 'content_url']),
       publishAt: pickFirstString(item, ['publish_time', 'pub_time', 'datetime', 'time', 'date']) || null,
       summary: pickFirstString(item, ['digest', 'summary', 'abstract', 'desc']),
@@ -317,26 +317,26 @@ function chooseSources(sources: SourceRecord[], plan: WechattoolPlan, userQuery:
 }
 
 function renderCandidates(candidates: ArticleCandidate[]) {
-  if (candidates.length === 0) return 'message.';
+  if (candidates.length === 0) return 'No article candidates were found.';
   return candidates
     .map(
       (item, i) =>
         `${i + 1}. ${item.title}\n` +
         `Source: ${item.sourceName} (biz: ${item.biz})\n` +
-        `message: ${item.publishAt || 'message'}\n` +
-        `message: ${item.url}\n` +
-        `message: ${item.summary || 'message'}`
+        `Published: ${item.publishAt || 'unknown'}\n` +
+        `URL: ${item.url}\n` +
+        `Summary: ${item.summary || 'No summary available.'}`
     )
     .join('\n\n');
 }
 
 function rendertoolResults(results: Array<{ tool: string; result: unknown }>) {
-  if (results.length === 0) return 'messagetoolmessage.';
+  if (results.length === 0) return 'No tool results.';
   return results.map((r, i) => `${i + 1}. ${r.tool}\n${JSON.stringify(r.result)}`).join('\n\n');
 }
 
 function rendertoolFailures(failures: toolFailureEntry[]) {
-  if (failures.length === 0) return 'messagetoolmessage.';
+  if (failures.length === 0) return 'No tool failures.';
   return failures
     .map((item, index) => `${index + 1}. ${item.tool}${item.target ? `(${item.target})` : ''}: ${item.detail}`)
     .join('\n');
@@ -472,7 +472,7 @@ export async function PUT(req: NextRequest) {
   const customPrompt = String(body.customPrompt || '');
   if (customPrompt.length > MAX_CUSTOM_PROMPT_LENGTH) {
     return NextResponse.json(
-      { error: `message, message ${MAX_CUSTOM_PROMPT_LENGTH} message` },
+      { error: `Custom prompt is too long. Keep it under ${MAX_CUSTOM_PROMPT_LENGTH} characters.` },
       { status: 400 }
     );
   }
@@ -488,7 +488,7 @@ export async function PUT(req: NextRequest) {
       investorId: investor.id,
       provider: WECHAT_PROVIDER,
       status: 'CONNECTED',
-      accountName: 'WeChat Official AccountsAI teammate',
+      accountName: 'WeChat Official Accounts AI teammate',
       assistantCustomPrompt: customPrompt,
     },
     update: {
@@ -513,7 +513,7 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json().catch(() => ({}))) as { messages?: unknown; threadId?: string };
   const messages = normalizeMessages(body.messages);
-  if (messages.length === 0) return NextResponse.json({ error: 'message' }, { status: 400 });
+  if (messages.length === 0) return NextResponse.json({ error: 'At least one message is required.' }, { status: 400 });
 
   const thread = await ensureThread({
     investorId: investor.id,
@@ -535,7 +535,7 @@ export async function POST(req: NextRequest) {
   if (!isWechatProviderReady()) {
     const provider = getWechatDataProviderLabel();
     const requiredEnv = getWechatProviderRequiredEnv();
-    const reply = `message (provider=${provider}, message ${requiredEnv}), message.`;
+    const reply = `WeChat data provider is not configured (provider=${provider}, missing ${requiredEnv}). Configure it before using this assistant.`;
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({ ok: true, reply, threadId: thread.id });
   }
@@ -566,7 +566,7 @@ export async function POST(req: NextRequest) {
   ]);
 
   if (sources.length === 0) {
-    const reply = 'message.message, message.';
+    const reply = 'No WeChat Official Account sources are configured yet. Add sources first, then ask me to analyze them.';
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({ ok: true, reply, threadId: thread.id });
   }
@@ -575,7 +575,7 @@ export async function POST(req: NextRequest) {
   const invalidSources = sources.filter((source) => !isValidBiz(source.biz));
   if (validSources.length === 0) {
     const names = invalidSources.map((item) => item.displayName).join(', ');
-    const reply = `message (message), messageDeletemessage.message: ${names || 'message'}`;
+    const reply = `All configured WeChat sources have invalid biz IDs. Remove or re-add these sources: ${names || 'unknown sources'}`;
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({ ok: true, reply, threadId: thread.id });
   }
@@ -584,7 +584,7 @@ export async function POST(req: NextRequest) {
     [...messages].reverse().find((m) => m.role === 'user')?.content || messages[messages.length - 1].content;
 
   const plannerInput: ChatMessage[] = [
-    { role: 'system', content: 'messageJSONmessage.' },
+    { role: 'system', content: 'Return valid JSON only. Do not include Markdown or explanatory text.' },
     {
       role: 'user',
       content: buildPlannerPrompt({ userQuery, sources, messages }),
@@ -669,7 +669,7 @@ export async function POST(req: NextRequest) {
       const result = plan.args?.realtime
         ? await searchRealtimeArticles({ keyword: keyword || userQuery, mode: 1, page: 1, limit: maxArticles })
         : await searchArticles({ keyword: keyword || userQuery, page: 1, limit: maxArticles });
-      const arr = toArticleCandidates('message', '', result);
+      const arr = toArticleCandidates('Global WeChat search', '', result);
       candidates.push(...arr);
       toolResults.push({
         tool: plan.args?.realtime ? 'searchRealtimeArticles' : 'searchArticles',
@@ -888,7 +888,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (toolResults.length === 0 && toolFailures.length > 0) {
-    const reply = `messagefailed, message: \n${rendertoolFailures(toolFailures)}`;
+    const reply = `Tool execution failed. Details:\n${rendertoolFailures(toolFailures)}`;
     await appendThreadMessage({
       threadId: thread.id,
       role: 'ASSISTANT',
@@ -918,18 +918,18 @@ export async function POST(req: NextRequest) {
     {
       role: 'system',
       content: [
-        `message: ${validSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`,
+        `Valid sources: ${validSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`,
         invalidSources.length > 0
-          ? `message, messageSkipped: ${invalidSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`
+          ? `Invalid sources skipped: ${invalidSources.map((s) => `${s.displayName}(${s.biz})`).join(', ')}`
           : '',
       ]
         .filter(Boolean)
         .join('\n'),
     },
-    { role: 'system', content: `message: ${JSON.stringify(plan)}` },
-    { role: 'system', content: `message: \n${renderCandidates(candidates)}` },
-    { role: 'system', content: `toolmessage: \n${rendertoolResults(toolResults)}` },
-    { role: 'system', content: `toolmessage: \n${rendertoolFailures(toolFailures)}` },
+    { role: 'system', content: `Planner decision: ${JSON.stringify(plan)}` },
+    { role: 'system', content: `Article candidates:\n${renderCandidates(candidates)}` },
+    { role: 'system', content: `Tool results:\n${rendertoolResults(toolResults)}` },
+    { role: 'system', content: `Tool failures:\n${rendertoolFailures(toolFailures)}` },
     ...messages.map((message) => ({ role: message.role, content: message.content })),
   ];
 
@@ -962,6 +962,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown';
-    return NextResponse.json({ error: `AI teammatemessage: ${detail}` }, { status: 500 });
+    return NextResponse.json({ error: `AI teammate failed: ${detail}` }, { status: 500 });
   }
 }

@@ -99,7 +99,7 @@ const plannerStatusClass: Record<PlannerStepStatus, string> = {
 };
 
 export const EXECUTIVE_UPDATE_BRIEFING_PROMPT =
-  'content, contentagent, contentWeChat Official Accountscontent, content, Lark AssistantcontentXiaohongshu Assistant, content.content"Information Digest, Today To-Dos, Twin Recommendations"content: Information Digestcontent; Today To-DoscontentRed P0, Yellow P1, Green P2content; Twin Recommendationscontent/content.';
+  'Update my Decision Briefing using all available agents and connected sources, including WeChat Official Accounts, Gmail, Lark Assistant, and Xiaohongshu Assistant. Return three sections: Information Digest, Today To-Dos, and Twin Recommendations. For Today To-Dos, classify items as Red P0, Yellow P1, or Green P2.';
 
 const dayTimeFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'numeric',
@@ -127,7 +127,7 @@ function defaultPriorityLabel(priority: 'high' | 'medium' | 'low') {
 function defaultBriefingModules(briefing?: ExecutiveDailyBriefingView): BriefingModule[] {
   const taskItems = (briefing?.priorityTasks || []).map((task) => ({
     title: `${defaultPriorityLabel(task.priority)} ${task.task}`,
-    summary: `Due: ${task.deadline}.Source: ${task.assignedBy}`,
+    summary: `Due: ${task.deadline}. Source: ${task.assignedBy}`,
     source: task.assignedBy,
     publishedAt: briefing?.generatedTime,
   }));
@@ -137,7 +137,7 @@ function defaultBriefingModules(briefing?: ExecutiveDailyBriefingView): Briefing
       return {
         key: moduleKey(title, index),
         title,
-        content: taskItems.length > 0 ? 'contentTodaycontent.' : 'content, Executive AssistantcontentTodaycontent.',
+        content: taskItems.length > 0 ? 'Tasks identified for today.' : 'No high-priority tasks found for today by Executive Assistant.',
         items: taskItems.length > 0 ? taskItems : undefined,
       };
     }
@@ -147,8 +147,8 @@ function defaultBriefingModules(briefing?: ExecutiveDailyBriefingView): Briefing
       title,
       content:
         title === 'Information Digest'
-          ? 'content"Update briefing"content, Executive Assistantcontent, Gmail, content, content.'
-          : 'content, content, content/content.',
+          ? 'Click "Update briefing" to let Executive Assistant pull current signals from Gmail, Lark, WeChat, and other connected sources.'
+          : 'Ask your digital twin for recommendations, tradeoffs, and follow-up actions.',
     };
   });
 }
@@ -168,7 +168,7 @@ function normalizeBriefingModules(sections: unknown, briefing?: ExecutiveDailyBr
       return {
         key: moduleKey(title, index),
         title,
-        content: typeof section.content === 'string' && section.content.trim() ? section.content : 'content.',
+        content: typeof section.content === 'string' && section.content.trim() ? section.content : 'No summary available.',
         items: rawItems
           .map((item) => {
             if (!isRecord(item)) return null;
@@ -274,7 +274,7 @@ async function waitForExecutiveRun(runId: string, onUpdate?: (run: ExecutiveRunP
     if (data.status === 'SUCCESS' || data.status === 'ERROR') return data;
     await sleep(typeof data.pollIntervalMs === 'number' ? data.pollIntervalMs : 3000);
   }
-  throw new Error('contentComplete, content');
+  throw new Error('Task did not complete before the timeout.');
 }
 
 function normalizeImageUrls(item: BriefingItem | undefined) {
@@ -303,7 +303,7 @@ function normalizeBriefingEntries(
     const compact = module.title === 'Information Digest' || module.title === 'Today To-Dos' || module.title === 'Twin Recommendations';
     const insight = briefing.externalInsights?.find((item) => item.category.includes(module.title));
     const fallbackTitle = module.title;
-    const fallbackSummary = insight?.content || module.content || 'Todaycontent.';
+    const fallbackSummary = insight?.content || module.content || 'No updates yet.';
     const rawItems =
       module.items && module.items.length > 0
         ? module.items
@@ -531,7 +531,7 @@ export function ExecutiveDailyBriefingBrowser({
         });
         applyRunResult(run);
       } catch (err) {
-        setError(err instanceof Error ? `Update failed: ${err.message}` : 'Update failed, content');
+        setError(err instanceof Error ? `Update failed: ${err.message}` : 'Update failed.');
       } finally {
         activeRunIdRef.current = null;
         setActiveRunId(null);
@@ -566,7 +566,7 @@ export function ExecutiveDailyBriefingBrowser({
       setCurrentProgress(null);
       setError('This update has been stopped.');
     } catch (err) {
-      setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task, content');
+      setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task.');
     } finally {
       setStoppingRun(false);
     }
@@ -642,7 +642,7 @@ export function ExecutiveDailyBriefingBrowser({
       });
       applyRunResult(run);
     } catch (err) {
-      setError(err instanceof Error ? `Update failed: ${err.message}` : 'Update failed, content');
+      setError(err instanceof Error ? `Update failed: ${err.message}` : 'Update failed.');
     } finally {
       activeRunIdRef.current = null;
       setActiveRunId(null);
@@ -699,7 +699,7 @@ export function ExecutiveDailyBriefingBrowser({
             <button
               type="button"
               onClick={() =>
-                requestPrompt('content Decision Briefing, content: content, content, contentDecidecontent.')
+                requestPrompt('Review my Decision Briefing and help me decide what to prioritize next.')
               }
               className="inline-flex items-center justify-center rounded-xl border border-[#d9c5af] bg-white/70 px-4 py-2.5 text-sm font-semibold text-[#6b3d1d] transition hover:bg-white hover:text-[#4f2b15]"
             >
@@ -806,7 +806,7 @@ export function ExecutiveDailyBriefingBrowser({
               <button
                 key={entry.id}
                 type="button"
-                onClick={() => requestPrompt(`contentExpandcontent: ${entry.title}, content, content.`)}
+                onClick={() => requestPrompt(`Expand this briefing item: ${entry.title}. Include context, implications, and next actions.`)}
                 className="block h-full w-full text-left"
               >
                 {card}

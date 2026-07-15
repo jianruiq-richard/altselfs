@@ -20,22 +20,22 @@ function redirectWithResult(req: NextRequest, provider: string, status: string, 
 }
 
 function toFriendlyError(provider: 'gmail' | 'feishu', detail: string) {
-  const label = provider === 'gmail' ? 'Gmail' : 'message';
+  const label = provider === 'gmail' ? 'Gmail' : 'Lark';
   const normalized = detail.toLowerCase();
 
   if (normalized.includes('fetch failed') || normalized.includes('econn') || normalized.includes('enotfound') || normalized.includes('etimedout')) {
-    return `${label} message, message/VPNmessage.`;
+    return `${label} connection failed because the server could not reach the provider. Check network or VPN access.`;
   }
   if (normalized.includes('redirect_uri_mismatch')) {
-    return `${label} message, message OAuth message URI message.`;
+    return `${label} OAuth redirect URI is not configured correctly.`;
   }
   if (normalized.includes('invalid_grant') || normalized.includes('missing required parameter')) {
-    return `${label} message, message"Connect${label}".`;
+    return `${label} authorization expired. Click "Connect ${label}" and try again.`;
   }
   if (normalized.includes('missing environment variable')) {
-    return `${label} messageComplete, message.`;
+    return `${label} OAuth configuration is incomplete. Check environment variables.`;
   }
-  return `${label} connection failed, message.`;
+  return `${label} connection failed. Please try again.`;
 }
 
 export async function GET(
@@ -59,13 +59,13 @@ export async function GET(
   const stateCookie = req.cookies.get(`oauth_state_${provider}`)?.value;
 
   if (error) {
-    return redirectWithResult(req, provider, 'error', `messagefailed: ${error}`);
+    return redirectWithResult(req, provider, 'error', `Authorization failed: ${error}`);
   }
   if (!state || !stateCookie || state !== stateCookie) {
-    return redirectWithResult(req, provider, 'error', 'messagefailed, message');
+    return redirectWithResult(req, provider, 'error', 'OAuth state validation failed. Please reconnect.');
   }
   if (!code) {
-    return redirectWithResult(req, provider, 'error', 'message');
+    return redirectWithResult(req, provider, 'error', 'Missing authorization code.');
   }
 
   try {

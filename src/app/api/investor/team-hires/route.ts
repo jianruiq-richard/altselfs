@@ -8,7 +8,7 @@ function isTeamKey(input: string): input is TeamKey {
 }
 
 function teamDefaultAgentName(teamKey: TeamKey) {
-  return TEAM_LIBRARY.find((team) => team.key === teamKey)?.defaultAgentName || 'defaultAI teammate';
+  return TEAM_LIBRARY.find((team) => team.key === teamKey)?.defaultAgentName || 'Default AI teammate';
 }
 
 export async function POST(req: NextRequest) {
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!isTeamKey(teamKey)) {
-    return NextResponse.json({ error: 'message teamKey' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid teamKey.' }, { status: 400 });
   }
 
   if (action === 'unhire') {

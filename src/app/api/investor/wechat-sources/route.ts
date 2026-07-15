@@ -77,11 +77,11 @@ async function parseWechatArticleUrl(raw: string) {
   try {
     parsed = new URL(raw);
   } catch {
-    return { error: 'message' } as const;
+    return { error: 'Invalid WeChat article URL.' } as const;
   }
 
   if (!['mp.weixin.qq.com', 'weixin.qq.com'].includes(parsed.hostname)) {
-    return { error: 'message' } as const;
+    return { error: 'Please use a WeChat Official Account article URL from mp.weixin.qq.com.' } as const;
   }
 
   const directBiz = (parsed.searchParams.get('__biz') || '').trim();
@@ -115,7 +115,7 @@ async function parseWechatArticleUrl(raw: string) {
   }
 
   try {
-    // message: messageURL, messageURLmessageHTMLmessage __biz
+    // Some shared URLs redirect before exposing __biz, so fetch the final HTML and parse it.
     const res = await fetch(parsed.toString(), {
       method: 'GET',
       redirect: 'follow',
@@ -147,15 +147,15 @@ async function parseWechatArticleUrl(raw: string) {
       } as const;
     }
   } catch {
-    // message/messagefailedmessage
+    // Ignore network or parsing failures and return a user-facing error below.
   }
 
-  return { error: 'message (__biz), message' } as const;
+  return { error: 'Unable to extract the WeChat account biz ID (__biz) from this article URL.' } as const;
 }
 
 function inferDisplayName(biz: string) {
   const suffix = biz.length > 8 ? biz.slice(-8) : biz;
-  return `message-${suffix}`;
+  return `WeChat account ${suffix}`;
 }
 
 type AnyRecord = Record<string, unknown>;
@@ -208,10 +208,10 @@ async function enrichFromProviderByBiz(biz: string, hintUrl?: string) {
   const provider = getWechatDataProviderLabel();
   if (!isWechatProviderReady()) {
     const requiredEnv = getWechatProviderRequiredEnv();
-    logs.push({
-      step: `${provider}_config_check`,
-      status: 'skip',
-      detail: `${requiredEnv} message`,
+      logs.push({
+        step: `${provider}_config_check`,
+        status: 'skip',
+      detail: `${requiredEnv} is not configured`,
     });
     return { displayName: '', description: '', latestArticleUrl: '', logs };
   }
@@ -262,12 +262,12 @@ async function enrichFromProviderByBiz(biz: string, hintUrl?: string) {
         const baseList = Array.isArray(baseData) ? (baseData as AnyRecord[]) : [];
         if (!displayName) {
           displayName =
-            pickFromKvPairs(baseList, ['message', 'accountsmessage', 'message']) ||
+            pickFromKvPairs(baseList, ['name', 'account', 'nickname']) ||
             displayName;
         }
         if (!description) {
           description =
-            pickFromKvPairs(baseList, ['message', 'message', 'message']) ||
+            pickFromKvPairs(baseList, ['description', 'intro', 'signature']) ||
             description;
         }
       } catch (error) {
@@ -303,7 +303,7 @@ async function enrichFromProviderByBiz(biz: string, hintUrl?: string) {
       logs.push({
         step: 'getMpHistoryPosts',
         status: 'skip',
-        detail: 'message, message',
+        detail: 'Skipped because a hint URL is already available',
       });
     }
 
@@ -342,7 +342,7 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'messageError' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
   }
 
   const articleUrl = String((body as { articleUrl?: string })?.articleUrl || '').trim();
@@ -366,10 +366,10 @@ export async function POST(req: NextRequest) {
     }
   } else {
     if (!candidateBiz) {
-      return NextResponse.json({ error: 'message, messageAdd' }, { status: 400 });
+      return NextResponse.json({ error: 'Provide an article URL or a valid biz ID to add a source.' }, { status: 400 });
     }
     if (!isValidBiz(candidateBiz)) {
-      return NextResponse.json({ error: 'message, message' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid WeChat biz ID.' }, { status: 400 });
     }
     parsed = {
       biz: candidateBiz,
@@ -389,7 +389,7 @@ export async function POST(req: NextRequest) {
   if (existing) {
     return NextResponse.json(
       {
-        error: 'message, message',
+        error: 'This WeChat account is already in your source library.',
         source: existing,
       },
       { status: 409 }

@@ -26,6 +26,7 @@ const sourceIconMap = {
   Lark: MessageSquare,
   Xiaohongshu: FileText,
   WeChat: FileText,
+  'Digital Twin': MessageSquare,
   Instagram: MessageSquare,
   Facebook: MessageSquare,
   'Demo Source': FileText,
@@ -36,6 +37,7 @@ const sourceColorMap: Record<string, string> = {
   Lark: 'text-blue-600 bg-blue-50',
   Xiaohongshu: 'text-rose-600 bg-rose-50',
   WeChat: 'text-green-600 bg-green-50',
+  'Digital Twin': 'text-violet-600 bg-violet-50',
   Instagram: 'text-indigo-600 bg-indigo-50',
   Facebook: 'text-sky-600 bg-sky-50',
   'Demo Source': 'text-purple-600 bg-purple-50',
@@ -140,8 +142,8 @@ export default async function MessagesPage() {
     items.push({
       id: `integration-${integration.id}`,
       source: providerLabel[integration.provider] || integration.provider,
-      sender: integration.accountEmail || 'content',
-      title: `${providerLabel[integration.provider] || integration.provider} content`,
+      sender: integration.accountEmail || 'Connected account',
+      title: `${providerLabel[integration.provider] || integration.provider} summary`,
       summary: latest.summary,
       priority: 'medium',
       createdAt: latest.createdAt,
@@ -152,10 +154,10 @@ export default async function MessagesPage() {
   for (const source of dbUser.wechatSources) {
     items.push({
       id: `wechat-${source.id}`,
-      source: 'content',
+      source: 'WeChat',
       sender: source.displayName,
-      title: `content: ${source.displayName}`,
-      summary: source.description || 'content, content.',
+      title: `WeChat source: ${source.displayName}`,
+      summary: source.description || 'No summary available yet.',
       priority: 'low',
       createdAt: source.updatedAt,
       isRead: true,
@@ -167,9 +169,9 @@ export default async function MessagesPage() {
     if (!latest) continue;
     items.push({
       id: `candidate-chat-${chat.id}`,
-      source: 'content',
+      source: 'Digital Twin',
       sender: chat.avatar.name,
-      title: `content ${chat.avatar.name} content`,
+      title: `Conversation with ${chat.avatar.name}`,
       summary: latest.content,
       priority: 'medium',
       createdAt: latest.createdAt,
@@ -181,12 +183,12 @@ export default async function MessagesPage() {
     for (const chat of avatar.chats) {
       const latest = chat.messages[0];
       if (!latest) continue;
-      const candidateName = chat.candidate.nickname || chat.candidate.name || 'content';
+      const candidateName = chat.candidate.nickname || chat.candidate.name || 'Anonymous user';
       items.push({
         id: `investor-chat-${chat.id}`,
-        source: 'content',
+        source: 'Digital Twin',
         sender: candidateName,
-        title: `${avatar.name} content ${candidateName} content`,
+        title: `${avatar.name} conversation with ${candidateName}`,
         summary: latest.content,
         priority: chat.needsInvestorReview || chat.qualificationStatus === 'QUALIFIED' ? 'high' : 'medium',
         createdAt: latest.createdAt,
@@ -198,10 +200,10 @@ export default async function MessagesPage() {
   const mockDemoItems: CenterMessage[] = [
     {
       id: 'demo-1',
-      source: 'content (Demo)',
-      sender: 'contentAgent',
-      title: 'AI content',
-      summary: 'Democontent: content, content.',
+      source: 'Demo Source',
+      sender: 'Demo Agent',
+      title: 'AI digest',
+      summary: 'Demo summary: connect real sources to populate this inbox.',
       priority: 'low',
       createdAt: new Date(),
       isRead: true,
@@ -217,8 +219,8 @@ export default async function MessagesPage() {
   return (
     <FigmaShell
       homeHref="/dashboard"
-      title="content"
-      subtitle="AIcontent"
+      title="Messages"
+      subtitle="AI summaries, conversation updates, and high-priority signals"
     >
       <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6">
         <div className="mb-4 flex items-center gap-4">
@@ -226,7 +228,7 @@ export default async function MessagesPage() {
             <input
               readOnly
               value=""
-              placeholder="content..."
+              placeholder="Search messages..."
               className="w-full rounded-xl border border-gray-300 px-4 py-2.5 pl-10 text-sm text-gray-700 placeholder:text-gray-400"
             />
             <Search className="pointer-events-none -mt-8 ml-3 h-4 w-4 text-gray-400" />
@@ -235,8 +237,8 @@ export default async function MessagesPage() {
         <div className="flex flex-wrap gap-2">
           {[
             `All (${list.length})`,
-            `content (${highCount})`,
-            `contentSummary (${dbUser.integrations.filter((it) => it.snapshots[0]).length})`,
+            `Priority (${highCount})`,
+            `Summaries (${dbUser.integrations.filter((it) => it.snapshots[0]).length})`,
             `Demo (${mockDemoItems.length})`,
           ].map((tab, index) => (
             <button
@@ -272,7 +274,7 @@ export default async function MessagesPage() {
                 })()}
                 <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-600">{item.source}</span>
                 <span className="text-xs text-gray-500">{item.sender}</span>
-                {!item.isRead ? <span className="rounded bg-blue-600 px-1.5 py-0.5 text-xs text-white">content</span> : null}
+                {!item.isRead ? <span className="rounded bg-blue-600 px-1.5 py-0.5 text-xs text-white">New</span> : null}
               </div>
               <span className="text-xs text-gray-400">{item.createdAt.toLocaleString('en-US')}</span>
             </div>
@@ -281,7 +283,7 @@ export default async function MessagesPage() {
 
             <div className="mt-3 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50 p-3">
               <div className="flex items-start gap-2">
-                <span className="text-xs font-medium text-purple-600">AIcontent</span>
+                <span className="text-xs font-medium text-purple-600">AI summary</span>
                 <p className="flex-1 whitespace-pre-wrap text-sm text-gray-700">{item.summary}</p>
               </div>
             </div>
@@ -297,19 +299,19 @@ export default async function MessagesPage() {
                         : 'bg-slate-100 text-slate-700'
                   }`}
                 >
-                  {item.priority === 'high' ? 'content' : item.priority === 'medium' ? 'content' : 'content'}
+                  {item.priority === 'high' ? 'High priority' : item.priority === 'medium' ? 'Medium priority' : 'Low priority'}
                 </span>
                 <button type="button" className="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100">
                   <Eye className="mr-1 h-3.5 w-3.5" />
-                  content
+                  View
                 </button>
                 <button type="button" className="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100">
                   <Star className="mr-1 h-3.5 w-3.5" />
-                  content
+                  Star
                 </button>
                 <button type="button" className="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100">
                   <Archive className="mr-1 h-3.5 w-3.5" />
-                  content
+                  Archive
                 </button>
               </div>
             </div>
@@ -318,7 +320,7 @@ export default async function MessagesPage() {
 
         {list.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-slate-500">
-            content, content Gmail / content / content.
+            No messages yet. Connect Gmail, Lark, WeChat, or a digital twin to populate this inbox.
           </div>
         ) : null}
       </div>

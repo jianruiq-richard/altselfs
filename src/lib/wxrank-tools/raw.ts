@@ -33,7 +33,7 @@ const DEFINITIONS: EndpointDefinition[] = [
   { key: 'searchMpByKeyword', label: 'Search official accounts by keyword', method: 'POST', defaultPath: '/weixin/getsu' },
   { key: 'searchMpBySosuo', label: 'Search WeChat official accounts', method: 'POST', defaultPath: '/weixin/getsu' },
   { key: 'getMpHistoryPosts', label: 'Get official account article history', method: 'POST', defaultPath: '/weixin/getps' },
-  { key: 'getMpHistoryPostsByBiz', label: 'Get official account article history (bizcontent)', method: 'POST', defaultPath: '/weixin/getpc' },
+  { key: 'getMpHistoryPostsByBiz', label: 'Get official account article history by biz ID', method: 'POST', defaultPath: '/weixin/getpc' },
   { key: 'getMpSubjectInfo', label: 'Get official account entity information', method: 'POST', defaultPath: '/weixin/getinfo' },
   { key: 'getMpBaseInfo', label: 'Get official account profile', method: 'POST', defaultPath: '/weixin/getbiz' },
   { key: 'getArticleDetailTextRich', label: 'Get article details (body)', method: 'POST', defaultPath: '/weixin/artinfo' },

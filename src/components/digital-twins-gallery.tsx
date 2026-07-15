@@ -26,9 +26,9 @@ export type DigitalTwinCard = {
 const categories: Array<{ id: DigitalTwinCategory; name: string; Icon: React.ComponentType<{ className?: string }> }> = [
   { id: 'all', name: 'All', Icon: Star },
   { id: 'tech', name: 'Technical', Icon: Code },
-  { id: 'business', name: 'content', Icon: Briefcase },
-  { id: 'design', name: 'content', Icon: Palette },
-  { id: 'knowledge', name: 'content', Icon: BookOpen },
+  { id: 'business', name: 'Business', Icon: Briefcase },
+  { id: 'design', name: 'Design', Icon: Palette },
+  { id: 'knowledge', name: 'Knowledge', Icon: BookOpen },
 ];
 
 type SortBy = 'popular' | 'rating' | 'recent';
@@ -63,7 +63,7 @@ export default function DigitalTwinsGallery({ cards }: { cards: DigitalTwinCard[
     <>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Digital Twin Gallery</h1>
-        <p className="mt-2 text-gray-500">content, content</p>
+        <p className="mt-2 text-gray-500">Explore public digital twins built for decision support, research, and execution.</p>
       </div>
 
       <div className="mb-8 rounded-xl border border-gray-200 bg-white p-6">
@@ -73,7 +73,7 @@ export default function DigitalTwinsGallery({ cards }: { cards: DigitalTwinCard[
             <input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="content, content, content..."
+              placeholder="Search by name, skill, or topic..."
               className="w-full rounded-xl border border-gray-300 py-2.5 pl-10 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -96,7 +96,7 @@ export default function DigitalTwinsGallery({ cards }: { cards: DigitalTwinCard[
               }`}
             >
               <Star className="mr-2 h-4 w-4" />
-              content
+              Top rated
             </button>
           </div>
         </div>
@@ -122,7 +122,7 @@ export default function DigitalTwinsGallery({ cards }: { cards: DigitalTwinCard[
 
       {filteredTwins.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-14 text-center">
-          <p className="text-gray-500">content</p>
+          <p className="text-gray-500">No digital twins match your filters.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -146,7 +146,7 @@ export default function DigitalTwinsGallery({ cards }: { cards: DigitalTwinCard[
                       <span className="ml-1 font-medium text-gray-800">{twin.rating.toFixed(1)}</span>
                     </div>
                     <span className="text-gray-400">·</span>
-                    <span className="text-gray-500">{twin.conversations} content</span>
+                    <span className="text-gray-500">{twin.conversations} conversations</span>
                   </div>
                 </div>
               </div>
@@ -162,7 +162,7 @@ export default function DigitalTwinsGallery({ cards }: { cards: DigitalTwinCard[
               </div>
 
               <div className="mb-4">
-                <p className="mb-2 text-xs text-gray-500">content</p>
+                <p className="mb-2 text-xs text-gray-500">Core skills</p>
                 <div className="flex flex-wrap gap-1">
                   {twin.skills.slice(0, 3).map((skill) => (
                     <span key={skill} className="rounded-md border px-2 py-0.5 text-xs text-[#030213]">
@@ -180,11 +180,11 @@ export default function DigitalTwinsGallery({ cards }: { cards: DigitalTwinCard[
               <div className="flex gap-2">
                 {twin.detailHref ? (
                   <Link href={twin.detailHref} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-center text-sm text-gray-700 hover:bg-gray-50">
-                    content
+                    View profile
                   </Link>
                 ) : (
                   <button type="button" className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
-                    content
+                    View profile
                   </button>
                 )}
 

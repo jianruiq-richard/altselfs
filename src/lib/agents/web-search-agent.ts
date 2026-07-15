@@ -141,7 +141,7 @@ function normalizeItems(rawItems: unknown): WebSearchSourceItem[] {
 function parseWebSearchOutput(raw: string): WebSearchAgentOutput {
   const json = extractJsonObject(raw);
   if (!json) {
-    throw new Error(`OpenRouter Web Search agent instruction JSON.instruction: ${raw.slice(0, 600)}`);
+    throw new Error(`OpenRouter Web Search agent did not return valid JSON: ${raw.slice(0, 600)}`);
   }
 
   const parsed = JSON.parse(json) as WebSearchAgentOutput;
@@ -160,7 +160,7 @@ function parseWebSearchOutput(raw: string): WebSearchAgentOutput {
 function parseWebSearchSummary(raw: string): WebSearchSummaryOutput {
   const json = extractJsonObject(raw);
   if (!json) {
-    throw new Error(`instruction Step2 instruction JSON.instruction: ${raw.slice(0, 600)}`);
+    throw new Error(`Step 2 did not return valid JSON: ${raw.slice(0, 600)}`);
   }
   const parsed = JSON.parse(json) as WebSearchSummaryOutput;
   const findings = Array.isArray(parsed.findings)
@@ -193,7 +193,7 @@ function parseWebSearchSummary(raw: string): WebSearchSummaryOutput {
 function buildDefaultTaskSpec(input: AgentRunInput): AgentTaskSpec {
   const now = new Date();
   return {
-    objective: `instruction: ${input.userQuery}`,
+    objective: `Research request: ${input.userQuery}`,
     sourceSelectionCriteria: [
       input.userQuery,
     ],
@@ -204,7 +204,7 @@ function buildDefaultTaskSpec(input: AgentRunInput): AgentTaskSpec {
     },
     returnFormat: {
       sections: ['Information Digest'],
-      instructions: 'instruction; instruction24instruction; instruction.instructionInformation Digestinstruction; Today To-DosinstructionExecutive Assistantinstruction; Twin Recommendationsinstruction.',
+      instructions: 'Prioritize credible, recent sources from the last 24 hours when possible. Return an Information Digest; use Today To-Dos and Twin Recommendations only when requested by the caller.',
     },
   };
 }
@@ -217,7 +217,7 @@ function flattenBriefingItems(output: WebSearchAgentOutput): AgentBriefingItem[]
       result.push({
         category: MODULE_LABELS[key],
         title: item.title,
-        summary: item.whyItMatters ? `${item.summary}\ninstruction: ${item.whyItMatters}` : item.summary,
+        summary: item.whyItMatters ? `${item.summary}\nWhy it matters: ${item.whyItMatters}` : item.summary,
         source: item.source,
         url: item.url,
         publishedAt: item.publishedAt,
@@ -238,15 +238,15 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
   const steps = [
     {
       id: 'web_search_collect',
-      goal: 'instruction OpenRouter web_search / web_fetch instruction.',
+      goal: 'Collect fresh evidence with OpenRouter web_search and web_fetch.',
     },
     {
       id: 'web_search_summarize',
-      goal: 'instruction, instruction.',
+      goal: 'Summarize citations into evidence-backed findings.',
     },
     {
       id: 'web_search_structure',
-      goal: 'instructionInformation Digestinstruction JSON.',
+      goal: 'Structure findings into Information Digest JSON.',
     },
   ];
 
@@ -261,10 +261,10 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     {
       role: 'system',
       content: [
-        'instruction"instruction"instruction Step1 instruction.',
-        'instruction OpenRouter web_search / web_fetch toolinstruction, instruction.',
-        'instructionExecutive Assistantinstruction, instruction query, instruction24instruction.',
-        'instruction; instructionCompleteinstructionCompleted, instructionJSON.',
+        'You are Step 1 of a web research agent.',
+        'Use OpenRouter web_search and web_fetch tools to find credible, current sources.',
+        'Focus on the Executive Assistant request, derived search intent, and the requested time window.',
+        'After tool use is complete, return a short JSON-compatible research note.',
       ].join('\n'),
     },
     {
@@ -276,9 +276,9 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
         searchIntent,
         ...(subagentSignals.length > 0 ? { existingSignals: subagentSignals } : {}),
         hardRules: [
-          'instructiontool.',
-          'instruction, instruction/instruction taskSpec instruction searchIntent instruction.',
-          'instruction24instruction; instruction.',
+          'Use web tools before answering.',
+          'Search queries must follow taskSpec and searchIntent.',
+          'Prefer sources from the last 24 hours when the request asks for current updates.',
         ],
       }),
     },
@@ -309,16 +309,16 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     },
   });
   if (citations.length === 0) {
-    throw new Error(`instruction Step1 instruction.instruction: ${searchStep.content.slice(0, 600)}`);
+    throw new Error(`Step 1 returned no citations. Assistant content: ${searchStep.content.slice(0, 600)}`);
   }
 
   const summarizeMessages: ChatMessage[] = [
     {
       role: 'system',
       content: [
-        'instruction"instruction"instruction Step2 instruction, instructionJSON.',
-        'instruction Step1 instruction.instructionExecutive Assistantinstruction, instruction, instruction.',
-        'instruction.instruction.',
+        'You are Step 2 of a web research agent. Return strict JSON.',
+        'Use the Step 1 citations to produce concise, evidence-backed findings for Executive Assistant.',
+        'Do not invent URLs or sources.',
       ].join('\n'),
     },
     {
@@ -338,9 +338,9 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
               url: 'string',
               source: 'publisher/domain',
               publishedAt: 'date if known, otherwise empty',
-              summary: '120instruction, instruction',
-              evidence: 'instruction',
-              relevance: 'instruction',
+              summary: '120 words or fewer, factual and specific',
+              evidence: 'direct evidence from the cited source',
+              relevance: 'why this finding matters to the user request',
             },
           ],
         },
@@ -371,11 +371,11 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
     {
       role: 'system',
       content: [
-        'instruction"instruction"instruction Step3 Information Digestinstruction, instructionJSON.',
-        'instruction Step2 instruction.instructionInformation Digestinstruction.',
-        'Today To-DosinstructionExecutive Assistantinstruction; Twin Recommendationsinstruction, instruction.',
-        'instruction item instruction Step2 findings, instruction source instruction url.',
-        'instruction, instruction.',
+        'You are Step 3 of a web research agent. Return strict JSON.',
+        'Transform Step 2 findings into an Information Digest module.',
+        'Do not add Today To-Dos or Twin Recommendations unless the task explicitly requested them.',
+        'Every item must be grounded in Step 2 findings and include its source URL.',
+        'Keep the language concise and professional.',
       ].join('\n'),
     },
     {
@@ -411,9 +411,9 @@ export async function runWebSearchAgent(input: AgentRunInput): Promise<AgentRunR
           ],
         },
         hardRules: [
-          'instruction50instructionitems.',
-          'instructioniteminstructionStep2 findings.',
-          'instruction; instructionitemsinstructioncontentinstruction.',
+          'Return no more than 50 items.',
+          'Each item must come from Step 2 findings.',
+          'Do not create empty sections; informationSummary.content should summarize the items.',
         ],
       }),
     },

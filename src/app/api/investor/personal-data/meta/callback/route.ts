@@ -13,20 +13,20 @@ function redirectWithResult(req: NextRequest, status: string, detail?: string) {
 
 function friendlyError(detail: string) {
   const normalized = detail.toLowerCase();
-  if (normalized.includes('redirect_uri')) return 'Meta message, message Facebook Login redirect URI.';
-  if (normalized.includes('invalid') && normalized.includes('code')) return 'Meta message, messageReconnect.';
+  if (normalized.includes('redirect_uri')) return 'Meta connection failed. Check the Facebook Login redirect URI.';
+  if (normalized.includes('invalid') && normalized.includes('code')) return 'Meta authorization expired. Reconnect Meta.';
   if (normalized.includes('app_id') || normalized.includes('app secret') || normalized.includes('meta_app')) {
-    return 'Meta OAuth message, message META_APP_ID / META_APP_SECRET.';
+    return 'Meta OAuth is not configured. Check META_APP_ID and META_APP_SECRET.';
   }
-  if (normalized.includes('credential vault')) return 'message, message ECS secret.';
+  if (normalized.includes('credential vault')) return 'Credential vault is unavailable. Check the ECS secret configuration.';
   if (
     normalized.includes('und_err_connect_timeout') ||
     normalized.includes('connect timeout') ||
     normalized.includes('fetch failed')
   ) {
-    return 'Meta message, messageSavemessage, message personal-agent-server message.';
+    return 'Meta connected, but saving the account to personal-agent-server timed out.';
   }
-  return 'Meta / Instagram / Facebook connection failed, message.';
+  return 'Meta / Instagram / Facebook connection failed. Please try again.';
 }
 
 export async function GET(req: NextRequest) {
@@ -39,9 +39,9 @@ export async function GET(req: NextRequest) {
   const errorDescription = req.nextUrl.searchParams.get('error_description');
   const stateCookie = req.cookies.get('oauth_state_personal_meta')?.value;
 
-  if (error) return redirectWithResult(req, 'error', `messagefailed: ${errorDescription || error}`);
-  if (!state || !stateCookie || state !== stateCookie) return redirectWithResult(req, 'error', 'messagefailed, message');
-  if (!code) return redirectWithResult(req, 'error', 'message');
+  if (error) return redirectWithResult(req, 'error', `Authorization failed: ${errorDescription || error}`);
+  if (!state || !stateCookie || state !== stateCookie) return redirectWithResult(req, 'error', 'OAuth state validation failed. Please reconnect.');
+  if (!code) return redirectWithResult(req, 'error', 'Missing authorization code.');
 
   try {
     const token = await exchangeMetaPersonalCode(req.nextUrl.origin, code);

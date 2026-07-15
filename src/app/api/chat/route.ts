@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
           data: {
             candidateId: user.id,
             avatarId: avatarId,
-            title: `message ${avatar.name} message`,
+            title: `Conversation with ${avatar.name}`,
           },
           include: {
             messages: {
@@ -120,10 +120,10 @@ export async function GET(req: NextRequest) {
     if (!chat) {
       // Create new chat
       chat = await prisma.chat.create({
-        data: {
-          candidateId: user.id,
-          avatarId: avatarId,
-          title: `message ${avatar.name} message`,
+          data: {
+            candidateId: user.id,
+            avatarId: avatarId,
+            title: `Conversation with ${avatar.name}`,
         },
         include: {
           messages: {

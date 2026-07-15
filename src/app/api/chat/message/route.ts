@@ -95,16 +95,16 @@ export async function POST(req: NextRequest) {
       // Check if we have OpenRouter API key
       if (!process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY.includes('your_openrouter_api_key_here')) {
         // Return a demo response if no real API key
-        const demoResponse = `message!message ${chat.avatar.name}, message.
+        const demoResponse = `Hi, I am ${chat.avatar.name}'s digital twin.
 
-message, message: 
-1. message?
-2. message?
-3. message?
+Thanks for reaching out. To help assess fit, could you share:
+1. What problem are you trying to solve?
+2. What relevant experience or context should I know?
+3. What outcome are you hoping for?
 
-messageDemomessage, messageAI APImessage.message, messageAImessage.
+This is demo mode because the AI API key is not configured. Configure the AI service to receive real responses.
 
-message!`;
+Thanks.`;
 
         await prisma.message.create({
           data: {
@@ -119,8 +119,8 @@ message!`;
           data: {
             qualificationStatus: 'NEEDS_INFO',
             qualificationScore: 40,
-            qualificationReason: 'messageDemomessage, messagedefaultmessage"Needs more informationmessage".',
-            summary: 'Demomessage: message, message.',
+            qualificationReason: 'Demo mode defaulted to "Needs more information".',
+            summary: 'Demo mode: candidate provided an initial message, but no real AI evaluation was run.',
             needsInvestorReview: false,
             lastEvaluatedAt: new Date(),
           },
@@ -187,8 +187,8 @@ message!`;
           chatId: chatId,
           content:
             process.env.NODE_ENV === 'development'
-              ? `AImessagefailed: ${detail}`
-              : 'message, message.message, messageTechnicalmessage.',
+              ? `AI response failed: ${detail}`
+              : 'The assistant is temporarily unavailable. Please try again later or contact support.',
           role: 'assistant',
         },
       });
@@ -197,7 +197,7 @@ message!`;
         where: { id: chatId },
         data: {
           qualificationStatus: 'PENDING',
-          qualificationReason: 'messageAImessagefailed, message.',
+          qualificationReason: 'AI response failed, so evaluation is pending.',
           lastEvaluatedAt: new Date(),
         },
       });

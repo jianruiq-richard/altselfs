@@ -30,7 +30,7 @@ export default function SetupPage({
   const handleSetup = useCallback(async () => {
     if (!user) return;
     if (normalizedRole === 'candidate' && (!nickname.trim() || !phone.trim() || !wechatId.trim())) {
-      setError('contentDisplay name, PhonecontentWeChat ID');
+      setError('Please enter your display name, phone number, and WeChat ID.');
       return;
     }
 
@@ -62,7 +62,7 @@ export default function SetupPage({
         router.refresh();
       } else {
         const data = await response.json().catch(() => ({}));
-        setError(data.error || 'contentSettingsfailed, content');
+        setError(data.error || 'Failed to save settings. Please try again.');
       }
     } catch (error) {
       console.error('Error:', error);
@@ -94,10 +94,10 @@ export default function SetupPage({
             Altselfs
           </p>
           <h1 className="mb-4 text-2xl font-semibold text-stone-950">
-            content Decision OS
+            Set up your Decision OS
           </h1>
           <p className="mb-8 text-sm leading-6 text-stone-600">
-            contentdefault AI content
+            We will create your default AI workspace and route you to the right home screen.
           </p>
 
           {error && (
@@ -113,7 +113,7 @@ export default function SetupPage({
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   className="w-full rounded-xl border border-[#d8c8b5] bg-white px-3 py-2 text-stone-950 outline-none focus:border-[#7a451f]"
-                  placeholder="contentDisplay name"
+                  placeholder="Display name"
                 />
               </div>
               <div>
@@ -123,7 +123,7 @@ export default function SetupPage({
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="w-full rounded-xl border border-[#d8c8b5] bg-white px-3 py-2 text-stone-950 outline-none focus:border-[#7a451f]"
-                  placeholder="content"
+                  placeholder="Phone number"
                 />
               </div>
               <div>
@@ -133,7 +133,7 @@ export default function SetupPage({
                   value={wechatId}
                   onChange={(e) => setWechatId(e.target.value)}
                   className="w-full rounded-xl border border-[#d8c8b5] bg-white px-3 py-2 text-stone-950 outline-none focus:border-[#7a451f]"
-                  placeholder="contentWeChat ID"
+                  placeholder="WeChat ID"
                 />
               </div>
             </div>
@@ -145,11 +145,11 @@ export default function SetupPage({
               disabled={isLoading}
               className="w-full rounded-xl bg-[#7a451f] px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLoading ? 'Settingscontent...' : 'content'}
+              {isLoading ? 'Saving settings...' : 'Continue'}
             </button>
           ) : (
             <div className="w-full rounded-xl border border-[#ead8bd] bg-white px-4 py-3 text-sm text-stone-600">
-              {isLoading ? 'content...' : 'content Decision OS Workcontent...'}
+              {isLoading ? 'Setting up...' : 'Preparing your Decision OS workspace...'}
             </div>
           )}
         </div>

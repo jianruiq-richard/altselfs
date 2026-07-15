@@ -31,7 +31,7 @@ function defaultTwinName(input: {
   phone?: string | null;
 }) {
   const base = deriveTwinDisplayBase(input);
-  return base ? `${base} content` : 'My Digital Twin';
+  return base ? `${base} Twin` : 'My Digital Twin';
 }
 
 function pickVisitorEmoji(seed: string) {
@@ -45,22 +45,22 @@ function buildMockConversations(baseAvatarId: string): ReceivedConversationItem[
   const now = Date.now();
   const samples: Array<{ name: string; title: string; summary: string; message: string }> = [
     {
-      name: 'content',
-      title: 'content',
-      message: 'content AI content',
-      summary: 'contentDecidecontent, content, content.',
+      name: 'Alex Chen',
+      title: 'Product founder',
+      message: 'Can this AI workflow become a useful product?',
+      summary: 'Explored product positioning, market risk, and recommended next steps.',
     },
     {
-      name: 'content',
-      title: 'content',
-      message: 'content',
-      summary: 'content, content, content.',
+      name: 'Jordan Lee',
+      title: 'Investor',
+      message: 'What would make this opportunity worth a deeper look?',
+      summary: 'Discussed investment criteria, traction signals, and follow-up questions.',
     },
     {
-      name: 'content',
-      title: 'Technicalcontent',
-      message: 'contentTechnicalcontent',
-      summary: 'contentTechnicalcontent, content.',
+      name: 'Taylor Morgan',
+      title: 'Technical lead',
+      message: 'Can you review the technical architecture?',
+      summary: 'Reviewed technical tradeoffs and implementation risks.',
     },
   ];
 
@@ -181,9 +181,9 @@ export default async function AvatarHomePage() {
           email: dbUser.email,
           phone: dbUser.phone,
         }),
-        description: 'contentdefaultcontent, content.',
+        description: 'Default digital twin for representing your preferences and decision style.',
         systemPrompt:
-          'content.content, content, content, content; content, content.',
+          'You are my digital twin. Answer in my style, ask clarifying questions when needed, and help others understand my priorities, preferences, and decision criteria.',
         status: 'ACTIVE',
       },
     });
@@ -223,8 +223,8 @@ export default async function AvatarHomePage() {
 
   const receivedConversationsRaw: ReceivedConversationItem[] = defaultAvatarRecord.chats
     .map((chat) => {
-      const visitorName = chat.candidate.nickname || chat.candidate.name || 'content';
-      const lastMessage = chat.messages[0]?.content || chat.qualificationReason || 'content';
+      const visitorName = chat.candidate.nickname || chat.candidate.name || 'Anonymous user';
+      const lastMessage = chat.messages[0]?.content || chat.qualificationReason || 'No message yet';
       return {
         id: chat.id,
         avatarId: defaultAvatarRecord.id,
@@ -232,7 +232,7 @@ export default async function AvatarHomePage() {
         visitor: {
           name: visitorName,
           avatar: pickVisitorEmoji(`${chat.candidate.id}-${chat.id}`),
-          title: chat.candidate.nickname ? 'contentSign upcontent' : 'content',
+          title: chat.candidate.nickname ? 'Registered user' : 'Visitor',
         },
         lastMessage,
         messageCount: chat._count.messages,
@@ -242,7 +242,7 @@ export default async function AvatarHomePage() {
         aiSummary:
           chat.summary ||
           chat.qualificationReason ||
-          `content ${defaultAvatarRecord.name} contentExpand, content.`,
+          `The conversation with ${defaultAvatarRecord.name} is ready for review.`,
       };
     })
     .sort((a, b) => +new Date(b.lastActiveTime) - +new Date(a.lastActiveTime));

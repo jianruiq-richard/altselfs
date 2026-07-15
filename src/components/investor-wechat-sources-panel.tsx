@@ -136,7 +136,7 @@ export default function InvestorWechatSourcesPanel({
       setSources((prev) => [created, ...prev.filter((it) => it.id !== created.id)]);
       setArticleUrl('');
       setExpanded(true);
-      setSuccess(`content: ${created.displayName}`);
+      setSuccess(`Added source: ${created.displayName}`);
       const logs = Array.isArray(data.logs) ? (data.logs as AddSourceLog[]) : [];
       setAddLogs(logs);
       setLogsOpen(logs.length > 0);
@@ -228,7 +228,7 @@ export default function InvestorWechatSourcesPanel({
       const created = data.source as WechatSource;
       setSources((prev) => [created, ...prev.filter((it) => it.id !== created.id)]);
       setExpanded(true);
-      setSuccess(`content: ${created.displayName}`);
+      setSuccess(`Added source: ${created.displayName}`);
       const logs = Array.isArray(data.logs) ? (data.logs as AddSourceLog[]) : [];
       setAddLogs(logs);
       setLogsOpen(logs.length > 0);
@@ -285,7 +285,7 @@ export default function InvestorWechatSourcesPanel({
     } catch {
       setAssistantMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: 'Network error. Please try again later..' },
+        { role: 'assistant', content: 'Network error. Please try again later.' },
       ]);
     } finally {
       setAssistantLoading(false);
@@ -358,14 +358,14 @@ export default function InvestorWechatSourcesPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'SavecontentSettingsfailed');
+        setError(data.error || 'Failed to save settings.');
         return;
       }
 
       const prompt = String(data.integration?.customPrompt || '');
       setCoachDraft(prompt);
       setCoachSaved(prompt);
-      setCoachMessage('contentSave, contentAI teammate chatcontent.');
+      setCoachMessage('Saved. Future AI teammate chats will use this coaching prompt.');
     } catch {
       setError('Network error. Please try again later.');
     } finally {
@@ -377,7 +377,7 @@ export default function InvestorWechatSourcesPanel({
     <div className="bg-white rounded-xl border border-slate-200 p-5 mb-8 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">WeChat Official Accounts</h2>
       <p className="text-sm text-slate-600 mt-1">
-        content, content, content AI Agent content.
+        Add WeChat Official Account sources, then ask the AI agent to summarize signals and trends.
       </p>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -471,7 +471,7 @@ export default function InvestorWechatSourcesPanel({
         <input
           value={articleUrl}
           onChange={(e) => setArticleUrl(e.target.value)}
-          placeholder="content, content https://mp.weixin.qq.com/s?..."
+          placeholder="Paste a WeChat article URL, e.g. https://mp.weixin.qq.com/s?..."
           className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
         />
         <button
@@ -535,7 +535,7 @@ export default function InvestorWechatSourcesPanel({
                   onClick={() => void addSourceFromCandidate(candidate)}
                   className="shrink-0 px-3 py-1.5 text-xs rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
                 >
-                  contentAdd
+                  Add
                 </button>
               </div>
             ))}
@@ -618,7 +618,7 @@ export default function InvestorWechatSourcesPanel({
                     value={coachDraft}
                     onChange={(e) => setCoachDraft(e.target.value)}
                     rows={6}
-                    placeholder="content: content.content3content, content, content."
+                    placeholder="Example: Keep summaries concise, identify the top three signals, and explain why they matter."
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                   <div className="mt-2 flex items-center justify-between gap-2">

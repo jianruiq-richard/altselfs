@@ -50,7 +50,7 @@ export async function resolveWechatAccountsByKeyword(keyword: string) {
   const query = keyword.trim();
   if (!query) return [];
   if (!isWechatProviderReady()) {
-    throw new Error('WeChat Official Accountsinstruction');
+    throw new Error('WeChat Official Accounts provider is not configured');
   }
 
   const primary = await WechatProviderRaw.searchMpByKeyword({

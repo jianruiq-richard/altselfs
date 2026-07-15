@@ -49,7 +49,7 @@ function renderMemoryBlock(entries: MemoryEntry[]) {
 
 function shouldAutoApprove(suggestion: MemoryWriteSuggestion) {
   if (suggestion.confidence < 0.9) return false;
-  return /^instruction|^User explicitly asked to remember/i.test(suggestion.reason);
+  return /^explicit user memory request|^user explicitly asked to remember/i.test(suggestion.reason);
 }
 
 export function buildMemoryContext(snapshot: MemorySnapshot) {
@@ -67,20 +67,19 @@ export function buildMemoryContext(snapshot: MemorySnapshot) {
 }
 
 export function inferExplicitMemoryWrite(message: string): MemoryWriteSuggestion | null {
-  const match = message.match(/(?:instruction|instruction|instruction)([: :\s]*)(?<content>[\s\S]+)/);
+  const match = message.match(/(?:^|[.!?\n]\s*)(?:please\s+)?(?:remember|save|store|note)\s+(?:that\s+)?(?<content>[\s\S]+)/iu);
   const content = match?.groups?.content?.trim();
   if (!content) return null;
   return {
     action: 'add',
     scope: classifyMemoryScope(content),
     content,
-    reason: 'instruction',
+    reason: 'Explicit user memory request',
     confidence: 0.98,
   };
 }
 
 function classifyMemoryScope(content: string): MemoryScope {
-  if (/instruction|instruction|instruction|instruction|instruction|instruction.*instruction|instruction/.test(content)) return 'user';
+  if (/\b(i|me|my|mine|prefer|preference|remember)\b/i.test(content)) return 'user';
   return 'agent';
 }
-

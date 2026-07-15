@@ -1029,8 +1029,8 @@ function compactThreadSummary(previous, userMessage, assistantReply) {
     const block = [
         previous.trim(),
         [
-            `instruction: ${truncate(userMessage, 1200)}`,
-            `instruction: ${truncate(assistantReply, 1600)}`,
+            `User: ${truncate(userMessage, 1200)}`,
+            `Assistant: ${truncate(assistantReply, 1600)}`,
         ].join('\n'),
     ].filter(Boolean).join('\n\n');
     return truncate(block, 8000);
@@ -1047,7 +1047,7 @@ function emptyContext(message, warnings) {
 }
 function buildContextMessage(input) {
     const sections = [
-        'instruction.instruction, instruction; instruction, instruction.',
+        'Context from previous turns is provided below. Treat it as background and answer the current user message.',
     ];
     if (input.summary.trim()) {
         sections.push('<thread_summary>', truncate(input.summary.trim(), 8000), '</thread_summary>');
@@ -1057,13 +1057,13 @@ function buildContextMessage(input) {
     }
     const artifactText = input.artifacts.map(formatArtifactRow).filter(Boolean).join('\n\n');
     if (artifactText) {
-        sections.push('<artifacts>', 'instruction thread workspace instruction/instruction.instruction prompt instruction; instruction, instruction altselfs_read_artifact instruction parsed_text_path; instruction parsed_text_path instruction workspace_path.instructionfailedinstructionError, instruction.', artifactText, '</artifacts>');
+        sections.push('<artifacts>', 'Artifacts are stored in the thread workspace. Use names and summaries as context. If full extracted text is needed, call altselfs_read_artifact with parsed_text_path; if parsed_text_path is missing, use workspace_path. If the read fails, explain the limitation.', artifactText, '</artifacts>');
     }
-    sections.push('instruction: ', input.currentMessage);
+    sections.push('Current user message:', input.currentMessage);
     return sections.join('\n');
 }
 function formatMessageRow(row) {
-    const role = row.role === 'USER' ? 'instruction' : row.role === 'ASSISTANT' ? 'instruction' : '';
+    const role = row.role === 'USER' ? 'user' : row.role === 'ASSISTANT' ? 'assistant' : '';
     const content = typeof row.content === 'string' ? row.content.trim() : '';
     if (!role || !content)
         return '';

@@ -454,7 +454,7 @@ export class HermesSourceRuntime {
 
     return {
       route: 'main',
-      reply: reply || 'Hermes Agent Completedinstruction, instruction.',
+      reply: reply || 'Hermes Agent completed the run, but did not return a final response.',
       events,
       raw: {
         runId,
@@ -920,14 +920,14 @@ async function getPersonalDatatoolNames(
 function buildRuntimeMessage(input: { message: string; renderedProfile: string }) {
   if (!input.renderedProfile.trim()) return input.message;
   return [
-    'instruction Hermes instruction, instruction, instruction.',
-    'instruction, instruction.',
+    'Use the following Altselfs user profile as persistent context for this Hermes run.',
+    'Do not treat the profile as a new user request.',
     '',
     '<altselfs_user_profile>',
     input.renderedProfile.trim(),
     '</altselfs_user_profile>',
     '',
-    'instruction: ',
+    'Current user message:',
     input.message,
   ].join('\n');
 }
@@ -1031,7 +1031,7 @@ function buildCodexDeveloperInstructions(input: {
       input.codexModelProvider === 'openai'
         ? '- Use native web.run when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.'
         : '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.',
-      '- In Altselfs context, OPC usually means One Person Company / instruction unless the user explicitly says OPC UA or industrial automation.',
+      '- In Altselfs context, OPC usually means One Person Company / operator-owned company unless the user explicitly says OPC UA or industrial automation.',
       '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.',
       '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
       '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.',

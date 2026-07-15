@@ -104,18 +104,18 @@ export default async function InfoOpsPage({
   });
 
   const assistantHint: Record<string, string> = {
-    gmail: 'content Gmail contentRefresh summary.',
-    feishu: 'content content contentRefresh summary.',
-    meta: 'contentConnect Instagram / Facebook contentaccounts, content AI contentAuthorized assets.',
-    wechat: 'content, contentWeChat Assistantcontent.',
-    xiaohongshu: 'content, contentXiaohongshu Assistant.',
-    semrush: 'contentteammatecontent, content AI contenttool.',
+    gmail: 'Connect Gmail, then refresh the summary.',
+    feishu: 'Connect Lark, then refresh the summary.',
+    meta: 'Connect Instagram or Facebook accounts so AI teammates can use authorized assets.',
+    wechat: 'Add WeChat sources, then use the WeChat Assistant.',
+    xiaohongshu: 'Connect Xiaohongshu, then use the Xiaohongshu Assistant.',
+    semrush: 'Connect competitive data sources for AI teammate tools.',
   };
 
   return (
-    <FigmaShell homeHref="/dashboard" title="Information Operationscontent" subtitle="content, content, Gmail, content, Instagram / Facebook content">
+    <FigmaShell homeHref="/dashboard" title="Information Operations" subtitle="Connect Gmail, Lark, WeChat, Instagram, Facebook, and competitive data sources">
       <div className="mb-6 flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-4">
-        <p className="text-sm text-gray-600">{assistantHint[query.assistant || ''] || 'contentCompleteInformation OperationscontentAllcontent.'}</p>
+        <p className="text-sm text-gray-600">{assistantHint[query.assistant || ''] || 'Complete your Information Operations setup from this page.'}</p>
         <Link href="/dashboard" className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
           <ArrowLeft className="mr-1 h-4 w-4" />
           Back to workspace

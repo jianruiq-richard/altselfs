@@ -13,7 +13,7 @@ export async function DELETE(
 
   const { id } = await params;
   if (!id) {
-    return NextResponse.json({ error: 'messageID' }, { status: 400 });
+    return NextResponse.json({ error: 'Source ID is required.' }, { status: 400 });
   }
 
   const existing = await prisma.investorWechatSource.findUnique({
@@ -22,7 +22,7 @@ export async function DELETE(
   });
 
   if (!existing || existing.investorId !== investor.id) {
-    return NextResponse.json({ error: 'message' }, { status: 404 });
+    return NextResponse.json({ error: 'Source not found.' }, { status: 404 });
   }
 
   await prisma.investorWechatSource.delete({ where: { id } });

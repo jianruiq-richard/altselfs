@@ -35,7 +35,7 @@ export async function POST(
   });
 
   if (!integration || !integration.accessToken) {
-    return NextResponse.json({ error: 'messageConnectmessage' }, { status: 400 });
+    return NextResponse.json({ error: 'Connect this account before refreshing the summary.' }, { status: 400 });
   }
 
   try {

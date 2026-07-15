@@ -120,12 +120,12 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
   ];
 
   const summary: OpsMetric[] = [
-    { label: 'content', value: String(appStats.userCount), detail: `${appStats.investorCount} content / ${appStats.candidateCount} content`, status: 'ok' },
-    { label: 'content 7 content', value: String(appStats.recentMessageCount), detail: 'content, content agent context content', status: 'ok' },
-    { label: 'OpenRouter content', value: openRouter.balance, detail: openRouter.note || openRouter.usage, status: openRouter.status },
+    { label: 'Users', value: String(appStats.userCount), detail: `${appStats.investorCount} investors / ${appStats.candidateCount} candidates`, status: 'ok' },
+    { label: 'Messages in last 7 days', value: String(appStats.recentMessageCount), detail: 'Candidate chat and agent context messages', status: 'ok' },
+    { label: 'OpenRouter balance', value: openRouter.balance, detail: openRouter.note || openRouter.usage, status: openRouter.status },
     {
-      label: 'Agent content',
-      value: agentSnapshot.connected ? 'content' : 'content',
+      label: 'Agent server',
+      value: agentSnapshot.connected ? 'Connected' : 'Unknown',
       detail: agentSnapshot.note,
       status: agentSnapshot.connected ? 'ok' : 'unknown',
     },
@@ -142,9 +142,9 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
     users,
     alerts,
     notes: [
-      'content Clerk content, content, OpenRouter credits, content Agent server content.',
-      'content token content; content LLM/tool content ops_usage_events content.',
-      'Supabase, Vercel, content API content; Supabase content API, content limit env.',
+      'Clerk user counts, database usage, OpenRouter credits, and Agent server usage are combined in this view.',
+      'Token counts are estimates. For precise LLM and tool cost tracking, add rows to ops_usage_events.',
+      'Supabase, Vercel, and Aliyun API data depends on available API tokens and configured limit environment variables.',
     ],
   };
 }
@@ -219,12 +219,12 @@ async function getAppStats() {
     databaseResource: {
       provider: databaseDescriptor.provider,
       resource: databaseDescriptor.resource,
-      used: databaseSize ? formatBytes(databaseSize) : 'content',
-      total: 'content',
+      used: databaseSize ? formatBytes(databaseSize) : 'Unknown',
+      total: 'Unknown',
       percent: null,
       status: databaseSize ? 'ok' as const : 'unknown' as const,
       updatedAt: new Date().toISOString(),
-      note: databaseSize ? `content · content pg_database_size(current_database()) · ${databaseDescriptor.host}` : 'contentfailed',
+      note: databaseSize ? `Measured with pg_database_size(current_database()) · ${databaseDescriptor.host}` : 'Database size check failed',
       metadata: {
         usedBytes: databaseSize,
       },
@@ -318,11 +318,11 @@ async function getOpenRouterAccount(): Promise<ApiAccountSnapshot> {
         provider: 'OpenRouter',
         account: 'Platform key',
         fingerprint: fingerprint(apiKey),
-        balance: 'contentfailed',
+        balance: 'Check failed',
         usage: `HTTP ${response.status}`,
         status: 'warning',
         updatedAt: new Date().toISOString(),
-        note: 'OpenRouter credits API content',
+        note: 'OpenRouter credits API returned an unexpected response',
       };
     }
 
@@ -334,19 +334,19 @@ async function getOpenRouterAccount(): Promise<ApiAccountSnapshot> {
       provider: 'OpenRouter',
       account: 'Platform key',
       fingerprint: fingerprint(apiKey),
-      balance: balance === null ? 'content' : formatUsd(balance),
-      usage: totalUsage === null ? 'content' : `content ${formatUsd(totalUsage)}`,
+      balance: balance === null ? 'Unknown' : formatUsd(balance),
+      usage: totalUsage === null ? 'Unknown' : `Used ${formatUsd(totalUsage)}`,
       status: balance === null ? 'unknown' : balance < 5 ? 'critical' : balance < 20 ? 'warning' : 'ok',
       updatedAt: new Date().toISOString(),
-      note: totalCredits === null ? 'credits API content total_credits' : `content ${formatUsd(totalCredits)}`,
+      note: totalCredits === null ? 'Credits API did not return total_credits' : `Total credits ${formatUsd(totalCredits)}`,
     };
   } catch (error) {
     return {
       provider: 'OpenRouter',
       account: 'Platform key',
       fingerprint: fingerprint(apiKey),
-      balance: 'contentfailed',
-      usage: 'content',
+      balance: 'Check failed',
+      usage: 'Unknown',
       status: 'warning',
       updatedAt: new Date().toISOString(),
       note: error instanceof Error ? error.message : String(error),
@@ -358,7 +358,7 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
   const baseUrl = process.env.OPS_AGENT_BASE_URL?.trim();
   const token = process.env.OPS_AGENT_TOKEN?.trim();
   if (!baseUrl || !token) {
-    return { connected: false, note: 'content OPS_AGENT_BASE_URL content OPS_AGENT_TOKEN content ECS/workspace content', resources: [], userResources: [], apiAccounts: [] };
+    return { connected: false, note: 'Configure OPS_AGENT_BASE_URL and OPS_AGENT_TOKEN to read ECS/workspace usage.', resources: [], userResources: [], apiAccounts: [] };
   }
 
   try {
@@ -368,7 +368,7 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
     });
     const data = await response.json().catch(() => null) as unknown;
     if (!response.ok || !isRecord(data)) {
-      return { connected: false, note: `Agent ops content HTTP ${response.status}`, resources: [], userResources: [], apiAccounts: [] };
+      return { connected: false, note: `Agent ops endpoint returned HTTP ${response.status}`, resources: [], userResources: [], apiAccounts: [] };
     }
     const resources = Array.isArray(data.resources)
       ? data.resources
@@ -377,8 +377,8 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
           .map((item): ResourceSnapshot => ({
             provider: 'Agent ECS',
             resource: String(item.resource || 'unknown'),
-            used: typeof item.usedBytes === 'number' ? formatBytes(item.usedBytes) : 'content',
-            total: typeof item.totalBytes === 'number' ? formatBytes(item.totalBytes) : 'content',
+            used: typeof item.usedBytes === 'number' ? formatBytes(item.usedBytes) : 'Unknown',
+            total: typeof item.totalBytes === 'number' ? formatBytes(item.totalBytes) : 'Unknown',
             percent: typeof item.percent === 'number' ? item.percent : null,
             status: statusFromPercent(typeof item.percent === 'number' ? item.percent : null),
             updatedAt: typeof data.collectedAt === 'string' ? data.collectedAt : new Date().toISOString(),
@@ -406,14 +406,14 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
           provider: typeof item.provider === 'string' ? item.provider : 'Agent API',
           account: typeof item.account === 'string' ? item.account : 'unknown',
           fingerprint: typeof item.fingerprint === 'string' ? item.fingerprint : 'ECS',
-          balance: typeof item.balance === 'string' ? item.balance : 'content',
-          usage: typeof item.usage === 'string' ? item.usage : 'content',
+          balance: typeof item.balance === 'string' ? item.balance : 'Unknown',
+          usage: typeof item.usage === 'string' ? item.usage : 'Unknown',
           status: isOpsStatus(item.status) ? item.status : 'unknown',
           updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : new Date().toISOString(),
           note: typeof item.note === 'string' ? item.note : undefined,
         }))
       : [];
-    return { connected: true, note: 'content personal-agent-server /internal/ops/snapshot', resources, userResources, apiAccounts };
+    return { connected: true, note: 'Read from personal-agent-server /internal/ops/snapshot', resources, userResources, apiAccounts };
   } catch (error) {
     return { connected: false, note: error instanceof Error ? error.message : String(error), resources: [], userResources: [], apiAccounts: [] };
   }
@@ -459,12 +459,12 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
         resources.push({
           provider: 'Supabase API',
           resource: `Project ${projectRef}`,
-          used: 'contentfailed',
+          used: 'Check failed',
           total: `HTTP ${response.status}`,
           percent: null,
           status: 'warning',
           updatedAt: now,
-          note: 'Supabase Management API content',
+          note: 'Supabase Management API returned an unexpected response',
         });
       }
     } catch (error) {
@@ -474,12 +474,12 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
     resources.push({
       provider: 'Supabase API',
       resource: 'Project metadata',
-      used: 'content token',
-      total: 'content ref',
+      used: 'Token configured',
+      total: 'Missing project ref',
       percent: null,
       status: 'unknown',
       updatedAt: now,
-      note: 'content SUPABASE_PROJECT_REF content',
+      note: 'Configure SUPABASE_PROJECT_REF to read project metadata.',
     });
   }
 
@@ -487,15 +487,15 @@ async function getSupabaseResources(): Promise<SupabaseSnapshot> {
   if (storageBytes !== null || storageLimit !== null || token) {
     resources.push({
       provider: 'Supabase',
-      resource: 'Object Storage / bucket content',
-      used: storageBytes === null ? 'content' : formatBytes(storageBytes),
-      total: storageLimit === null ? 'content' : formatBytes(storageLimit),
+      resource: 'Object Storage / bucket usage',
+      used: storageBytes === null ? 'Unknown' : formatBytes(storageBytes),
+      total: storageLimit === null ? 'Unknown' : formatBytes(storageLimit),
       percent: storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null,
       status: statusFromPercent(storageBytes !== null && storageLimit ? (storageBytes / storageLimit) * 100 : null),
       updatedAt: now,
       note: storageBytes === null
-        ? 'content, content; content bucket content storage.objects'
-        : `content, content storage.objects metadata.size${storageLimitSource ? ` · content ${storageLimitSource}` : ''}`,
+        ? 'Unable to read bucket object sizes from storage.objects.'
+        : `Measured from storage.objects metadata.size${storageLimitSource ? ` · Limit source ${storageLimitSource}` : ''}`,
     });
   }
 
@@ -566,7 +566,7 @@ function mergeAppDatabaseResource(resource: ResourceSnapshot, supabase: Supabase
     note: [
       resource.note,
       supabase.projectNote,
-      supabase.databaseLimitSource ? `content ${supabase.databaseLimitSource}` : null,
+      supabase.databaseLimitSource ? `Limit source ${supabase.databaseLimitSource}` : null,
     ].filter(Boolean).join(' · '),
   };
 }
@@ -596,19 +596,19 @@ function rapidApiAccountsFromAgent(agentSnapshot: AgentSnapshot) {
 
 function describeDatabaseUrl() {
   const raw = process.env.DATABASE_URL?.trim().replace(/^['"]|['"]$/g, '');
-  if (!raw) return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL content' };
+  if (!raw) return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL not configured' };
   try {
     const url = new URL(raw);
     const host = url.hostname;
     if (host.includes('supabase.co') || host.includes('supabase.com')) {
-      return { provider: 'Supabase', resource: 'Postgres database / App content', host };
+      return { provider: 'Supabase', resource: 'Postgres database / App data', host };
     }
     if (host.includes('rds.aliyuncs.com')) {
-      return { provider: 'Aliyun RDS', resource: 'Postgres database / App content', host };
+      return { provider: 'Aliyun RDS', resource: 'Postgres database / App data', host };
     }
     return { provider: 'PostgreSQL', resource: 'App database', host };
   } catch {
-    return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL contentfailed' };
+    return { provider: 'PostgreSQL', resource: 'App database', host: 'DATABASE_URL parse failed' };
   }
 }
 
@@ -660,12 +660,12 @@ async function getVercelResources(): Promise<ResourceSnapshot[]> {
     return [{
       provider: 'Vercel',
       resource: 'Project',
-      used: 'content token',
-      total: 'content ID',
+      used: 'Token configured',
+      total: 'Missing project ID',
       percent: null,
       status: 'unknown',
       updatedAt: new Date().toISOString(),
-      note: 'content VERCEL_PROJECT_ID; content VERCEL_TEAM_ID',
+      note: 'Configure VERCEL_PROJECT_ID. VERCEL_TEAM_ID is required for team projects.',
     }];
   }
 
@@ -687,18 +687,18 @@ async function getVercelResources(): Promise<ResourceSnapshot[]> {
         percent: null,
         status: 'ok',
         updatedAt: now,
-        note: typeof project.updatedAt === 'number' ? `updated ${new Date(project.updatedAt).toISOString()}` : 'content Vercel Project API',
+        note: typeof project.updatedAt === 'number' ? `updated ${new Date(project.updatedAt).toISOString()}` : 'Vercel Project API',
       });
     } else {
       resources.push({
         provider: 'Vercel',
         resource: `Project ${target}`,
-        used: 'contentfailed',
+        used: 'Check failed',
         total: `HTTP ${projectResponse.status}`,
         percent: null,
         status: 'warning',
         updatedAt: now,
-        note: 'content VERCEL_PROJECT_ID / VERCEL_TEAM_ID / token scope',
+        note: 'Check VERCEL_PROJECT_ID, VERCEL_TEAM_ID, and token scope.',
       });
     }
 
@@ -716,7 +716,7 @@ async function getVercelResources(): Promise<ResourceSnapshot[]> {
     resources.push({
       provider: 'Vercel',
       resource: 'Recent deployments',
-      used: latest ? String(latest.state || 'unknown') : 'content',
+      used: latest ? String(latest.state || 'unknown') : 'No deployments',
       total: `${deployments.length} recent`,
       percent: null,
       status: latest && latest.state === 'ERROR' ? 'critical' : deploymentsResponse.ok ? 'ok' : 'warning',
@@ -738,12 +738,12 @@ async function getAliyunResources(): Promise<ResourceSnapshot[]> {
     return [{
       provider: 'Aliyun',
       resource: 'API credentials',
-      used: accessKeySecret ? 'AccessKeySecret content' : 'content AccessKeySecret',
-      total: regionId ? regionId : 'content RegionId',
+      used: accessKeySecret ? 'AccessKeySecret configured' : 'Missing AccessKeySecret',
+      total: regionId ? regionId : 'Missing RegionId',
       percent: null,
       status: 'unknown',
       updatedAt: new Date().toISOString(),
-      note: 'content ALIYUN_ACCESS_KEY_SECRET content ALIYUN_REGION_ID content ECS/RDS',
+      note: 'Configure ALIYUN_ACCESS_KEY_SECRET and ALIYUN_REGION_ID to read ECS/RDS resources.',
     }];
   }
 
@@ -757,12 +757,12 @@ async function getAliyunResources(): Promise<ResourceSnapshot[]> {
     resources.push({
       provider: 'Aliyun',
       resource: 'ECS / RDS',
-      used: 'content',
+      used: 'Not configured',
       total: regionId,
       percent: null,
       status: 'unknown',
       updatedAt: new Date().toISOString(),
-      note: 'content ALIYUN_ECS_DISK_IDS content ALIYUN_RDS_INSTANCE_ID content',
+      note: 'Configure ALIYUN_ECS_DISK_IDS or ALIYUN_RDS_INSTANCE_ID to read resources.',
     });
   }
   return resources;
@@ -780,7 +780,7 @@ function mergeEcsDiskResources(agentResources: ResourceSnapshot[], aliyunResourc
     return {
       ...agent,
       provider: 'ECS',
-      note: `content ${diskName} / ${device} / ${size} / ${cloudStatus}`,
+      note: `Matched Aliyun disk ${diskName} / ${device} / ${size} / ${cloudStatus}`,
       metadata: {
         ...(agent.metadata || {}),
         aliyunDiskId: stringValue(disk.metadata?.diskId) || null,
@@ -827,7 +827,7 @@ async function getAliyunEcsDisks(credentials: AliyunCredentials): Promise<Resour
         percent: null,
         status: 'unknown',
         updatedAt: new Date().toISOString(),
-        note: 'DescribeDisks content; content ALIYUN_ECS_DISK_IDS / ALIYUN_ECS_INSTANCE_ID',
+        note: 'DescribeDisks returned no disks. Check ALIYUN_ECS_DISK_IDS or ALIYUN_ECS_INSTANCE_ID.',
       }];
     }
     return disks.map((disk) => {
@@ -837,11 +837,11 @@ async function getAliyunEcsDisks(credentials: AliyunCredentials): Promise<Resour
         provider: 'Aliyun',
         resource: `ECS disk ${String(disk.DiskName || disk.DiskId || 'unknown')}`,
         used: status,
-        total: sizeGiB === null ? 'content' : `${sizeGiB} GiB provisioned`,
+        total: sizeGiB === null ? 'Unknown' : `${sizeGiB} GiB provisioned`,
         percent: null,
         status: status === 'In_use' || status === 'Available' ? 'ok' : 'unknown',
         updatedAt: new Date().toISOString(),
-        note: String(disk.Device || disk.Type || 'content ECS DescribeDisks'),
+        note: String(disk.Device || disk.Type || 'ECS DescribeDisks'),
         metadata: {
           kind: 'ecs_disk',
           device: typeof disk.Device === 'string' ? disk.Device : null,
@@ -872,12 +872,12 @@ async function getAliyunRdsInstance(credentials: AliyunCredentials): Promise<Res
       return [{
         provider: 'Aliyun',
         resource: `RDS ${instanceId}`,
-        used: 'contentfailed',
-        total: 'content',
+        used: 'Check failed',
+        total: 'Unknown',
         percent: null,
         status: 'warning',
         updatedAt: new Date().toISOString(),
-        note: 'DescribeDBInstanceAttribute content',
+        note: 'DescribeDBInstanceAttribute returned no instance attributes',
       }];
     }
     const totalGiB = readNumber(attr.DBInstanceStorage);
@@ -888,7 +888,7 @@ async function getAliyunRdsInstance(credentials: AliyunCredentials): Promise<Res
       provider: 'Aliyun',
       resource: `RDS ${String(attr.DBInstanceDescription || instanceId)}`,
       used: usedBytes === null ? String(attr.DBInstanceStatus || 'unknown') : formatBytes(usedBytes),
-      total: totalGiB === null ? 'content' : `${totalGiB} GiB provisioned`,
+      total: totalGiB === null ? 'Unknown' : `${totalGiB} GiB provisioned`,
       percent,
       status: percent === null ? (attr.DBInstanceStatus === 'Running' ? 'ok' : 'unknown') : statusFromPercent(percent),
       updatedAt: new Date().toISOString(),
@@ -906,11 +906,11 @@ function staticKeyStatus(provider: string, envKey: string): ApiAccountSnapshot {
     provider,
     account: envKey,
     fingerprint: fingerprint(value),
-    balance: 'content API',
-    usage: 'content',
+    balance: 'API key configured',
+    usage: 'Unknown',
     status: 'unknown',
     updatedAt: new Date().toISOString(),
-    note: 'key content, content',
+    note: 'Key is configured. Balance or quota is not available from this API.',
   };
 }
 
@@ -970,12 +970,12 @@ function staticResourceStatus(provider: string, resource: string, envKey: string
   return {
     provider,
     resource,
-    used: configured ? 'content' : 'content',
-    total: configured ? 'content' : 'content',
+    used: configured ? 'Configured' : 'Missing',
+    total: configured ? 'Not available' : 'Not configured',
     percent: null,
     status: 'unknown',
     updatedAt: new Date().toISOString(),
-    note: configured ? `${envKey} content, content API` : `content ${envKey} content`,
+    note: configured ? `${envKey} is configured, but this API does not expose usage.` : `Configure ${envKey}.`,
   };
 }
 
@@ -983,12 +983,12 @@ function missingAccount(provider: string, envKey: string): ApiAccountSnapshot {
   return {
     provider,
     account: envKey,
-    fingerprint: 'content',
-    balance: 'content',
-    usage: 'content',
+    fingerprint: 'Missing',
+    balance: 'Not configured',
+    usage: 'Unknown',
     status: 'unknown',
     updatedAt: new Date().toISOString(),
-    note: `content ${envKey}`,
+    note: `Configure ${envKey}.`,
   };
 }
 
@@ -996,20 +996,20 @@ function buildAlerts(apiAccounts: ApiAccountSnapshot[], resources: ResourceSnaps
   const alerts: Array<{ severity: OpsStatus; title: string; detail: string }> = [];
   for (const account of apiAccounts) {
     if (account.status === 'critical' || account.status === 'warning') {
-      alerts.push({ severity: account.status, title: `${account.provider} content`, detail: `${account.balance} · ${account.note || account.usage}` });
+      alerts.push({ severity: account.status, title: `${account.provider} needs attention`, detail: `${account.balance} · ${account.note || account.usage}` });
     }
   }
   for (const resource of resources) {
     if (resource.status === 'critical' || resource.status === 'warning') {
-      alerts.push({ severity: resource.status, title: `${resource.provider} ${resource.resource} content`, detail: `${resource.used} / ${resource.total}` });
+      alerts.push({ severity: resource.status, title: `${resource.provider} ${resource.resource} needs attention`, detail: `${resource.used} / ${resource.total}` });
     }
   }
   const topUser = users[0];
   if (topUser && topUser.estimatedTokens > 100_000) {
     alerts.push({
       severity: 'warning',
-      title: 'content',
-      detail: `${topUser.email} content ${topUser.estimatedTokens.toLocaleString()} tokens`,
+      title: 'High estimated token usage',
+      detail: `${topUser.email} used about ${topUser.estimatedTokens.toLocaleString()} tokens`,
     });
   }
   return alerts;
@@ -1069,7 +1069,7 @@ function apiErrorResource(provider: string, resource: string, error: unknown): R
   return {
     provider,
     resource,
-    used: 'contentfailed',
+    used: 'Check failed',
     total: 'API error',
     percent: null,
     status: 'warning',
@@ -1083,7 +1083,7 @@ function formatUsd(value: number) {
 }
 
 function formatBytes(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes < 0) return 'content';
+  if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let index = 0;

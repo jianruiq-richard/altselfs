@@ -197,7 +197,7 @@ function normalizeCodexModelOption(value: unknown): CodexModelOption['value'] {
 }
 
 const suggestedQuestions = [
-  'instructionTodayinstruction OPC instructionTechnicalinstruction.',
+  'Find today\'s industry and technical updates related to OPC.',
   'Help me analyze whether this product idea is worth pursuing.',
   'What changes in AI agents are worth paying attention to today?',
   'Help me turn a complex problem into an action plan.',
@@ -524,7 +524,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type === 'codex.tool.output') {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: 'toolinstruction',
+      title: 'Tool result',
       detail: typeof payload.callId === 'string' && payload.callId ? `callId: ${payload.callId}` : 'function_call_output',
       status: 'completed',
       timestamp,
@@ -651,7 +651,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     return {
       id: `${type}-${timestamp}-${index}`,
       title: 'Load context',
-      detail: `Summary ${summaryChars} chars, history messages ${messageCount} rows, attachments ${artifactCount} instruction`,
+      detail: `Summary ${summaryChars} chars, history messages ${messageCount} rows, attachments ${artifactCount}`,
       status: 'completed',
       timestamp,
       method: type,
@@ -663,11 +663,11 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const diskBytes = typeof payload.diskBytes === 'number' ? payload.diskBytes : null;
     const detailParts = [
       status,
-      diskBytes === null ? '' : `instruction ${formatBytes(diskBytes)}`,
+      diskBytes === null ? '' : `Disk ${formatBytes(diskBytes)}`,
     ].filter(Boolean);
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: type === 'agent_context.sandbox_state_failed' ? 'instructionfailed' : 'instruction',
+      title: type === 'agent_context.sandbox_state_failed' ? 'Failed to save sandbox state' : 'Save sandbox state',
       detail: detailParts.join(' · ') || type.replace('agent_context.', ''),
       status: type === 'agent_context.sandbox_state_failed' || status === 'ERROR' ? 'error' : 'completed',
       timestamp,
@@ -678,10 +678,10 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type === 'hermes.profile.updated' || type === 'hermes.profile.loaded') {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: type === 'hermes.profile.updated' ? 'instruction' : 'instruction',
+      title: type === 'hermes.profile.updated' ? 'Update profile memory' : 'Load profile memory',
       detail: type === 'hermes.profile.loaded'
-        ? `instruction ${typeof payload.entryCount === 'number' ? payload.entryCount : 0} instruction`
-        : 'instruction/instruction',
+        ? `${typeof payload.entryCount === 'number' ? payload.entryCount : 0} profile entries`
+        : 'Recorded new long-term preferences',
       status: 'completed',
       timestamp,
       method: type,
@@ -693,8 +693,8 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const sessionMode = typeof payload.sessionMode === 'string' ? payload.sessionMode : '';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: 'instruction Hermes/Codex',
-      detail: [model, sessionMode].filter(Boolean).join(' · ') || 'instruction agent loop',
+      title: 'Start Hermes/Codex',
+      detail: [model, sessionMode].filter(Boolean).join(' · ') || 'Starting agent loop',
       status: 'running',
       timestamp,
       method: type,
@@ -705,7 +705,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     return {
       id: `${type}-${timestamp}-${index}`,
       title: 'Complete Hermes/Codex',
-      detail: typeof payload.sessionId === 'string' ? `sessionId: ${payload.sessionId}` : 'agent loop Completed',
+      detail: typeof payload.sessionId === 'string' ? `sessionId: ${payload.sessionId}` : 'Agent loop completed',
       status: 'completed',
       timestamp,
       method: type,
@@ -715,7 +715,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   if (type.startsWith('runtime_state.')) {
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: 'instruction',
+      title: 'Sync runtime state',
       detail: type.replace('runtime_state.', ''),
       status: type.includes('cleaned') || type.includes('flushed') || type.includes('hydrated') ? 'completed' : 'running',
       timestamp,
@@ -740,7 +740,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
       const params = isRecord(notification.params) ? notification.params : {};
       return {
         id: `warning-${timestamp}-${index}`,
-        title: 'Codex instruction',
+        title: 'Codex warning',
         detail: typeof params.message === 'string' ? params.message : 'warning',
         status: 'error',
         timestamp,
@@ -751,7 +751,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     if (method === 'turn/completed') {
       return {
         id: 'turn-completed',
-        title: 'Completeinstruction',
+        title: 'Turn completed',
         detail: 'turn/completed',
         status: 'completed',
         timestamp,
@@ -785,7 +785,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     }
     return {
       id: `${method}-${timestamp}-${index}`,
-      title: 'Codex instruction',
+      title: 'Codex event',
       detail: method || type,
       status: method.includes('completed') ? 'completed' : 'running',
       timestamp,
@@ -797,7 +797,7 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
 
   return {
     id: `${type}-${timestamp}-${index}`,
-    title: 'Agent instruction',
+    title: 'Agent event',
     detail: type,
     status: type.includes('completed') ? 'completed' : 'running',
     timestamp,
@@ -891,34 +891,34 @@ function codexActionLabel(item: CodexStreamItem) {
   const method = item.method || '';
   if (item.status === 'error') return item.title || 'Execution failed';
   if (method.includes('tool') || item.title.includes('tool')) {
-    return item.status === 'completed' ? 'instructionCall tool' : 'instructionCall tool';
+    return item.status === 'completed' ? 'Called tool' : 'Calling tool';
   }
-  if (method.includes('queue_claimed')) return 'instruction';
-  if (method.includes('queue_timeout')) return 'instruction';
-  if (method.includes('plan') || item.title.includes('instruction')) return 'instruction';
-  if (method.includes('thread') || method.includes('session')) return 'instruction';
-  if (method.includes('agent_context') || method.includes('runtime_state')) return 'instruction';
-  if (method.includes('workspace_artifacts')) return 'instruction';
-  if (method.includes('profile')) return 'instruction';
-  if (method.includes('task_complete') || method.includes('completed')) return 'Completeinstruction';
-  return item.status === 'running' ? 'instruction' : item.title;
+  if (method.includes('queue_claimed')) return 'Starting task';
+  if (method.includes('queue_timeout')) return 'Task timed out';
+  if (method.includes('plan') || item.title.includes('plan')) return 'Planning';
+  if (method.includes('thread') || method.includes('session')) return 'Preparing session';
+  if (method.includes('agent_context') || method.includes('runtime_state')) return 'Reading context';
+  if (method.includes('workspace_artifacts')) return 'Processing attachments';
+  if (method.includes('profile')) return 'Reading memory';
+  if (method.includes('task_complete') || method.includes('completed')) return 'Completed';
+  return item.status === 'running' ? 'Thinking' : item.title;
 }
 
 function codexCompletedActionLabel(item: CodexStreamItem) {
   const method = item.method || '';
   if (item.status === 'error') return item.title || 'Execution failed';
   if (method.includes('tool') || item.title.includes('tool')) return 'Call tool';
-  if (method.includes('queue_claimed')) return 'instruction';
-  if (method.includes('queue_timeout')) return 'instruction';
-  if (method.includes('plan') || item.title.includes('instruction')) return 'instruction';
-  if (method.includes('thread') || method.includes('session')) return 'instruction';
-  if (method.includes('agent_context') || method.includes('runtime_state')) return 'instruction';
-  if (method.includes('workspace_artifacts')) return 'instruction';
-  if (method.includes('profile')) return 'instruction';
-  if (method.includes('hermes.source_runtime')) return 'instruction Hermes/Codex';
+  if (method.includes('queue_claimed')) return 'Start task';
+  if (method.includes('queue_timeout')) return 'Task timeout';
+  if (method.includes('plan') || item.title.includes('plan')) return 'Plan';
+  if (method.includes('thread') || method.includes('session')) return 'Prepare session';
+  if (method.includes('agent_context') || method.includes('runtime_state')) return 'Read context';
+  if (method.includes('workspace_artifacts')) return 'Process attachments';
+  if (method.includes('profile')) return 'Read memory';
+  if (method.includes('hermes.source_runtime')) return 'Run Hermes/Codex';
   if (method.includes('codex.agent_message')) return 'Generate reply';
-  if (method.includes('task_complete') || method.includes('completed')) return 'Completeinstruction';
-  return item.title.replace(/^instruction/, '');
+  if (method.includes('task_complete') || method.includes('completed')) return 'Complete';
+  return item.title.replace(/^Running\s+/, '');
 }
 
 function codexCompactDetail(item: CodexStreamItem) {
@@ -992,8 +992,8 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
                         <span className="min-w-0 break-words text-slate-500">{codexCompactDetail(item)}</span>
                       </div>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
-                        {item.method ? <span>instruction {item.method}</span> : null}
-                        <span>instruction {formatDuration(stepDuration(items, index, completedAtMs))}</span>
+                        {item.method ? <span>Source {item.method}</span> : null}
+                        <span>Duration {formatDuration(stepDuration(items, index, completedAtMs))}</span>
                       </div>
                       {links.length > 0 ? (
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1014,7 +1014,7 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
                         <details className="group/output mt-2">
                           <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
                             <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
-                            instruction
+                            Output
                           </summary>
                           <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
                             {content}
@@ -1077,7 +1077,7 @@ async function waitForExecutiveRun(
     if (data.status === 'SUCCESS' || data.status === 'ERROR') return data;
     await sleep(typeof data.pollIntervalMs === 'number' ? data.pollIntervalMs : 3000);
   }
-  throw new Error('instructionComplete, instruction');
+  throw new Error('The briefing run is still in progress. Refresh in a moment to view the result.');
 }
 
 function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active: boolean }) {
@@ -1087,15 +1087,15 @@ function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active
     : [
         {
           id: 'agent-stream-preparing',
-          title: 'instruction',
-          detail: 'instructionCreate taskinstruction',
+          title: 'Thinking',
+          detail: 'Creating task and reading context',
           status: 'running' as const,
           timestamp: new Date().toISOString(),
         },
       ];
   const latestItem = [...visibleItems].reverse().find((item) => item.status === 'running') || visibleItems[visibleItems.length - 1];
-  const activeTitle = latestItem ? codexActionLabel(latestItem) : 'instruction';
-  const activeDetail = latestItem ? codexCompactDetail(latestItem) : 'instructionCreate taskinstruction';
+  const activeTitle = latestItem ? codexActionLabel(latestItem) : 'Thinking';
+  const activeDetail = latestItem ? codexCompactDetail(latestItem) : 'Creating task and reading context';
 
   return (
     <div className="flex justify-start">
@@ -1111,14 +1111,14 @@ function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="shrink-0 font-medium text-slate-950">{active ? activeTitle : 'instructionComplete'}</span>
+                <span className="shrink-0 font-medium text-slate-950">{active ? activeTitle : 'Completed'}</span>
                 {active ? <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" /> : null}
-                <span className="min-w-0 truncate text-slate-500">{active ? activeDetail : 'instructionGenerate reply'}</span>
+                <span className="min-w-0 truncate text-slate-500">{active ? activeDetail : 'Reply generated'}</span>
               </div>
               <details className="group mt-2">
                 <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900">
                   <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
-                  instruction
+                  View details
                 </summary>
 
                 <div className="mt-3 space-y-2 border-l border-slate-200 pl-3">
@@ -1143,7 +1143,7 @@ function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active
                               <details className="group/output mt-2">
                                 <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
                                   <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
-                                  instruction
+                                  Output
                                 </summary>
                                 <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
                                   {content}
@@ -1233,17 +1233,17 @@ export default function InvestorAgentChatPage() {
     router.replace(buildSignInRedirectUrl());
   }, [router]);
 
-  const title = useMemo(() => (isExecutive ? 'instruction Hermes Agent' : 'AI instruction'), [isExecutive]);
+  const title = useMemo(() => (isExecutive ? 'Hermes Agent' : 'AI Assistant'), [isExecutive]);
   const showExecutiveControls = false;
   const latestPlannerStatuses = useMemo(() => getLatestPlannerStatuses(plannerTrace), [plannerTrace]);
   const hasPlannerErrors = plannerTrace.some((item) => item.status === 'ERROR');
   const plannerButtonText = sending
-    ? 'instruction, instruction'
+    ? 'Running plan'
     : plannerTrace.length > 0
       ? hasPlannerErrors
-        ? 'instructionError'
-        : 'instruction'
-        : 'instruction planner';
+        ? 'Planner errors'
+        : 'View planner'
+        : 'Open planner';
   const selectedCodexModel =
     codexModelOptions.find((option) => option.value === codexModel) ||
     codexModelOptions.find((option) => option.value === DEFAULT_CODEX_MODEL) ||
@@ -1269,7 +1269,7 @@ export default function InvestorAgentChatPage() {
     })
       .then(async (res) => {
         const data = (await res.json().catch(() => ({}))) as { connectors?: ConnectorItem[]; error?: string };
-        if (!res.ok) throw new Error(data.error || 'instructionfailed');
+        if (!res.ok) throw new Error(data.error || 'Failed to load connectors');
         return Array.isArray(data.connectors) ? data.connectors : [];
       })
       .then((items) => {
@@ -1282,7 +1282,7 @@ export default function InvestorAgentChatPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setConnectorsError(err instanceof Error ? err.message : 'instructionfailed');
+        setConnectorsError(err instanceof Error ? err.message : 'Failed to load connectors');
       })
       .finally(() => {
         if (!cancelled) setConnectorsLoading(false);
@@ -1325,7 +1325,7 @@ export default function InvestorAgentChatPage() {
     ) => {
       const data = isRecord(run.result) ? run.result : {};
       if (run.status === 'ERROR') {
-        setError(run.error || (typeof data.error === 'string' ? data.error : 'Sendfailed'));
+        setError(run.error || (typeof data.error === 'string' ? data.error : 'Failed to send message'));
         setMessages(fallbackMessages);
         setPlannerTrace(normalizePlannerTrace(run.plannerTrace || data.plannerTrace));
         setPlannerSteps(normalizePlannerSteps(run.planner || data.planner));
@@ -1378,7 +1378,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(err instanceof Error ? `instructionError: ${err.message}` : 'Network error. Please try again later.');
+        setError(err instanceof Error ? `Execution error: ${err.message}` : 'Network error. Please try again later.');
       } finally {
         activeRunIdRef.current = null;
         setActiveRunId(null);
@@ -1414,9 +1414,9 @@ export default function InvestorAgentChatPage() {
       setSending(false);
       clearStoredActiveRunId(runId);
       setPlannerTrace(normalizePlannerTrace(data.plannerTrace || (isRecord(data.result) ? data.result.plannerTrace : null)));
-      setError('instructionStopinstruction.');
+      setError('This run has been stopped.');
     } catch (err) {
-      setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task, instruction');
+      setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task. Please try again.');
     } finally {
       setStoppingRun(false);
     }
@@ -1447,14 +1447,14 @@ export default function InvestorAgentChatPage() {
         ...prev,
         {
           id: `personal-agent-stopped-${Date.now()}`,
-          title: 'instructionStop',
+          title: 'Stop requested',
           detail: `runId: ${runId}`,
           status: 'completed' as const,
           timestamp: new Date().toISOString(),
         },
       ].slice(-18));
     } catch (err) {
-      setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task, instruction');
+      setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task. Please try again.');
     } finally {
       setStoppingRun(false);
     }
@@ -1582,10 +1582,10 @@ export default function InvestorAgentChatPage() {
         const terminalError = typeof latestTerminalRun.error === 'string' && latestTerminalRun.error.trim()
           ? latestTerminalRun.error.trim()
             : latestTerminalStatus === 'CANCELLED'
-              ? 'instructionStopinstruction.'
+              ? 'This run has been stopped.'
               : latestTerminalStatus === 'TIMEOUT'
-                ? 'instruction.'
-              : 'Sendfailed';
+                ? 'The run timed out.'
+              : 'Failed to send message';
         setError(terminalError);
         return 'terminal';
       }
@@ -1636,7 +1636,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || 'instructionfailed');
+        setError(data.error || 'Failed to load conversation');
         return;
       }
       resetPersonalAgentRunState();
@@ -1691,7 +1691,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || 'instructionfailed');
+        setError(data.error || 'Failed to create a new chat');
         return;
       }
       resetPersonalAgentRunState();
@@ -1705,7 +1705,7 @@ export default function InvestorAgentChatPage() {
         messagesViewportRef.current?.scrollTo({ top: 0 });
       });
     } catch {
-      setError('instructionfailed, instruction');
+      setError('Failed to create a new chat. Please try again.');
     } finally {
       setCreatingSession(false);
       setRecoveringRunState(false);
@@ -1759,7 +1759,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || 'instructionfailed');
+        setError(data.error || 'Failed to load older messages');
         return;
       }
 
@@ -1780,7 +1780,7 @@ export default function InvestorAgentChatPage() {
         nextViewport.scrollTop = nextViewport.scrollHeight - previousScrollHeight + previousScrollTop;
       });
     } catch {
-      setError('instructionfailed, instruction');
+      setError('Failed to load older messages. Please try again.');
     } finally {
       loadingOlderMessagesRef.current = false;
       setLoadingOlderMessages(false);
@@ -1804,7 +1804,7 @@ export default function InvestorAgentChatPage() {
     const selectedFiles = Array.from(files);
     const oversized = selectedFiles.find((file) => file.size > MAX_ATTACHMENT_FILE_BYTES);
     if (oversized) {
-      setError(`instruction ${oversized.name} instruction ${formatBytes(MAX_ATTACHMENT_FILE_BYTES)}, instruction.`);
+      setError(`${oversized.name} exceeds the ${formatBytes(MAX_ATTACHMENT_FILE_BYTES)} file size limit. Please compress it and try again.`);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -1864,8 +1864,8 @@ export default function InvestorAgentChatPage() {
       ...prev,
       {
         id: `stream-recovery-${Date.now()}`,
-        title: 'instruction, instruction',
-        detail: 'instruction',
+        title: 'Connection interrupted; recovering',
+        detail: 'Checking whether the background task was created',
         status: 'running' as const,
         timestamp: new Date().toISOString(),
       },
@@ -1915,8 +1915,8 @@ export default function InvestorAgentChatPage() {
             ...prev,
             {
               id: `stream-recovery-active-${Date.now()}`,
-              title: 'instruction',
-              detail: 'instruction, instructionCompleteinstruction',
+              title: 'Switched to background recovery',
+              detail: 'The connection was interrupted; the result will sync back into this chat when it finishes',
               status: 'running' as const,
               timestamp: new Date().toISOString(),
             },
@@ -1953,8 +1953,8 @@ export default function InvestorAgentChatPage() {
 
     const attachmentList = formatAttachmentList(requestAttachments);
     const displayContent = [
-      content || 'instruction.',
-      attachmentList ? `instruction: \n${attachmentList}` : '',
+      content || 'Please analyze the attached files.',
+      attachmentList ? `Attachments:\n${attachmentList}` : '',
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -2021,8 +2021,8 @@ export default function InvestorAgentChatPage() {
             ...prev,
             {
               id: `personal-agent-start-retry-${clientRequestId}-${attempt}`,
-              title: 'Create taskinstruction, instruction',
-              detail: `instruction ${attempt + 2} instruction`,
+              title: 'Task creation interrupted; retrying',
+              detail: `Attempt ${attempt + 2}`,
               status: 'running' as const,
               timestamp: new Date().toISOString(),
             },
@@ -2045,7 +2045,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(typeof data.error === 'string' ? data.error : 'Sendfailed');
+        setError(typeof data.error === 'string' ? data.error : 'Failed to send message');
         setMessages(nextMessages);
         setInput(content);
         setAttachments(requestAttachments);
@@ -2055,7 +2055,7 @@ export default function InvestorAgentChatPage() {
       const asyncThreadId = typeof data.threadId === 'string' ? data.threadId : threadId;
       const runId = typeof data.runId === 'string' ? data.runId : '';
       if (!runId) {
-        setError('instructionfailed: instruction runId');
+        setError('Failed to start background task: missing runId');
         setMessages(nextMessages);
         setInput(content);
         setAttachments(requestAttachments);
@@ -2074,7 +2074,7 @@ export default function InvestorAgentChatPage() {
       setCodexStreamItems([
         {
           id: `async-run-${runId}`,
-          title: 'instruction',
+          title: 'Background task started',
           detail: `runId: ${runId}`,
           status: 'running' as const,
           timestamp: new Date().toISOString(),
@@ -2090,11 +2090,11 @@ export default function InvestorAgentChatPage() {
       }
       if (recoveryResult === 'recovered') return;
       if (recoveryResult === 'saved') {
-        setError('instruction, instructionSave; instruction.');
+        setError('The network connection was interrupted. This message was saved; refresh this chat later to view the result.');
         return;
       }
 
-      setError(err instanceof Error ? `instructionError: ${err.message}` : 'Network error. Please try again later.');
+      setError(err instanceof Error ? `Network error: ${err.message}` : 'Network error. Please try again later.');
       setMessages(nextMessages);
       setInput(content);
       setAttachments(requestAttachments);
@@ -2127,7 +2127,7 @@ export default function InvestorAgentChatPage() {
     if (promptSaving) return;
     const nextPrompt = resetToDefault ? defaultPrompt : promptDraft.trim();
     if (!resetToDefault && !nextPrompt) {
-      setPromptMessage('system prompt instruction.');
+      setPromptMessage('System prompt cannot be empty.');
       return;
     }
 
@@ -2151,7 +2151,7 @@ export default function InvestorAgentChatPage() {
       }
 
       applyAgentConfig(data.agentConfig);
-      setPromptMessage(resetToDefault ? 'instructiondefault system prompt, instruction.' : 'instructionSave, instruction.');
+      setPromptMessage(resetToDefault ? 'Default system prompt restored. It will apply to future replies.' : 'Saved. It will apply to future replies.');
     } catch {
       setPromptMessage('Network error. Please try again later.');
     } finally {
@@ -2163,8 +2163,8 @@ export default function InvestorAgentChatPage() {
     return (
       <FigmaShell
         homeHref="/dashboard"
-        title="AIinstruction"
-        subtitle="instructionExecutive Assistant Momoinstruction"
+        title="AI Assistant"
+        subtitle="Only Executive Assistant Momo is available right now"
         actions={
           <Link href="/dashboard" className="text-sm text-blue-700 hover:underline">
             Back to workspace
@@ -2172,7 +2172,7 @@ export default function InvestorAgentChatPage() {
         }
       >
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-slate-600">
-          instruction, instructionBack to workspaceinstructionExecutive Assistant Momoinstruction.
+          This assistant is not available yet. Return to the workspace and use Executive Assistant Momo.
         </div>
       </FigmaShell>
     );
@@ -2182,7 +2182,7 @@ export default function InvestorAgentChatPage() {
     <FigmaShell
       homeHref="/dashboard"
       title={title}
-      subtitle="instruction, instruction Agent instruction"
+      subtitle="Long-term memory, live research, and multi-agent task execution"
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {showExecutiveControls ? (
@@ -2191,7 +2191,7 @@ export default function InvestorAgentChatPage() {
               onClick={openPromptEditor}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              {promptEditorOpen ? 'Collapse system prompt' : 'instruction system prompt'}
+              {promptEditorOpen ? 'Collapse system prompt' : 'Edit system prompt'}
             </button>
           ) : null}
           <Link href="/dashboard" className="px-2 text-sm text-blue-700 hover:underline">
@@ -2206,7 +2206,7 @@ export default function InvestorAgentChatPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Executive Assistant system prompt</h2>
               <p className="mt-1 text-sm text-slate-500">
-                instruction.Saveinstruction, Momo instructionGenerate replyinstruction.
+                Account-level instructions for Momo. Saved changes apply to future replies.
               </p>
             </div>
             <span
@@ -2214,7 +2214,7 @@ export default function InvestorAgentChatPage() {
                 hasCustomPrompt ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
               }`}
             >
-              {hasCustomPrompt ? 'instruction' : 'defaultinstruction'}
+              {hasCustomPrompt ? 'Custom' : 'Default'}
             </span>
           </div>
 
@@ -2226,13 +2226,13 @@ export default function InvestorAgentChatPage() {
             }}
             rows={14}
             className="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 font-mono text-sm leading-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="instructionExecutive Assistant Momo instruction system prompt..."
+            placeholder="Enter the system prompt for Executive Assistant Momo..."
           />
 
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">
               Current length {promptDraft.length}/30000
-              {promptDraft !== promptSaved ? ' · instructionSaveinstruction' : ''}
+              {promptDraft !== promptSaved ? ' · Unsaved changes' : ''}
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -2252,7 +2252,7 @@ export default function InvestorAgentChatPage() {
                 onClick={() => void savePrompt(true)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
-                instructiondefault
+                Restore default
               </button>
               <button
                 type="button"
@@ -2265,7 +2265,7 @@ export default function InvestorAgentChatPage() {
             </div>
           </div>
           {promptMessage ? (
-            <p className={`mt-3 text-sm ${promptMessage.includes('failed') || promptMessage.includes('Error') || promptMessage.includes('instruction') ? 'text-red-600' : 'text-emerald-700'}`}>
+            <p className={`mt-3 text-sm ${promptMessage.includes('failed') || promptMessage.includes('Error') || promptMessage.includes('empty') ? 'text-red-600' : 'text-emerald-700'}`}>
               {promptMessage}
             </p>
           ) : null}
@@ -2276,9 +2276,9 @@ export default function InvestorAgentChatPage() {
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">instruction Planner</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Momo Planner</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Momo instruction; Sendinstruction, CompleteinstructionCollapse.
+              Momo generates a plan for each request. The panel opens during execution and collapses when the task is done.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -2289,7 +2289,7 @@ export default function InvestorAgentChatPage() {
                 disabled={stoppingRun}
                 className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
               >
-                {stoppingRun ? 'Stopping...' : 'instructionStop'}
+                {stoppingRun ? 'Stopping...' : 'Force stop'}
               </button>
             ) : null}
             <button
@@ -2301,7 +2301,7 @@ export default function InvestorAgentChatPage() {
                   : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
               }`}
             >
-              {plannerPanelOpen ? 'Collapseinstruction' : plannerButtonText}
+              {plannerPanelOpen ? 'Collapse details' : plannerButtonText}
             </button>
           </div>
         </div>
@@ -2309,7 +2309,7 @@ export default function InvestorAgentChatPage() {
         {plannerPanelOpen ? (
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <h3 className="text-sm font-semibold text-slate-900">instruction planner</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Current plan</h3>
               <div className="mt-3 space-y-2">
                 {plannerSteps.length > 0 ? (
                   plannerSteps.map((step) => {
@@ -2335,13 +2335,13 @@ export default function InvestorAgentChatPage() {
                     );
                   })
                 ) : (
-                  <p className="text-sm text-slate-500">Sendinstruction, instruction Momo instruction.</p>
+                  <p className="text-sm text-slate-500">Send a request to see the plan Momo generates for this task.</p>
                 )}
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-950 p-3 text-slate-100">
-              <h3 className="text-sm font-semibold">instruction</h3>
+              <h3 className="text-sm font-semibold">Execution details</h3>
               <div className="mt-3 max-h-96 space-y-3 overflow-y-auto pr-1">
                 {plannerTrace.length > 0 ? (
                   plannerTrace.map((item, index) => {
@@ -2351,7 +2351,7 @@ export default function InvestorAgentChatPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-medium">{item.title}</p>
-                            <p className="mt-1 text-xs text-slate-400">{item.timestamp || 'instruction'}</p>
+                            <p className="mt-1 text-xs text-slate-400">{item.timestamp || 'Time unavailable'}</p>
                           </div>
                           <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${plannerStatusClass[item.status]}`}>
                             {plannerStatusLabel[item.status]}
@@ -2393,20 +2393,20 @@ export default function InvestorAgentChatPage() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <MessageSquare className="h-4 w-4 text-slate-500" />
-                <span>instruction</span>
+                <span>Conversation</span>
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                instruction; instruction, instructionWorkinstruction.
+                Profile memory and long-term preferences are shared across chats. Conversation context, attachments, and workspace files stay scoped to each chat.
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <label className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                <span className="text-xs font-medium text-slate-500">instruction</span>
+                <span className="text-xs font-medium text-slate-500">Model</span>
                 <select
                   value={codexModel}
                   onChange={(event) => setCodexModel(normalizeCodexModelOption(event.target.value))}
                   disabled={sending || recoveringRunState}
-                  title={`instruction: ${selectedCodexModel.detail}`}
+                  title={`Current: ${selectedCodexModel.detail}`}
                   className="bg-transparent text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {codexModelOptions.map((option) => (
@@ -2420,11 +2420,11 @@ export default function InvestorAgentChatPage() {
                 type="button"
                 onClick={() => void createNewSession()}
                 disabled={creatingSession || sending || recoveringRunState}
-                title="instruction"
+                title="New chat"
                 className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" />
-                {creatingSession ? 'instruction...' : 'instruction'}
+                {creatingSession ? 'Creating...' : 'New chat'}
               </button>
             </div>
           </div>
@@ -2447,7 +2447,7 @@ export default function InvestorAgentChatPage() {
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60',
                     ].join(' ')}
                   >
-                    <span className="block truncate text-sm font-medium">{session.title || 'instruction'}</span>
+                    <span className="block truncate text-sm font-medium">{session.title || 'New chat'}</span>
                     <span className="mt-1 block text-xs text-slate-500">
                       {session.messageCount} messages{formatSessionTime(session.updatedAt) ? ` · ${formatSessionTime(session.updatedAt)}` : ''}
                     </span>
@@ -2456,7 +2456,7 @@ export default function InvestorAgentChatPage() {
               })
             ) : (
               <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-500">
-                Sendinstructionmessagesinstruction.
+                Send the first message to create a chat.
               </div>
             )}
           </div>
@@ -2480,10 +2480,10 @@ export default function InvestorAgentChatPage() {
                       disabled={loadingOlderMessages}
                       className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {loadingOlderMessages ? 'Loading...' : 'instruction'}
+                      {loadingOlderMessages ? 'Loading...' : 'Load earlier messages'}
                     </button>
                   ) : (
-                    <span className="text-xs text-slate-400">instruction</span>
+                    <span className="text-xs text-slate-400">Beginning of chat</span>
                   )}
                 </div>
               ) : null}
@@ -2511,7 +2511,7 @@ export default function InvestorAgentChatPage() {
               })}
               <CodexStreamOutput items={codexStreamItems} active={sending} />
               <StreamingAssistantMessage content={assistantDraft} />
-              {messages.length === 0 ? <div className="py-8 text-center text-slate-500">instruction Hermes Agent instruction.</div> : null}
+              {messages.length === 0 ? <div className="py-8 text-center text-slate-500">Start a conversation with your Hermes Agent.</div> : null}
             </div>
           )}
         </div>
@@ -2542,9 +2542,9 @@ export default function InvestorAgentChatPage() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-600">
                   <Plug className="h-3.5 w-3.5 shrink-0" />
-                  <span>instruction</span>
+                  <span>Connectors for this turn</span>
                   <span className="text-slate-400">
-                    {connectorsLoading ? 'instruction' : `${activeConnectors.length}/${connectors.filter((connector) => connector.connected).length} Enabled`}
+                    {connectorsLoading ? 'Loading' : `${activeConnectors.length}/${connectors.filter((connector) => connector.connected).length} enabled`}
                   </span>
                 </div>
                 <Link
@@ -2552,7 +2552,7 @@ export default function InvestorAgentChatPage() {
                   className="inline-flex items-center gap-1 self-start text-xs font-medium text-blue-700 hover:underline sm:self-auto"
                 >
                   <Settings2 className="h-3.5 w-3.5" />
-                  instruction
+                  Manage connectors
                 </Link>
               </div>
               <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
@@ -2563,10 +2563,10 @@ export default function InvestorAgentChatPage() {
                     const accountLabel = connector.accounts.length > 0
                       ? connector.accounts.map((account) => account.displayName || account.accountEmail).filter(Boolean).join(', ')
                       : connector.platformConfigured === false
-                        ? 'instruction'
+                        ? 'Platform credentials are not configured'
                         : connector.connected
-                          ? 'instruction'
-                          : 'instruction';
+                          ? 'Connected'
+                          : 'Not connected';
                     return (
                       <button
                         key={connector.key}
@@ -2592,7 +2592,7 @@ export default function InvestorAgentChatPage() {
                   })
                 ) : (
                   <span className="text-xs text-slate-400">
-                    {connectorsError || (connectorsLoading ? 'instruction...' : 'instruction')}
+                    {connectorsError || (connectorsLoading ? 'Loading connectors...' : 'No connectors available')}
                   </span>
                 )}
               </div>
@@ -2608,10 +2608,10 @@ export default function InvestorAgentChatPage() {
                   >
                     <span className="min-w-0 truncate">{attachment.name}</span>
                     <span className="shrink-0 text-slate-400">{formatBytes(attachment.size)}</span>
-                    <span className="hidden shrink-0 text-slate-400 sm:inline">Sendinstruction</span>
+                    <span className="hidden shrink-0 text-slate-400 sm:inline">Uploads on send</span>
                     <button
                       type="button"
-                      title="Removeinstruction"
+                      title="Remove attachment"
                       onClick={() => removeAttachment(attachment.id)}
                       className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                     >
@@ -2647,7 +2647,7 @@ export default function InvestorAgentChatPage() {
                 />
                 <button
                   type="button"
-                  title="Addinstruction"
+                  title="Add attachment"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending || recoveringRunState}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50 sm:h-9 sm:w-9"
@@ -2665,14 +2665,14 @@ export default function InvestorAgentChatPage() {
                     ].join(' ')}
                     title={
                       recoveringRunState
-                        ? 'instruction'
+                        ? 'Recovering task state'
                         : activeRunId
-                          ? 'Stopinstruction'
-                          : 'instruction'
+                          ? 'Stop this task'
+                          : 'Preparing task'
                     }
                   >
                     {recoveringRunState ? null : <Square className="h-3.5 w-3.5 fill-current" />}
-                    {recoveringRunState ? 'instruction...' : stoppingRun ? 'Stopping...' : activeRunId ? 'Stop' : 'instruction...'}
+                    {recoveringRunState ? 'Recovering...' : stoppingRun ? 'Stopping...' : activeRunId ? 'Stop' : 'Preparing...'}
                   </button>
                 ) : (
                   <button

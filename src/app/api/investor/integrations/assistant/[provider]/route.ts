@@ -136,10 +136,10 @@ function safeParsePlan(raw: string): GmailPlan {
 }
 
 function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | null, raw: unknown) {
-  const providerLabel = provider === 'gmail' ? 'Gmail' : 'message';
+  const providerLabel = provider === 'gmail' ? 'Gmail' : 'Lark';
   const lines: string[] = [];
-  lines.push(`message: ${providerLabel}`);
-  lines.push(`Latest summary: ${summary || 'message, message"Refresh summary".'}`);
+  lines.push(`Provider: ${providerLabel}`);
+  lines.push(`Latest summary: ${summary || 'No summary available yet. Click "Refresh summary" first if you need account context.'}`);
 
   if (provider === 'gmail' && raw && typeof raw === 'object') {
     const r = raw as {
@@ -174,13 +174,13 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
       }>;
     };
     if (r.profile?.emailAddress) {
-      lines.push(`Emailaccounts: ${r.profile.emailAddress}`);
+      lines.push(`Email account: ${r.profile.emailAddress}`);
     }
     if (typeof r.profile?.messagesTotal === 'number') {
-      lines.push(`message: ${r.profile.messagesTotal}`);
+      lines.push(`Total messages reported by Gmail: ${r.profile.messagesTotal}`);
     }
     if (typeof r.profile?.threadsTotal === 'number') {
-      lines.push(`message: ${r.profile.threadsTotal}`);
+      lines.push(`Total threads reported by Gmail: ${r.profile.threadsTotal}`);
     }
 
     if (Array.isArray(r.allMessages) && r.allMessages.length > 0) {
@@ -190,24 +190,24 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
       const withAttachments = r.allMessages.filter((m) => (m.attachments?.length || 0) > 0).length;
       const withBody = r.allMessages.filter((m) => Boolean((m.bodyText || '').trim())).length;
       lines.push(
-        `message: ${total} message (message ${unread}, message ${important}, message ${withAttachments}${r.hasMore ? `, message ${r.maxMessages || 'N/A'}` : ''})`
+        `Snapshot: ${total} messages (unread ${unread}, important ${important}, with attachments ${withAttachments}${r.hasMore ? `, capped at ${r.maxMessages || 'N/A'}` : ''})`
       );
-      lines.push(`message: message ${withBody}/${total} message.`);
+      lines.push(`Message bodies available for ${withBody}/${total} messages.`);
 
       const top = r.allMessages.slice(0, 12).map((m, idx) => {
-        const subject = (m.subject || 'message').trim();
-        const from = (m.from || 'message').trim();
+        const subject = (m.subject || '(no subject)').trim();
+        const from = (m.from || 'Unknown sender').trim();
         const snippet = (m.snippet || '').trim().slice(0, 120);
         const bodyPreview = (m.bodyText || '').replace(/\s+/g, ' ').trim().slice(0, 220);
         const status = [
-          m.status?.unread ? 'message' : null,
-          m.status?.important ? 'message' : null,
-          m.status?.starred ? 'message' : null,
-          m.status?.inbox ? 'message' : null,
-          m.status?.sent ? 'messageSend' : null,
-          m.status?.draft ? 'message' : null,
-          m.status?.trash ? 'message' : null,
-          m.status?.spam ? 'message' : null,
+          m.status?.unread ? 'unread' : null,
+          m.status?.important ? 'important' : null,
+          m.status?.starred ? 'starred' : null,
+          m.status?.inbox ? 'inbox' : null,
+          m.status?.sent ? 'sent' : null,
+          m.status?.draft ? 'draft' : null,
+          m.status?.trash ? 'trash' : null,
+          m.status?.spam ? 'spam' : null,
         ]
           .filter(Boolean)
           .join('/');
@@ -217,35 +217,35 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
                 .slice(0, 4)
                 .map((a) => `${a.filename || 'unnamed'}(${a.mimeType || 'unknown'},${a.size || 0}B)`)
                 .join(', ')
-            : 'message';
+            : 'none';
         return [
           `${idx + 1}. ${subject} (${from})`,
-          `   message: ${m.receivedAt || m.date || 'message'} | message: ${status || 'message'}`,
-          `   message: ${attachSummary}`,
-          `   message: ${snippet || 'message'}`,
-          `   message: ${bodyPreview || 'message'}`,
+          `   received: ${m.receivedAt || m.date || 'unknown'} | status: ${status || 'normal'}`,
+          `   attachments: ${attachSummary}`,
+          `   snippet: ${snippet || 'none'}`,
+          `   body preview: ${bodyPreview || 'none'}`,
         ].join('\n');
       });
 
-      lines.push(`message: \n${top.join('\n')}`);
+      lines.push(`Recent messages:\n${top.join('\n')}`);
 
       const fullBodyItems = r.allMessages
         .filter((m) => Boolean((m.bodyText || '').trim()))
         .slice(0, 3)
         .map((m, idx) => {
-          const subject = (m.subject || 'message').trim();
-          const from = (m.from || 'message').trim();
+          const subject = (m.subject || '(no subject)').trim();
+          const from = (m.from || 'Unknown sender').trim();
           const body = (m.bodyText || '').replace(/\s+/g, ' ').trim().slice(0, 6000);
           return [
-            `[message${idx + 1}] ${subject} (${from})`,
-            `message: ${m.receivedAt || m.date || 'message'}`,
-            `message (message6000message): `,
-            body || 'message',
+            `[Full body ${idx + 1}] ${subject} (${from})`,
+            `received: ${m.receivedAt || m.date || 'unknown'}`,
+            'body preview (first 6000 chars):',
+            body || 'none',
           ].join('\n');
         });
 
       if (fullBodyItems.length > 0) {
-        lines.push(`message: \n${fullBodyItems.join('\n\n')}`);
+        lines.push(`Full body previews:\n${fullBodyItems.join('\n\n')}`);
       }
     }
   }
@@ -254,23 +254,23 @@ function buildProviderContext(provider: 'gmail' | 'feishu', summary: string | nu
 }
 
 function buildSystemPrompt(provider: 'gmail' | 'feishu', customPrompt?: string | null) {
-  const providerLabel = provider === 'gmail' ? 'Gmail' : 'message';
+  const providerLabel = provider === 'gmail' ? 'Gmail' : 'Lark';
   const base = [
-    `message"${providerLabel} messageAI teammate".`,
-    'messageWorkmessage: ',
-    '1) message; ',
-    '2) message (message/message/message); ',
-    '3) message, defaultmessage, message.',
-    'message: ',
-    '1) message, message/message; ',
-    '2) message, message"Refresh summary"; ',
-    '3) message, message.',
-    '4) message"message: message X/Y", message X>0, message"message".',
+    `You are the ${providerLabel} AI teammate.`,
+    'Core responsibilities:',
+    '1) Help the user understand and act on connected account context.',
+    '2) Summarize messages, docs, calendar items, and action items when available.',
+    '3) Be concise, specific, and professional by default.',
+    'Response rules:',
+    '1) Use the provided account summary and context; do not invent unseen messages.',
+    '2) If the context is stale or missing, ask the user to refresh the summary.',
+    '3) Call out uncertainty and missing data clearly.',
+    '4) When referencing counts, use the format "source coverage: X/Y" when applicable.',
   ];
 
   const normalized = customPrompt?.trim();
   if (normalized) {
-    base.push('message: ');
+    base.push('Custom coaching:');
     base.push(normalized);
   }
 
@@ -279,49 +279,49 @@ function buildSystemPrompt(provider: 'gmail' | 'feishu', customPrompt?: string |
 
 function buildRealtimePlannerPrompt(conversation: ClientMessage[], customPrompt?: string | null) {
   const blocks = [
-    'message Gmail messagetoolmessage.message Gmail API.',
-    'message JSON, message.',
-    'message action: ',
-    '1) list_recent: message (message query)',
-    '2) list_unread: message (message query)',
-    '3) search_messages: message query message',
-    '4) read_message: message messageId message',
-    '5) send_email: Sendmessage',
-    '6) snapshot_answer: message API, message',
-    '7) clarify: message, message',
+    'Plan the next Gmail tool action. You have access to realtime Gmail API tools.',
+    'Return strict JSON only.',
+    'Available actions:',
+    '1) list_recent: list recent messages, optionally constrained by a query',
+    '2) list_unread: list unread messages, optionally constrained by a query',
+    '3) search_messages: search messages with a Gmail query',
+    '4) read_message: read one message by messageId',
+    '5) send_email: send an email',
+    '6) snapshot_answer: answer from current context without a tool call',
+    '7) clarify: ask a clarifying question',
     '',
     'JSON schema:',
     '{',
     '  "action": "list_recent|list_unread|search_messages|read_message|send_email|snapshot_answer|clarify",',
-    '  "reason": "message",',
+    '  "reason": "why this action is appropriate",',
     '  "args": {',
     '    "maxResults": 1-20,',
-    '    "query": "message",',
-    '    "messageId": "messageID",',
-    '    "to": "messageEmail",',
-    '    "cc": "messageEmail(message)",',
-    '    "bcc": "messageEmail(message)",',
-    '    "subject": "message",',
-    '    "body": "message"',
+    '    "query": "Gmail search query",',
+    '    "messageId": "Gmail message ID",',
+    '    "to": "recipient email",',
+    '    "cc": "optional cc email",',
+    '    "bcc": "optional bcc email",',
+    '    "subject": "email subject",',
+    '    "body": "email body"',
     '  }',
     '}',
     '',
-    'message: ',
-    '- message"message/message"message read_message.',
-    '- message"message/message"message search_messages.',
-    '- message"message/message"message+message send_email.',
-    '- message clarify.',
+    'Rules:',
+    '- If the user refers to a specific email, use read_message when you have a messageId.',
+    '- If the user asks for matching emails, use search_messages.',
+    '- If the user asks you to send or draft-and-send an email with all required fields, use send_email.',
+    '- Use clarify when required fields or intent are missing.',
     '',
   ];
 
   if (customPrompt?.trim()) {
-    blocks.push('message (message): ');
+    blocks.push('Custom coaching:');
     blocks.push(customPrompt.trim());
     blocks.push('');
   }
 
   blocks.push(
-    'message: ',
+    'Conversation:',
     ...conversation.map((m, idx) => `${idx + 1}. [${m.role}] ${m.content}`)
   );
 
@@ -338,23 +338,23 @@ async function buildRealtimeFinalReply(input: {
     {
       role: 'system',
       content: [
-        'message Gmail message.',
-        'messagetoolmessage, message.',
-        'message: ',
-        '1) message.',
-        '2) message, message messageId (message read_message).',
-        '3) message, message"messageSummary + message + message(message)".',
-        '4) message, messageSendmessage messageId.',
-        '5) messagetoolmessage.',
-        input.customPrompt?.trim() ? `message: \n${input.customPrompt.trim()}` : '',
+        'You are the Gmail AI teammate.',
+        'Use the tool result to answer the user directly.',
+        'Rules:',
+        '1) Be concise and specific.',
+        '2) When listing emails, include messageId when the user may need to read or reference a message.',
+        '3) When summarizing, separate Summary, Action Items, and Draft Reply when useful.',
+        '4) If an email was sent, include the sent message ID.',
+        '5) Do not claim tool results you did not receive.',
+        input.customPrompt?.trim() ? `Custom coaching:\n${input.customPrompt.trim()}` : '',
       ].join('\n'),
     },
     {
       role: 'user',
       content: [
-        `message (message): ${JSON.stringify(input.userMessages.slice(-8))}`,
-        `toolmessage: ${JSON.stringify(input.plan)}`,
-        `toolmessage: ${JSON.stringify(input.toolResult)}`,
+        `Conversation (latest first not guaranteed): ${JSON.stringify(input.userMessages.slice(-8))}`,
+        `Planner action: ${JSON.stringify(input.plan)}`,
+        `Tool result: ${JSON.stringify(input.toolResult)}`,
       ].join('\n\n'),
     },
   ];
@@ -395,7 +395,7 @@ async function resolveInvestorAndProvider(
   if (!integration) {
     return {
       error: NextResponse.json(
-        { error: `messageConnect${provider === 'gmail' ? 'Gmail' : 'message'}accounts` },
+        { error: `Connect a ${provider === 'gmail' ? 'Gmail' : 'Lark'} account first.` },
         { status: 400 }
       ),
     } as const;
@@ -481,7 +481,7 @@ async function executeGmailPlan(accessToken: string, plan: GmailPlan) {
     case 'search_messages': {
       const query = String(args.query || '').trim();
       if (!query) {
-        return { action: 'clarify', error: 'message, message Gmail message.' };
+        return { action: 'clarify', error: 'Please provide a Gmail search query.' };
       }
       const maxResults = Math.max(1, Math.min(Number(args.maxResults || 8), 20));
       const items = await searchGmailMessages(accessToken, { query, maxResults, includeSpamTrash: false });
@@ -490,7 +490,7 @@ async function executeGmailPlan(accessToken: string, plan: GmailPlan) {
     case 'read_message': {
       const messageId = String(args.messageId || '').trim();
       if (!messageId) {
-        return { action: 'clarify', error: 'message messageId, message.' };
+        return { action: 'clarify', error: 'Please provide the Gmail messageId to read.' };
       }
       const item = await getGmailMessageById(accessToken, messageId);
       return { action: plan.action, item };
@@ -500,7 +500,7 @@ async function executeGmailPlan(accessToken: string, plan: GmailPlan) {
       const subject = String(args.subject || '').trim();
       const body = String(args.body || '').trim();
       if (!to || !subject || !body) {
-        return { action: 'clarify', error: 'message (to/subject/body).' };
+        return { action: 'clarify', error: 'Please provide the recipient, subject, and body before sending email.' };
       }
       const sent = await sendGmailMessage(accessToken, {
         to,
@@ -602,7 +602,7 @@ export async function POST(
 
     const aiMessages: ChatMessage[] = [
       { role: 'system', content: buildSystemPrompt(provider, customPrompt) },
-      { role: 'system', content: `message: \n${context}` },
+      { role: 'system', content: `Account context:\n${context}` },
       ...messages,
     ];
 
@@ -617,7 +617,7 @@ export async function POST(
       return NextResponse.json({ reply: result.content, model: result.model, threadId: thread.id });
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'unknown';
-      return NextResponse.json({ error: `AImessagefailed: ${detail}` }, { status: 500 });
+      return NextResponse.json({ error: `AI assistant failed: ${detail}` }, { status: 500 });
     }
   }
 
@@ -627,7 +627,7 @@ export async function POST(
     const plannerMessages: ChatMessage[] = [
       {
         role: 'system',
-        content: 'message JSON message.message JSON message.',
+        content: 'Return valid JSON only. Do not include Markdown or explanatory text.',
       },
       {
         role: 'user',
@@ -656,7 +656,7 @@ export async function POST(
     });
 
     if ((toolResult as { action?: string }).action === 'clarify') {
-      const clarify = (toolResult as { error?: string; note?: string }).error || 'message.';
+      const clarify = (toolResult as { error?: string; note?: string }).error || 'Please clarify what you want me to do.';
       await appendThreadMessage({
         threadId: thread.id,
         role: 'ASSISTANT',
@@ -671,8 +671,8 @@ export async function POST(
         {
           role: 'system',
           content: [
-            'message Gmail message.message, messageCall tool.',
-            customPrompt?.trim() ? `message: \n${customPrompt.trim()}` : '',
+            'You are the Gmail AI teammate. Answer from the available conversation context without calling tools.',
+            customPrompt?.trim() ? `Custom coaching:\n${customPrompt.trim()}` : '',
           ].join('\n'),
         },
         ...messages,
@@ -720,11 +720,11 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            'message Gmail message (message).message"Reconnect Gmail"message.',
+            'Gmail needs additional authorization scopes. Reconnect Gmail and try again.',
         },
         { status: 400 }
       );
     }
-    return NextResponse.json({ error: `AImessageExecution failed: ${detail}` }, { status: 500 });
+    return NextResponse.json({ error: `AI assistant execution failed: ${detail}` }, { status: 500 });
   }
 }

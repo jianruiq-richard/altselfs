@@ -588,9 +588,9 @@ function digestGmailMessage(message: GmailMessageFull): GmailMessageDigest {
   return {
     id: message.id,
     threadId: message.threadId || null,
-    subject: headerValue(headers, 'Subject') || 'content',
-    from: headerValue(headers, 'From') || 'content',
-    to: headerValue(headers, 'To') || 'content',
+    subject: headerValue(headers, 'Subject') || '(no subject)',
+    from: headerValue(headers, 'From') || 'Unknown sender',
+    to: headerValue(headers, 'To') || 'Unknown recipient',
     date: headerValue(headers, 'Date') || '',
     snippet: (message.snippet || '').trim(),
     bodyText: extractBodyText(message.payload),
@@ -772,25 +772,25 @@ function summarizeGmailDigests(
   const important = digests.filter((m) => m.status.important).length;
 
   const latestLines = digests.slice(0, 8).map((m, idx) => {
-    const attach = m.attachments.length > 0 ? ` | content ${m.attachments.length}` : '';
+    const attach = m.attachments.length > 0 ? ` | attachments ${m.attachments.length}` : '';
     const status = [
-      m.status.unread ? 'content' : null,
-      m.status.important ? 'content' : null,
-      m.status.starred ? 'content' : null,
+      m.status.unread ? 'unread' : null,
+      m.status.important ? 'important' : null,
+      m.status.starred ? 'starred' : null,
     ].filter(Boolean).join('/');
     const statusText = status ? ` | ${status}` : '';
     return `${idx + 1}. ${m.subject} (${m.from})${statusText}${attach}`;
   });
 
   const summary = [
-    `Gmail content ${profile.emailAddress} Overview: `,
-    `content ${digests.length} content (Allcontent${hasMore ? `, content ${maxMessages}` : ''}).`,
-    `content ${unread}, content ${important}, content ${inbox}, contentSend ${sent}.`,
-    `content ${withAttachments} content, content ${totalAttachments}.`,
-    'content: ',
-    ...(latestLines.length > 0 ? latestLines : ['content.']),
+    `Gmail account ${profile.emailAddress} overview:`,
+    `Synced ${digests.length} messages${hasMore ? `, capped at ${maxMessages}` : ''}.`,
+    `Unread ${unread}, important ${important}, inbox ${inbox}, sent ${sent}.`,
+    `${withAttachments} messages include attachments, ${totalAttachments} attachments total.`,
+    'Latest messages:',
+    ...(latestLines.length > 0 ? latestLines : ['No messages found.']),
     hasMore
-      ? `content: content ${maxMessages} content, content GMAIL_SYNC_MAX_MESSAGES content.`
+      ? `Note: sync stopped at ${maxMessages} messages. Increase GMAIL_SYNC_MAX_MESSAGES for a deeper scan.`
       : '',
   ]
     .filter(Boolean)
@@ -841,14 +841,14 @@ export async function buildFeishuSummary(accessToken: string) {
   const info = await fetchFeishuUserInfo(accessToken);
 
   const summary = [
-    `content ${info.name || info.en_name || 'content'} Connected.`,
-    `contentRolecontent (open_id: ${info.open_id || 'content'}).`,
-    'content, content Mail contentRefresh summary.',
+    `Lark account ${info.name || info.en_name || 'Unknown user'} connected.`,
+    `Authorized user open_id: ${info.open_id || 'unknown'}.`,
+    'Use the Lark tools to refresh messages, docs, meetings, and calendar summaries.',
   ].join('\n');
 
   return {
     accountEmail: info.email || null,
-    accountName: info.name || info.en_name || 'content',
+    accountName: info.name || info.en_name || 'Lark account',
     summary,
     raw: info,
   };

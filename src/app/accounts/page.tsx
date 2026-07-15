@@ -79,8 +79,8 @@ export default async function AccountsPage() {
     {
       id: 'wechat-sources',
       typeName: 'WeChat Assistant',
-      account: dbUser.wechatSources.length > 0 ? `${dbUser.wechatSources.length} content` : 'content',
-      agentName: 'WeChat Assistantcontent',
+      account: dbUser.wechatSources.length > 0 ? `${dbUser.wechatSources.length} sources` : 'Not connected',
+      agentName: 'WeChat Assistant',
       status: (dbUser.wechatSources.length > 0 ? 'active' : 'paused') as 'active' | 'paused',
       processedToday: dbUser.wechatSources.length * 3,
       source: 'real' as const,
@@ -88,8 +88,8 @@ export default async function AccountsPage() {
     {
       id: 'xiaohongshu-assistant',
       typeName: 'Xiaohongshu Assistant',
-      account: xhsIntegration?.accountName || 'content',
-      agentName: 'Xiaohongshu Assistantcontent',
+      account: xhsIntegration?.accountName || 'Not connected',
+      agentName: 'Xiaohongshu Assistant',
       status: (xhsIntegration ? 'active' : 'paused') as 'active' | 'paused',
       processedToday: xhsIntegration?.snapshots[0] ? 6 : 0,
       source: 'real' as const,
@@ -106,8 +106,8 @@ export default async function AccountsPage() {
     {
       id: 'feishu-assistant',
       typeName: 'Lark Assistant',
-      account: feishuIntegration?.accountEmail || 'Not connected content',
-      agentName: 'Lark Assistantcontent',
+      account: feishuIntegration?.accountEmail || 'Not connected Lark',
+      agentName: 'Lark Assistant',
       status: (feishuIntegration ? 'active' : 'paused') as 'active' | 'paused',
       processedToday: feishuIntegration ? Math.max(6, (feishuIntegration.snapshots[0]?.summary?.length || 0) % 30) : 0,
       source: 'real' as const,
@@ -140,17 +140,17 @@ export default async function AccountsPage() {
     {
       id: TEAM_KEYS.EXECUTIVE_OFFICE,
       name: 'Executive Office',
-      description: 'content, content.',
+      description: 'Executive briefing, prioritization, and decision support.',
       icon: Briefcase,
       color: 'from-purple-500 to-pink-600',
       employees: isExecutiveHired ? 1 : 0,
-      status: isExecutiveHired ? 'Running' : 'contentHire',
+      status: isExecutiveHired ? 'Running' : 'Not hired',
       employeeRows: isExecutiveHired
         ? [
             {
               id: 'executive-secretary',
               typeName: 'Executive Assistant',
-              account: `content: ${dailyBriefing.generatedTime}`,
+              account: `Generated at ${dailyBriefing.generatedTime}`,
               agentName: 'Executive Assistant Momo',
               status: 'active' as const,
               processedToday: dailyBriefing.departmentOverview.reduce(
@@ -162,42 +162,42 @@ export default async function AccountsPage() {
           ]
         : [],
       details: [
-        `content: ${dailyBriefing.date}`,
-        `content: ${dailyBriefing.priorityTasks.length} content`,
-        'content: /investor/chat/100',
+        `Date: ${dailyBriefing.date}`,
+        `Priority tasks: ${dailyBriefing.priorityTasks.length}`,
+        'Workspace: /investor/chat/100',
       ],
     },
     {
       id: TEAM_KEYS.INFO_OPS,
       name: 'Information Operations',
-      description: 'content, content, content.',
+      description: 'Gmail, Lark, WeChat, and social signal monitoring.',
       icon: Mail,
       color: 'from-blue-500 to-purple-600',
       employees: isInfoOpsHired ? Math.max(1, infoOpsEmployeeRows.length) : 0,
-      status: isInfoOpsHired ? 'Running' : 'contentHire',
+      status: isInfoOpsHired ? 'Running' : 'Not hired',
       employeeRows: isInfoOpsHired ? infoOpsEmployeeRows : [],
       details: [
-        `Gmail/content: ${connectedIntegrations}`,
-        `content: ${dbUser.wechatSources.length}`,
-        'Xiaohongshu Assistant: content',
-        'content: content',
+        `Connected channels: ${connectedIntegrations}`,
+        `WeChat sources: ${dbUser.wechatSources.length}`,
+        'Xiaohongshu Assistant: available',
+        'Summary refresh: on demand',
       ],
     },
     {
       id: TEAM_KEYS.ENGINEERING,
       name: 'Engineering',
-      description: 'content, content.',
+      description: 'Digital twins and technical workflow support.',
       icon: MessageSquare,
       color: 'from-green-500 to-teal-600',
       employees: isEngineeringHired ? Math.max(1, dbUser.avatars.length || 1) : 0,
-      status: isEngineeringHired ? 'Running' : 'contentHire',
+      status: isEngineeringHired ? 'Running' : 'Not hired',
       employeeRows: isEngineeringHired
         ? dbUser.avatars.length > 0
           ? dbUser.avatars.slice(0, 3).map((avatar) => ({
               id: `avatar-${avatar.id}`,
               typeName: 'Engineering Assistant',
               account: avatar.name,
-              agentName: `${avatar.name}·content`,
+              agentName: `${avatar.name} · Engineering`,
               status: 'active' as const,
               processedToday: Math.max(3, avatar.chats.length * 2),
               source: 'real' as const,
@@ -206,7 +206,7 @@ export default async function AccountsPage() {
               {
                 id: 'default-engineering-agent',
                 typeName: 'Engineering Assistant',
-                account: 'defaultteammate (content)',
+                account: 'Default teammate (demo)',
                 agentName: 'Engineering AssistantAlpha',
                 status: 'paused' as const,
                 processedToday: 0,
@@ -215,25 +215,25 @@ export default async function AccountsPage() {
             ]
         : [],
       details: [
-        `content: ${dbUser.avatars.length}`,
-        'content: content',
-        'defaultteammate: Engineering AssistantAlpha',
+        `Digital twins: ${dbUser.avatars.length}`,
+        'Status: connected to digital twin workspace',
+        'Default teammate: Engineering Assistant Alpha',
       ],
     },
     {
       id: TEAM_KEYS.MARKETING_OPS,
       name: 'Marketing Operations',
-      description: 'content, content.',
+      description: 'Campaign, audience, and content operations.',
       icon: Megaphone,
       color: 'from-orange-500 to-red-600',
       employees: isMarketingHired ? 1 : 0,
-      status: isMarketingHired ? 'Running' : 'contentHire',
+      status: isMarketingHired ? 'Running' : 'Not hired',
       employeeRows: isMarketingHired
         ? [
             {
               id: 'default-marketing-agent',
               typeName: 'Marketing Assistant',
-              account: 'defaultteammate (content)',
+              account: 'Default teammate (demo)',
               agentName: 'Marketing AssistantBeta',
               status: 'paused' as const,
               processedToday: 0,
@@ -242,9 +242,9 @@ export default async function AccountsPage() {
           ]
         : [],
       details: [
-        'defaultteammate: Marketing AssistantBeta',
-        'content: content',
-        'content: content',
+        'Default teammate: Marketing Assistant Beta',
+        'Status: demo',
+        'Workspace: AI Talent Hub',
       ],
     },
   ] as const;
@@ -252,7 +252,7 @@ export default async function AccountsPage() {
   return (
     <FigmaShell
       homeHref="/dashboard"
-      title="Department Management"
+      title="Team Management"
       subtitle="Manage your AI teammate teams and department structure"
     >
       <div className="mb-8 grid gap-6 md:grid-cols-4">
@@ -268,7 +268,7 @@ export default async function AccountsPage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Runningcontent</p>
+              <p className="text-sm text-gray-500">Running teams</p>
               <p className="mt-2 text-4xl font-bold text-gray-900">{departments.filter((d) => d.status === 'Running').length}</p>
             </div>
             <Bot className="h-8 w-8 text-green-600" />
@@ -288,7 +288,7 @@ export default async function AccountsPage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Democontent</p>
+              <p className="text-sm text-gray-500">Demo teams</p>
               <p className="mt-2 text-4xl font-bold text-gray-900">2</p>
             </div>
             <Mail className="h-8 w-8 text-purple-600" />
@@ -303,8 +303,8 @@ export default async function AccountsPage() {
               <Plus className="h-6 w-6 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold text-gray-900">HirecontentAI teammate</h2>
-              <p className="mt-1 text-sm text-gray-600">content AI content, Hirecontentteammatecontent</p>
+              <h2 className="text-xl font-bold text-gray-900">Hire an AI teammate</h2>
+              <p className="mt-1 text-sm text-gray-600">Add specialized AI teammates to staff your operating teams.</p>
             </div>
           </div>
           <a href="/ai-talent" className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 sm:py-2.5">
@@ -360,7 +360,7 @@ export default async function AccountsPage() {
                           <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
                             <span>AI teammate: {employee.agentName}</span>
                             <span>·</span>
-                            <span>Todaycontent: {employee.processedToday} content</span>
+                            <span>Processed today: {employee.processedToday} items</span>
                           </div>
                         </div>
                       </div>
@@ -390,7 +390,7 @@ export default async function AccountsPage() {
             ) : (
               <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center">
                 <AlertCircle className="mx-auto mb-2 h-8 w-8 text-gray-400" />
-                <p className="text-sm text-gray-500">contentteammate, Go to Talent HubAdd.</p>
+                <p className="text-sm text-gray-500">No teammates yet. Go to Talent Hub to add one.</p>
               </div>
             )}
           </div>

@@ -288,7 +288,7 @@ export class CodexAgentRuntime {
             }
             input.push({
                 type: 'text',
-                text: `[instruction ${attachment.name} instruction ${attachment.kind}/${attachment.type}, Codex app-server instruction turn input instruction.]`,
+                text: `[Attachment ${attachment.name} (${attachment.kind}/${attachment.type}) is available in the Codex app-server turn input.]`,
             });
         }
         return input;
@@ -441,7 +441,7 @@ export class CodexAgentRuntime {
             '- Use conversation and reasoning for tasks that do not need external data.',
             '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',
             generalPublicWebInstruction,
-            '- In Altselfs context, OPC usually means One Person Company / instruction unless the user explicitly says OPC UA or industrial automation.',
+            '- In Altselfs context, OPC usually means One Person Company / operator-owned company unless the user explicitly says OPC UA or industrial automation.',
             '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.',
             '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
         ].join('\n');

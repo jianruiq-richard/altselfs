@@ -39,20 +39,20 @@ type toolPlan = {
 const DEFAULT_SKILL_SET = [
   {
     skill: 'xhs_search_notes',
-    description: 'message, message, message, message.',
-    trigger: 'message, message, message',
+    description: 'Search Xiaohongshu notes by keyword and return matching note summaries.',
+    trigger: 'brand, topic, creator, or trend research',
     source: 'Spider_XHS.apis.xhs_pc_apis.search_some_note',
   },
   {
     skill: 'xhs_get_note_detail',
-    description: 'message (message, message, message, message), message.',
-    trigger: 'message',
+    description: 'Fetch detail for a specific note, including title, author, engagement, and content when available.',
+    trigger: 'note detail or note URL',
     source: 'Spider_XHS.apis.xhs_pc_apis.get_note_info',
   },
   {
     skill: 'xhs_get_user_notes',
-    description: 'messageaccountsAllmessage (message), messageaccountsmessage.',
-    trigger: 'messageaccountsmessage',
+    description: 'Fetch notes from a Xiaohongshu user profile when a user URL is provided.',
+    trigger: 'creator profile or user notes',
     source: 'Spider_XHS.apis.xhs_pc_apis.get_user_all_notes',
   },
 ];
@@ -107,43 +107,43 @@ function buildPlannerPrompt(input: { userQuery: string; messages: ClientMessage[
     .map((message, i) => `${i + 1}. [${message.role}] ${message.content}`)
     .join('\n');
   return [
-    'messagetoolmessage, message JSON.',
-    'message action, message args.',
-    'action message: ',
-    '1) search_notes: message',
-    '2) get_note_detail: message (message noteUrl)',
-    '3) get_user_notes: messageaccountsmessage (message userUrl)',
-    '4) clarify: message',
+    'Plan the next Xiaohongshu tool action. Return strict JSON only.',
+    'Choose the best action and arguments for the user request.',
+    'Available actions:',
+    '1) search_notes: search notes by keyword',
+    '2) get_note_detail: fetch a specific note by noteUrl',
+    '3) get_user_notes: fetch notes from a user profile by userUrl',
+    '4) clarify: ask for missing information',
     'JSON Schema:',
     '{',
     '  "action":"search_notes|get_note_detail|get_user_notes|clarify",',
-    '  "reason":"message",',
+    '  "reason":"why this action is appropriate",',
     '  "args":{',
-    '    "query":"message, message",',
-    '    "noteUrl":"message, message",',
-    '    "userUrl":"message, message",',
+    '    "query":"search keyword or topic",',
+    '    "noteUrl":"Xiaohongshu note URL",',
+    '    "userUrl":"Xiaohongshu user profile URL",',
     '    "limit":10',
     '  }',
     '}',
-    `message: ${input.userQuery}`,
-    `message: \n${history || 'message'}`,
+    `User request: ${input.userQuery}`,
+    `Conversation history:\n${history || 'No prior context.'}`,
   ].join('\n');
 }
 
 function buildSystemPrompt(customPrompt?: string | null) {
   const lines = [
-    'messageAI teammate (Claude Code Agent).',
-    'message Spider_XHS message, message.',
-    'message: ',
-    '1) message3message, message, message.',
-    '2) message, message.',
-    '3) message: message, message, message.',
+    'You are the Xiaohongshu AI teammate.',
+    'Use Spider_XHS tool results to answer the user with source-grounded, practical analysis.',
+    'Response rules:',
+    '1) Highlight the top signals, relevant examples, and recommended actions.',
+    '2) Be clear when a tool result is incomplete or unavailable.',
+    '3) Keep the tone concise and professional.',
     '',
-    'messageLearnmessage (message external_solutions/Spider_XHS): ',
-    ...DEFAULT_SKILL_SET.map((item) => `- ${item.skill}: ${item.description} (message: ${item.trigger})`),
+    'Available skills from external_solutions/Spider_XHS:',
+    ...DEFAULT_SKILL_SET.map((item) => `- ${item.skill}: ${item.description} (trigger: ${item.trigger})`),
   ];
   if (customPrompt?.trim()) {
-    lines.push('', 'message: ', customPrompt.trim());
+    lines.push('', 'Custom coaching:', customPrompt.trim());
   }
   return lines.join('\n');
 }
@@ -185,7 +185,7 @@ async function runSpiderSkill(plan: toolPlan, cookies: string) {
   }
   const raw = (stdout || '').trim();
   if (!raw) {
-    throw new Error('Spider_XHS message');
+    throw new Error('Spider_XHS returned no output');
   }
   const parsed = JSON.parse(raw) as { ok?: boolean; error?: string };
   if (parsed.ok === false) {
@@ -259,7 +259,7 @@ export async function PUT(req: NextRequest) {
   const customPrompt = typeof body?.customPrompt === 'string' ? body.customPrompt.trim() : '';
   const cookies = typeof body?.cookies === 'string' ? body.cookies.trim() : undefined;
   if (customPrompt.length > MAX_CUSTOM_PROMPT_LENGTH) {
-    return NextResponse.json({ error: `message ${MAX_CUSTOM_PROMPT_LENGTH} message` }, { status: 400 });
+    return NextResponse.json({ error: `Custom prompt must be under ${MAX_CUSTOM_PROMPT_LENGTH} characters.` }, { status: 400 });
   }
 
   const integration = await upsertXhsIntegration({ investorId: investor.id, customPrompt, cookies });
@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
   const messages = normalizeMessages(body?.messages);
   const latest = messages[messages.length - 1];
   if (!latest || latest.role !== 'user') {
-    return NextResponse.json({ error: 'messagemessagesmessage' }, { status: 400 });
+    return NextResponse.json({ error: 'At least one user message is required.' }, { status: 400 });
   }
 
   const [integration, thread] = await Promise.all([
@@ -301,7 +301,7 @@ export async function POST(req: NextRequest) {
   const cookies = integration?.accessToken || process.env.XHS_COOKIES || '';
   const endpointConfigured = Boolean(process.env.XHS_SPIDER_ENDPOINT);
   if (!cookies && !endpointConfigured) {
-    const reply = 'message: message Cookie (message XHS_COOKIES), message XHS_SPIDER_ENDPOINT.';
+    const reply = 'Xiaohongshu cookies are not configured. Set XHS_COOKIES or XHS_SPIDER_ENDPOINT before using this assistant.';
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({
       threadId: thread.id,
@@ -332,7 +332,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (plan.action === 'clarify') {
-    const reply = 'message.message, messageaccountsmessage.';
+    const reply = 'Please provide a keyword, note URL, or Xiaohongshu user profile URL so I can run the right search.';
     await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });
     return NextResponse.json({
       threadId: thread.id,
@@ -358,10 +358,10 @@ export async function POST(req: NextRequest) {
       {
         role: 'user',
         content: [
-          `message: ${latest.content}`,
-          `message: ${plan.action}`,
-          `message: ${JSON.stringify(toolResult, null, 2)}`,
-          'message: 3message + message + message.',
+          `User request: ${latest.content}`,
+          `Tool action: ${plan.action}`,
+          `Tool result:\n${JSON.stringify(toolResult, null, 2)}`,
+          'Answer with three sections: Key Signals, Evidence, and Recommended Actions.',
         ].join('\n\n'),
       },
     ];
@@ -384,7 +384,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    reply = `messagefailed: ${detail}`;
+    reply = `Xiaohongshu tool execution failed: ${detail}`;
   }
 
   await appendThreadMessage({ threadId: thread.id, role: 'ASSISTANT', content: reply });

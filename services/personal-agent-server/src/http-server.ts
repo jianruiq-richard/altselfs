@@ -442,7 +442,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           }
           if (isAgentRunCancelledError(error)) {
             return json(res, 499, {
-              error: 'instructionStopinstruction.',
+              error: 'Run stopped by user.',
               cancelled: true,
               runId: persisted?.runId,
             });
@@ -621,7 +621,7 @@ function streamTurnStart(
         result: {
           runId: persisted?.runId,
           cancelled: isAgentRunCancelledError(error),
-          error: isAgentRunCancelledError(error) ? 'instructionStopinstruction.' : error instanceof Error ? error.message : String(error),
+          error: isAgentRunCancelledError(error) ? 'Run stopped by user.' : error instanceof Error ? error.message : String(error),
         },
       });
     } finally {

@@ -31,11 +31,11 @@ function defaultTwinName(input: {
   phone?: string | null;
 }) {
   const base = deriveTwinDisplayBase(input);
-  return base ? `${base} message` : 'My Digital Twin';
+  return base ? `${base}'s Digital Twin` : 'My Digital Twin';
 }
 
 const DEFAULT_TWIN_PROMPT =
-  'message.message, message, message, message; message, message.';
+  'You are my professional digital twin. Represent my background, preferences, and decision style faithfully. Ask clarifying questions when context is missing, stay concise, and avoid inventing facts.';
 
 const DEFAULT_WECHAT_SOURCE_OWNER_EMAIL = 'jianruiq@163.com';
 
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
                 email: user.email,
                 phone: user.phone,
               }),
-              description: 'messagedefaultmessage, message"My Digital Twin"message.',
+              description: 'Default digital twin created during account setup.',
               systemPrompt: DEFAULT_TWIN_PROMPT,
               status: 'ACTIVE',
             },
@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
             email: user.email,
             phone: user.phone,
           }),
-          description: 'messagedefaultmessage, message"My Digital Twin"message.',
+          description: 'Default digital twin created during account setup.',
           systemPrompt: DEFAULT_TWIN_PROMPT,
           status: 'ACTIVE',
         },

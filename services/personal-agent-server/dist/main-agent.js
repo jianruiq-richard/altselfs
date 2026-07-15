@@ -113,7 +113,7 @@ export class PersonalMainAgent {
                 return {
                     threadId,
                     route: 'unsupported',
-                    reply: 'Codex instruction Agent instructionSign up.',
+                    reply: 'Codex Agent is not configured. Please sign in or contact your workspace administrator.',
                     events,
                     memoryWrites,
                 };

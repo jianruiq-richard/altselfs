@@ -70,10 +70,10 @@ export async function startFeishuCliAuthorization(config, input) {
 export async function continueFeishuCliAuthorization(config, input) {
     const session = getFeishuCliBindSession(input.sessionId, input.investorId);
     if (!session)
-        throw new Error('instructionConnectinstruction, instructionConnect.');
+        throw new Error('Lark connection session expired. Start Connect again.');
     if (isFeishuCliBindSessionExpired(session)) {
         await destroyFeishuCliBindSession(config, session.sessionId, 'expired');
-        throw new Error('instructionConnectinstruction, instructionConnect.');
+        throw new Error('Lark connection session expired. Start Connect again.');
     }
     if (session.phase === 'app_setup') {
         if (!session.setupClosed) {
@@ -114,18 +114,18 @@ export async function completeFeishuCliAuthorization(config, input) {
     if (input.sessionId) {
         const session = getFeishuCliBindSession(input.sessionId, input.investorId);
         if (!session)
-            throw new Error('instructionConnectinstruction, instructionConnect.');
+            throw new Error('Lark connection session expired. Start Connect again.');
         if (isFeishuCliBindSessionExpired(session)) {
             await destroyFeishuCliBindSession(config, session.sessionId, 'expired');
-            throw new Error('instructionConnectinstruction, instructionConnect.');
+            throw new Error('Lark connection session expired. Start Connect again.');
         }
         if (session.phase === 'app_setup' || session.phase === 'app_configured') {
-            throw new Error('instructionCompleteinstruction CLI instruction, instructionaccountsinstruction.');
+            throw new Error('Complete the Lark CLI authorization before opening Accounts.');
         }
         if (session.phase === 'completed' && session.completed)
             return session.completed;
         if (session.phase !== 'user_auth' || !session.deviceCode) {
-            throw new Error('instructionaccountsinstruction, instructionConnect.');
+            throw new Error('Authorization is not ready yet. Start Connect again.');
         }
         await runLarkCliJson(config, ['auth', 'login', '--device-code', session.deviceCode, '--json'], {
             profileName: session.profileName,

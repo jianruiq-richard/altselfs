@@ -243,12 +243,12 @@ export async function getRapidApiQuotaSnapshots() {
     return {
       provider: 'RapidAPI',
       account: `${tool.source} · ${tool.host}`,
-      fingerprint: configured ? 'ECS key configured' : 'instruction',
-      balance: remaining !== null && limit !== null ? `${remaining.toLocaleString()} / ${limit.toLocaleString()}` : configured ? 'instruction' : 'instruction',
-      usage: reset ? `reset ${reset}` : quota ? `HTTP ${String(quota.status || 'unknown')}` : 'instruction',
+      fingerprint: configured ? 'ECS key configured' : 'Not configured',
+      balance: remaining !== null && limit !== null ? `${remaining.toLocaleString()} / ${limit.toLocaleString()}` : configured ? 'Unknown' : 'Not configured',
+      usage: reset ? `reset ${reset}` : quota ? `HTTP ${String(quota.status || 'unknown')}` : 'No quota data',
       status: !configured ? 'unknown' : remaining === null || limit === null ? 'unknown' : remaining <= 0 ? 'critical' : remaining / limit < 0.1 ? 'warning' : 'ok',
       updatedAt: typeof quota?.updatedAt === 'string' ? quota.updatedAt : new Date().toISOString(),
-      note: quota ? 'instruction RapidAPI instruction' : 'instruction quota headers',
+      note: quota ? 'RapidAPI quota headers were returned.' : 'Quota headers were not returned.',
     };
   });
 }

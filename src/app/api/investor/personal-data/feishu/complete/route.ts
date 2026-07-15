@@ -42,10 +42,10 @@ export async function POST(req: NextRequest) {
   const expiresAt = typeof pending?.expiresAt === 'string' ? pending.expiresAt : '';
   const featurePackages = Array.isArray(pending?.featurePackages) ? pending.featurePackages : [];
   if (!sessionId) {
-    return NextResponse.json({ error: 'message, messageReconnect.' }, { status: 400 });
+    return NextResponse.json({ error: 'Lark CLI session is missing. Reconnect Lark.' }, { status: 400 });
   }
   if (expiresAt && Date.parse(expiresAt) < Date.now()) {
-    return NextResponse.json({ error: 'message, messageReconnect.' }, { status: 400 });
+    return NextResponse.json({ error: 'Lark CLI session expired. Reconnect Lark.' }, { status: 400 });
   }
 
   try {
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (err) {
     return NextResponse.json({
-      error: err instanceof Error ? err.message : 'message CLI messagefailed, messageCompletemessage.',
+      error: err instanceof Error ? err.message : 'Lark CLI completion failed. Try completing authorization again.',
     }, { status: 500 });
   }
 }

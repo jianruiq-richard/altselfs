@@ -58,19 +58,19 @@ export default async function Page({
               Welcome back
             </p>
             <h1 className="mt-5 text-4xl font-semibold leading-tight sm:text-5xl sm:leading-tight">
-              content OS
+              Your Decision OS
             </h1>
             <p className="mt-6 text-base leading-8 text-[#fff0dc]/82 sm:text-lg sm:leading-9">
-              content, contentDecide, contentLearncontentPersonal decision preferences.
+              Sign in to reconnect your context, decision history, and personal AI teammates.
             </p>
           </section>
 
           <section className="flex justify-center lg:justify-end">
             <div className="w-full max-w-md rounded-2xl border border-[#ead8bd] bg-[#fffaf2] p-5 shadow-2xl shadow-black/20 sm:p-7">
               <div className="mb-6 text-center">
-                <h1 className="text-2xl font-semibold text-stone-950">content</h1>
+                <h1 className="text-2xl font-semibold text-stone-950">Sign in</h1>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  content, contentEmail / Google Sign in
+                  Use your phone and password, or continue with email or Google.
                 </p>
               </div>
               <div className="mb-4 grid grid-cols-2 gap-2">
@@ -112,9 +112,9 @@ export default async function Page({
                 </EmbeddedBrowserAuthGuard>
               )}
               <div className="mt-4 text-center text-sm text-stone-600">
-                contentaccounts?
+                New to Altselfs?
                 <Link href="/sign-up?method=phone" className="ml-1 font-medium text-[#7a451f] hover:underline">
-                  content Altselfs
+                  Create an account
                 </Link>
               </div>
             </div>

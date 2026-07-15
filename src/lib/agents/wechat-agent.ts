@@ -268,11 +268,11 @@ function inferDomains(text: string) {
 }
 
 function inferStyle(text: string) {
-  if (/instruction|instruction|instruction/.test(text)) return 'instruction';
-  if (/instruction|instruction|instruction|instruction/.test(text)) return 'instruction';
-  if (/instruction|instruction|instruction|instruction/.test(text)) return 'instruction';
-  if (/instruction|instruction|instruction|instruction/.test(text)) return 'instruction';
-  return 'instruction';
+  if (/technical|engineering|developer|infra|api|ai/i.test(text)) return 'technical';
+  if (/market|funding|startup|investor|business|strategy/i.test(text)) return 'business';
+  if (/product|design|growth|user|ux/i.test(text)) return 'product';
+  if (/policy|regulation|legal|risk/i.test(text)) return 'risk';
+  return 'general';
 }
 
 function inferProfile(source: SourceRecord, articles: ArticleCandidate[] = []): SourceProfile {
@@ -289,14 +289,14 @@ function inferProfile(source: SourceRecord, articles: ArticleCandidate[] = []): 
   return {
     topics: uniq([...(existing?.topics || []), ...inferDomains(text), ...titles.slice(0, 5)], 20),
     domains: uniq([...(existing?.domains || []), ...inferDomains(text)], 12),
-    style: inferStyle(text) || existing?.style || 'instruction',
-    audience: existing?.audience || (/instruction|instruction|VC|instruction/.test(text) ? 'instruction' : 'instruction'),
+    style: inferStyle(text) || existing?.style || 'general',
+    audience: existing?.audience || (/investor|VC|founder|executive/i.test(text) ? 'executive' : 'general'),
     keywords: uniq(tokenCandidates, 40),
     negativeKeywords: existing?.negativeKeywords || [],
     summary:
       source.description ||
       existing?.summary ||
-      `${source.displayName} instruction ${inferDomains(text).join(', ')} instruction.`,
+      `${source.displayName} covers ${inferDomains(text).join(', ') || 'general business and technology topics'}.`,
     lastObservedArticleTitles: titles.length > 0 ? titles : existing?.lastObservedArticleTitles || [],
   };
 }
@@ -333,7 +333,7 @@ function defaultTaskSpec(input: AgentRunInput): AgentTaskSpec {
     },
     returnFormat: {
       sections: ['Information Digest'],
-      instructions: 'instructionInformation Digestinstruction, instruction, instruction.Today To-DosinstructionExecutive Assistantinstruction; Twin Recommendationsinstruction, instructionWeChat Assistantinstruction.',
+      instructions: 'Return an Information Digest with concise signals, evidence, and why each item matters. Use Today To-Dos or Twin Recommendations only when requested by Executive Assistant.',
     },
   };
 }
@@ -382,10 +382,10 @@ async function selectSourcesForTask(sources: SourceRecord[], taskSpec: AgentTask
     {
       role: 'system',
       content: [
-        'instructionWeChat Official Accountsinstruction, instructionJSON.',
-        'instruction, instruction.',
-        'instruction; instruction.',
-        'instruction, instruction.',
+        'Select the WeChat Official Account sources most relevant to the task. Return strict JSON.',
+        'Use source profiles, topics, keywords, and the task objective.',
+        'Prefer credible, high-signal sources and explain skipped sources briefly.',
+        'Do not invent biz IDs.',
       ].join('\n'),
     },
     {
@@ -400,7 +400,7 @@ async function selectSourcesForTask(sources: SourceRecord[], taskSpec: AgentTask
         sources: sourceCards,
         outputSchema: {
           selectedBizes: ['biz'],
-          skipped: [{ biz: 'biz', reason: 'instruction' }],
+          skipped: [{ biz: 'biz', reason: 'why it was skipped' }],
         },
       }),
     },
@@ -428,17 +428,17 @@ async function selectSourcesForTask(sources: SourceRecord[], taskSpec: AgentTask
               return {
                 biz,
                 displayName: source.displayName,
-                reason: typeof rawItem.reason === 'string' ? rawItem.reason : 'instruction',
+                reason: typeof rawItem.reason === 'string' ? rawItem.reason : 'Not selected for this task',
               };
             })
             .filter(Boolean) as Array<{ biz: string; displayName: string; reason: string }>
         : [];
       return { selected, skipped, source: 'MODEL' };
     }
-    throw new Error('instruction.');
+    throw new Error('Source selector returned no selected sources.');
   } catch (error) {
     const detail = getErrorMessage(error);
-    throw new Error(`instruction JSON instructionfailed: ${detail}.instruction: ${raw.slice(0, 800)}`);
+    throw new Error(`Source selection JSON parse failed: ${detail}. Raw output: ${raw.slice(0, 800)}`);
   }
 }
 
@@ -528,7 +528,7 @@ function normalizeSelectedArticles(raw: unknown, candidates: ArticleCandidate[])
     out.push({
       ...article,
       category,
-      reason: asString(item.reason ?? item.r, 'instruction').slice(0, 80),
+      reason: asString(item.reason ?? item.r, 'Relevant to the task').slice(0, 80),
       priority: Number.isFinite(Number(item.priority ?? item.p)) ? Number(item.priority ?? item.p) : 50,
     });
   }
@@ -545,13 +545,12 @@ async function selectArticlesForDetail(input: {
     {
       role: 'system',
       content: [
-        'instructionWeChat Official Accountsinstruction, instructionJSON.',
-        'instructionExecutive Assistantinstruction, instruction, instruction24instruction.',
-        'instruction, instruction.',
-        'WeChat Official Accountsinstruction"Information Digest"instruction; instructionToday To-DosinstructionTwin Recommendations.',
-        'Today To-DosinstructionExecutive Assistantinstruction; Twin Recommendationsinstruction.',
-        'instruction; instruction.',
-        'instruction, selectedinstructionurl, instruction, instruction; instructionindexinstruction.',
+        'Select WeChat Official Account articles for an Executive Assistant briefing. Return strict JSON.',
+        'Prioritize recent, decision-relevant articles within the requested time window.',
+        'Use the task objective, source criteria, article metadata, and source profile.',
+        'Default category is "Information Digest"; use Today To-Dos or Twin Recommendations only if the task asks for them.',
+        'Prefer articles with strong evidence, clear source, URL, and current relevance.',
+        'Do not invent URLs or article indexes.',
       ].join('\n'),
     },
     {
@@ -571,17 +570,17 @@ async function selectArticlesForDetail(input: {
               i: 0,
               c: 'Information Digest',
               p: 0,
-              r: '20instruction',
+              r: '20 words explaining why selected',
             },
           ],
-          skippedReasonSummary: '30instructionSkippedinstruction',
+          skippedReasonSummary: '30 words summarizing why items were skipped',
         },
         hardRules: [
-          'selectedinstruction i/c/p/r.',
-          'instructionurl.',
-          'instruction.',
-          'instruction.',
-          'rinstruction, instruction20instruction.',
+          'Each selected item must include i/c/p/r.',
+          'Do not fabricate URLs.',
+          'Select only items that support the task.',
+          'Keep selection small and high-signal.',
+          'r must be concise, 20 words or fewer.',
         ],
       }),
     },
@@ -599,7 +598,7 @@ async function selectArticlesForDetail(input: {
     return { selected, raw: parsed, source: 'MODEL' };
   } catch (error) {
     const detail = getErrorMessage(error);
-    throw new Error(`instruction JSON instructionfailed: ${detail}.instruction: ${raw.slice(0, 800)}`);
+    throw new Error(`Article selection JSON parse failed: ${detail}. Raw output: ${raw.slice(0, 800)}`);
   }
 }
 
@@ -617,13 +616,13 @@ function normalizeStructuredItem(raw: unknown, fallbackCategory: WechatModuleTit
   const item = raw as Record<string, unknown>;
   const title = asString(item.title).slice(0, 160);
   const summary = asString(item.summary).slice(0, 700);
-  const source = asString(item.source, 'WeChat Official Accountsinstruction').slice(0, 120);
+  const source = asString(item.source, 'WeChat Official Accounts').slice(0, 120);
   if (!title || !summary) return null;
   return {
     category: fallbackCategory,
     title,
     summary: asString(item.whyItMatters)
-      ? `${summary}\ninstruction: ${asString(item.whyItMatters).slice(0, 300)}`
+      ? `${summary}\nWhy it matters: ${asString(item.whyItMatters).slice(0, 300)}`
       : summary,
     source,
     url: asString(item.url) || undefined,
@@ -632,7 +631,7 @@ function normalizeStructuredItem(raw: unknown, fallbackCategory: WechatModuleTit
 }
 
 function normalizeStructuredModule(raw: unknown, title: WechatModuleTitle): WechatStructuredModule {
-  if (!raw || typeof raw !== 'object') return { title, content: `instruction${title}.`, items: [] };
+  if (!raw || typeof raw !== 'object') return { title, content: `No ${title} items available.`, items: [] };
   const rawModule = raw as Record<string, unknown>;
   const items = Array.isArray(rawModule.items)
     ? rawModule.items.map((item) => normalizeStructuredItem(item, title)).filter((item): item is AgentBriefingItem => Boolean(item))
@@ -648,7 +647,7 @@ function normalizeWechatStructuredSummary(raw: string): WechatStructuredSummary 
   const parsed = JSON.parse(raw) as Record<string, unknown>;
   const modules = parsed.modules && typeof parsed.modules === 'object' ? (parsed.modules as Record<string, unknown>) : {};
   return {
-    summary: asString(parsed.summary, 'WeChat Official AccountsinstructionCompletedinstruction.').slice(0, 2000),
+    summary: asString(parsed.summary, 'WeChat Official Accounts analysis completed.').slice(0, 2000),
     modules: [
       normalizeStructuredModule(modules.informationSummary, 'Information Digest'),
     ],
@@ -657,10 +656,10 @@ function normalizeWechatStructuredSummary(raw: string): WechatStructuredSummary 
 
 function emptyStructuredSummary(): WechatStructuredSummary {
   return {
-    summary: 'WeChat Official Accountsinstruction.',
+    summary: 'No relevant WeChat Official Accounts updates were found.',
     modules: MODULE_TITLES.map((title) => ({
       title,
-      content: `instruction${title}.`,
+      content: `No ${title} items available.`,
       items: [],
     })),
   };
@@ -690,12 +689,12 @@ async function summarizeArticleInsight(input: {
     {
       role: 'system',
       content: [
-        'instructionWeChat Official Accountsinstruction, instructionJSON.',
-        'instruction, instruction, instruction.',
-        'instructionWeChat Official AccountsinstructionDecideinstruction, instruction.',
-        'instruction; instruction, instruction, instruction, instructionagentinstruction.',
-        'instruction"Information Digest".Today To-DosinstructionExecutive Assistantinstruction; Twin Recommendationsinstruction.',
-        'instruction, instruction.',
+        'Analyze one WeChat Official Account article and return strict JSON.',
+        'Decide whether it should be included in the Executive Assistant briefing.',
+        'Ground your summary in the article detail text and digest.',
+        'Use the requested category only when justified by the task.',
+        'Default category is "Information Digest"; use Today To-Dos or Twin Recommendations only when explicitly relevant.',
+        'Keep the output concise and decision-oriented.',
       ].join('\n'),
     },
     {
@@ -719,8 +718,8 @@ async function summarizeArticleInsight(input: {
         outputSchema: {
           include: true,
           category: 'Information Digest',
-          summary: '120instruction, instruction, instruction',
-          whyItMatters: '80instruction, instructionInformation Digest',
+          summary: '120 words or fewer, factual and specific',
+          whyItMatters: '80 words or fewer explaining why this belongs in Information Digest',
         },
       }),
     },
@@ -736,12 +735,12 @@ async function summarizeArticleInsight(input: {
     return normalizeArticleInsight(raw, input.article);
   } catch (error) {
     const detail = getErrorMessage(error);
-    throw new Error(`instructionSummary JSON instructionfailed: ${detail}.instruction: ${input.article.title}.instruction: ${raw.slice(0, 800)}`);
+    throw new Error(`Article summary JSON parse failed: ${detail}. Article: ${input.article.title}. Raw output: ${raw.slice(0, 800)}`);
   }
 }
 
 function buildModuleContent(title: WechatModuleTitle, items: AgentBriefingItem[]) {
-  if (items.length === 0) return `instruction${title}.`;
+  if (items.length === 0) return `No ${title} items available.`;
   return items
     .slice(0, 50)
     .map((item, index) => `${index + 1}. ${item.title}: ${item.summary}`)
@@ -758,7 +757,7 @@ function buildWechatStructuredSummaryFromInsights(insights: ArticleInsight[]): W
       .map((item) => ({
         category: title,
         title: item.article.title,
-        summary: item.whyItMatters ? `${item.summary}\ninstruction: ${item.whyItMatters}` : item.summary,
+        summary: item.whyItMatters ? `${item.summary}\nWhy it matters: ${item.whyItMatters}` : item.summary,
         source: item.article.sourceName,
         url: item.article.url,
         publishedAt: item.article.publishAt || undefined,
@@ -770,7 +769,7 @@ function buildWechatStructuredSummaryFromInsights(insights: ArticleInsight[]): W
     };
   });
   return {
-    summary: `WeChat Official Accountsinstruction ${included.length} instruction24instruction, instructionInformation DigestinstructionExecutive Assistant.`,
+    summary: `WeChat Official Accounts found ${included.length} relevant updates for the requested briefing window.`,
     modules,
   };
 }
@@ -792,12 +791,12 @@ function buildFallbackAnswer(candidates: ArticleCandidate[], failures: AgentRunt
       .filter((item) => item.status === 'ERROR')
       .map((item) => `${item.toolName}: ${String(item.result || 'unknown error')}`)
       .join('\n');
-    return failureText ? `WeChat Assistantinstruction, toolinstruction: \n${failureText}` : 'WeChat Assistantinstruction.';
+    return failureText ? `WeChat Assistant could not retrieve article data. Tool errors:\n${failureText}` : 'WeChat Assistant found no article candidates.';
   }
 
   return [
-    `WeChat Assistantinstruction ${candidates.length} instruction/instruction.`,
-    ...candidates.slice(0, 5).map((item, index) => `${index + 1}. ${item.title} (${item.sourceName}, ${item.publishAt || 'instruction'})\n${item.url}`),
+    `WeChat Assistant found ${candidates.length} candidate articles.`,
+    ...candidates.slice(0, 5).map((item, index) => `${index + 1}. ${item.title} (${item.sourceName}, ${item.publishAt || 'unknown date'})\n${item.url}`),
   ].join('\n');
 }
 
@@ -809,7 +808,7 @@ function toBriefingItems(candidates: ArticleCandidate[], answer: string, structu
     return [
       {
         category: 'Information Digest',
-        title: 'WeChat Assistantinstruction',
+        title: 'WeChat Assistant',
         summary: answer.slice(0, 300),
         source: 'WeChat Assistant',
       },
@@ -819,7 +818,7 @@ function toBriefingItems(candidates: ArticleCandidate[], answer: string, structu
   return candidates.map((item) => ({
     category: 'Information Digest',
     title: item.title,
-    summary: item.summary || `instruction ${item.sourceName} instruction, instructionDecide.`,
+    summary: item.summary || `Article from ${item.sourceName}; review the source to assess relevance.`,
     source: item.sourceName,
     url: item.url,
     publishedAt: item.publishAt || undefined,
@@ -839,13 +838,13 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
   if (!isWechatProviderReady()) {
     return {
       agentType: WECHAT_AGENT_TYPE,
-      answer: 'WeChat Assistantinstruction: WeChat Official Accountsinstruction.',
+      answer: 'WeChat Assistant is not ready because the WeChat data provider is not configured.',
       briefingItems: [],
       toolCalls: [
         {
           toolName: 'wechat_provider_ready',
           status: 'ERROR',
-          result: 'WeChat Official Accountsinstruction',
+          result: 'WeChat data provider is not configured',
         },
       ],
     };
@@ -871,7 +870,7 @@ export async function runWechatAgent(input: AgentRunInput): Promise<AgentRunResu
   if (validSources.length === 0) {
     return {
       agentType: WECHAT_AGENT_TYPE,
-      answer: 'WeChat Assistantinstruction, instruction.',
+      answer: 'No valid WeChat Official Account sources are configured.',
       briefingItems: [],
       toolCalls,
       debug: { sourceCount: sources.length, validSourceCount: 0 },
