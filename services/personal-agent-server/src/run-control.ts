@@ -15,6 +15,7 @@ type ActiveRun = {
   child: ChildProcess;
   startedAt: string;
   cancelledAt?: string;
+  personalDataToolNames?: string[];
 };
 
 const activeRuns = new Map<string, ActiveRun>();
@@ -25,9 +26,11 @@ export function registerActiveRun(input: {
   userId: string;
   threadId: string;
   child: ChildProcess;
+  personalDataToolNames?: string[];
 }) {
   activeRuns.set(input.runId, {
     ...input,
+    personalDataToolNames: input.personalDataToolNames ? [...input.personalDataToolNames] : undefined,
     startedAt: nowIso(),
   });
   if (cancelledRuns.has(input.runId)) {
@@ -37,6 +40,14 @@ export function registerActiveRun(input: {
       // The process may have already exited.
     }
   }
+}
+
+export function getActiveRunToolScope(runId: string) {
+  const active = activeRuns.get(runId);
+  if (!active) return null;
+  return {
+    personalDataToolNames: active.personalDataToolNames ? [...active.personalDataToolNames] : undefined,
+  };
 }
 
 export function unregisterActiveRun(runId: string) {

@@ -37,7 +37,7 @@ import {
   touchAgentRunHeartbeat,
   type PersistedAgentTurnInput,
 } from './agent-context-store.js';
-import { cancelActiveRun, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
+import { cancelActiveRun, getActiveRunToolScope, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
 import type { AgentEvent, TurnStartRequest } from './types.js';
 
@@ -345,11 +345,29 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         if (!isPersonalDataTool(toolName)) return json(res, 400, { error: `Unsupported personal data tool: ${toolName}` });
         const context = isRecord(body._context) ? body._context : {};
         const investorId = readRequiredBodyString(context, 'investorId');
+        const runId = typeof context.runId === 'string' && context.runId.trim() ? context.runId.trim() : undefined;
+        const runToolScope = runId ? getActiveRunToolScope(runId) : null;
+        if (runToolScope?.personalDataToolNames && !runToolScope.personalDataToolNames.includes(toolName)) {
+          return json(res, 200, {
+            contentItems: [
+              {
+                type: 'inputText',
+                text: JSON.stringify({
+                  source: 'personal-data-tools',
+                  error: `Personal data tool ${toolName} is not enabled for this turn by connector selection.`,
+                  toolName,
+                  enabledTools: runToolScope.personalDataToolNames,
+                }, null, 2),
+              },
+            ],
+            success: false,
+          });
+        }
         const resultText = await runPersonalDataTool(toolName, body.arguments, config, {
           investorId,
           userId: typeof context.userId === 'string' && context.userId.trim() ? context.userId.trim() : investorId,
           threadId: typeof context.threadId === 'string' && context.threadId.trim() ? context.threadId.trim() : undefined,
-          runId: typeof context.runId === 'string' && context.runId.trim() ? context.runId.trim() : undefined,
+          runId,
         });
         return json(res, 200, {
           contentItems: [{ type: 'inputText', text: resultText }],
