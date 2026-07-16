@@ -2,6 +2,7 @@ import type { ServerConfig } from './config.js';
 import type { RuntimePaths } from './sandbox-runtime.js';
 import type { AgentEvent, AgentRoute, TurnStartRequest } from './types.js';
 import { id, isRecord, truncate } from './util.js';
+import { resolveHermesModelSelection } from './hermes/llm-provider.js';
 
 type PgPool = {
   query: (text: string, values?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
@@ -1260,36 +1261,11 @@ function storedTurnRequest(value: unknown): TurnStartRequest | null {
 }
 
 function resolveRunModelSelection(config: ServerConfig, request: TurnStartRequest) {
-  const requested = request.metadata?.codexModel;
-  const model = normalizeRunModel(typeof requested === 'string' && requested.trim() ? requested.trim() : config.codexModel);
-  if (model === 'gpt-5.5') return { model, provider: 'openai' };
-  if (model === 'deepseek/deepseek-v3.2') return { model, provider: 'openrouter' };
-  const configuredProvider = normalizeRunProvider(config.codexModelProvider);
+  const selection = resolveHermesModelSelection(config, request.metadata?.hermesModel);
   return {
-    model,
-    provider: configuredProvider || (model ? 'openrouter' : undefined),
+    model: selection.model,
+    provider: selection.provider,
   };
-}
-
-function normalizeRunModel(model?: string) {
-  const value = model?.trim();
-  if (!value) return undefined;
-  const normalized = value.toLowerCase();
-  if (normalized === 'gpt-5.5' || normalized === 'chatgpt-5.5') return 'gpt-5.5';
-  if (
-    normalized === 'deepseek/deepseek-v3.2' ||
-    normalized === 'deepseek-v3.2' ||
-    normalized === 'deepseek3.2'
-  ) {
-    return 'deepseek/deepseek-v3.2';
-  }
-  return value;
-}
-
-function normalizeRunProvider(provider?: string) {
-  const value = provider?.trim().toLowerCase();
-  if (value === 'openai' || value === 'openrouter') return value;
-  return undefined;
 }
 
 function stringifyJson(value: unknown) {

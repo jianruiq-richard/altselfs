@@ -137,29 +137,27 @@ If the browser callback cannot reach the local CLI process, use manual paste:
 npm run kernel:hermes-auth -- --no-browser --manual-paste
 ```
 
-This auth belongs to Hermes itself. The default Altselfs local path now avoids
-that dependency by using OpenRouter for both Hermes and Codex.
+This auth belongs to Hermes itself. The default Altselfs local path now keeps
+Hermes on APIYI Claude and Codex on the OpenAI/Codex login path.
 
 ## Provider Mode
 
-The local preparation defaults both Hermes and Codex to OpenRouter:
+The local preparation defaults Hermes to APIYI Claude and Codex to OpenAI:
 
 ```text
-ALTSELFS_CODEX_PROVIDER_MODE=openrouter
-ALTSELFS_CODEX_MODEL=deepseek/deepseek-v3.2
-ALTSELFS_HERMES_PROVIDER_MODE=openrouter
-ALTSELFS_HERMES_MODEL=deepseek/deepseek-v3.2
+ALTSELFS_CODEX_PROVIDER_MODE=openai
+ALTSELFS_CODEX_MODEL=gpt-5.5
+ALTSELFS_HERMES_PROVIDER_MODE=apiyi
+ALTSELFS_HERMES_MODEL=claude-sonnet-4-6
 ```
 
-This writes a `model_providers.openrouter` entry using `wire_api = "responses"`.
-If OpenRouter does not support the exact Responses API surface required by this
-Codex source version, switch Codex back to the OpenAI/Codex login path:
+Hermes reads `APIYI_API_KEY` from the prepared local `.env`. Codex still uses
+the source-built or installed `codex login` flow:
 
 ```bash
-ALTSELFS_CODEX_PROVIDER_MODE=openai npm run kernel:prepare
+npm run kernel:build-codex
+codex login
 ```
-
-Then authenticate Codex using the source-built or installed `codex login` flow.
 
 ## Phase 1 Acceptance
 

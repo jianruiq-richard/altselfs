@@ -15,10 +15,15 @@ const kernelRoot =
   process.env.ALTSELFS_LOCAL_KERNEL_ROOT ||
   DEFAULT_KERNEL_ROOT;
 const userId = process.env.ALTSELFS_LOCAL_AGENT_USER || "local-user";
-const codexProviderMode = process.env.ALTSELFS_CODEX_PROVIDER_MODE || "openrouter";
-const hermesProviderMode = process.env.ALTSELFS_HERMES_PROVIDER_MODE || codexProviderMode;
-const codexModel = process.env.ALTSELFS_CODEX_MODEL || "deepseek/deepseek-v3.2";
-const hermesModel = process.env.ALTSELFS_HERMES_MODEL || codexModel;
+const codexProviderMode = process.env.ALTSELFS_CODEX_PROVIDER_MODE || "openai";
+const hermesProviderMode = process.env.ALTSELFS_HERMES_PROVIDER_MODE || "apiyi";
+const codexModel = process.env.ALTSELFS_CODEX_MODEL || "gpt-5.5";
+const hermesModel = process.env.ALTSELFS_HERMES_MODEL || "claude-sonnet-4-6";
+const defaultHermesBaseUrl =
+  hermesProviderMode === "openrouter" ? "https://openrouter.ai/api/v1" : "https://api.apiyi.com/v1";
+const defaultHermesApiKeyEnv = hermesProviderMode === "openrouter" ? "OPENROUTER_API_KEY" : "APIYI_API_KEY";
+const hermesBaseUrl = process.env.ALTSELFS_HERMES_BASE_URL || defaultHermesBaseUrl;
+const hermesApiKeyEnv = process.env.ALTSELFS_HERMES_API_KEY_ENV || defaultHermesApiKeyEnv;
 const codexBin =
   process.env.CODEX_BIN ||
   join(codexRoot, "codex-rs", "target", "debug", "codex");
@@ -65,11 +70,20 @@ mkdirSync(codexHome, { recursive: true });
 mkdirSync(workspace, { recursive: true });
 
 const hermesConfig = `model:
-  # Hermes owns the outer loop. With the local OpenRouter runtime patch applied,
-  # this provider can still enter the Codex app-server runtime.
+  # Hermes owns the outer loop. Codex remains the execution agent.
   provider: ${hermesProviderMode}
   default: "${hermesModel}"
-  openai_runtime: codex_app_server
+  base_url: "${hermesBaseUrl}"
+  api_mode: "chat_completions"
+  key_env: "${hermesApiKeyEnv}"
+
+providers:
+  ${hermesProviderMode}:
+    name: "${hermesProviderMode.toUpperCase()}"
+    base_url: "${hermesBaseUrl}"
+    key_env: "${hermesApiKeyEnv}"
+    default_model: "${hermesModel}"
+    transport: "chat_completions"
 
 terminal:
   cwd: "${workspace}"
@@ -96,7 +110,7 @@ wire_api = "responses"
 requires_openai_auth = false
 `;
 
-const codexOpenAiConfig = `model = "${hermesModel}"
+const codexOpenAiConfig = `model = "${codexModel}"
 model_provider = "openai"
 web_search = "live"
 sandbox_mode = "workspace-write"
@@ -125,6 +139,13 @@ if (openRouterApiKey) {
   envLines.push(`OPENROUTER_API_KEY=${openRouterApiKey}`);
 } else {
   envLines.push("# OPENROUTER_API_KEY=sk-or-...");
+}
+
+const hermesApiKey = readEnvValue(hermesApiKeyEnv);
+if (hermesApiKey) {
+  envLines.push(`${hermesApiKeyEnv}=${hermesApiKey}`);
+} else {
+  envLines.push(`# ${hermesApiKeyEnv}=sk-...`);
 }
 
 writeFileSync(join(hermesHome, ".env"), `${envLines.join("\n")}\n`, "utf8");

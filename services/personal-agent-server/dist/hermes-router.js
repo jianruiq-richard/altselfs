@@ -1,5 +1,6 @@
 import { buildMemoryContext } from './memory-store.js';
 import { isRecord, truncate } from './util.js';
+import { hermesChatCompletionsUrl, hermesChatHeaders, resolveHermesApiKey, resolveHermesModelSelection, } from './hermes/llm-provider.js';
 export class HermesRouter {
     config;
     constructor(config) {
@@ -8,9 +9,9 @@ export class HermesRouter {
     async decide(input) {
         if (!this.config.hermesRouterEnabled)
             return fallbackRouterDecision(input, 'router disabled');
-        const apiKey = process.env[this.config.hermesOpenRouterApiKeyEnv]?.trim();
-        if (!apiKey)
-            return fallbackRouterDecision(input, `${this.config.hermesOpenRouterApiKeyEnv} is missing`);
+        const selection = resolveHermesModelSelection(this.config);
+        if (!resolveHermesApiKey(selection))
+            return fallbackRouterDecision(input, `${selection.apiKeyEnv} is missing`);
         const routerPayload = buildRouterPayload(input);
         const messages = [
             {
@@ -36,7 +37,7 @@ export class HermesRouter {
                 content: JSON.stringify(routerPayload),
             },
         ];
-        const raw = await this.callOpenRouter(messages, apiKey);
+        const raw = await this.callHermesChatCompletion(messages, selection);
         const parsed = parseRouterJson(raw.content);
         if (!parsed) {
             return {
@@ -56,20 +57,16 @@ export class HermesRouter {
             },
         };
     }
-    async callOpenRouter(messages, apiKey) {
+    async callHermesChatCompletion(messages, selection) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 45_000);
         try {
-            const response = await fetch(`${this.config.openRouterBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+            const response = await fetch(hermesChatCompletionsUrl(selection), {
                 method: 'POST',
                 signal: controller.signal,
-                headers: {
-                    authorization: `Bearer ${apiKey}`,
-                    'content-type': 'application/json',
-                    'x-openrouter-title': this.config.openRouterAppTitle,
-                },
+                headers: hermesChatHeaders(this.config, selection),
                 body: JSON.stringify({
-                    model: this.config.hermesModel,
+                    model: selection.model,
                     messages,
                     temperature: 0,
                     max_tokens: 800,
@@ -77,7 +74,7 @@ export class HermesRouter {
             });
             const text = await response.text();
             if (!response.ok)
-                throw new Error(`OpenRouter router failed ${response.status}: ${truncate(text, 2000)}`);
+                throw new Error(`Hermes router failed ${response.status}: ${truncate(text, 2000)}`);
             const rawCompletion = JSON.parse(text);
             const content = extractContent(rawCompletion);
             return { content, rawCompletion };

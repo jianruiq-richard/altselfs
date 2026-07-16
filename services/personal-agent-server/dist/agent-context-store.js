@@ -1,4 +1,5 @@
 import { id, isRecord, truncate } from './util.js';
+import { resolveHermesModelSelection } from './hermes/llm-provider.js';
 let sharedContextPool = null;
 let sharedContextUrl = '';
 export async function loadCleanTurnContext(config, request) {
@@ -990,37 +991,11 @@ function storedTurnRequest(value) {
     };
 }
 function resolveRunModelSelection(config, request) {
-    const requested = request.metadata?.codexModel;
-    const model = normalizeRunModel(typeof requested === 'string' && requested.trim() ? requested.trim() : config.codexModel);
-    if (model === 'gpt-5.5')
-        return { model, provider: 'openai' };
-    if (model === 'deepseek/deepseek-v3.2')
-        return { model, provider: 'openrouter' };
-    const configuredProvider = normalizeRunProvider(config.codexModelProvider);
+    const selection = resolveHermesModelSelection(config, request.metadata?.hermesModel);
     return {
-        model,
-        provider: configuredProvider || (model ? 'openrouter' : undefined),
+        model: selection.model,
+        provider: selection.provider,
     };
-}
-function normalizeRunModel(model) {
-    const value = model?.trim();
-    if (!value)
-        return undefined;
-    const normalized = value.toLowerCase();
-    if (normalized === 'gpt-5.5' || normalized === 'chatgpt-5.5')
-        return 'gpt-5.5';
-    if (normalized === 'deepseek/deepseek-v3.2' ||
-        normalized === 'deepseek-v3.2' ||
-        normalized === 'deepseek3.2') {
-        return 'deepseek/deepseek-v3.2';
-    }
-    return value;
-}
-function normalizeRunProvider(provider) {
-    const value = provider?.trim().toLowerCase();
-    if (value === 'openai' || value === 'openrouter')
-        return value;
-    return undefined;
 }
 function stringifyJson(value) {
     return JSON.stringify(value === undefined ? null : value);

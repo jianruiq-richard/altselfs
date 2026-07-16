@@ -3,6 +3,13 @@ import path from 'node:path';
 import type { ServerConfig } from './config.js';
 import { LocalProfileStore, type UserProfileStore } from './profile-store.js';
 import { id, isRecord, nowIso, truncate } from './util.js';
+import {
+  hermesChatCompletionsUrl,
+  hermesChatHeaders,
+  resolveHermesApiKey,
+  resolveHermesModelSelection,
+  type HermesModelSelection,
+} from './hermes/llm-provider.js';
 
 export type MemoryReviewJobStatus = 'queued' | 'running' | 'success' | 'error';
 
@@ -188,12 +195,13 @@ export class MemoryReviewWorker {
   }
 
   private async runReview(job: MemoryReviewJob) {
-    const apiKey = process.env[this.config.hermesOpenRouterApiKeyEnv]?.trim();
+    const selection = resolveHermesModelSelection(this.config);
+    const apiKey = resolveHermesApiKey(selection);
     const result = apiKey
-      ? await this.reviewWithOpenRouter(job, apiKey)
+      ? await this.reviewWithHermesModel(job, selection)
       : {
           memories: [],
-          skipReason: `${this.config.hermesOpenRouterApiKeyEnv} is missing; skipped LLM memory review.`,
+          skipReason: `${selection.apiKeyEnv} is missing; skipped LLM memory review.`,
         };
     let savedCount = 0;
     for (const memory of result.memories) {
@@ -220,7 +228,7 @@ export class MemoryReviewWorker {
     };
   }
 
-  private async reviewWithOpenRouter(job: MemoryReviewJob, apiKey: string): Promise<MemoryReviewResult> {
+  private async reviewWithHermesModel(job: MemoryReviewJob, selection: HermesModelSelection): Promise<MemoryReviewResult> {
     const profile = await this.profileStore.getSnapshot(job.userId);
     const messages: Array<{ role: 'system' | 'user'; content: string }> = [
       {
@@ -249,23 +257,19 @@ export class MemoryReviewWorker {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
     try {
-      const response = await fetch(`${this.config.openRouterBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+      const response = await fetch(hermesChatCompletionsUrl(selection), {
         method: 'POST',
         signal: controller.signal,
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          'content-type': 'application/json',
-          'x-openrouter-title': this.config.openRouterAppTitle,
-        },
+        headers: hermesChatHeaders(this.config, selection),
         body: JSON.stringify({
-          model: this.config.hermesModel,
+          model: selection.model,
           messages,
           temperature: 0,
           max_tokens: 1200,
         }),
       });
       const text = await response.text();
-      if (!response.ok) throw new Error(`OpenRouter memory review failed ${response.status}: ${truncate(text, 2000)}`);
+      if (!response.ok) throw new Error(`Hermes memory review failed ${response.status}: ${truncate(text, 2000)}`);
       const completion = JSON.parse(text) as unknown;
       const content = extractCompletionContent(completion);
       return normalizeMemoryReviewResult(parseReviewJson(content));

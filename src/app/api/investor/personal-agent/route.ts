@@ -19,7 +19,7 @@ const PERSONAL_AGENT_TYPE = 'PERSONAL';
 const DEFAULT_MULTIMODAL_MAX_FILES = 6;
 const DEFAULT_MULTIMODAL_MAX_FILE_BYTES = 20 * 1024 * 1024;
 const PERSONAL_AGENT_FETCH_TIMEOUT_MS = 15_000;
-const DEFAULT_CODEX_AGENT_MODEL = 'gpt-5.5';
+const DEFAULT_HERMES_MODEL = 'claude-sonnet-4-6';
 
 type ClientMessage = {
   id?: string;
@@ -71,15 +71,22 @@ type ParsedPostBody = {
   userMessage: string;
   displayUserMessage: string;
   clientRequestId?: string | null;
-  codexModel: 'deepseek/deepseek-v3.2' | typeof DEFAULT_CODEX_AGENT_MODEL;
+  hermesModel: 'deepseek/deepseek-v3.2' | typeof DEFAULT_HERMES_MODEL;
   attachments: UploadedAttachment[];
   connectorScope: ConnectorScope | null;
 };
 
-function normalizeCodexModel(value: unknown): ParsedPostBody['codexModel'] {
-  if (typeof value !== 'string') return DEFAULT_CODEX_AGENT_MODEL;
+function normalizeHermesModel(value: unknown): ParsedPostBody['hermesModel'] {
+  if (typeof value !== 'string') return DEFAULT_HERMES_MODEL;
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'gpt-5.5' || normalized === 'chatgpt-5.5') return 'gpt-5.5';
+  if (
+    normalized === 'claude-sonnet-4-6' ||
+    normalized === 'claude-sonnet-4.6' ||
+    normalized === 'sonnet-4-6' ||
+    normalized === 'sonnet-4.6'
+  ) {
+    return 'claude-sonnet-4-6';
+  }
   if (
     normalized === 'deepseek/deepseek-v3.2' ||
     normalized === 'deepseek-v3.2' ||
@@ -87,7 +94,7 @@ function normalizeCodexModel(value: unknown): ParsedPostBody['codexModel'] {
   ) {
     return 'deepseek/deepseek-v3.2';
   }
-  return DEFAULT_CODEX_AGENT_MODEL;
+  return DEFAULT_HERMES_MODEL;
 }
 
 function normalizeClientRequestId(value: unknown) {
@@ -294,7 +301,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       message?: unknown;
       displayMessage?: unknown;
       messages?: unknown;
-      codexModel?: unknown;
+      hermesModel?: unknown;
       clientRequestId?: unknown;
       connectorScope?: unknown;
     };
@@ -308,7 +315,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       userMessage,
       displayUserMessage: displayMessage || userMessage,
       clientRequestId: normalizeClientRequestId(body.clientRequestId),
-      codexModel: normalizeCodexModel(body.codexModel),
+      hermesModel: normalizeHermesModel(body.hermesModel),
       attachments: [],
       connectorScope: normalizeConnectorScope(body.connectorScope),
     };
@@ -353,7 +360,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     userMessage,
     displayUserMessage,
     clientRequestId: normalizeClientRequestId(getStringFormValue(form.get('clientRequestId'))),
-    codexModel: normalizeCodexModel(getStringFormValue(form.get('codexModel'))),
+    hermesModel: normalizeHermesModel(getStringFormValue(form.get('hermesModel'))),
     attachments,
     connectorScope: parseConnectorScopeJson(getStringFormValue(form.get('connectorScope'))),
   };
@@ -721,7 +728,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: detail }, { status });
   }
 
-  const { messages, userMessage, displayUserMessage, attachments, codexModel, connectorScope } = parsedBody;
+  const { messages, userMessage, displayUserMessage, attachments, hermesModel, connectorScope } = parsedBody;
   if (!userMessage && attachments.length === 0) return NextResponse.json({ error: 'Message or attachment is required.' }, { status: 400 });
 
   const thread = await ensureThread({
@@ -780,7 +787,7 @@ export async function POST(req: NextRequest) {
       workspaceAttachments: getAttachmentPayloads(attachments),
       enabledInfoSources,
       ...(connectorScope ? { connectorScope } : {}),
-      codexModel,
+      hermesModel,
       runId: stableRunIdFromMessageId(userThreadMessage.id),
     },
   };

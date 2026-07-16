@@ -64,7 +64,9 @@ export function renderProductizationPage(config, jobs) {
           <p><code>RUNTIME_STATE_MODE</code>: ${escapeHtml(config.runtimeStateMode)}</p>
           <p><code>SANDBOX_STORAGE_ROOT</code>: ${escapeHtml(config.sandboxStorageRoot)}</p>
           <p><code>HERMES_MODEL</code>: ${escapeHtml(config.hermesModel)}</p>
-          <p><code>CODEX_MODEL</code>: ${escapeHtml(config.codexModel || config.hermesModel)}</p>
+          <p><code>HERMES_PROVIDER</code>: ${escapeHtml(config.hermesProvider)}</p>
+          <p><code>HERMES_BASE_URL</code>: ${escapeHtml(config.hermesBaseUrl)}</p>
+          <p><code>CODEX_MODEL</code>: ${escapeHtml(config.codexModel || '')}</p>
         </div>
         <div class="panel">
           <h3>Memory Review</h3>

@@ -11,6 +11,7 @@ import { createRunCancelledError, isAgentRunCancelledError, isRunCancelled, regi
 import { calculateDirectoryBytes, prepareRuntimeDirectories, readSandboxState, resolveRuntimePaths, writeSandboxState, } from '../sandbox-runtime.js';
 import { acquireSharedOpenAiAuthLock } from '../codex/openai-auth-lock.js';
 import { id, isRecord, nowIso, safeJson, truncate } from '../util.js';
+import { resolveHermesApiKey, resolveHermesModelSelection } from './llm-provider.js';
 export class HermesSourceRuntime {
     config;
     memoryReviewQueue;
@@ -37,6 +38,7 @@ export class HermesSourceRuntime {
         const { hermesHome, codexHome, workspace } = runtimePaths;
         const selectedCodexModel = resolveSelectedCodexModel(this.config, request);
         const codexModelSelection = resolveCodexModelSelection(this.config, selectedCodexModel);
+        const hermesModelSelection = resolveHermesModelSelection(this.config, request.metadata?.hermesModel);
         const runtimeStatePaths = { hermesHome, codexHome, workspace };
         const codexLocalEnvironmentDisabled = this.config.disableLocalEnvironmentForGeneral;
         const previousSandboxState = await readSandboxState(runtimePaths);
@@ -61,7 +63,7 @@ export class HermesSourceRuntime {
             }
         }
         const prepareHomesStartedAtMs = Date.now();
-        await this.prepareHomes(runtimePaths, codexModelSelection);
+        await this.prepareHomes(runtimePaths, codexModelSelection, hermesModelSelection);
         await emit('hermes.runtime.prepare_homes_timing', {
             durationMs: Date.now() - prepareHomesStartedAtMs,
             sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
@@ -70,6 +72,8 @@ export class HermesSourceRuntime {
             workspace,
             codexModelProvider: codexModelSelection.provider || null,
             codexModel: codexModelSelection.model || null,
+            hermesProvider: hermesModelSelection.provider,
+            hermesModel: hermesModelSelection.model,
         });
         await writeSandboxState(runtimePaths, {
             status: 'ACTIVE',
@@ -165,8 +169,11 @@ export class HermesSourceRuntime {
             sessionMode: this.config.runtimeStateMode,
             resumeSessionId: resumeSessionId || null,
             codexLocalEnvironmentDisabled,
-            model: this.config.hermesModel,
-            provider: 'openrouter',
+            model: hermesModelSelection.model,
+            provider: hermesModelSelection.provider,
+            baseUrl: hermesModelSelection.baseUrl,
+            apiKeyEnv: hermesModelSelection.apiKeyEnv,
+            apiKeyPresent: Boolean(resolveHermesApiKey(hermesModelSelection)),
             codexModel: codexModelSelection.model || null,
             codexModelProvider: codexModelSelection.provider || null,
             selectedAgentProfileId: selectedAgentProfileId || null,
@@ -232,6 +239,7 @@ export class HermesSourceRuntime {
                 codexHome,
                 workspace,
                 statePath: runtimePaths.statePath || '',
+                hermesModelSelection,
                 codexModelSelection,
             }, {
                 emit,
@@ -393,15 +401,20 @@ export class HermesSourceRuntime {
             },
         };
     }
-    async prepareHomes(paths, codexModelSelection) {
+    async prepareHomes(paths, codexModelSelection, hermesModelSelection) {
         await prepareRuntimeDirectories(paths);
         const codexMcpServerPath = await resolveCodexMcpServerPath();
         const codexMcpEnvLines = buildCodexMcpEnvEntries(this.config, codexModelSelection)
             .map(([key, value]) => `      ${key}: ${yamlString(value)}`);
         await fs.writeFile(path.join(paths.hermesHome, 'config.yaml'), [
             'model:',
-            '  provider: openrouter',
-            `  default: ${yamlString(this.config.hermesModel)}`,
+            `  provider: ${yamlString(hermesModelSelection.provider)}`,
+            `  default: ${yamlString(hermesModelSelection.model)}`,
+            `  base_url: ${yamlString(hermesModelSelection.baseUrl)}`,
+            `  api_mode: ${yamlString(hermesModelSelection.apiMode)}`,
+            `  key_env: ${yamlString(hermesModelSelection.apiKeyEnv)}`,
+            '',
+            ...hermesProviderConfigYamlLines(hermesModelSelection),
             '',
             'terminal:',
             `  cwd: ${yamlString(paths.workspace)}`,
@@ -558,6 +571,10 @@ export class HermesSourceRuntime {
                     ALTSELFS_WORKSPACE: paths.workspace,
                     ALTSELFS_STATE_PATH: paths.statePath,
                     ALTSELFS_CODEX_HOME: paths.codexHome,
+                    ALTSELFS_HERMES_MODEL: paths.hermesModelSelection.model,
+                    ALTSELFS_HERMES_PROVIDER: paths.hermesModelSelection.provider,
+                    ALTSELFS_HERMES_BASE_URL: paths.hermesModelSelection.baseUrl,
+                    ALTSELFS_HERMES_API_KEY_ENV: paths.hermesModelSelection.apiKeyEnv,
                     ALTSELFS_SELECTED_AGENT_PROFILE_ID: paths.selectedAgentProfileId,
                     ALTSELFS_CONNECTOR_SCOPE_JSON: JSON.stringify(paths.connectorScope),
                     ALTSELFS_ENABLED_INFO_SOURCES_JSON: JSON.stringify(paths.enabledInfoSources),
@@ -721,6 +738,19 @@ function tail(value, maxLines) {
 }
 function yamlString(value) {
     return JSON.stringify(value);
+}
+function hermesProviderConfigYamlLines(selection) {
+    if (!selection.provider || selection.provider === 'openrouter')
+        return [];
+    return [
+        'providers:',
+        `  ${selection.provider}:`,
+        `    name: ${yamlString(selection.provider.toUpperCase())}`,
+        `    base_url: ${yamlString(selection.baseUrl)}`,
+        `    key_env: ${yamlString(selection.apiKeyEnv)}`,
+        `    default_model: ${yamlString(selection.model)}`,
+        `    transport: ${yamlString(selection.apiMode)}`,
+    ];
 }
 function tomlString(value) {
     return JSON.stringify(value);

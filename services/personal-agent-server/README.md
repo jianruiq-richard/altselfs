@@ -218,6 +218,10 @@ source .env.local
 set +a
 
 PORT=8787 \
+HERMES_MODEL=claude-sonnet-4-6 \
+HERMES_PROVIDER=apiyi \
+HERMES_BASE_URL=https://api.apiyi.com/v1 \
+HERMES_API_KEY_ENV=APIYI_API_KEY \
 CODEX_MODEL_PROVIDER=openai \
 CODEX_MODEL=gpt-5.5 \
 CODEX_MODEL_CONTEXT_WINDOW=128000 \

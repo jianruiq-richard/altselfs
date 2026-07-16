@@ -270,7 +270,10 @@ function readOptionalBoolEnv(key) {
 export function loadConfig() {
     loadLocalEnvFiles();
     const storageBackend = readStorageBackendEnv('STORAGE_BACKEND', 'file');
-    const hermesModel = readEnv('HERMES_MODEL', 'deepseek/deepseek-v3.2');
+    const hermesModel = readEnv('HERMES_MODEL', 'claude-sonnet-4-6');
+    const hermesProvider = readEnv('HERMES_PROVIDER', 'apiyi');
+    const hermesBaseUrl = readEnv('HERMES_BASE_URL', 'https://api.apiyi.com/v1');
+    const hermesApiKeyEnv = readEnv('HERMES_API_KEY_ENV', 'APIYI_API_KEY');
     const openRouterApiKeyEnv = readEnv('OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY');
     const hasOpenRouterKey = Boolean(process.env[openRouterApiKeyEnv]?.trim());
     const codexModel = process.env.CODEX_MODEL?.trim() || 'gpt-5.5';
@@ -284,7 +287,10 @@ export function loadConfig() {
         contextDatabaseUrl: process.env.AGENT_CONTEXT_DATABASE_URL?.trim() || undefined,
         hermesRouterEnabled: readBoolEnv('HERMES_ROUTER_ENABLED', true),
         hermesModel,
-        hermesOpenRouterApiKeyEnv: readEnv('HERMES_OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY'),
+        hermesProvider,
+        hermesBaseUrl,
+        hermesApiKeyEnv,
+        hermesOpenRouterApiKeyEnv: readEnv('HERMES_OPENROUTER_API_KEY_ENV', hermesApiKeyEnv),
         codexBin: readEnv('CODEX_BIN', 'codex'),
         codexHomeRoot: path.resolve(readEnv('CODEX_HOME_ROOT', '/tmp/altselfs-codex-homes')),
         workspaceRoot: path.resolve(readEnv('WORKSPACE_ROOT', '/tmp/altselfs-workspaces')),

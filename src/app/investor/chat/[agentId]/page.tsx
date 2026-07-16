@@ -161,7 +161,7 @@ type ConnectorScopePayload = {
 };
 
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
-const CODEX_MODEL_STORAGE_KEY = 'altselfs:personal-agent-codex-model';
+const HERMES_MODEL_STORAGE_KEY = 'altselfs:personal-agent-hermes-model';
 const AUTH_EXPIRED_MESSAGE = 'Your sign-in session expired. Please sign in again.';
 
 function buildSignInRedirectUrl() {
@@ -171,29 +171,29 @@ function buildSignInRedirectUrl() {
   return `/sign-in?${params.toString()}`;
 }
 
-type CodexModelOption = {
-  value: 'deepseek/deepseek-v3.2' | 'gpt-5.5';
+type HermesModelOption = {
+  value: 'claude-sonnet-4-6' | 'deepseek/deepseek-v3.2';
   label: string;
   detail: string;
 };
 
-const DEFAULT_CODEX_MODEL: CodexModelOption['value'] = 'gpt-5.5';
+const DEFAULT_HERMES_MODEL: HermesModelOption['value'] = 'claude-sonnet-4-6';
 
-const codexModelOptions: CodexModelOption[] = [
+const hermesModelOptions: HermesModelOption[] = [
   {
-    value: 'gpt-5.5',
-    label: 'ChatGPT 5.5',
-    detail: 'OpenAI + web.run',
+    value: 'claude-sonnet-4-6',
+    label: 'Claude Sonnet 4.6',
+    detail: 'Hermes via APIYI',
   },
   {
     value: 'deepseek/deepseek-v3.2',
     label: 'DeepSeek 3.2',
-    detail: 'OpenRouter',
+    detail: 'Hermes via OpenRouter',
   },
 ];
 
-function normalizeCodexModelOption(value: unknown): CodexModelOption['value'] {
-  return codexModelOptions.find((option) => option.value === value)?.value || DEFAULT_CODEX_MODEL;
+function normalizeHermesModelOption(value: unknown): HermesModelOption['value'] {
+  return hermesModelOptions.find((option) => option.value === value)?.value || DEFAULT_HERMES_MODEL;
 }
 
 const suggestedQuestions = [
@@ -1212,7 +1212,7 @@ export default function InvestorAgentChatPage() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stoppingRun, setStoppingRun] = useState(false);
   const [recoveringRunState, setRecoveringRunState] = useState(false);
-  const [codexModel, setCodexModel] = useState<CodexModelOption['value']>(DEFAULT_CODEX_MODEL);
+  const [hermesModel, setHermesModel] = useState<HermesModelOption['value']>(DEFAULT_HERMES_MODEL);
   const [connectors, setConnectors] = useState<ConnectorItem[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
   const [connectorsError, setConnectorsError] = useState<string | null>(null);
@@ -1244,19 +1244,19 @@ export default function InvestorAgentChatPage() {
         ? 'Planner errors'
         : 'View planner'
         : 'Open planner';
-  const selectedCodexModel =
-    codexModelOptions.find((option) => option.value === codexModel) ||
-    codexModelOptions.find((option) => option.value === DEFAULT_CODEX_MODEL) ||
-    codexModelOptions[0];
+  const selectedHermesModel =
+    hermesModelOptions.find((option) => option.value === hermesModel) ||
+    hermesModelOptions.find((option) => option.value === DEFAULT_HERMES_MODEL) ||
+    hermesModelOptions[0];
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(CODEX_MODEL_STORAGE_KEY);
-    if (stored) setCodexModel(normalizeCodexModelOption(stored));
+    const stored = window.localStorage.getItem(HERMES_MODEL_STORAGE_KEY);
+    if (stored) setHermesModel(normalizeHermesModelOption(stored));
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(CODEX_MODEL_STORAGE_KEY, codexModel);
-  }, [codexModel]);
+    window.localStorage.setItem(HERMES_MODEL_STORAGE_KEY, hermesModel);
+  }, [hermesModel]);
 
   useEffect(() => {
     if (!isExecutive) return;
@@ -1985,7 +1985,7 @@ export default function InvestorAgentChatPage() {
           if (threadId) formData.append('threadId', threadId);
           formData.append('message', content);
           formData.append('displayMessage', displayContent);
-          formData.append('codexModel', codexModel);
+          formData.append('hermesModel', hermesModel);
           formData.append('clientRequestId', clientRequestId);
           formData.append('connectorScope', JSON.stringify(connectorScope));
           requestAttachments.forEach((attachment) => {
@@ -1997,7 +1997,7 @@ export default function InvestorAgentChatPage() {
             threadId,
             message: content,
             displayMessage: displayContent,
-            codexModel,
+            hermesModel,
             clientRequestId,
             connectorScope,
           })
@@ -2401,15 +2401,15 @@ export default function InvestorAgentChatPage() {
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <label className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                <span className="text-xs font-medium text-slate-500">Model</span>
+                <span className="text-xs font-medium text-slate-500">Hermes</span>
                 <select
-                  value={codexModel}
-                  onChange={(event) => setCodexModel(normalizeCodexModelOption(event.target.value))}
+                  value={hermesModel}
+                  onChange={(event) => setHermesModel(normalizeHermesModelOption(event.target.value))}
                   disabled={sending || recoveringRunState}
-                  title={`Current: ${selectedCodexModel.detail}`}
+                  title={`Current: ${selectedHermesModel.detail}`}
                   className="bg-transparent text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {codexModelOptions.map((option) => (
+                  {hermesModelOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
