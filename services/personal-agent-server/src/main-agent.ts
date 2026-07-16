@@ -48,7 +48,9 @@ export class PersonalMainAgent {
       memorySnapshot,
       availableProfiles,
     });
-    const effectiveDecision = enforceHermesBoundary(routerDecision, currentUserMessage, availableProfiles);
+    const effectiveDecision = this.sourceRuntime
+      ? routerDecision
+      : enforceHermesBoundary(routerDecision, currentUserMessage, availableProfiles);
     await emitRouterDecision(effectiveDecision, emit);
 
     if (this.sourceRuntime) {

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { Buffer } from 'node:buffer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   loadCleanTurnContext,
   upsertAgentSandboxControlPlane,
@@ -171,6 +172,8 @@ export class HermesSourceRuntime {
         ? request.metadata.selectedAgentProfileId.trim()
         : '';
     const connectorScope = getConnectorScope(request.metadata);
+    const enabledInfoSources = getEnabledInfoSourceNames(request.metadata, connectorScope.enabledConnectorKeys);
+    const enabledCompetitortools = getEnabledCompetitortoolNames(request.metadata, connectorScope.enabledConnectorKeys);
     const personalDatatoolNames = await getPersonalDatatoolNames(this.config, investorId, request.userId, connectorScope);
     const profileLoadStartedAtMs = Date.now();
     const profileSnapshot = await this.profileStore.getSnapshot(request.userId);
@@ -179,6 +182,7 @@ export class HermesSourceRuntime {
     const runtimeMessage = buildRuntimeMessage({
       message: cleanContext.message,
       renderedProfile: combinedProfile,
+      selectedAgentProfileId,
     });
     await emit('hermes.profile.loaded', {
       profileStorePath: this.config.profileStorePath,
@@ -261,11 +265,14 @@ export class HermesSourceRuntime {
         threadId: request.threadId || 'default',
         currentUserMessage,
         selectedAgentProfileId,
-        enabledCompetitortools: getEnabledCompetitortoolNames(request.metadata, connectorScope.enabledConnectorKeys),
+        enabledCompetitortools,
+        enabledInfoSources,
+        connectorScope,
         personalDatatoolNames,
         hermesHome,
         codexHome,
         workspace,
+        statePath: runtimePaths.statePath || '',
         codexModelSelection,
       }, {
         emit,
@@ -339,45 +346,19 @@ export class HermesSourceRuntime {
     const sessionId = extractSessionId(combinedOutput);
     const codexOutcome = await extractLatestCodexOutcome(codexHome, startedAtMs);
     if (codexOutcome.turnAborted && !codexOutcome.taskComplete) {
-      const message = [
-        'Codex turn aborted before producing a task_complete final answer',
-        codexOutcome.abortReason ? `reason=${codexOutcome.abortReason}` : '',
-      ].filter(Boolean).join('; ');
       await emit('codex.turn_aborted.detected', {
         reason: codexOutcome.abortReason || null,
         file: codexOutcome.file || null,
         lastAgentMessage: codexOutcome.reply ? truncate(codexOutcome.reply, 4000) : null,
+        handledByHermes: true,
       });
-      const diskBytes = await this.calculateSandboxDiskBytes(runtimePaths);
-      await writeSandboxState(runtimePaths, {
-        status: 'ERROR',
-        activeRunId: null,
-        lastErrorAt: nowIso(),
-        error: message,
-        hermesSessionId: sessionId || previousHermesSessionId || null,
-      });
-      await this.syncSandboxControlPlane({
-        request,
-        runtimePaths,
-        runId,
-        status: 'ERROR',
-        activeSessionId: sessionId || previousHermesSessionId || null,
-        diskBytes,
-        error: message,
-        emit,
-        metadata: {
-          phase: 'codex_turn_aborted',
-          codexRolloutFile: codexOutcome.file || null,
-          codexAbortReason: codexOutcome.abortReason || null,
-        },
-      });
-      throw new Error(message);
     }
     const codexReply = codexOutcome.reply;
-    const reply = normalizeAssistantReply(codexReply || extractReply(combinedOutput).trim());
+    const reply = normalizeAssistantReply(extractReply(combinedOutput).trim());
     await emit('hermes.source_runtime.completed', {
       sessionId: sessionId || null,
       codexReply: codexReply || null,
+      hermesReply: reply || null,
       codexTaskComplete: codexOutcome.taskComplete,
       codexTurnAborted: codexOutcome.turnAborted,
       stdout: truncate(result.stdout, 20000),
@@ -458,6 +439,9 @@ export class HermesSourceRuntime {
 
   private async prepareHomes(paths: RuntimePaths, codexModelSelection: CodexModelSelection) {
     await prepareRuntimeDirectories(paths);
+    const codexMcpServerPath = await resolveCodexMcpServerPath();
+    const codexMcpEnvLines = buildCodexMcpEnvEntries(this.config, codexModelSelection)
+      .map(([key, value]) => `      ${key}: ${yamlString(value)}`);
 
     await fs.writeFile(
       path.join(paths.hermesHome, 'config.yaml'),
@@ -465,10 +449,26 @@ export class HermesSourceRuntime {
         'model:',
         '  provider: openrouter',
         `  default: ${yamlString(this.config.hermesModel)}`,
-        '  openai_runtime: codex_app_server',
         '',
         'terminal:',
         `  cwd: ${yamlString(paths.workspace)}`,
+        '',
+        'mcp_servers:',
+        '  altselfs_codex:',
+        '    enabled: true',
+        `    command: ${yamlString(process.execPath)}`,
+        '    args:',
+        `      - ${yamlString(codexMcpServerPath)}`,
+        '    timeout: 900',
+        '    connect_timeout: 30',
+        '    supports_parallel_tool_calls: false',
+        '    tools:',
+        '      include:',
+        '        - codex_agent',
+        '      resources: false',
+        '      prompts: false',
+        '    env:',
+        ...codexMcpEnvLines,
         '',
         'display:',
         '  tool_activity: compact',
@@ -613,10 +613,13 @@ export class HermesSourceRuntime {
       currentUserMessage: string;
       selectedAgentProfileId: string;
       enabledCompetitortools: string[];
+      enabledInfoSources: string[];
+      connectorScope: ReturnType<typeof getConnectorScope>;
       personalDatatoolNames: string[];
       hermesHome: string;
       codexHome: string;
       workspace: string;
+      statePath: string;
       codexModelSelection: CodexModelSelection;
     },
     timing?: {
@@ -652,15 +655,19 @@ export class HermesSourceRuntime {
           ALTSELFS_INVESTOR_ID: paths.investorId,
           ALTSELFS_THREAD_ID: paths.threadId,
           ALTSELFS_WORKSPACE: paths.workspace,
+          ALTSELFS_STATE_PATH: paths.statePath,
+          ALTSELFS_CODEX_HOME: paths.codexHome,
+          ALTSELFS_SELECTED_AGENT_PROFILE_ID: paths.selectedAgentProfileId,
+          ALTSELFS_CONNECTOR_SCOPE_JSON: JSON.stringify(paths.connectorScope),
+          ALTSELFS_ENABLED_INFO_SOURCES_JSON: JSON.stringify(paths.enabledInfoSources),
+          ALTSELFS_CODEX_MODEL: paths.codexModelSelection.model || '',
+          ALTSELFS_CODEX_MODEL_PROVIDER: paths.codexModelSelection.provider || '',
           ALTSELFS_HERMES_TIMING: '1',
           ALTSELFS_CODEX_TIMING: '1',
           ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: this.config.disableLocalEnvironmentForGeneral ? '1' : '0',
           ALTSELFS_CODEX_PERSONALITY: 'pragmatic',
           ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL: this.config.sandboxExecEnabled ? '1' : '0',
-          ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS:
-            paths.selectedAgentProfileId === 'codex-competitive-intelligence'
-              ? paths.enabledCompetitortools.join(',')
-              : '0',
+          ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS: paths.enabledCompetitortools.join(','),
           ALTSELFS_CODEX_PERSONAL_DATA_DYNAMIC_TOOLS: paths.personalDatatoolNames.join(','),
           ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL:
             paths.codexModelSelection.provider === 'openai' ? '0' : '1',
@@ -826,6 +833,24 @@ function tomlString(value: string) {
   return JSON.stringify(value);
 }
 
+async function resolveCodexMcpServerPath() {
+  const compiledNextToRuntime = fileURLToPath(new URL('./codex-agent-mcp-server.js', import.meta.url));
+  if (await fileExists(compiledNextToRuntime)) return compiledNextToRuntime;
+
+  const builtFromServiceRoot = path.resolve(process.cwd(), 'dist', 'hermes', 'codex-agent-mcp-server.js');
+  if (await fileExists(builtFromServiceRoot)) return builtFromServiceRoot;
+  return compiledNextToRuntime;
+}
+
+async function fileExists(file: string) {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function mergeNoProxy(value: string) {
   const entries = new Set(
     value
@@ -839,6 +864,88 @@ function mergeNoProxy(value: string) {
   return Array.from(entries).join(',');
 }
 
+function buildCodexMcpEnvEntries(config: ServerConfig, selection: CodexModelSelection) {
+  const entries = new Map<string, string>();
+  const set = (key: string, value: string | undefined) => {
+    if (value !== undefined && value !== '') entries.set(key, value);
+  };
+  const refIfPresent = (key: string) => {
+    if (process.env[key]?.trim()) set(key, `\${${key}}`);
+  };
+
+  set('ALTSELFS_RUN_ID', '${ALTSELFS_RUN_ID}');
+  set('ALTSELFS_USER_ID', '${ALTSELFS_USER_ID}');
+  set('ALTSELFS_INVESTOR_ID', '${ALTSELFS_INVESTOR_ID}');
+  set('ALTSELFS_THREAD_ID', '${ALTSELFS_THREAD_ID}');
+  set('ALTSELFS_WORKSPACE', '${ALTSELFS_WORKSPACE}');
+  set('ALTSELFS_STATE_PATH', '${ALTSELFS_STATE_PATH}');
+  set('ALTSELFS_CODEX_HOME', '${ALTSELFS_CODEX_HOME}');
+  set('ALTSELFS_SELECTED_AGENT_PROFILE_ID', '${ALTSELFS_SELECTED_AGENT_PROFILE_ID}');
+  set('ALTSELFS_CONNECTOR_SCOPE_JSON', '${ALTSELFS_CONNECTOR_SCOPE_JSON}');
+  set('ALTSELFS_ENABLED_INFO_SOURCES_JSON', '${ALTSELFS_ENABLED_INFO_SOURCES_JSON}');
+  set('ALTSELFS_CODEX_TIMING', '${ALTSELFS_CODEX_TIMING}');
+  set('ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL', '${ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL}');
+  set('ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS', '${ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS}');
+  set('ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL', '${ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL}');
+  set('CODEX_HOME', '${CODEX_HOME}');
+
+  set('CODEX_BIN', config.codexBin);
+  set('CODEX_MODEL', selection.model || config.codexModel || '');
+  set('CODEX_MODEL_PROVIDER', selection.provider || config.codexModelProvider || '');
+  set('ALTSELFS_CODEX_MODEL', selection.model || config.codexModel || '');
+  set('ALTSELFS_CODEX_MODEL_PROVIDER', selection.provider || config.codexModelProvider || '');
+  set('CODEX_OPENAI_AUTH_JSON_PATH', config.codexOpenAiAuthJsonPath || '');
+  set('CODEX_OPENAI_PROXY_URL', config.codexOpenAiProxyUrl || '');
+  set('CODEX_WEB_SEARCH_MODE', config.codexWebSearchMode);
+  set('OPENROUTER_BASE_URL', config.openRouterBaseUrl);
+  set('OPENROUTER_API_KEY_ENV', config.openRouterApiKeyEnv);
+  set('OPENROUTER_APP_TITLE', config.openRouterAppTitle);
+  set('RAPIDAPI_KEY_ENV', config.rapidApiKeyEnv);
+  set('RAPIDAPI_REQUEST_TIMEOUT_MS', String(config.rapidApiRequestTimeoutMs));
+  set('SERPAPI_API_KEY_ENV', config.serpApiKeyEnv);
+  set('SERPER_API_KEY_ENV', config.serperApiKeyEnv);
+  set('GOOGLE_CSE_API_KEY_ENV', config.googleCseApiKeyEnv);
+  set('GOOGLE_CSE_ID_ENV', config.googleCseIdEnv);
+  set('BING_SEARCH_API_KEY_ENV', config.bingSearchApiKeyEnv);
+  set('BING_SEARCH_ENDPOINT', config.bingSearchEndpoint);
+  set('WEB_SEARCH_PROVIDER', config.webSearchProvider);
+  set('WEB_SEARCH_TIMEOUT_MS', String(config.webSearchTimeoutMs));
+  set('OUTBOUND_PROXY_URL', config.outboundProxyUrl || '');
+  set('LARK_CLI_BIN', config.larkCliBin);
+  set('LARK_CLI_HOME_ROOT', config.larkCliHomeRoot);
+  set('LARK_CLI_TIMEOUT_MS', String(config.larkCliTimeoutMs));
+  set('LARK_CLI_PROXY_URL', config.larkCliProxyUrl || '');
+  set('SANDBOX_EXEC_ENABLED', config.sandboxExecEnabled ? 'true' : 'false');
+  set('SANDBOX_DOCKER_SOCKET_PATH', config.sandboxExecDockerSocketPath);
+  set('SANDBOX_EXEC_IMAGE', config.sandboxExecImage);
+  set('SANDBOX_EXEC_NETWORK_ENABLED', config.sandboxExecNetworkEnabled ? 'true' : 'false');
+  set('SANDBOX_EXEC_PROXY_URL', config.sandboxExecProxyUrl || '');
+  set('STORAGE_BACKEND', config.storageBackend);
+  set('ALTSELFS_AGENT_ENV', config.env);
+
+  refIfPresent('NODE_ENV');
+  refIfPresent('DATABASE_URL');
+  refIfPresent('AGENT_CONTEXT_DATABASE_URL');
+  refIfPresent('CREDENTIAL_VAULT_MASTER_KEY_FILE');
+  refIfPresent('CREDENTIAL_VAULT_MASTER_KEY_BASE64');
+  refIfPresent('CREDENTIAL_VAULT_KEY_VERSION');
+  refIfPresent(config.openRouterApiKeyEnv);
+  refIfPresent(config.rapidApiKeyEnv);
+  refIfPresent(config.serpApiKeyEnv);
+  refIfPresent(config.serperApiKeyEnv);
+  refIfPresent(config.googleCseApiKeyEnv);
+  refIfPresent(config.googleCseIdEnv);
+  refIfPresent(config.bingSearchApiKeyEnv);
+  refIfPresent('RAPIDAPI_QUOTA_SNAPSHOT_PATH');
+  refIfPresent('FEISHU_APP_ID');
+  refIfPresent('FEISHU_APP_SECRET');
+  refIfPresent('GOOGLE_CLIENT_ID');
+  refIfPresent('GOOGLE_CLIENT_SECRET');
+  refIfPresent('META_GRAPH_API_VERSION');
+
+  return Array.from(entries.entries()).sort(([a], [b]) => a.localeCompare(b));
+}
+
 const COMPETITOR_INFO_SOURCE_TO_TOOL: Record<string, string> = {
   similarweb_api1: 'altselfs_similarweb_api1',
   semrush13: 'altselfs_semrush13',
@@ -847,6 +954,14 @@ const COMPETITOR_INFO_SOURCE_TO_TOOL: Record<string, string> = {
 };
 
 function getEnabledCompetitortoolNames(metadata: Record<string, unknown> | undefined, enabledConnectorKeys?: string[]) {
+  const providers = getEnabledInfoSourceNames(metadata, enabledConnectorKeys);
+  const names = providers
+    .map((provider) => COMPETITOR_INFO_SOURCE_TO_TOOL[provider])
+    .filter((item): item is string => Boolean(item));
+  return Array.from(new Set(names));
+}
+
+function getEnabledInfoSourceNames(metadata: Record<string, unknown> | undefined, enabledConnectorKeys?: string[]) {
   const value = metadata?.enabledInfoSources;
   if (!Array.isArray(value)) return [];
   const allowed = enabledConnectorKeys ? new Set(enabledConnectorKeys) : null;
@@ -857,7 +972,6 @@ function getEnabledCompetitortoolNames(metadata: Record<string, unknown> | undef
       return typeof item.provider === 'string' ? item.provider.toLowerCase() : null;
     })
     .filter((provider) => !allowed || (provider ? allowed.has(provider) : false))
-    .map((provider) => (provider ? COMPETITOR_INFO_SOURCE_TO_TOOL[provider] : null))
     .filter((item): item is string => Boolean(item));
   return Array.from(new Set(names));
 }
@@ -906,9 +1020,60 @@ async function getPersonalDatatoolNames(
   }
 }
 
-function buildRuntimeMessage(input: { message: string; renderedProfile: string }) {
-  if (!input.renderedProfile.trim()) return input.message;
+function buildRuntimeMessage(input: { message: string; renderedProfile: string; selectedAgentProfileId?: string }) {
+  const runtimeContract = [
+    'Altselfs runtime contract:',
+    '',
+    'Role split:',
+    '- You are Hermes, the primary cognitive, planning, emotional-intelligence, and user-facing loop for this chat.',
+    '- Hermes owns the user relationship: intent understanding, tone, clarification, memory/profile reasoning, judgment, prioritization, final synthesis, and the final answer.',
+    '- Codex is the execution agent under Hermes. Treat Codex as hands, not the brain. It should execute bounded tasks, gather evidence, use tools, inspect available workspace context, and return results to Hermes.',
+    '- The user is talking to Hermes. Do not present Codex as a separate chatbot unless it matters for transparency.',
+    '',
+    'What Codex can do when you call `mcp_altselfs_codex_codex_agent`:',
+    '- Codex runs through the native Codex app-server loop, using the Codex session bound to this Altselfs thread. It keeps its own Codex JSONL/session continuity and native compaction behavior across delegated execution turns.',
+    '- Codex can use current/public web research through its available web capability: native `web.run` on OpenAI-backed Codex, or the registered `altselfs_web_search` dynamic tool on non-OpenAI-backed Codex.',
+    '- Codex can use enabled private connected-account tools when the user asks for authorized personal or business data, such as Gmail, Feishu/Lark messages/docs/calendar, Meta/Instagram/Facebook data, and connected-account discovery.',
+    '- Codex can use enabled competitive-intelligence data tools, including RapidAPI-backed Similarweb/Semrush/domain-metric style tools, when the task needs traffic, SEO, keyword, backlink, acquisition, market, or competitor evidence.',
+    '- Codex can use deterministic execution tools when enabled, such as sandboxed command execution for calculation, parsing, scraping, data cleanup, or small file transformations. If local execution or a needed tool is unavailable, Codex should report that limitation instead of pretending it used it.',
+    '- Codex can work with this thread workspace and artifacts only through the files/tools made available to its Codex session. Hermes-only conversational context is not automatically visible to Codex.',
+    '',
+    'When to answer directly as Hermes:',
+    '- Answer directly for normal conversation, coaching, judgment, emotional nuance, preference/profile updates, memory/profile questions, strategy discussion that does not need fresh evidence, and reasoning-only tasks.',
+    '- Ask a concise clarification question when the user intent is underspecified and tool execution would be premature.',
+    '',
+    'When to delegate to Codex:',
+    '- Call Codex when the turn needs current external facts, public web research, private connected-account data, workspace/artifact inspection, competitive-intelligence tooling, deterministic computation, API/tool execution, or multi-step operational work.',
+    '- You may call Codex multiple times in one Hermes turn if that is genuinely useful, for example gather evidence first, then ask Codex to verify a narrow follow-up. Keep the loop bounded and avoid unnecessary calls.',
+    '- Choose an appropriate Codex mode in the tool arguments, such as `general`, `research`, `private_data`, `competitive_intelligence`, `artifact_review`, `calculation`, or `coding_execution`.',
+    '',
+    'How to delegate:',
+    '- Send Codex a concrete task with a clear success condition. Include target entities, dates, accounts, domains, files, or constraints that matter.',
+    '- Put necessary Hermes-only background in the Codex `task` or `hermesContext` field. Keep it focused; do not dump the full chat history, full profile, or irrelevant emotional/contextual material.',
+    '- Use `expectedReturn` only to guide the shape of Codex output when helpful. Do not force JSON or rigid structure unless Hermes needs machine-readable data.',
+    '- Do not ask Codex to make the final user-facing judgment when Hermes should synthesize. Codex should return findings, evidence, execution results, limitations, or a draft when requested.',
+    '',
+    'After Codex returns:',
+    '- Treat Codex output as tool evidence, not as the automatic final response. Decide whether to answer, clarify, call Codex again, or add Hermes-level synthesis.',
+    '- In the final answer, be transparent about important limitations and whether evidence came from connected tools, public web, workspace artifacts, or inference.',
+    '- Never claim that Hermes or Codex searched, read private accounts, used a platform, inspected files, or ran tools unless the corresponding Codex/tool call actually happened.',
+    input.selectedAgentProfileId
+      ? `- Router profile suggestion for this turn: ${input.selectedAgentProfileId}. Treat it as advisory; you still decide whether and how to call Codex.`
+      : '- No router profile was selected for this turn; decide directly.',
+  ].join('\n');
+
+  if (!input.renderedProfile.trim()) {
+    return [
+      runtimeContract,
+      '',
+      'Current user message:',
+      input.message,
+    ].join('\n');
+  }
+
   return [
+    runtimeContract,
+    '',
     'Use the following Altselfs user profile as persistent context for this Hermes run.',
     'Do not treat the profile as a new user request.',
     '',

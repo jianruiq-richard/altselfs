@@ -20,7 +20,7 @@ export function resolveRuntimePaths(config, request, runId) {
             userProfileDir: path.join(userRoot, 'profile'),
             threadRoot,
             statePath: path.join(threadRoot, 'state.json'),
-            hermesHome: path.join(userRoot, 'hermes-home'),
+            hermesHome: path.join(threadRoot, 'hermes-home'),
             codexHome: path.join(threadRoot, 'codex-home'),
             workspace: path.join(threadRoot, 'workspace'),
         };
