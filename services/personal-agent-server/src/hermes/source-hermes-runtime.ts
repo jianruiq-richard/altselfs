@@ -1058,8 +1058,8 @@ function buildRuntimeMessage(input: { message: string; renderedProfile: string; 
     '- In the final answer, be transparent about important limitations and whether evidence came from connected tools, public web, workspace artifacts, or inference.',
     '- Never claim that Hermes or Codex searched, read private accounts, used a platform, inspected files, or ran tools unless the corresponding Codex/tool call actually happened.',
     input.selectedAgentProfileId
-      ? `- Router profile suggestion for this turn: ${input.selectedAgentProfileId}. Treat it as advisory; you still decide whether and how to call Codex.`
-      : '- No router profile was selected for this turn; decide directly.',
+      ? `- Host-provided default Codex mode/profile for this turn: ${input.selectedAgentProfileId}. Treat it as advisory; you still decide whether and how to call Codex.`
+      : '- No default Codex mode/profile was selected for this turn; decide directly.',
   ].join('\n');
 
   if (!input.renderedProfile.trim()) {
@@ -1134,7 +1134,7 @@ function buildCodexDeveloperInstructions(input: {
       : 'When public web research is needed, use the registered altselfs_web_search tool.',
     'Answer in the user language unless the user asks otherwise.',
     '',
-    `Selected agent profile from Hermes Router: ${input.selectedAgentProfileId || 'main'}.`,
+    `Default Codex mode/profile from host: ${input.selectedAgentProfileId || 'general'}.`,
   ];
   const personalDatatoolInstruction = input.personalDatatoolNames?.length
     ? [
@@ -1153,7 +1153,7 @@ function buildCodexDeveloperInstructions(input: {
     instructions.push(
       '',
       'Altselfs codex-competitive-intelligence policy:',
-      '- You are the competitive intelligence analysis profile selected by Hermes Router for this turn.',
+      '- You are the competitive intelligence analysis profile requested by Hermes or the host for this turn.',
       '- Answer questions about competitors, competitive landscape, user/traffic/revenue estimates, growth rate, acquisition channels, SEO, PPC, keywords, backlinks, Semrush, Similarweb, market share, and growth intelligence.',
       ...artifactAccessPolicy,
       '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.',
@@ -1177,7 +1177,7 @@ function buildCodexDeveloperInstructions(input: {
     instructions.push(
       '',
       'Altselfs codex-general policy:',
-      '- You are the general personal agent profile selected by Hermes Router for this turn.',
+      '- You are the general personal execution profile requested by Hermes or the host for this turn.',
       ...artifactAccessPolicy,
       '- Use conversation and reasoning for tasks that do not need external data.',
       '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',

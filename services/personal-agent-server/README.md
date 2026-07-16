@@ -9,7 +9,7 @@ Design:
 Altselfs Personal Main Agent
   - user memory / profile snapshots
   - session and thread ownership
-  - agent profile registry and LLM routing
+  - agent profile registry and legacy LLM routing fallback
   - memory write suggestions
   - trace persistence boundary
 
@@ -30,9 +30,13 @@ Default profiles:
 - `codex-engineering`: repository inspection, code editing, shell commands,
   tests, builds, debugging, and deployment work.
 
-The Hermes router LLM sees the registered profiles and returns a structured
-routing decision. The raw router request/response is emitted in `main.router.raw`
-for trace inspection.
+When `HERMES_SOURCE_RUNTIME_ENABLED=true`, the Hermes source runtime is the
+primary loop and no pre-Hermes router LLM decision is made. Hermes decides
+whether to answer directly or call Codex as a tool.
+
+The legacy non-source runtime path can still use the Hermes router LLM to return
+a structured routing decision. Its raw request/response is emitted in
+`main.router.raw` for trace inspection.
 
 ## MVP Endpoints
 

@@ -37,30 +37,15 @@ export class PersonalMainAgent {
                 })),
             },
         });
-        const routerDecision = await this.router.decide({
-            userId: request.userId,
-            threadId,
-            message: currentUserMessage,
-            memorySnapshot,
-            availableProfiles,
-        });
-        const effectiveDecision = this.sourceRuntime
-            ? routerDecision
-            : enforceHermesBoundary(routerDecision, currentUserMessage, availableProfiles);
-        await emitRouterDecision(effectiveDecision, emit);
         if (this.sourceRuntime) {
-            const selectedProfile = effectiveDecision.agentProfileId
-                ? availableProfiles.find((profile) => profile.id === effectiveDecision.agentProfileId)
-                : undefined;
+            const runtimeDecision = buildSourceRuntimeDecision();
             await emit({
                 type: 'main.route.selected',
                 timestamp: nowIso(),
                 payload: {
-                    route: selectedProfile?.runtimeId || 'main',
-                    agentProfileId: effectiveDecision.agentProfileId,
-                    runtimeId: effectiveDecision.runtimeId,
-                    reason: effectiveDecision.reason,
-                    confidence: effectiveDecision.confidence,
+                    route: 'main',
+                    reason: runtimeDecision.reason,
+                    confidence: runtimeDecision.confidence,
                     sourceRuntime: true,
                     availableAgents: this.registry.list(),
                 },
@@ -70,10 +55,10 @@ export class PersonalMainAgent {
                 threadId,
                 metadata: {
                     ...(request.metadata || {}),
-                    selectedAgentProfileId: effectiveDecision.agentProfileId || null,
-                    selectedAgentRuntimeId: effectiveDecision.runtimeId || null,
-                    selectedAgentProfile: selectedProfile || null,
-                    routerDecision: effectiveDecision,
+                    selectedAgentProfileId: null,
+                    selectedAgentRuntimeId: null,
+                    selectedAgentProfile: null,
+                    runtimeDecision,
                 },
                 onEvent: emit,
             });
@@ -86,6 +71,15 @@ export class PersonalMainAgent {
                 memoryWrites,
             };
         }
+        const routerDecision = await this.router.decide({
+            userId: request.userId,
+            threadId,
+            message: currentUserMessage,
+            memorySnapshot,
+            availableProfiles,
+        });
+        const effectiveDecision = enforceHermesBoundary(routerDecision, currentUserMessage, availableProfiles);
+        await emitRouterDecision(effectiveDecision, emit);
         const route = this.selectRoute(effectiveDecision);
         await emit({
             type: 'main.route.selected',
@@ -170,6 +164,14 @@ function enforceHermesBoundary(decision, message, availableProfiles) {
         runtimeId: defaultProfile.runtimeId,
         reason: `Hermes boundary override: non-memory/non-profile work is delegated to ${defaultProfile.id}. Original router reason: ${decision.reason}`,
         confidence: Math.max(decision.confidence, 0.75),
+    };
+}
+function buildSourceRuntimeDecision() {
+    return {
+        route: 'main',
+        reason: 'Hermes source runtime is the primary loop and decides whether to answer directly or call Codex as a tool.',
+        confidence: 1,
+        needsClarification: false,
     };
 }
 function selectBoundaryOverrideProfile(message, availableProfiles) {
