@@ -12,6 +12,7 @@ RUN touch README.md \
   && python3 -m venv /opt/altselfs/hermes-agent/.venv \
   && /opt/altselfs/hermes-agent/.venv/bin/pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com -U pip setuptools wheel \
   && /opt/altselfs/hermes-agent/.venv/bin/pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com -e '/opt/altselfs/hermes-agent[acp]' \
+  && /opt/altselfs/hermes-agent/.venv/bin/pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com 'mcp==1.28.1' \
   && printf '%s\n' \
     '#!/bin/sh' \
     'set -eu' \

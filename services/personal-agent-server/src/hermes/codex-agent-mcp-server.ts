@@ -75,6 +75,7 @@ const TOOL_NAME = 'codex_agent';
 
 class McpStdioServer {
   private buffer = Buffer.alloc(0);
+  private outputMode: 'content-length' | 'jsonl' = 'content-length';
 
   start() {
     process.stdin.on('data', (chunk: Buffer) => this.onData(chunk));
@@ -98,21 +99,37 @@ class McpStdioServer {
   }
 
   private readMessage(): McpMessage | null {
-    const headerEnd = this.buffer.indexOf('\r\n\r\n');
-    if (headerEnd === -1) return null;
-    const header = this.buffer.subarray(0, headerEnd).toString('utf8');
-    const lengthMatch = header.match(/content-length:\s*(\d+)/i);
-    if (!lengthMatch) {
-      this.buffer = this.buffer.subarray(headerEnd + 4);
-      return null;
+    while (true) {
+      if (this.buffer.length === 0) return null;
+
+      const prefix = this.buffer.subarray(0, Math.min(this.buffer.length, 32)).toString('utf8').toLowerCase();
+      if (prefix.startsWith('content-length:')) {
+        const headerEnd = this.buffer.indexOf('\r\n\r\n');
+        if (headerEnd === -1) return null;
+        const header = this.buffer.subarray(0, headerEnd).toString('utf8');
+        const lengthMatch = header.match(/content-length:\s*(\d+)/i);
+        if (!lengthMatch) {
+          this.buffer = this.buffer.subarray(headerEnd + 4);
+          continue;
+        }
+        const length = Number(lengthMatch[1]);
+        const bodyStart = headerEnd + 4;
+        const bodyEnd = bodyStart + length;
+        if (this.buffer.length < bodyEnd) return null;
+        const body = this.buffer.subarray(bodyStart, bodyEnd).toString('utf8');
+        this.buffer = this.buffer.subarray(bodyEnd);
+        this.outputMode = 'content-length';
+        return JSON.parse(body) as McpMessage;
+      }
+
+      const lineEnd = this.buffer.indexOf('\n');
+      if (lineEnd === -1) return null;
+      const line = this.buffer.subarray(0, lineEnd).toString('utf8').trim();
+      this.buffer = this.buffer.subarray(lineEnd + 1);
+      if (!line) continue;
+      this.outputMode = 'jsonl';
+      return JSON.parse(line) as McpMessage;
     }
-    const length = Number(lengthMatch[1]);
-    const bodyStart = headerEnd + 4;
-    const bodyEnd = bodyStart + length;
-    if (this.buffer.length < bodyEnd) return null;
-    const body = this.buffer.subarray(bodyStart, bodyEnd).toString('utf8');
-    this.buffer = this.buffer.subarray(bodyEnd);
-    return JSON.parse(body) as McpMessage;
   }
 
   private async handleMessage(message: McpMessage) {
@@ -213,12 +230,12 @@ class McpStdioServer {
 
   private sendResult(id: McpMessage['id'], result: unknown) {
     if (id === undefined || id === null) return;
-    sendFrame({ jsonrpc: '2.0', id, result });
+    sendFrame({ jsonrpc: '2.0', id, result }, this.outputMode);
   }
 
   private sendError(id: McpMessage['id'], code: number, message: string) {
     if (id === undefined || id === null) return;
-    sendFrame({ jsonrpc: '2.0', id, error: { code, message } });
+    sendFrame({ jsonrpc: '2.0', id, error: { code, message } }, this.outputMode);
   }
 }
 
@@ -685,8 +702,12 @@ function readProtocolVersion(params: unknown) {
   return typeof params.protocolVersion === 'string' ? params.protocolVersion : '';
 }
 
-function sendFrame(payload: unknown) {
+function sendFrame(payload: unknown, mode: 'content-length' | 'jsonl' = 'content-length') {
   const body = Buffer.from(JSON.stringify(payload), 'utf8');
+  if (mode === 'jsonl') {
+    process.stdout.write(`${body.toString('utf8')}\n`, 'utf8');
+    return;
+  }
   process.stdout.write(`Content-Length: ${body.length}\r\n\r\n`, 'utf8');
   process.stdout.write(body);
 }

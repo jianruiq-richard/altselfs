@@ -9,7 +9,6 @@ import { createPersonalDataDynamictools } from '../tools/personal-data.js';
 import { LocalProfileStore } from '../profile-store.js';
 import { createRunCancelledError, isAgentRunCancelledError, isRunCancelled, registerActiveRun, unregisterActiveRun, } from '../run-control.js';
 import { calculateDirectoryBytes, prepareRuntimeDirectories, readSandboxState, resolveRuntimePaths, writeSandboxState, } from '../sandbox-runtime.js';
-import { acquireSharedOpenAiAuthLock } from '../codex/openai-auth-lock.js';
 import { id, isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { resolveHermesApiKey, resolveHermesModelSelection } from './llm-provider.js';
 export class HermesSourceRuntime {
@@ -207,23 +206,7 @@ export class HermesSourceRuntime {
             startedAtMs,
             emit,
         });
-        let codexOpenAiAuthLock;
         try {
-            if (codexModelSelection.provider === 'openai') {
-                const lockStartedAtMs = Date.now();
-                codexOpenAiAuthLock = await acquireSharedOpenAiAuthLock({
-                    codexHome,
-                    sourcePath: this.config.codexOpenAiAuthJsonPath,
-                });
-                if (codexOpenAiAuthLock) {
-                    await emit('codex.openai_auth.lock_acquired', {
-                        authPath: codexOpenAiAuthLock.authPath,
-                        sourcePath: codexOpenAiAuthLock.sourcePath,
-                        durationMs: Date.now() - lockStartedAtMs,
-                        sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
-                    });
-                }
-            }
             result = await this.spawnHermes(args, {
                 runId,
                 userId: request.userId,
@@ -289,27 +272,6 @@ export class HermesSourceRuntime {
                 metadata: { phase: 'error' },
             });
             throw error;
-        }
-        finally {
-            if (codexOpenAiAuthLock) {
-                const releaseStartedAtMs = Date.now();
-                try {
-                    await codexOpenAiAuthLock.release();
-                    await emit('codex.openai_auth.lock_released', {
-                        authPath: codexOpenAiAuthLock.authPath,
-                        sourcePath: codexOpenAiAuthLock.sourcePath,
-                        durationMs: Date.now() - releaseStartedAtMs,
-                        sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
-                    });
-                }
-                catch (error) {
-                    await emit('codex.openai_auth.lock_release_failed', {
-                        authPath: codexOpenAiAuthLock.authPath,
-                        sourcePath: codexOpenAiAuthLock.sourcePath,
-                        error: error instanceof Error ? error.message : String(error),
-                    });
-                }
-            }
         }
         await rolloutBridge.stop();
         const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join('\n');

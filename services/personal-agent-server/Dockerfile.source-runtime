@@ -64,6 +64,7 @@ RUN ALTSELFS_HERMES_SOURCE_ROOT=/opt/altselfs/hermes-agent node /tmp/patch-herme
 RUN python3 -m venv /opt/altselfs/hermes-agent/.venv \
   && /opt/altselfs/hermes-agent/.venv/bin/pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com -U pip \
   && /opt/altselfs/hermes-agent/.venv/bin/pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com -e '/opt/altselfs/hermes-agent[acp]' \
+  && /opt/altselfs/hermes-agent/.venv/bin/pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com 'mcp==1.28.1' \
   && printf '%s\n' \
     '#!/bin/sh' \
     'set -eu' \

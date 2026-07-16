@@ -403,7 +403,11 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           let eventIndex = 0;
           const result = await agent.startTurn({
             ...turnRequest,
-            metadata: { ...(turnRequest.metadata || {}), runId: persisted.runId },
+            metadata: {
+              ...(turnRequest.metadata || {}),
+              runId: persisted.runId,
+              currentMessageId: persisted.userMessageId,
+            },
             onEvent: async (event) => {
               const index = eventIndex;
               eventIndex += 1;
@@ -580,7 +584,11 @@ function streamTurnStart(
       }, 15_000);
       const result = await agent.startTurn({
         ...request,
-        metadata: { ...(request.metadata || {}), runId: persisted.runId },
+        metadata: {
+          ...(request.metadata || {}),
+          runId: persisted.runId,
+          currentMessageId: persisted.userMessageId,
+        },
         onEvent: async (event) => {
           const index = eventIndex;
           eventIndex += 1;
