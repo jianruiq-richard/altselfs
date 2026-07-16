@@ -44,10 +44,12 @@ type McpMessage = {
 
 type CodexToolArgs = {
   task: string;
-  mode?: string;
+  mode?: CodexDelegationMode;
   expectedReturn?: string;
   hermesContext?: string;
 };
+
+type CodexDelegationMode = 'general' | 'competitive_intelligence';
 
 type RuntimeEnv = {
   runId: string;
@@ -142,7 +144,7 @@ class McpStdioServer {
           {
             name: TOOL_NAME,
             description:
-              'Delegate an execution, research, private-data, or tool-use step to the thread-bound Codex agent. Codex uses its native app-server session and returns text to Hermes; Hermes decides the final user reply.',
+              'Delegate an execution, research, private-data, competitive-intelligence, or tool-use step to the thread-bound Codex agent. Codex uses its native app-server session and returns text to Hermes; Hermes decides the final user reply.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -152,8 +154,9 @@ class McpStdioServer {
                 },
                 mode: {
                   type: 'string',
+                  enum: ['general', 'competitive_intelligence'],
                   description:
-                    'Optional execution profile, for example general, competitive_intelligence, research, coding, private_data, or calculation.',
+                    'Optional execution profile. Use general for normal execution, research, private-data, artifact, calculation, or coding tasks. Use competitive_intelligence for competitor, market, traffic, SEO, keyword, backlink, acquisition, user, revenue, or growth analysis.',
                 },
                 expectedReturn: {
                   type: 'string',
@@ -227,12 +230,13 @@ async function runCodexAgentTool(argumentsValue: unknown) {
   const modelSelection = resolveCodexModelSelection(config, selectedModel);
   const localEnvironmentDisabled = config.disableLocalEnvironmentForGeneral;
   const dynamicTools = await buildDynamicTools(config, runtime, modelSelection);
+  const requestedMode = toolArgs.mode || normalizeCodexDelegationMode(runtime.selectedAgentProfileId) || 'general';
   const developerInstructions = buildCodexDeveloperInstructions({
     config,
     runtime,
     modelSelection,
     dynamicToolNames: dynamicTools.names,
-    requestedMode: toolArgs.mode || runtime.selectedAgentProfileId,
+    requestedMode,
     currentTask: toolArgs.task,
   });
   const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
@@ -365,7 +369,7 @@ async function runCodexAgentTool(argumentsValue: unknown) {
         responsesapiClientMetadata: {
           altselfs_run_id: runtime.runId,
           altselfs_thread_id: runtime.threadId,
-          altselfs_codex_mode: toolArgs.mode || runtime.selectedAgentProfileId || 'general',
+          altselfs_codex_mode: requestedMode,
         },
       },
       20_000
@@ -377,7 +381,7 @@ async function runCodexAgentTool(argumentsValue: unknown) {
     await writeStatePatch(runtime.statePath, {
       codexSessionId: codexThreadId,
       lastCodexToolCompletedAt: nowIso(),
-      lastCodexToolMode: toolArgs.mode || runtime.selectedAgentProfileId || 'general',
+      lastCodexToolMode: requestedMode,
     });
     return reply;
   } finally {
@@ -481,12 +485,35 @@ function parseCodexToolArgs(value: unknown): CodexToolArgs {
   if (!isRecord(value)) throw new Error('codex_agent arguments must be an object.');
   const task = typeof value.task === 'string' ? value.task.trim() : '';
   if (!task) throw new Error('codex_agent requires a non-empty task.');
+  const mode = parseCodexDelegationMode(value.mode);
   return {
     task,
-    mode: typeof value.mode === 'string' ? value.mode.trim() : undefined,
+    mode,
     expectedReturn: typeof value.expectedReturn === 'string' ? value.expectedReturn.trim() : undefined,
     hermesContext: typeof value.hermesContext === 'string' ? value.hermesContext.trim() : undefined,
   };
+}
+
+function parseCodexDelegationMode(value: unknown): CodexDelegationMode | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') {
+    throw new Error('codex_agent mode must be either "general" or "competitive_intelligence".');
+  }
+  const mode = normalizeCodexDelegationMode(value);
+  if (!mode) {
+    throw new Error(`Unsupported codex_agent mode "${value}". Use "general" or "competitive_intelligence".`);
+  }
+  return mode;
+}
+
+function normalizeCodexDelegationMode(value?: string): CodexDelegationMode | undefined {
+  const normalized = value?.trim().toLowerCase().replace(/-/g, '_');
+  if (!normalized) return undefined;
+  if (normalized === 'general' || normalized === 'codex_general') return 'general';
+  if (normalized === 'competitive_intelligence' || normalized === 'codex_competitive_intelligence') {
+    return 'competitive_intelligence';
+  }
+  return undefined;
 }
 
 function readRuntimeEnv(): RuntimeEnv {
@@ -507,13 +534,14 @@ function readRuntimeEnv(): RuntimeEnv {
 }
 
 function buildCodexTaskPrompt(args: CodexToolArgs, runtime: RuntimeEnv) {
+  const mode = args.mode || normalizeCodexDelegationMode(runtime.selectedAgentProfileId) || 'general';
   return [
     'Hermes delegated the following step to Codex.',
     'Return useful results to Hermes. Natural language is allowed. Do not force structured output unless Hermes explicitly requested it.',
     'Hermes remains responsible for the final user-facing answer.',
     '',
     `Altselfs thread: ${runtime.threadId}`,
-    `Delegation mode: ${args.mode || runtime.selectedAgentProfileId || 'general'}`,
+    `Delegation mode: ${mode}`,
     args.expectedReturn ? `Expected return: ${args.expectedReturn}` : '',
     args.hermesContext ? `<hermes_context>\n${args.hermesContext}\n</hermes_context>` : '',
     '',
@@ -536,8 +564,8 @@ function buildCodexDeveloperInstructions(input: {
     timeStyle: 'long',
   }).format(new Date());
   const toolNames = input.dynamicToolNames.length ? input.dynamicToolNames.join(', ') : 'none';
-  const mode = (input.requestedMode || '').toLowerCase();
-  const isCompetitive = mode.includes('competitive') || mode.includes('competitor') || mode.includes('market');
+  const mode = normalizeCodexDelegationMode(input.requestedMode) || 'general';
+  const isCompetitive = mode === 'competitive_intelligence';
   const webInstruction = input.modelSelection.provider === 'openai'
     ? 'Use native web.run when public current web research is required.'
     : 'Use altselfs_web_search when public current web research is required.';
@@ -548,7 +576,7 @@ function buildCodexDeveloperInstructions(input: {
   const lines = [
     `Current time: ${currentTime} (Asia/Shanghai).`,
     `Altselfs user: ${input.runtime.userId}. Thread: ${input.runtime.threadId}.`,
-    `Requested Codex delegation mode: ${input.requestedMode || 'general'}.`,
+    `Requested Codex delegation mode: ${mode}.`,
     `Codex model provider: ${input.modelSelection.provider || 'default'}.`,
     `Available dynamic tools for this Codex session: ${toolNames}.`,
     'You are Codex under Hermes. Hermes is the cognitive and user-facing loop; you are the execution agent.',
