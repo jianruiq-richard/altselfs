@@ -8,7 +8,7 @@ import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-searc
 import { createRapidApiCompetitorDynamictools, getRapidApiCompetitortoolNamesForProviders, isRapidApiCompetitortool, runRapidApiCompetitortool, } from '../tools/rapidapi-competitor.js';
 import { createSandboxExecDynamictool, isSandboxExectool, runSandboxExectool, } from '../tools/sandbox-exec.js';
 import { createPersonalDataDynamictools, isPersonalDatatool, runPersonalDatatool, } from '../tools/personal-data.js';
-import { acquireSharedOpenAiAuthLock } from './openai-auth-lock.js';
+import { prepareTemporaryOpenAiAuth } from './openai-auth-lock.js';
 export class CodexAgentRuntime {
     config;
     id = 'codex';
@@ -35,14 +35,15 @@ export class CodexAgentRuntime {
         let policyViolationMessage = null;
         let usedExternalSearch = false;
         let client;
-        let codexOpenAiAuthLock;
+        let codexOpenAiAuth;
         const nonLocalProfile = this.isNonLocalCodexProfile(input.profileId);
         const localEnvironmentDisabled = nonLocalProfile && this.config.disableLocalEnvironmentForGeneral;
         try {
             if (modelSelection.provider === 'openai') {
-                codexOpenAiAuthLock = await acquireSharedOpenAiAuthLock({
+                codexOpenAiAuth = await prepareTemporaryOpenAiAuth({
                     codexHome,
                     sourcePath: this.config.codexOpenAiAuthJsonPath,
+                    label: this.resolveRunLabel(input),
                 });
             }
             client = new CodexJsonRpcClient({
@@ -176,17 +177,18 @@ export class CodexAgentRuntime {
         }
         finally {
             client?.close();
-            if (codexOpenAiAuthLock) {
+            if (codexOpenAiAuth) {
                 try {
-                    await codexOpenAiAuthLock.release();
+                    await codexOpenAiAuth.release();
                 }
                 catch (error) {
                     await emit({
-                        type: 'codex.openai_auth.lock_release_failed',
+                        type: 'codex.openai_auth.cleanup_failed',
                         timestamp: nowIso(),
                         payload: {
-                            authPath: codexOpenAiAuthLock.authPath,
-                            sourcePath: codexOpenAiAuthLock.sourcePath,
+                            authPath: codexOpenAiAuth.authPath,
+                            sourcePath: codexOpenAiAuth.sourcePath,
+                            tempDir: codexOpenAiAuth.tempDir,
                             error: error instanceof Error ? error.message : String(error),
                         },
                     });
@@ -199,6 +201,13 @@ export class CodexAgentRuntime {
         await fs.mkdir(dir, { recursive: true });
         await this.writeCodexConfig(dir, selection);
         return dir;
+    }
+    resolveRunLabel(input) {
+        if (typeof input.metadata?.runId === 'string' && input.metadata.runId.trim())
+            return input.metadata.runId.trim();
+        if (input.threadId.trim())
+            return input.threadId.trim();
+        return input.userId;
     }
     async writeCodexConfig(codexHome, selection) {
         const configPath = path.join(codexHome, 'config.toml');

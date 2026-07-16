@@ -5,7 +5,7 @@ import path from 'node:path';
 import { loadConfig } from '../config.js';
 import { CodexJsonRpcClient } from '../codex/json-rpc-client.js';
 import { projectCodexNotification } from '../codex/event-projector.js';
-import { acquireSharedOpenAiAuthLock } from '../codex/openai-auth-lock.js';
+import { prepareTemporaryOpenAiAuth } from '../codex/openai-auth-lock.js';
 import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-search.js';
 import { RAPIDAPI_COMPETITOR_TOOL_PROVIDER_NAMES, createRapidApiCompetitorDynamictools, isRapidApiCompetitortool, runRapidApiCompetitortool, } from '../tools/rapidapi-competitor.js';
 import { createSandboxExecDynamictool, isSandboxExectool, runSandboxExectool, } from '../tools/sandbox-exec.js';
@@ -190,7 +190,7 @@ async function runCodexAgentTool(argumentsValue) {
     });
     const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
     const processEnv = buildCodexProcessEnv(config, modelSelection, noProxy);
-    let lock;
+    let openAiAuth;
     let client;
     let finalText = '';
     let assistantBuffer = '';
@@ -198,9 +198,10 @@ async function runCodexAgentTool(argumentsValue) {
     let resumed = false;
     try {
         if (modelSelection.provider === 'openai') {
-            lock = await acquireSharedOpenAiAuthLock({
+            openAiAuth = await prepareTemporaryOpenAiAuth({
                 codexHome: runtime.codexHome,
                 sourcePath: config.codexOpenAiAuthJsonPath,
+                label: runtime.runId,
             });
         }
         client = new CodexJsonRpcClient({
@@ -317,9 +318,9 @@ async function runCodexAgentTool(argumentsValue) {
     }
     finally {
         client?.close();
-        if (lock) {
-            await lock.release().catch((error) => {
-                log(`OpenAI auth lock release failed: ${error instanceof Error ? error.message : String(error)}`);
+        if (openAiAuth) {
+            await openAiAuth.release().catch((error) => {
+                log(`OpenAI temporary auth cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
             });
         }
     }

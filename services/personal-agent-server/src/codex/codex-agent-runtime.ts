@@ -22,7 +22,7 @@ import {
   isPersonalDatatool,
   runPersonalDatatool,
 } from '../tools/personal-data.js';
-import { acquireSharedOpenAiAuthLock, type SharedOpenAiAuthLock } from './openai-auth-lock.js';
+import { prepareTemporaryOpenAiAuth, type TemporaryOpenAiAuth } from './openai-auth-lock.js';
 import type { ChildAgentRunInput, ChildAgentRunResult, ChildAgentRuntime, AgentEvent } from '../types.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
 
@@ -61,15 +61,16 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     let policyViolationMessage: string | null = null;
     let usedExternalSearch = false;
     let client: CodexJsonRpcClient | undefined;
-    let codexOpenAiAuthLock: SharedOpenAiAuthLock | undefined;
+    let codexOpenAiAuth: TemporaryOpenAiAuth | undefined;
     const nonLocalProfile = this.isNonLocalCodexProfile(input.profileId);
     const localEnvironmentDisabled = nonLocalProfile && this.config.disableLocalEnvironmentForGeneral;
 
     try {
       if (modelSelection.provider === 'openai') {
-        codexOpenAiAuthLock = await acquireSharedOpenAiAuthLock({
+        codexOpenAiAuth = await prepareTemporaryOpenAiAuth({
           codexHome,
           sourcePath: this.config.codexOpenAiAuthJsonPath,
+          label: this.resolveRunLabel(input),
         });
       }
       client = new CodexJsonRpcClient({
@@ -208,16 +209,17 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       };
     } finally {
       client?.close();
-      if (codexOpenAiAuthLock) {
+      if (codexOpenAiAuth) {
         try {
-          await codexOpenAiAuthLock.release();
+          await codexOpenAiAuth.release();
         } catch (error) {
           await emit({
-            type: 'codex.openai_auth.lock_release_failed',
+            type: 'codex.openai_auth.cleanup_failed',
             timestamp: nowIso(),
             payload: {
-              authPath: codexOpenAiAuthLock.authPath,
-              sourcePath: codexOpenAiAuthLock.sourcePath,
+              authPath: codexOpenAiAuth.authPath,
+              sourcePath: codexOpenAiAuth.sourcePath,
+              tempDir: codexOpenAiAuth.tempDir,
               error: error instanceof Error ? error.message : String(error),
             },
           });
@@ -231,6 +233,12 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     await fs.mkdir(dir, { recursive: true });
     await this.writeCodexConfig(dir, selection);
     return dir;
+  }
+
+  private resolveRunLabel(input: ChildAgentRunInput) {
+    if (typeof input.metadata?.runId === 'string' && input.metadata.runId.trim()) return input.metadata.runId.trim();
+    if (input.threadId.trim()) return input.threadId.trim();
+    return input.userId;
   }
 
   private async writeCodexConfig(codexHome: string, selection: CodexModelSelection) {

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { loadConfig, type ServerConfig } from '../config.js';
 import { CodexJsonRpcClient } from '../codex/json-rpc-client.js';
 import { projectCodexNotification } from '../codex/event-projector.js';
-import { acquireSharedOpenAiAuthLock, type SharedOpenAiAuthLock } from '../codex/openai-auth-lock.js';
+import { prepareTemporaryOpenAiAuth, type TemporaryOpenAiAuth } from '../codex/openai-auth-lock.js';
 import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-search.js';
 import {
   RAPIDAPI_COMPETITOR_TOOL_PROVIDER_NAMES,
@@ -258,7 +258,7 @@ async function runCodexAgentTool(argumentsValue: unknown) {
   });
   const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
   const processEnv = buildCodexProcessEnv(config, modelSelection, noProxy);
-  let lock: SharedOpenAiAuthLock | undefined;
+  let openAiAuth: TemporaryOpenAiAuth | undefined;
   let client: CodexJsonRpcClient | undefined;
   let finalText = '';
   let assistantBuffer = '';
@@ -267,9 +267,10 @@ async function runCodexAgentTool(argumentsValue: unknown) {
 
   try {
     if (modelSelection.provider === 'openai') {
-      lock = await acquireSharedOpenAiAuthLock({
+      openAiAuth = await prepareTemporaryOpenAiAuth({
         codexHome: runtime.codexHome,
         sourcePath: config.codexOpenAiAuthJsonPath,
+        label: runtime.runId,
       });
     }
 
@@ -403,9 +404,9 @@ async function runCodexAgentTool(argumentsValue: unknown) {
     return reply;
   } finally {
     client?.close();
-    if (lock) {
-      await lock.release().catch((error) => {
-        log(`OpenAI auth lock release failed: ${error instanceof Error ? error.message : String(error)}`);
+    if (openAiAuth) {
+      await openAiAuth.release().catch((error) => {
+        log(`OpenAI temporary auth cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
       });
     }
   }

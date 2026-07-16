@@ -5,12 +5,97 @@ import { randomUUID } from 'node:crypto';
 const DEFAULT_WAIT_TIMEOUT_MS = 650_000;
 const DEFAULT_STALE_LOCK_MS = 20 * 60_000;
 const DEFAULT_POLL_MS = 250;
+const DEFAULT_TEMP_AUTH_TTL_MS = 24 * 60 * 60_000;
 
 export type SharedOpenAiAuthLock = {
   authPath: string;
   sourcePath: string;
   release: () => Promise<void>;
 };
+
+export type TemporaryOpenAiAuth = {
+  authPath: string;
+  sourcePath: string;
+  tempDir: string;
+  release: () => Promise<void>;
+};
+
+export async function prepareTemporaryOpenAiAuth(input: {
+  codexHome: string;
+  sourcePath?: string;
+  label?: string;
+  tempRoot?: string;
+  waitTimeoutMs?: number;
+  staleLockMs?: number;
+  pollMs?: number;
+}): Promise<TemporaryOpenAiAuth | undefined> {
+  if (!input.sourcePath) return undefined;
+
+  const codexHome = path.resolve(input.codexHome);
+  await fs.mkdir(codexHome, { recursive: true });
+
+  const sourcePath = path.resolve(input.sourcePath);
+  const authPath = path.join(codexHome, 'auth.json');
+  const releaseAuthMountLock = await acquireDirectoryLock(path.join(codexHome, '.auth.json.lock'), {
+    waitTimeoutMs: input.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS,
+    staleLockMs: input.staleLockMs ?? DEFAULT_STALE_LOCK_MS,
+    pollMs: input.pollMs ?? DEFAULT_POLL_MS,
+  });
+
+  let released = false;
+  let tempDir = '';
+  let tempAuthPath = '';
+  let initialAuthContent: Buffer | undefined;
+  const release = async () => {
+    if (released) return;
+    released = true;
+    try {
+      if (tempAuthPath) {
+        let writeBackError: unknown;
+        try {
+          if (initialAuthContent) {
+            await syncTemporaryAuthBackToSource({
+              tempAuthPath,
+              sourcePath,
+              initialAuthContent,
+              waitTimeoutMs: input.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS,
+              staleLockMs: input.staleLockMs ?? DEFAULT_STALE_LOCK_MS,
+              pollMs: input.pollMs ?? DEFAULT_POLL_MS,
+            });
+          }
+        } catch (error) {
+          writeBackError = error;
+        }
+        await cleanupMountedTemporaryAuth(authPath, tempAuthPath);
+        if (writeBackError) throw writeBackError;
+      }
+    } finally {
+      try {
+        if (tempDir) await fs.rm(tempDir, { recursive: true, force: true });
+      } finally {
+        await releaseAuthMountLock();
+      }
+    }
+  };
+
+  try {
+    await fs.stat(sourcePath);
+    const tempParent = input.tempRoot ? path.resolve(input.tempRoot) : path.join(codexHome, '.tmp-auth');
+    await fs.mkdir(tempParent, { recursive: true });
+    await cleanupStaleTemporaryAuthDirs(tempParent, DEFAULT_TEMP_AUTH_TTL_MS).catch(() => undefined);
+    const label = sanitizeTempPathSegment(input.label || 'codex');
+    tempDir = path.join(tempParent, `${label}-${process.pid}-${randomUUID()}`);
+    await fs.mkdir(tempDir, { recursive: false });
+    tempAuthPath = path.join(tempDir, 'auth.json');
+    initialAuthContent = await fs.readFile(sourcePath);
+    await writeAuthFileAtomically(initialAuthContent, tempAuthPath);
+    await replaceAuthWithSymlink({ authPath, targetPath: tempAuthPath });
+    return { authPath, sourcePath, tempDir, release };
+  } catch (error) {
+    await release().catch(() => undefined);
+    throw error;
+  }
+}
 
 export async function acquireSharedOpenAiAuthLock(input: {
   codexHome: string;
@@ -101,11 +186,122 @@ async function syncAuthBackToSource(authPath: string, sourcePath: string) {
   }
 }
 
+async function replaceAuthWithSymlink(input: { authPath: string; targetPath: string }) {
+  try {
+    const existing = await fs.lstat(input.authPath);
+    if (existing.isDirectory() && !existing.isSymbolicLink()) {
+      throw new Error(`Refusing to replace non-file Codex auth path: ${input.authPath}`);
+    }
+    await fs.unlink(input.authPath);
+  } catch (error) {
+    if (!isNodeError(error) || error.code !== 'ENOENT') throw error;
+  }
+
+  await fs.symlink(input.targetPath, input.authPath);
+  await fs.chmod(input.targetPath, 0o600).catch(() => undefined);
+}
+
+async function cleanupMountedTemporaryAuth(authPath: string, expectedTargetPath: string) {
+  try {
+    const existing = await fs.lstat(authPath);
+    if (existing.isSymbolicLink()) {
+      const target = await fs.readlink(authPath);
+      const resolvedTarget = path.resolve(path.dirname(authPath), target);
+      if (resolvedTarget === expectedTargetPath) await fs.unlink(authPath);
+      return;
+    }
+    if (existing.isFile()) {
+      await fs.unlink(authPath);
+    }
+  } catch (error) {
+    if (!isNodeError(error) || error.code !== 'ENOENT') throw error;
+  }
+}
+
+async function cleanupStaleTemporaryAuthDirs(tempParent: string, ttlMs: number) {
+  const entries = await fs.readdir(tempParent, { withFileTypes: true });
+  const now = Date.now();
+  await Promise.all(entries.map(async (entry) => {
+    if (!entry.isDirectory()) return;
+    const fullPath = path.join(tempParent, entry.name);
+    const stat = await fs.stat(fullPath).catch(() => undefined);
+    if (!stat || now - stat.mtimeMs < ttlMs) return;
+    await fs.rm(fullPath, { recursive: true, force: true });
+  }));
+}
+
+async function syncTemporaryAuthBackToSource(input: {
+  tempAuthPath: string;
+  sourcePath: string;
+  initialAuthContent: Buffer;
+  waitTimeoutMs: number;
+  staleLockMs: number;
+  pollMs: number;
+}) {
+  const tempContent = await fs.readFile(input.tempAuthPath).catch((error) => {
+    if (isNodeError(error) && error.code === 'ENOENT') return undefined;
+    throw error;
+  });
+  if (!tempContent) return;
+  if (Buffer.compare(tempContent, input.initialAuthContent) === 0) return;
+
+  const releaseSourceLock = await acquireDirectoryLock(`${input.sourcePath}.lock`, {
+    waitTimeoutMs: input.waitTimeoutMs,
+    staleLockMs: input.staleLockMs,
+    pollMs: input.pollMs,
+  });
+
+  try {
+    const tempStat = await fs.stat(input.tempAuthPath).catch((error) => {
+      if (isNodeError(error) && error.code === 'ENOENT') return undefined;
+      throw error;
+    });
+    if (!tempStat) return;
+
+    const sourceStat = await fs.stat(input.sourcePath).catch((error) => {
+      if (isNodeError(error) && error.code === 'ENOENT') return undefined;
+      throw error;
+    });
+    const sourceContent = await fs.readFile(input.sourcePath).catch((error) => {
+      if (isNodeError(error) && error.code === 'ENOENT') return undefined;
+      throw error;
+    });
+    if (sourceContent && Buffer.compare(sourceContent, tempContent) === 0) {
+      await fs.chmod(input.sourcePath, 0o600).catch(() => undefined);
+      return;
+    }
+
+    const sourceChangedSinceTempStarted =
+      sourceContent && Buffer.compare(sourceContent, input.initialAuthContent) !== 0;
+    if (sourceChangedSinceTempStarted && sourceStat && tempStat.mtimeMs <= sourceStat.mtimeMs) {
+      return;
+    }
+
+    await writeAuthFileAtomically(tempContent, input.sourcePath);
+  } finally {
+    await releaseSourceLock();
+  }
+}
+
 async function copyAuthFileAtomically(from: string, to: string) {
   await fs.mkdir(path.dirname(to), { recursive: true });
   const tempPath = `${to}.tmp-${process.pid}-${randomUUID()}`;
   try {
     await fs.copyFile(from, tempPath);
+    await fs.chmod(tempPath, 0o600).catch(() => undefined);
+    await fs.rename(tempPath, to);
+    await fs.chmod(to, 0o600).catch(() => undefined);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function writeAuthFileAtomically(content: Buffer, to: string) {
+  await fs.mkdir(path.dirname(to), { recursive: true });
+  const tempPath = `${to}.tmp-${process.pid}-${randomUUID()}`;
+  try {
+    await fs.writeFile(tempPath, content);
     await fs.chmod(tempPath, 0o600).catch(() => undefined);
     await fs.rename(tempPath, to);
     await fs.chmod(to, 0o600).catch(() => undefined);
@@ -158,6 +354,11 @@ async function getLockAgeMs(lockPath: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sanitizeTempPathSegment(value: string) {
+  const sanitized = value.trim().replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return sanitized || 'codex';
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
