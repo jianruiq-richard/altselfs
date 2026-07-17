@@ -4,10 +4,10 @@ import type { ServerConfig } from './config.js';
 import { LocalProfileStore, type UserProfileStore } from './profile-store.js';
 import { id, isRecord, nowIso, truncate } from './util.js';
 import {
-  hermesChatCompletionsUrl,
-  hermesChatHeaders,
+  callHermesText,
   resolveHermesApiKey,
   resolveHermesModelSelection,
+  type HermesTextMessage,
   type HermesModelSelection,
 } from './hermes/llm-provider.js';
 
@@ -230,7 +230,7 @@ export class MemoryReviewWorker {
 
   private async reviewWithHermesModel(job: MemoryReviewJob, selection: HermesModelSelection): Promise<MemoryReviewResult> {
     const profile = await this.profileStore.getSnapshot(job.userId);
-    const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+    const messages: HermesTextMessage[] = [
       {
         role: 'system',
         content: [
@@ -257,22 +257,15 @@ export class MemoryReviewWorker {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
     try {
-      const response = await fetch(hermesChatCompletionsUrl(selection), {
-        method: 'POST',
+      const completion = await callHermesText(this.config, selection, {
+        messages,
+        temperature: 0,
+        maxTokens: 1200,
         signal: controller.signal,
-        headers: hermesChatHeaders(this.config, selection),
-        body: JSON.stringify({
-          model: selection.model,
-          messages,
-          temperature: 0,
-          max_tokens: 1200,
-        }),
       });
-      const text = await response.text();
-      if (!response.ok) throw new Error(`Hermes memory review failed ${response.status}: ${truncate(text, 2000)}`);
-      const completion = JSON.parse(text) as unknown;
-      const content = extractCompletionContent(completion);
-      return normalizeMemoryReviewResult(parseReviewJson(content));
+      return normalizeMemoryReviewResult(parseReviewJson(completion.content));
+    } catch (error) {
+      throw new Error(`Hermes memory review failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       clearTimeout(timeout);
     }
@@ -327,15 +320,4 @@ function parseReviewJson(content: string) {
       return null;
     }
   }
-}
-
-function extractCompletionContent(rawCompletion: unknown) {
-  if (!isRecord(rawCompletion)) return '';
-  const choices = rawCompletion.choices;
-  if (!Array.isArray(choices)) return '';
-  const first = choices[0];
-  if (!isRecord(first)) return '';
-  const message = first.message;
-  if (!isRecord(message)) return '';
-  return typeof message.content === 'string' ? message.content : '';
 }

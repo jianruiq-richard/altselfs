@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { LocalProfileStore } from './profile-store.js';
 import { id, isRecord, nowIso, truncate } from './util.js';
-import { hermesChatCompletionsUrl, hermesChatHeaders, resolveHermesApiKey, resolveHermesModelSelection, } from './hermes/llm-provider.js';
+import { callHermesText, resolveHermesApiKey, resolveHermesModelSelection, } from './hermes/llm-provider.js';
 export class FileMemoryReviewQueue {
     config;
     lock = Promise.resolve();
@@ -198,23 +198,16 @@ export class MemoryReviewWorker {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 45_000);
         try {
-            const response = await fetch(hermesChatCompletionsUrl(selection), {
-                method: 'POST',
+            const completion = await callHermesText(this.config, selection, {
+                messages,
+                temperature: 0,
+                maxTokens: 1200,
                 signal: controller.signal,
-                headers: hermesChatHeaders(this.config, selection),
-                body: JSON.stringify({
-                    model: selection.model,
-                    messages,
-                    temperature: 0,
-                    max_tokens: 1200,
-                }),
             });
-            const text = await response.text();
-            if (!response.ok)
-                throw new Error(`Hermes memory review failed ${response.status}: ${truncate(text, 2000)}`);
-            const completion = JSON.parse(text);
-            const content = extractCompletionContent(completion);
-            return normalizeMemoryReviewResult(parseReviewJson(content));
+            return normalizeMemoryReviewResult(parseReviewJson(completion.content));
+        }
+        catch (error) {
+            throw new Error(`Hermes memory review failed: ${error instanceof Error ? error.message : String(error)}`);
         }
         finally {
             clearTimeout(timeout);
@@ -264,18 +257,4 @@ function parseReviewJson(content) {
             return null;
         }
     }
-}
-function extractCompletionContent(rawCompletion) {
-    if (!isRecord(rawCompletion))
-        return '';
-    const choices = rawCompletion.choices;
-    if (!Array.isArray(choices))
-        return '';
-    const first = choices[0];
-    if (!isRecord(first))
-        return '';
-    const message = first.message;
-    if (!isRecord(message))
-        return '';
-    return typeof message.content === 'string' ? message.content : '';
 }

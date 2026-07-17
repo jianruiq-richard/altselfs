@@ -1,12 +1,12 @@
 import { buildMemoryContext } from './memory-store.js';
-import { isRecord, truncate } from './util.js';
+import { isRecord } from './util.js';
 import type { ServerConfig } from './config.js';
 import type { AgentProfile, MemorySnapshot, RouterDecision } from './types.js';
 import {
-  hermesChatCompletionsUrl,
-  hermesChatHeaders,
+  callHermesText,
   resolveHermesApiKey,
   resolveHermesModelSelection,
+  type HermesTextMessage,
   type HermesModelSelection,
 } from './hermes/llm-provider.js';
 
@@ -27,7 +27,7 @@ export class HermesRouter {
     if (!resolveHermesApiKey(selection)) return fallbackRouterDecision(input, `${selection.apiKeyEnv} is missing`);
 
     const routerPayload = buildRouterPayload(input);
-    const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+    const messages: HermesTextMessage[] = [
       {
         role: 'system',
         content: [
@@ -75,28 +75,20 @@ export class HermesRouter {
   }
 
   private async callHermesChatCompletion(
-    messages: Array<{ role: 'system' | 'user'; content: string }>,
+    messages: HermesTextMessage[],
     selection: HermesModelSelection
   ): Promise<{ content: string; rawCompletion: unknown }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
     try {
-      const response = await fetch(hermesChatCompletionsUrl(selection), {
-        method: 'POST',
+      return await callHermesText(this.config, selection, {
+        messages,
+        temperature: 0,
+        maxTokens: 800,
         signal: controller.signal,
-        headers: hermesChatHeaders(this.config, selection),
-        body: JSON.stringify({
-          model: selection.model,
-          messages,
-          temperature: 0,
-          max_tokens: 800,
-        }),
       });
-      const text = await response.text();
-      if (!response.ok) throw new Error(`Hermes router failed ${response.status}: ${truncate(text, 2000)}`);
-      const rawCompletion = JSON.parse(text) as unknown;
-      const content = extractContent(rawCompletion);
-      return { content, rawCompletion };
+    } catch (error) {
+      throw new Error(`Hermes router failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       clearTimeout(timeout);
     }
@@ -205,17 +197,6 @@ function parseRouterJson(content: string) {
       return null;
     }
   }
-}
-
-function extractContent(rawCompletion: unknown) {
-  if (!isRecord(rawCompletion)) return '';
-  const choices = rawCompletion.choices;
-  if (!Array.isArray(choices)) return '';
-  const first = choices[0];
-  if (!isRecord(first)) return '';
-  const message = first.message;
-  if (!isRecord(message)) return '';
-  return typeof message.content === 'string' ? message.content : '';
 }
 
 function readString(value: unknown, fallback: string) {

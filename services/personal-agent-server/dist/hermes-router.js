@@ -1,6 +1,6 @@
 import { buildMemoryContext } from './memory-store.js';
-import { isRecord, truncate } from './util.js';
-import { hermesChatCompletionsUrl, hermesChatHeaders, resolveHermesApiKey, resolveHermesModelSelection, } from './hermes/llm-provider.js';
+import { isRecord } from './util.js';
+import { callHermesText, resolveHermesApiKey, resolveHermesModelSelection, } from './hermes/llm-provider.js';
 export class HermesRouter {
     config;
     constructor(config) {
@@ -61,23 +61,15 @@ export class HermesRouter {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 45_000);
         try {
-            const response = await fetch(hermesChatCompletionsUrl(selection), {
-                method: 'POST',
+            return await callHermesText(this.config, selection, {
+                messages,
+                temperature: 0,
+                maxTokens: 800,
                 signal: controller.signal,
-                headers: hermesChatHeaders(this.config, selection),
-                body: JSON.stringify({
-                    model: selection.model,
-                    messages,
-                    temperature: 0,
-                    max_tokens: 800,
-                }),
             });
-            const text = await response.text();
-            if (!response.ok)
-                throw new Error(`Hermes router failed ${response.status}: ${truncate(text, 2000)}`);
-            const rawCompletion = JSON.parse(text);
-            const content = extractContent(rawCompletion);
-            return { content, rawCompletion };
+        }
+        catch (error) {
+            throw new Error(`Hermes router failed: ${error instanceof Error ? error.message : String(error)}`);
         }
         finally {
             clearTimeout(timeout);
@@ -186,20 +178,6 @@ function parseRouterJson(content) {
             return null;
         }
     }
-}
-function extractContent(rawCompletion) {
-    if (!isRecord(rawCompletion))
-        return '';
-    const choices = rawCompletion.choices;
-    if (!Array.isArray(choices))
-        return '';
-    const first = choices[0];
-    if (!isRecord(first))
-        return '';
-    const message = first.message;
-    if (!isRecord(message))
-        return '';
-    return typeof message.content === 'string' ? message.content : '';
 }
 function readString(value, fallback) {
     return typeof value === 'string' && value.trim() ? value.trim() : fallback;
