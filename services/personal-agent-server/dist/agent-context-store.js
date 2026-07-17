@@ -11,45 +11,27 @@ export async function loadCleanTurnContext(config, request) {
     }
     const pool = await getContextPostgresPool(databaseUrl);
     await ensureAgentContextSchema(pool);
-    const currentMessageId = typeof request.metadata?.currentMessageId === 'string' ? request.metadata.currentMessageId : '';
     const investorId = typeof request.metadata?.investorId === 'string' ? request.metadata.investorId : '';
     const warnings = [];
-    const messageQuery = buildMessageQuery({ threadId, investorId, currentMessageId, limit: 12 });
-    const [summaryResult, messagesResult, artifactsResult] = await Promise.all([
-        pool.query('select summary from agent_context_thread_summaries where thread_id = $1 limit 1', [threadId]).catch((error) => {
-            warnings.push(`summary unavailable: ${error instanceof Error ? error.message : String(error)}`);
-            return { rows: [] };
-        }),
-        pool.query(messageQuery.sql, messageQuery.values).catch((error) => {
-            warnings.push(`messages unavailable: ${error instanceof Error ? error.message : String(error)}`);
-            return { rows: [] };
-        }),
-        pool.query([
-            'select id, kind, name, mime_type as "mimeType", size_bytes as "sizeBytes", content_text as "contentText", metadata, created_at as "createdAt"',
-            'from agent_context_artifacts',
-            'where thread_id = $1',
-            investorId ? 'and investor_id = $2' : '',
-            'order by created_at desc, id desc',
-            'limit 12',
-        ].join(' '), investorId ? [threadId, investorId] : [threadId]).catch((error) => {
-            warnings.push(`artifacts unavailable: ${error instanceof Error ? error.message : String(error)}`);
-            return { rows: [] };
-        }),
-    ]);
-    const summary = typeof summaryResult.rows[0]?.summary === 'string' ? summaryResult.rows[0].summary : '';
-    const messages = messagesResult.rows.slice().reverse();
-    const artifacts = artifactsResult.rows;
-    const message = buildContextMessage({
-        currentMessage,
-        summary,
-        messages,
-        artifacts,
+    const artifactsResult = await pool.query([
+        'select id, kind, name, mime_type as "mimeType", size_bytes as "sizeBytes", content_text as "contentText", metadata, created_at as "createdAt"',
+        'from agent_context_artifacts',
+        'where thread_id = $1',
+        investorId ? 'and investor_id = $2' : '',
+        'order by created_at desc, id desc',
+        'limit 12',
+    ].join(' '), investorId ? [threadId, investorId] : [threadId]).catch((error) => {
+        warnings.push(`artifacts unavailable: ${error instanceof Error ? error.message : String(error)}`);
+        return { rows: [] };
     });
+    const artifacts = artifactsResult.rows;
+    const artifactContext = buildArtifactContextMessage({ artifacts });
     return {
-        message,
+        message: currentMessage,
+        artifactContext,
         loaded: true,
-        summaryChars: summary.length,
-        messageCount: messages.length,
+        summaryChars: 0,
+        messageCount: 0,
         artifactCount: artifacts.length,
         warnings,
     };
@@ -691,32 +673,6 @@ function rowToQueuedAgentTurn(row) {
         attemptCount: readRowNumber(row.attempt_count),
     };
 }
-function buildMessageQuery(input) {
-    const values = [input.threadId];
-    const where = [
-        'thread_id = $1',
-        'role in (\'USER\', \'ASSISTANT\')',
-    ];
-    if (input.investorId)
-        values.push(input.investorId);
-    if (input.investorId)
-        where.push(`investor_id = $${values.length}`);
-    if (input.currentMessageId) {
-        values.push(input.currentMessageId);
-        where.push(`id <> $${values.length}`);
-    }
-    values.push(input.limit);
-    return {
-        sql: [
-            'select id, role, content, created_at as "createdAt"',
-            'from agent_context_messages',
-            `where ${where.join(' and ')}`,
-            'order by "createdAt" desc, id desc',
-            `limit $${values.length}`,
-        ].join(' '),
-        values,
-    };
-}
 async function getContextPostgresPool(connectionString) {
     if (sharedContextPool && sharedContextUrl === connectionString)
         return sharedContextPool;
@@ -1013,6 +969,7 @@ function compactThreadSummary(previous, userMessage, assistantReply) {
 function emptyContext(message, warnings) {
     return {
         message,
+        artifactContext: '',
         loaded: false,
         summaryChars: 0,
         messageCount: 0,
@@ -1020,29 +977,16 @@ function emptyContext(message, warnings) {
         warnings,
     };
 }
-function buildContextMessage(input) {
-    const sections = [
-        'Context from previous turns is provided below. Treat it as background and answer the current user message.',
-    ];
-    if (input.summary.trim()) {
-        sections.push('<thread_summary>', truncate(input.summary.trim(), 8000), '</thread_summary>');
-    }
-    if (input.messages.length > 0) {
-        sections.push('<recent_messages>', input.messages.map(formatMessageRow).filter(Boolean).join('\n\n'), '</recent_messages>');
-    }
+function buildArtifactContextMessage(input) {
     const artifactText = input.artifacts.map(formatArtifactRow).filter(Boolean).join('\n\n');
-    if (artifactText) {
-        sections.push('<artifacts>', 'Artifacts are stored in the thread workspace. Use names and summaries as context. If full extracted text is needed, call altselfs_read_artifact with parsed_text_path; if parsed_text_path is missing, use workspace_path. If the read fails, explain the limitation.', artifactText, '</artifacts>');
-    }
-    sections.push('Current user message:', input.currentMessage);
-    return sections.join('\n');
-}
-function formatMessageRow(row) {
-    const role = row.role === 'USER' ? 'user' : row.role === 'ASSISTANT' ? 'assistant' : '';
-    const content = typeof row.content === 'string' ? row.content.trim() : '';
-    if (!role || !content)
+    if (!artifactText)
         return '';
-    return `${role}: ${truncate(content, 3000)}`;
+    return [
+        '<artifacts>',
+        'Artifacts are stored in the thread workspace. Use names and summaries as context. If full extracted text is needed, call altselfs_read_artifact with parsed_text_path; if parsed_text_path is missing, use workspace_path. If the read fails, explain the limitation.',
+        artifactText,
+        '</artifacts>',
+    ].join('\n');
 }
 function formatArtifactRow(row) {
     const id = typeof row.id === 'string' ? row.id : '';

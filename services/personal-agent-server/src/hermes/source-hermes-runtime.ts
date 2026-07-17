@@ -182,10 +182,16 @@ export class HermesSourceRuntime {
     const profileSnapshot = await this.profileStore.getSnapshot(request.userId);
     const hermesUserProfile = await readHermesUserProfile(hermesHome);
     const combinedProfile = combineProfileBlocks(profileSnapshot.rendered, hermesUserProfile);
-    const runtimeMessage = buildRuntimeMessage({
-      message: cleanContext.message,
+    const ephemeralArtifactContext = buildEphemeralArtifactContext(cleanContext.artifactContext);
+    const hermesEphemeralSystemPrompt = buildHermesEphemeralSystemPrompt({
+      artifactContext: ephemeralArtifactContext,
       renderedProfile: combinedProfile,
       selectedAgentProfileId,
+      enabledInfoSources,
+      enabledCompetitortools,
+      personalDatatoolNames,
+      codexModelProvider: codexModelSelection.provider,
+      sandboxExecEnabled: this.config.sandboxExecEnabled,
     });
     await emit('hermes.profile.loaded', {
       profileStorePath: this.config.profileStorePath,
@@ -194,6 +200,9 @@ export class HermesSourceRuntime {
       hermesUserProfileChars: hermesUserProfile.length,
       injected: Boolean(combinedProfile),
       renderedProfile: truncate(combinedProfile, 4000),
+      ephemeralPromptChars: hermesEphemeralSystemPrompt.length,
+      ephemeralArtifactContextChars: ephemeralArtifactContext.length,
+      cleanUserMessageChars: currentUserMessage.length,
       durationMs: Date.now() - profileLoadStartedAtMs,
       sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
     });
@@ -218,6 +227,9 @@ export class HermesSourceRuntime {
       codexModelProvider: codexModelSelection.provider || null,
       selectedAgentProfileId: selectedAgentProfileId || null,
       personalDatatoolCount: personalDatatoolNames.length,
+      cleanUserMessageChars: currentUserMessage.length,
+      ephemeralPromptChars: hermesEphemeralSystemPrompt.length,
+      ephemeralArtifactContextChars: ephemeralArtifactContext.length,
       preSpawnDurationMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
       sinceRunStartMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
     });
@@ -240,7 +252,7 @@ export class HermesSourceRuntime {
       '--max-turns',
       String(this.config.hermesMaxTurns),
       '-q',
-      runtimeMessage,
+      currentUserMessage,
     ];
 
     let result: { stdout: string; stderr: string };
@@ -267,6 +279,7 @@ export class HermesSourceRuntime {
         statePath: runtimePaths.statePath || '',
         hermesModelSelection,
         codexModelSelection,
+        hermesEphemeralSystemPrompt,
       }, {
         emit,
         startedAtMs,
@@ -605,6 +618,7 @@ export class HermesSourceRuntime {
       statePath: string;
       hermesModelSelection: HermesModelSelection;
       codexModelSelection: CodexModelSelection;
+      hermesEphemeralSystemPrompt: string;
     },
     timing?: {
       emit: (type: string, payload: Record<string, unknown>) => Promise<void>;
@@ -633,6 +647,7 @@ export class HermesSourceRuntime {
           PATH: [codexBinDir, process.env.PATH || ''].filter(Boolean).join(path.delimiter),
           HERMES_BACKGROUND_REVIEW_INLINE:
             this.config.memoryReviewMode === 'inline' && this.config.hermesBackgroundReviewInline ? '1' : '0',
+          HERMES_EPHEMERAL_SYSTEM_PROMPT: paths.hermesEphemeralSystemPrompt,
           HERMES_DISABLE_LAZY_INSTALLS: '1',
           ALTSELFS_RUN_ID: paths.runId,
           ALTSELFS_USER_ID: paths.userId,
@@ -1021,9 +1036,29 @@ async function getPersonalDatatoolNames(
   }
 }
 
-function buildRuntimeMessage(input: { message: string; renderedProfile: string; selectedAgentProfileId?: string }) {
+function buildEphemeralArtifactContext(artifactContext: string) {
+  return artifactContext.trim();
+}
+
+function buildHermesEphemeralSystemPrompt(input: {
+  artifactContext: string;
+  renderedProfile: string;
+  selectedAgentProfileId?: string;
+  enabledInfoSources?: string[];
+  enabledCompetitortools?: string[];
+  personalDatatoolNames?: string[];
+  codexModelProvider?: CodexModelProvider;
+  sandboxExecEnabled?: boolean;
+}) {
+  const currentTime = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    dateStyle: 'full',
+    timeStyle: 'long',
+  }).format(new Date());
+
   const runtimeContract = [
     'Altselfs runtime contract:',
+    `Current time: ${currentTime} (Asia/Shanghai).`,
     '',
     'Role split:',
     '- You are Hermes, the primary cognitive, planning, emotional-intelligence, and user-facing loop for this chat.',
@@ -1063,28 +1098,48 @@ function buildRuntimeMessage(input: { message: string; renderedProfile: string; 
       : '- No default Codex mode/profile was selected for this turn; decide directly.',
   ].join('\n');
 
-  if (!input.renderedProfile.trim()) {
-    return [
-      runtimeContract,
-      '',
-      'Current user message:',
-      input.message,
-    ].join('\n');
-  }
+  const runtimeFacts = [
+    'Altselfs runtime metadata:',
+    `- Codex provider: ${input.codexModelProvider || 'openrouter'}.`,
+    `- Sandboxed deterministic execution available to Codex: ${input.sandboxExecEnabled ? 'yes' : 'no'}.`,
+    `- Enabled public/competitive info sources: ${input.enabledInfoSources?.length ? input.enabledInfoSources.join(', ') : 'none declared'}.`,
+    `- Enabled competitive Codex tools: ${input.enabledCompetitortools?.length ? input.enabledCompetitortools.join(', ') : 'none'}.`,
+    `- Enabled private personal-data Codex tools: ${input.personalDatatoolNames?.length ? input.personalDatatoolNames.join(', ') : 'none'}.`,
+  ].join('\n');
 
-  return [
+  const sections = [
     runtimeContract,
     '',
-    'Use the following Altselfs user profile as persistent context for this Hermes run.',
-    'Do not treat the profile as a new user request.',
-    '',
-    '<altselfs_user_profile>',
-    input.renderedProfile.trim(),
-    '</altselfs_user_profile>',
-    '',
-    'Current user message:',
-    input.message,
-  ].join('\n');
+    runtimeFacts,
+  ];
+
+  const profile = input.renderedProfile.trim();
+  if (profile) {
+    sections.push(
+      '',
+      'Altselfs user profile context for this run only:',
+      'Use this as background. Do not treat it as a new user request, and do not mention it unless relevant.',
+      '',
+      '<altselfs_user_profile>',
+      profile,
+      '</altselfs_user_profile>'
+    );
+  }
+
+  const artifactContext = input.artifactContext.trim();
+  if (artifactContext) {
+    sections.push(
+      '',
+      'Altselfs artifact context for this run only:',
+      'These are product-level artifact indexes for the current thread. The actual conversation history comes from Hermes state.db, not from RDS recent messages or thread summaries.',
+      '',
+      '<altselfs_artifact_context>',
+      artifactContext,
+      '</altselfs_artifact_context>'
+    );
+  }
+
+  return sections.join('\n');
 }
 
 function buildCodexDeveloperInstructions(input: {

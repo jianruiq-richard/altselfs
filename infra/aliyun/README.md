@@ -8,6 +8,7 @@ ACR Personal Edition repositories:
 
 - `crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/codex-app-server`
 - `crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/hermes-runtime`
+- `crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/sandbox-exec-runtime`
 - `crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server`
 
 ## Build Order
@@ -16,9 +17,13 @@ Build in this order:
 
 1. `codex-app-server`
 2. `hermes-runtime`
-3. `personal-agent-server`
+3. `sandbox-exec-runtime`
+4. `personal-agent-server`
 
-The `personal-agent-server` image copies runtime artifacts from the first two images.
+The `personal-agent-server` image copies runtime artifacts from `codex-app-server`
+and `hermes-runtime`. The `sandbox-exec-runtime` image is not copied into the
+server image; it is pulled on the ECS host and used by `altselfs_sandbox_exec` for
+short-lived Docker sandbox containers.
 
 ## ACR Build Rules
 
@@ -74,6 +79,21 @@ CODEX_RUNTIME_IMAGE=crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/a
 HERMES_RUNTIME_IMAGE=crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/hermes-runtime:latest
 ```
 
+### sandbox-exec-runtime
+
+Use the Dockerfile in the main Altselfs repository:
+
+```text
+infra/aliyun/acr/sandbox-exec-runtime.Dockerfile
+```
+
+ACR build rule:
+
+- Source repository: `jianruiq-richard/altselfs`
+- Dockerfile path: `/infra/aliyun/acr/sandbox-exec-runtime.Dockerfile`
+- Build context: `/`
+- Image tag: `latest`
+
 ## ECS Deploy
 
 Login once on the ECS host:
@@ -103,3 +123,15 @@ bash deploy-personal-agent-server.sh
 ```
 
 The deploy script only pulls the ACR image and restarts the service. It does not rebuild images on ECS.
+
+If `SANDBOX_EXEC_ENABLED=true`, also pull the sandbox runtime image on the ECS host:
+
+```bash
+docker pull crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/sandbox-exec-runtime:latest
+```
+
+Set this in `.env.production`:
+
+```text
+SANDBOX_EXEC_IMAGE=crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/sandbox-exec-runtime:latest
+```
