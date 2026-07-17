@@ -180,14 +180,7 @@ async function runCodexAgentTool(argumentsValue) {
     const localEnvironmentDisabled = config.disableLocalEnvironmentForGeneral;
     const dynamicTools = await buildDynamicTools(config, runtime, modelSelection);
     const requestedMode = toolArgs.mode || normalizeCodexDelegationMode(runtime.selectedAgentProfileId) || 'general';
-    const developerInstructions = buildCodexDeveloperInstructions({
-        config,
-        runtime,
-        modelSelection,
-        dynamicToolNames: dynamicTools.names,
-        requestedMode,
-        currentTask: toolArgs.task,
-    });
+    const developerInstructions = buildCodexDeveloperInstructions();
     const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
     const processEnv = buildCodexProcessEnv(config, modelSelection, noProxy);
     let openAiAuth;
@@ -467,42 +460,19 @@ function buildCodexTaskPrompt(args, runtime) {
         args.task,
     ].filter(Boolean).join('\n');
 }
-function buildCodexDeveloperInstructions(input) {
-    const currentTime = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Shanghai',
-        dateStyle: 'full',
-        timeStyle: 'long',
-    }).format(new Date());
-    const toolNames = input.dynamicToolNames.length ? input.dynamicToolNames.join(', ') : 'none';
-    const mode = normalizeCodexDelegationMode(input.requestedMode) || 'general';
-    const isCompetitive = mode === 'competitive_intelligence';
-    const webInstruction = input.modelSelection.provider === 'openai'
-        ? 'Use native web.run when public current web research is required.'
-        : 'Use altselfs_web_search when public current web research is required.';
-    const sandboxInstruction = input.config.sandboxExecEnabled
-        ? 'Use altselfs_sandbox_exec only for deterministic computation, parsing, or small workspace file transformations. Keep commands scoped to /workspace.'
-        : 'Sandboxed command execution is disabled. Do not run shell commands, tests, builds, package managers, or local code.';
-    const lines = [
-        `Current time: ${currentTime} (Asia/Shanghai).`,
-        `Altselfs user: ${input.runtime.userId}. Thread: ${input.runtime.threadId}.`,
-        `Requested Codex delegation mode: ${mode}.`,
-        `Codex model provider: ${input.modelSelection.provider || 'default'}.`,
-        `Available dynamic tools for this Codex session: ${toolNames}.`,
+function buildCodexDeveloperInstructions() {
+    return [
         'You are Codex under Hermes. Hermes is the cognitive and user-facing loop; you are the execution agent.',
         'Use your native Codex session memory and JSONL continuity for execution context. Do not assume Hermes-only chat context unless Hermes included it in the task.',
         'Answer in the user language unless Hermes asks otherwise.',
-        webInstruction,
-        sandboxInstruction,
+        'Use available web research capabilities when public current facts are required. Prefer native provider web search when available; otherwise use a registered web-search tool if one is available.',
+        'Use registered sandbox execution tools only when deterministic computation, parsing, or small workspace file transformations are truly needed. Keep commands scoped to the provided workspace.',
         'Never claim that you searched, read private accounts, used a platform, or called a tool unless the corresponding tool was actually called.',
         'Return the result to Hermes directly. Do not say you will call another tool after the turn ends; either call it or report the limitation.',
-    ];
-    if (isCompetitive) {
-        lines.push('', 'Competitive intelligence mode:', '- Use enabled RapidAPI competitor tools when the task needs traffic, SEO, keywords, backlinks, market, or competitor proxy data and a relevant tool is available.', '- Treat RapidAPI sources as third-party wrappers and label estimates as estimates.', '- Separate observed facts, third-party estimates, assumptions, and your inference.', '- Provide ranges and confidence labels for user, traffic, or revenue estimates.');
-    }
-    else {
-        lines.push('', 'General execution mode:', '- Use private personal-data tools only when the delegated task asks for private-channel content such as Gmail, Feishu/Lark, Meta, calendar, docs, messages, or connected accounts.', '- Use public web research for current external facts and product/company/news information.', '- Use reasoning directly for tasks that do not need external tools.');
-    }
-    return lines.join('\n');
+        'Use private personal-data tools only when the delegated task asks for private-channel content such as Gmail, Feishu/Lark, calendar, docs, messages, or connected accounts.',
+        'For competitive intelligence tasks, use enabled competitor-data tools when relevant; label third-party estimates as estimates and separate facts, assumptions, and inference.',
+        'For tasks that do not need external tools, reason directly and keep the response focused.',
+    ].join('\n');
 }
 function waitForTurnCompletion(client) {
     return new Promise((resolve, reject) => {

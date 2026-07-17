@@ -5,7 +5,7 @@ import { projectCodexNotification } from './event-projector.js';
 import { buildMemoryContext } from '../memory-store.js';
 import { isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-search.js';
-import { createRapidApiCompetitorDynamictools, getRapidApiCompetitortoolNamesForProviders, isRapidApiCompetitortool, runRapidApiCompetitortool, } from '../tools/rapidapi-competitor.js';
+import { createRapidApiCompetitorDynamictools, isRapidApiCompetitortool, runRapidApiCompetitortool, } from '../tools/rapidapi-competitor.js';
 import { createSandboxExecDynamictool, isSandboxExectool, runSandboxExectool, } from '../tools/sandbox-exec.js';
 import { createPersonalDataDynamictools, isPersonalDatatool, runPersonalDatatool, } from '../tools/personal-data.js';
 import { prepareTemporaryOpenAiAuth } from './openai-auth-lock.js';
@@ -74,7 +74,7 @@ export class CodexAgentRuntime {
                 ...(nonLocalProfile ? { dynamictools } : {}),
                 ...(modelSelection.model ? { model: modelSelection.model } : {}),
                 ...(modelSelection.provider ? { modelProvider: modelSelection.provider } : {}),
-                developerInstructions: this.buildDeveloperInstructions(input.profileId, input.metadata, modelSelection),
+                developerInstructions: this.buildDeveloperInstructions(),
                 personality: 'pragmatic',
             }, 15_000);
             codexThreadId = extractThreadId(thread);
@@ -383,76 +383,17 @@ export class CodexAgentRuntime {
         client.respondError(requestId, -32601, `Unsupported server request: ${method}`);
         return 'handled';
     }
-    buildDeveloperInstructions(profileId, metadata, selection) {
-        const currentTime = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'Asia/Shanghai',
-            dateStyle: 'full',
-            timeStyle: 'long',
-        }).format(new Date());
-        const shared = [
-            `Current time: ${currentTime} (Asia/Shanghai).`,
-            `Codex web_search mode requested by host: ${this.config.codexWebSearchMode}.`,
-            'Answer in the user language unless the user asks otherwise.',
-            selection?.provider === 'openai'
-                ? 'When public web research is needed, use the native web.run tool exposed by the OpenAI Codex provider.'
-                : 'When public web research is needed, use the registered altselfs_web_search tool.',
-            'Personal account tools such as Gmail are available only when registered for this user. Use them only when the user asks for private-channel information or the task clearly requires it; never claim to have read private accounts unless the corresponding tool was actually called.',
-        ];
-        if (profileId === 'codex-competitive-intelligence') {
-            const enabledCompetitorSources = getEnabledInfoSourceNames(metadata);
-            const enabledtoolNames = getRapidApiCompetitortoolNamesForProviders(enabledCompetitorSources);
-            const competitortoolInstruction = enabledtoolNames.length > 0
-                ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledtoolNames.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
-                : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data; use public web fallback only when appropriate and state the limitation.';
-            const publicWebFallbackInstruction = selection?.provider === 'openai'
-                ? '- Treat native web.run as the public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.'
-                : '- Treat altselfs_web_search as the public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.';
-            return [
-                ...shared,
-                '',
-                'Altselfs codex-competitive-intelligence policy:',
-                '- You are a competitive intelligence analysis profile under the Altselfs information-processing operation department.',
-                '- The user still interacts through the normal AI assistant chatbox. Produce the final answer directly in chat; do not ask the user to open a separate report surface.',
-                '- Your job is to answer questions about competitors, competitive landscape, user/traffic/revenue estimates, growth rate, acquisition channels, SEO, PPC, keywords, backlinks, Semrush, Similarweb, market share, and growth intelligence.',
-                '- Do not use native local shell, file, patch, image, or repository tools. Do not inspect, read, write, patch, or modify local repositories.',
-                this.config.sandboxExecEnabled
-                    ? '- When deterministic computation, parsing, scraping, or small file transformation is truly needed, use only the registered altselfs_sandbox_exec tool. Keep commands short, scoped to /workspace, and explain any important command output in the final answer.'
-                    : '- Sandboxed command execution is not enabled in this environment. Do not run shell commands, scripts, package managers, or local code.',
-                '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.',
-                '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.',
-                competitortoolInstruction,
-                '- Treat these RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used in the answer.',
-                '- Similarweb, Google, YouTube, X/Twitter, Facebook, WeChat, Xiaohongshu, Gmail, and Feishu may be used only when actually available/enabled in the turn.',
-                publicWebFallbackInstruction,
-                '- Never claim that Semrush, Similarweb, Google, a social platform, or a private-channel agent was used unless the corresponding tool/capability was actually called.',
-                '- Structure competitor conclusions around four questions when relevant: who the competitors are, what their user/traffic/revenue scale appears to be, how fast they have grown, and how they acquire users.',
-                '- Separate observable facts, third-party estimates, proxy signals, model/user assumptions, and your own inference. Do not present inferred users or revenue as confirmed facts.',
-                '- Attach confidence labels to important claims: high when multiple reliable sources agree or the source is official; medium when several proxy signals align; low when the claim depends on one source or strong assumptions; unknown when evidence is insufficient.',
-                '- For revenue and user-count estimates, provide ranges and assumptions, not false precision.',
-                '- If an enabled data source is missing, state the limitation and explain which conclusions remain lower confidence until that source is enabled.',
-                '- Finish with a direct synthesis and actionable implications. Do not end by saying you will call another tool; either call it or answer from available evidence.',
-            ].join('\n');
-        }
-        if (!this.isNonLocalCodexProfile(profileId))
-            return shared.join('\n');
-        const generalPublicWebInstruction = selection?.provider === 'openai'
-            ? '- Use native web.run when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.'
-            : '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.';
+    buildDeveloperInstructions() {
         return [
-            ...shared,
-            '',
-            'Altselfs codex-general policy:',
-            '- You are a general personal agent for discussion, research, planning, and synthesis.',
-            '- Do not use native local shell, file, patch, image, or repository tools. Do not inspect, read, write, patch, or modify local repositories.',
-            this.config.sandboxExecEnabled
-                ? '- When deterministic computation, parsing, scraping, or small file transformation is truly needed, use only the registered altselfs_sandbox_exec tool. Keep commands short, scoped to /workspace, and prefer registered platform tools for third-party data.'
-                : '- Sandboxed command execution is not enabled in this environment. Do not run shell commands, scripts, package managers, or local code.',
-            '- Use conversation and reasoning for tasks that do not need external data.',
-            '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.',
-            generalPublicWebInstruction,
+            'You are Codex under Hermes. Hermes is the cognitive and user-facing loop; you are the execution agent.',
+            'Use your native Codex session memory and JSONL continuity for execution context.',
+            'Answer in the user language unless the user asks otherwise.',
+            'Use available web research capabilities when public current facts are required. Prefer native provider web search when available; otherwise use a registered web-search tool if one is available.',
+            'Use registered sandbox execution tools only when deterministic computation, parsing, scraping, or small workspace file transformations are truly needed. Keep commands scoped to the provided workspace.',
+            'Use private personal-data tools only when the delegated task asks for private-channel content such as Gmail, Feishu/Lark, calendar, docs, messages, or connected accounts.',
+            'For competitive intelligence tasks, use enabled competitor-data tools when relevant; label third-party estimates as estimates and separate facts, assumptions, and inference.',
             '- In Altselfs context, OPC usually means One Person Company / operator-owned company unless the user explicitly says OPC UA or industrial automation.',
-            '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.',
-            '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.',
+            'Never claim that you searched, read private accounts, used a platform, or called a tool unless the corresponding tool was actually called.',
         ].join('\n');
     }
     isGeneralProfile(profileId) {

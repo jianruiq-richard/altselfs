@@ -564,16 +564,7 @@ export class HermesSourceRuntime {
                     ALTSELFS_CODEX_COMPETITOR_DYNAMIC_TOOLS: paths.enabledCompetitortools.join(','),
                     ALTSELFS_CODEX_PERSONAL_DATA_DYNAMIC_TOOLS: paths.personalDatatoolNames.join(','),
                     ALTSELFS_CODEX_WEB_SEARCH_DYNAMIC_TOOL: paths.codexModelSelection.provider === 'openai' ? '0' : '1',
-                    ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS: buildCodexDeveloperInstructions({
-                        webSearchMode: this.config.codexWebSearchMode,
-                        runtimeStateMode: this.config.runtimeStateMode,
-                        message: paths.currentUserMessage,
-                        selectedAgentProfileId: paths.selectedAgentProfileId,
-                        enabledCompetitortools: paths.enabledCompetitortools,
-                        personalDatatoolNames: paths.personalDatatoolNames,
-                        codexModelProvider: paths.codexModelSelection.provider,
-                        sandboxExecEnabled: this.config.sandboxExecEnabled,
-                    }),
+                    ALTSELFS_CODEX_DEVELOPER_INSTRUCTIONS: buildCodexDeveloperInstructions(),
                     NO_PROXY: noProxy,
                     no_proxy: noProxy,
                     ...this.buildCodexProcessEnv(paths.codexModelSelection, noProxy),
@@ -978,67 +969,21 @@ function buildHermesEphemeralSystemPrompt(input) {
     }
     return sections.join('\n');
 }
-function buildCodexDeveloperInstructions(input) {
-    const currentTime = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Shanghai',
-        dateStyle: 'full',
-        timeStyle: 'long',
-    }).format(new Date());
-    const sandboxExecPolicy = input.sandboxExecEnabled
-        ? [
-            '- Do not use native local shell, file, patch, image, or repository tools. Do not inspect, read, write, patch, or modify local repositories.',
-            '- When deterministic computation, parsing, scraping, or small file transformation is truly needed, use only the registered `altselfs_sandbox_exec` tool. Keep commands short, scoped to /workspace, and prefer registered platform tools for third-party data.',
-            '- Do not install packages or run package managers unless the task cannot be solved with the sandbox image and standard libraries. If a package install is necessary, keep it minimal and explain it.',
-        ]
-        : [
-            '- Do not use native local shell, file, patch, image, or repository tools. Do not inspect, read, write, patch, or modify local repositories.',
-            '- Sandboxed command execution is not enabled in this environment. Do not run shell commands, tests, builds, package managers, scripts, network scanners, or local code.',
-        ];
-    const artifactAccessPolicy = input.runtimeStateMode === 'sandbox'
-        ? [
-            '- This run is inside an Altselfs sandbox workspace. User-provided artifacts listed in host context are available through the `altselfs_read_artifact` tool.',
-            '- If the user asks about an uploaded file or indexed material, call `altselfs_read_artifact` with `parsed_text_path` first, then `workspace_path` if needed.',
-            ...sandboxExecPolicy,
-        ]
-        : [
-            ...sandboxExecPolicy,
-            '- User-provided artifacts listed in host context are available through the `altselfs_read_artifact` tool. If the user asks about an uploaded file, call `altselfs_read_artifact` with `parsed_text_path` first, then `workspace_path` if needed.',
-            '- Do not say you cannot access an uploaded file when an artifact path is listed. Try `altselfs_read_artifact` first; if the tool fails, report the concrete failure.',
-        ];
-    const instructions = [
-        `Current time: ${currentTime} (Asia/Shanghai).`,
-        `Codex web_search mode requested by host: ${input.webSearchMode}.`,
-        `Codex model provider for this turn: ${input.codexModelProvider || 'openrouter'}.`,
-        input.codexModelProvider === 'openai'
-            ? 'When public web research is needed, use the native web.run tool exposed by the OpenAI Codex provider.'
-            : 'When public web research is needed, use the registered altselfs_web_search tool.',
-        'Answer in the user language unless the user asks otherwise.',
-        '',
-        `Default Codex mode/profile from host: ${input.selectedAgentProfileId || 'general'}.`,
-    ];
-    const personalDatatoolInstruction = input.personalDatatoolNames?.length
-        ? [
-            `- The following private personal-data tools are enabled for this user in this turn: ${input.personalDatatoolNames.join(', ')}.`,
-            '- When the user asks about Gmail, Feishu/Lark IM, email, inbox, messages, team updates, calendar, docs, wiki, Drive files, or personal-channel content, call the relevant personal-data tool before answering.',
-            '- Feishu/Lark native CLI access may be available through altselfs_feishu_lark_cli. Use it to inspect lark-cli help/schema/skills and run original lark-cli workflows when a specialized Feishu wrapper is too narrow.',
-            '- Feishu/Lark document access is available through the enabled Feishu tools: use search_docs/fetch_doc for common flows, or altselfs_feishu_lark_cli for original lark-cli workflows such as skills read, drive +search, docs +fetch, schema inspection, or raw api commands. Do not claim access to Feishu Mail or unsupported Feishu surfaces unless a matching tool is available and called.',
-        ].join(' ')
-        : '- No private personal-data tools are enabled for this user in this turn. Do not claim to have read Gmail, Feishu, or other private-channel accounts.';
-    if (input.selectedAgentProfileId === 'codex-competitive-intelligence') {
-        const enabledCompetitortools = input.enabledCompetitortools || [];
-        const publicWebFallbackInstruction = input.codexModelProvider === 'openai'
-            ? '- Treat native web.run as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.'
-            : '- Treat altselfs_web_search as a public-web fallback and cross-check source, not as a substitute for paid platform data when a more specific enabled source is available.';
-        instructions.push('', 'Altselfs codex-competitive-intelligence policy:', '- You are the competitive intelligence analysis profile requested by Hermes or the host for this turn.', '- Answer questions about competitors, competitive landscape, user/traffic/revenue estimates, growth rate, acquisition channels, SEO, PPC, keywords, backlinks, Semrush, Similarweb, market share, and growth intelligence.', ...artifactAccessPolicy, '- Before analysis, identify the product, website/domain, category, target market, target user, region/database, known competitors, and time window from the user message and conversation context.', '- If a critical input such as the product/domain is missing, ask one concise clarification question instead of fabricating a target.', enabledCompetitortools.length > 0
-            ? `- The following RapidAPI-backed competitor tools are enabled for this turn: ${enabledCompetitortools.join(', ')}. Use only these enabled tools, choose the narrowest useful tool for the question, and cross-check when multiple enabled sources overlap.`
-            : '- No RapidAPI-backed competitor data source is enabled for this user in this turn. Do not claim to have used Semrush, Similarweb, Ahrefs, Moz, Majestic, or RapidAPI platform data. If platform evidence is needed, state which specific data source should be enabled for higher-confidence estimates.', '- Treat RapidAPI tools as third-party wrappers, not official Semrush, Similarweb, Ahrefs, Moz, or Majestic APIs. Name the actual source used.', publicWebFallbackInstruction, '- If no enabled Similarweb data tool is available and the user asks for basic traffic, channel, audience, or competitor signals for a specific domain, you may use the public Similarweb website page at `https://www.similarweb.com/website/{domain}/` as a public-web source, for example `https://www.similarweb.com/website/az8.art/` or `https://www.similarweb.com/website/videoinu.com/`. Treat this as limited public-page evidence: extract only visible/basic metrics, identify it as public Similarweb website data, and tell the user that binding/enabling the Similarweb tool can provide more detailed, structured, and accurate data.', '- Never claim that Semrush, Similarweb, Google, a social platform, or a private-channel agent was used unless the corresponding tool/capability was actually called.', '- Structure competitor conclusions around four questions when relevant: who the competitors are, what their user/traffic/revenue scale appears to be, how fast they have grown, and how they acquire users.', '- Separate observable facts, third-party estimates, proxy signals, assumptions, and inference. Do not present inferred users or revenue as confirmed facts.', '- Attach confidence labels to important claims: high, medium, low, or unknown.', '- For revenue and user-count estimates, provide ranges and assumptions, not false precision.', '- If an enabled data source is missing, state the limitation and explain which conclusions remain lower confidence until that source is enabled.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
-    }
-    else {
-        instructions.push('', 'Altselfs codex-general policy:', '- You are the general personal execution profile requested by Hermes or the host for this turn.', ...artifactAccessPolicy, '- Use conversation and reasoning for tasks that do not need external data.', '- When a task needs external, current, private-channel, or product data, first choose the most relevant registered non-local tool, channel agent, or platform/MCP capability available in this turn.', personalDatatoolInstruction, input.codexModelProvider === 'openai'
-            ? '- Use native web.run when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.'
-            : '- Treat altselfs_web_search as the public-web information source, not as the only possible source. Use it when the user needs current public web facts, news, industry updates, market information, or web research and no more specific channel/tool is better.', '- In Altselfs context, OPC usually means One Person Company / operator-owned company unless the user explicitly says OPC UA or industrial automation.', '- Do not claim that you searched, read a channel, checked a platform, or called an agent unless the corresponding tool/capability was actually called.', '- If the needed capability is unavailable, explain the limitation instead of trying local file or command tools.', '- After using tools, finish with a direct user-facing synthesis. Do not end the turn by saying you will search/read/call another tool; either call the tool or answer from the evidence already available.', '- Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.');
-    }
-    return instructions.join('\n');
+function buildCodexDeveloperInstructions() {
+    return [
+        'You are Codex under Hermes. Hermes is the cognitive and user-facing loop; you are the execution agent.',
+        'Use your native Codex session memory and JSONL continuity for execution context. Do not assume Hermes-only chat context unless Hermes included it in the task.',
+        'Answer in the user language unless Hermes asks otherwise.',
+        'Use available web research capabilities when public current facts are required. Prefer native provider web search when available; otherwise use a registered web-search tool if one is available.',
+        'Use registered artifact-reading tools for uploaded files or indexed material when such tools are available.',
+        'Use registered sandbox execution tools only when deterministic computation, parsing, scraping, or small workspace file transformations are truly needed. Keep commands scoped to the provided workspace.',
+        'Do not use native local shell, file, patch, image, or repository tools unless explicitly provided by the active Codex environment.',
+        'Use private personal-data tools only when the delegated task asks for private-channel content such as Gmail, Feishu/Lark, calendar, docs, messages, or connected accounts.',
+        'For competitive intelligence tasks, use enabled competitor-data tools when relevant; label third-party estimates as estimates and separate facts, assumptions, and inference.',
+        'Never claim that you searched, read private accounts, used a platform, or called a tool unless the corresponding tool was actually called.',
+        'Return the result to Hermes directly. Do not say you will call another tool after the turn ends; either call it or report the limitation.',
+        'Never output protocol/content-item arrays such as `[{"type":"text","text":"..."}]` or Python-style variants. Output plain prose or Markdown only.',
+    ].join('\n');
 }
 async function readHermesUserProfile(hermesHome) {
     try {
