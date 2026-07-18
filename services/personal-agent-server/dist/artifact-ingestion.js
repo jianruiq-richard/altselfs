@@ -2,12 +2,14 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { persistAgentArtifacts } from './agent-context-store.js';
+import { getAgentContextArtifactsByIds, persistAgentArtifacts, } from './agent-context-store.js';
+import { buildGeneratedObjectKey, downloadObjectToBuffer, isArtifactObjectStorageConfigured, uploadBufferToObject, } from './artifact-storage.js';
 import { id, isRecord, nowIso, truncate } from './util.js';
 export async function ingestWorkspaceAttachments(config, request, paths, runId) {
     const attachments = getWorkspaceAttachments(request);
+    const artifactRefs = getWorkspaceArtifactRefs(request);
     const warnings = [];
-    if (attachments.length === 0)
+    if (attachments.length === 0 && artifactRefs.length === 0)
         return { artifacts: [], warnings };
     const investorId = metadataString(request, 'investorId') || request.userId;
     const threadId = request.threadId || 'default';
@@ -65,12 +67,198 @@ export async function ingestWorkspaceAttachments(config, request, paths, runId) 
             warnings.push(`${attachment.name}: ingest failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
+    if (artifactRefs.length > 0) {
+        const referencedArtifacts = await getAgentContextArtifactsByIds(config, {
+            investorId,
+            threadId,
+            artifactIds: artifactRefs,
+        }).catch((error) => {
+            warnings.push(`uploaded artifact lookup failed: ${error instanceof Error ? error.message : String(error)}`);
+            return [];
+        });
+        const artifactById = new Map(referencedArtifacts.map((artifact) => [artifact.id, artifact]));
+        for (const [offset, artifactId] of artifactRefs.entries()) {
+            const artifactRecord = artifactById.get(artifactId);
+            if (!artifactRecord) {
+                warnings.push(`${artifactId}: uploaded artifact metadata was not found`);
+                continue;
+            }
+            const stored = await ingestObjectStorageArtifact({
+                config,
+                artifact: artifactRecord,
+                index: attachments.length + offset,
+                uploadsDir,
+                parsedDir,
+                workspace: paths.workspace,
+                investorId,
+                threadId,
+                runId,
+                indexLines,
+            }).catch((error) => {
+                warnings.push(`${artifactRecord.name}: object storage ingest failed: ${error instanceof Error ? error.message : String(error)}`);
+                return null;
+            });
+            if (stored)
+                persisted.push(stored);
+        }
+    }
     if (persisted.length > 0) {
         const indexPath = path.join(artifactsDir, 'index.md');
         await fs.writeFile(indexPath, indexLines.join('\n'), 'utf8');
         await persistAgentArtifacts(config, persisted);
     }
     return { artifacts: persisted, warnings };
+}
+export async function collectGeneratedWorkspaceArtifacts(config, request, paths, runId, startedAtMs) {
+    const warnings = [];
+    const outputsDir = path.join(paths.workspace, 'outputs');
+    const entries = await listRecentOutputFiles(outputsDir, startedAtMs).catch((error) => {
+        if (error?.code !== 'ENOENT') {
+            warnings.push(`generated output scan failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        return [];
+    });
+    if (entries.length === 0)
+        return { artifacts: [], warnings };
+    const maxFiles = readGeneratedMaxFiles();
+    const maxBytes = readGeneratedMaxFileBytes(config);
+    const investorId = metadataString(request, 'investorId') || request.userId;
+    const threadId = request.threadId || 'default';
+    const persisted = [];
+    for (const entry of entries.slice(0, maxFiles)) {
+        try {
+            if (entry.sizeBytes > maxBytes) {
+                warnings.push(`${entry.relativePath}: generated file exceeds ${maxBytes} bytes`);
+                continue;
+            }
+            const artifactId = id('art');
+            const mimeType = inferMimeType(entry.relativePath, '');
+            const metadata = {
+                workspacePath: entry.path,
+                relativePath: path.relative(paths.workspace, entry.path),
+                outputRelativePath: entry.relativePath,
+                generatedByRunId: runId,
+                generatedAt: nowIso(),
+                inlineInContext: false,
+            };
+            if (isArtifactObjectStorageConfigured(config)) {
+                const bytes = await fs.readFile(entry.path);
+                const objectKey = buildGeneratedObjectKey({
+                    userId: request.userId,
+                    threadId,
+                    runId,
+                    relativePath: entry.relativePath,
+                });
+                await uploadBufferToObject(config, { objectKey, bytes, mimeType });
+                metadata.storageProvider = 'aliyun_oss';
+                metadata.ossObjectKey = objectKey;
+                metadata.downloadPath = `/api/investor/artifacts/download/${encodeURIComponent(artifactId)}?threadId=${encodeURIComponent(threadId)}`;
+            }
+            else {
+                metadata.storageProvider = 'workspace';
+            }
+            persisted.push({
+                id: artifactId,
+                investorId,
+                threadId,
+                runId,
+                kind: 'generated_file',
+                name: path.basename(entry.relativePath),
+                mimeType,
+                sizeBytes: entry.sizeBytes,
+                contentText: null,
+                metadata,
+            });
+        }
+        catch (error) {
+            warnings.push(`${entry.relativePath}: generated artifact persistence failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    if (persisted.length > 0)
+        await persistAgentArtifacts(config, persisted);
+    return { artifacts: persisted, warnings };
+}
+async function ingestObjectStorageArtifact(input) {
+    const objectKey = metadataStringValue(input.artifact.metadata.ossObjectKey) || metadataStringValue(input.artifact.metadata.objectKey);
+    if (!objectKey)
+        throw new Error('missing OSS object key');
+    const bytes = await downloadObjectToBuffer(input.config, objectKey);
+    const mimeType = input.artifact.mimeType || inferMimeType(input.artifact.name, '');
+    const basename = buildArtifactFileName(input.index, input.artifact.name, mimeType);
+    const filePath = path.join(input.uploadsDir, basename);
+    await fs.writeFile(filePath, bytes);
+    const attachment = {
+        name: input.artifact.name,
+        type: mimeType,
+        size: bytes.length,
+        kind: input.artifact.kind.replace(/^uploaded_/, '') || 'file',
+        dataUrl: `data:${mimeType};base64,${bytes.toString('base64')}`,
+    };
+    const parsed = await parseAttachment(input.config, attachment, { mimeType, bytes }, filePath).catch(() => null);
+    const parsedTextPath = parsed?.text
+        ? path.join(input.parsedDir, `${basename}.txt`)
+        : '';
+    if (parsed?.text && parsedTextPath) {
+        await fs.writeFile(parsedTextPath, parsed.text, 'utf8');
+    }
+    const metadata = {
+        ...input.artifact.metadata,
+        storageProvider: 'aliyun_oss',
+        ossObjectKey: objectKey,
+        storedAsFile: true,
+        materializedFromObjectStorage: true,
+        materializedAt: nowIso(),
+        workspacePath: filePath,
+        relativePath: path.relative(input.workspace, filePath),
+        parsedTextPath: parsedTextPath || null,
+        parsedTextRelativePath: parsedTextPath ? path.relative(input.workspace, parsedTextPath) : null,
+        originalName: input.artifact.name,
+        sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+        parser: parsed?.parser || null,
+        inlineInContext: false,
+    };
+    const artifact = {
+        id: input.artifact.id,
+        investorId: input.investorId,
+        threadId: input.threadId,
+        runId: input.runId,
+        kind: input.artifact.kind || `uploaded_${attachment.kind}`,
+        name: input.artifact.name || basename,
+        mimeType,
+        sizeBytes: bytes.length,
+        contentText: null,
+        metadata,
+    };
+    input.indexLines.push(`- ${artifact.name || basename}`, `  - path: ${metadata.relativePath}`, parsedTextPath ? `  - parsed_text: ${metadata.parsedTextRelativePath}` : '  - parsed_text: unavailable', `  - mime_type: ${artifact.mimeType || 'unknown'}`, `  - size_bytes: ${artifact.sizeBytes || 0}`, '');
+    return artifact;
+}
+async function listRecentOutputFiles(root, startedAtMs) {
+    const results = [];
+    async function walk(dir) {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.name.startsWith('.'))
+                continue;
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                await walk(fullPath);
+                continue;
+            }
+            if (!entry.isFile())
+                continue;
+            const stat = await fs.stat(fullPath);
+            if (stat.size <= 0 || stat.mtimeMs < startedAtMs - 1000)
+                continue;
+            results.push({
+                path: fullPath,
+                relativePath: path.relative(root, fullPath),
+                sizeBytes: stat.size,
+                mtimeMs: stat.mtimeMs,
+            });
+        }
+    }
+    await walk(root);
+    return results.sort((a, b) => a.mtimeMs - b.mtimeMs || a.relativePath.localeCompare(b.relativePath));
 }
 function getWorkspaceAttachments(request) {
     const raw = request.metadata?.workspaceAttachments;
@@ -92,6 +280,20 @@ function getWorkspaceAttachments(request) {
         };
     })
         .filter((item) => Boolean(item));
+}
+function getWorkspaceArtifactRefs(request) {
+    const raw = request.metadata?.workspaceArtifactRefs;
+    if (!Array.isArray(raw))
+        return [];
+    return raw
+        .map((item) => {
+        if (typeof item === 'string')
+            return item.trim();
+        if (!isRecord(item))
+            return '';
+        return typeof item.id === 'string' ? item.id.trim() : '';
+    })
+        .filter(Boolean);
 }
 function decodeDataUrl(dataUrl) {
     const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,([\s\S]*)$/);
@@ -143,6 +345,37 @@ function extensionForMimeType(mimeType) {
     if (mimeType === 'application/vnd.ms-excel.sheet.macroenabled.12')
         return '.xlsm';
     return '';
+}
+function inferMimeType(name, providedType) {
+    const normalizedType = providedType.trim().toLowerCase();
+    if (normalizedType)
+        return normalizedType;
+    const lowerName = name.toLowerCase();
+    if (lowerName.endsWith('.pdf'))
+        return 'application/pdf';
+    if (lowerName.endsWith('.doc'))
+        return 'application/msword';
+    if (lowerName.endsWith('.docx'))
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (lowerName.endsWith('.xlsx'))
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (lowerName.endsWith('.csv'))
+        return 'text/csv';
+    if (lowerName.endsWith('.tsv'))
+        return 'text/tab-separated-values';
+    if (lowerName.endsWith('.txt'))
+        return 'text/plain';
+    if (lowerName.endsWith('.md'))
+        return 'text/markdown';
+    if (lowerName.endsWith('.png'))
+        return 'image/png';
+    if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg'))
+        return 'image/jpeg';
+    if (lowerName.endsWith('.webp'))
+        return 'image/webp';
+    if (lowerName.endsWith('.gif'))
+        return 'image/gif';
+    return 'application/octet-stream';
 }
 async function parseAttachment(config, attachment, decoded, filePath) {
     const mimeType = decoded.mimeType || attachment.type || 'application/octet-stream';
@@ -549,6 +782,9 @@ function metadataString(request, key) {
     const value = request.metadata?.[key];
     return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
+function metadataStringValue(value) {
+    return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
 function readParserMaxChars() {
     const value = Number(process.env.OPENROUTER_FILE_PARSER_MAX_CHARS || '');
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : 60000;
@@ -556,4 +792,14 @@ function readParserMaxChars() {
 function readLocalParserTimeoutMs() {
     const value = Number(process.env.ARTIFACT_LOCAL_PARSER_TIMEOUT_MS || '');
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : 30_000;
+}
+function readGeneratedMaxFiles() {
+    const value = Number(process.env.ARTIFACT_GENERATED_MAX_FILES || '');
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 20;
+}
+function readGeneratedMaxFileBytes(config) {
+    const value = Number(process.env.ARTIFACT_GENERATED_MAX_FILE_BYTES || '');
+    return Number.isFinite(value) && value > 0
+        ? Math.floor(value)
+        : Math.max(1, config.artifactObjectStorageUploadMaxBytes || 50 * 1024 * 1024);
 }

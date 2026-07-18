@@ -60,6 +60,16 @@ export type AgentContextArtifactInput = {
   metadata?: Record<string, unknown> | null;
 };
 
+export type AgentContextArtifactRecord = Required<Pick<AgentContextArtifactInput, 'id' | 'investorId' | 'threadId' | 'kind' | 'name'>> & {
+  runId: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  contentText: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 export type AgentSandboxControlPlaneInput = {
   userId: string;
   investorId: string;
@@ -405,6 +415,89 @@ export async function persistAgentArtifacts(config: ServerConfig, artifacts: Age
       ]
     );
   }
+}
+
+export async function getAgentContextArtifactsByIds(
+  config: ServerConfig,
+  input: { investorId: string; threadId?: string | null; artifactIds: string[] }
+): Promise<AgentContextArtifactRecord[]> {
+  const artifactIds = Array.from(new Set(input.artifactIds.map((item) => item.trim()).filter(Boolean)));
+  if (artifactIds.length === 0) return [];
+  const pool = await getRequiredContextPool(config);
+  const values: unknown[] = [input.investorId, artifactIds];
+  const where = ['investor_id = $1', 'id = any($2::text[])'];
+  if (input.threadId) {
+    values.push(input.threadId);
+    where.push(`thread_id = $${values.length}`);
+  }
+  const result = await pool.query(
+    [
+      'select id, investor_id as "investorId", thread_id as "threadId", run_id as "runId",',
+      'kind, name, mime_type as "mimeType", size_bytes as "sizeBytes", content_text as "contentText",',
+      'metadata, created_at as "createdAt", updated_at as "updatedAt"',
+      'from agent_context_artifacts',
+      `where ${where.join(' and ')}`,
+      'order by created_at asc, id asc',
+    ].join(' '),
+    values
+  );
+  return result.rows.map(rowToAgentContextArtifactRecord);
+}
+
+export async function patchAgentContextArtifactMetadata(
+  config: ServerConfig,
+  input: {
+    artifactId: string;
+    investorId: string;
+    threadId?: string | null;
+    runId?: string | null;
+    kind?: string;
+    mimeType?: string | null;
+    sizeBytes?: number | null;
+    contentText?: string | null;
+    metadata: Record<string, unknown>;
+  }
+) {
+  const pool = await getRequiredContextPool(config);
+  const values: unknown[] = [
+    input.artifactId,
+    input.investorId,
+    stringifyJson(input.metadata),
+  ];
+  const setClauses = ["metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb", 'updated_at = now()'];
+  if (input.runId !== undefined) {
+    values.push(input.runId);
+    setClauses.push(`run_id = $${values.length}`);
+  }
+  if (input.kind !== undefined) {
+    values.push(input.kind);
+    setClauses.push(`kind = $${values.length}`);
+  }
+  if (input.mimeType !== undefined) {
+    values.push(input.mimeType);
+    setClauses.push(`mime_type = $${values.length}`);
+  }
+  if (input.sizeBytes !== undefined) {
+    values.push(typeof input.sizeBytes === 'number' ? Math.floor(input.sizeBytes) : null);
+    setClauses.push(`size_bytes = $${values.length}`);
+  }
+  if (input.contentText !== undefined) {
+    values.push(input.contentText);
+    setClauses.push(`content_text = $${values.length}`);
+  }
+  const where = ['id = $1', 'investor_id = $2'];
+  if (input.threadId) {
+    values.push(input.threadId);
+    where.push(`thread_id = $${values.length}`);
+  }
+  await pool.query(
+    [
+      'update agent_context_artifacts',
+      `set ${setClauses.join(', ')}`,
+      `where ${where.join(' and ')}`,
+    ].join(' '),
+    values
+  );
 }
 
 export async function upsertAgentSandboxControlPlane(
@@ -919,6 +1012,35 @@ function rowToQueuedAgentTurn(row: Record<string, unknown>): QueuedAgentTurn {
   };
 }
 
+function rowToAgentContextArtifactRecord(row: Record<string, unknown>): AgentContextArtifactRecord {
+  return {
+    id: String(row.id || ''),
+    investorId: String(row.investorId || row.investor_id || ''),
+    threadId: String(row.threadId || row.thread_id || ''),
+    runId: typeof row.runId === 'string'
+      ? row.runId
+      : typeof row.run_id === 'string'
+        ? row.run_id
+        : null,
+    kind: String(row.kind || 'artifact'),
+    name: String(row.name || 'artifact'),
+    mimeType: typeof row.mimeType === 'string'
+      ? row.mimeType
+      : typeof row.mime_type === 'string'
+        ? row.mime_type
+        : null,
+    sizeBytes: readNullableRowNumber(row.sizeBytes ?? row.size_bytes),
+    contentText: typeof row.contentText === 'string'
+      ? row.contentText
+      : typeof row.content_text === 'string'
+        ? row.content_text
+        : null,
+    metadata: isRecord(row.metadata) ? row.metadata : {},
+    createdAt: rowDateIso(row.createdAt ?? row.created_at),
+    updatedAt: rowDateIso(row.updatedAt ?? row.updated_at),
+  };
+}
+
 async function getContextPostgresPool(connectionString: string): Promise<PgPool> {
   if (sharedContextPool && sharedContextUrl === connectionString) return sharedContextPool;
   let pg: { Pool: new (options: { connectionString: string }) => PgPool };
@@ -1300,4 +1422,14 @@ function readRowNumber(value: unknown) {
     return Number.isFinite(number) ? number : 0;
   }
   return 0;
+}
+
+function readNullableRowNumber(value: unknown) {
+  if (value === null || value === undefined) return null;
+  return readRowNumber(value);
+}
+
+function rowDateIso(value: unknown) {
+  if (value instanceof Date) return value.toISOString();
+  return typeof value === 'string' ? value : null;
 }

@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCleanTurnContext, upsertAgentSandboxControlPlane, } from '../agent-context-store.js';
-import { ingestWorkspaceAttachments } from '../artifact-ingestion.js';
+import { collectGeneratedWorkspaceArtifacts, ingestWorkspaceAttachments } from '../artifact-ingestion.js';
 import { createPersonalDataDynamictools } from '../tools/personal-data.js';
 import { LocalProfileStore } from '../profile-store.js';
 import { createRunCancelledError, isAgentRunCancelledError, isRunCancelled, registerActiveRun, unregisterActiveRun, } from '../run-control.js';
@@ -299,7 +299,23 @@ export class HermesSourceRuntime {
             });
         }
         const codexReply = codexOutcome.reply;
-        const reply = normalizeAssistantReply(extractReply(combinedOutput).trim());
+        const baseReply = normalizeAssistantReply(extractReply(combinedOutput).trim());
+        const generatedArtifacts = await collectGeneratedWorkspaceArtifacts(this.config, request, runtimePaths, runId, startedAtMs);
+        if (generatedArtifacts.artifacts.length > 0 || generatedArtifacts.warnings.length > 0) {
+            await emit('workspace_artifacts.generated', {
+                count: generatedArtifacts.artifacts.length,
+                artifacts: generatedArtifacts.artifacts.map((artifact) => ({
+                    id: artifact.id,
+                    name: artifact.name,
+                    kind: artifact.kind,
+                    mimeType: artifact.mimeType,
+                    sizeBytes: artifact.sizeBytes,
+                    metadata: artifact.metadata,
+                })),
+                warnings: generatedArtifacts.warnings,
+            });
+        }
+        const reply = appendGeneratedArtifactLinks(baseReply, generatedArtifacts.artifacts);
         await emit('hermes.source_runtime.completed', {
             sessionId: sessionId || null,
             codexReply: codexReply || null,
@@ -373,6 +389,7 @@ export class HermesSourceRuntime {
                 codexHome,
                 workspace,
                 profileStorePath: this.config.profileStorePath,
+                generatedArtifacts: generatedArtifacts.artifacts.map(publicGeneratedArtifact),
             },
         };
     }
@@ -922,6 +939,7 @@ function buildHermesEphemeralSystemPrompt(input) {
         '- Codex can use enabled competitive-intelligence data tools, including RapidAPI-backed Similarweb/Semrush/domain-metric style tools, when the task needs traffic, SEO, keyword, backlink, acquisition, market, or competitor evidence.',
         '- Codex can use deterministic execution tools when enabled, such as sandboxed command execution for calculation, parsing, scraping, data cleanup, or small file transformations. If local execution or a needed tool is unavailable, Codex should report that limitation instead of pretending it used it.',
         '- Codex can work with this thread workspace and artifacts only through the files/tools made available to its Codex session. Hermes-only conversational context is not automatically visible to Codex.',
+        '- When the user needs a generated file, ask Codex to write the final deliverable under `outputs/` in the thread workspace. Files written there are uploaded back to the product and linked in the final chat response after the run.',
         '',
         'When to answer directly as Hermes:',
         '- Answer directly for normal conversation, coaching, judgment, emotional nuance, preference/profile updates, memory/profile questions, strategy discussion that does not need fresh evidence, and reasoning-only tasks.',
@@ -1472,6 +1490,34 @@ function parseJsonLine(line) {
 }
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function appendGeneratedArtifactLinks(reply, artifacts) {
+    const links = artifacts
+        .map(publicGeneratedArtifact)
+        .filter((artifact) => artifact.downloadPath)
+        .map((artifact) => `- [${escapeMarkdownLinkText(artifact.name)}](${artifact.downloadPath})`);
+    if (links.length === 0)
+        return reply;
+    return [
+        reply.trim() || 'Done.',
+        '',
+        'Generated files:',
+        ...links,
+    ].join('\n');
+}
+function publicGeneratedArtifact(artifact) {
+    const metadata = isRecord(artifact.metadata) ? artifact.metadata : {};
+    return {
+        id: artifact.id || '',
+        name: artifact.name,
+        kind: artifact.kind,
+        mimeType: artifact.mimeType || null,
+        sizeBytes: artifact.sizeBytes || null,
+        downloadPath: typeof metadata.downloadPath === 'string' ? metadata.downloadPath : null,
+    };
+}
+function escapeMarkdownLinkText(value) {
+    return value.replace(/\\/g, '\\\\').replace(/\]/g, '\\]');
 }
 function normalizeAssistantReply(value) {
     const trimmed = value.trim();

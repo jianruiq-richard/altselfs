@@ -2,14 +2,15 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { renderProductizationPage } from './productization-page.js';
-import { isRecord } from './util.js';
+import { id, isRecord } from './util.js';
 import { runWebSearchtool } from './tools/web-search.js';
 import { getRapidApiQuotaSnapshots, isRapidApiCompetitortool, runRapidApiCompetitortool } from './tools/rapidapi-competitor.js';
 import { isPersonalDatatool, runPersonalDatatool } from './tools/personal-data.js';
 import { runSandboxExectool } from './tools/sandbox-exec.js';
 import { disablePersonalConnection, listPersonalConnections, upsertFeishuCliConnection, upsertFeishuOAuthConnection, upsertGmailOAuthConnection, upsertMetaOAuthConnection, updateFeishuConnectionFeaturePackages, } from './personal-data-store.js';
 import { completeFeishuCliAuthorization, continueFeishuCliAuthorization, DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, startFeishuCliAuthorization, } from './feishu-cli.js';
-import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
+import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, getAgentContextArtifactsByIds, patchAgentContextArtifactMetadata, persistAgentArtifacts, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnSuccess, touchAgentRunHeartbeat, } from './agent-context-store.js';
+import { createDirectUploadPolicy, createSignedObjectUrl, isArtifactObjectStorageConfigured, } from './artifact-storage.js';
 import { cancelActiveRun, getActiveRuntoolScope, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
 const ASYNC_TURN_POLL_INTERVAL_MS = 3000;
@@ -25,6 +26,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     sandboxExecEnabled: config?.sandboxExecEnabled,
                     sandboxExecImage: config?.sandboxExecImage,
                     sandboxExecNetworkEnabled: config?.sandboxExecNetworkEnabled,
+                    artifactObjectStorageEnabled: config ? isArtifactObjectStorageConfigured(config) : false,
                 });
             }
             if (req.method === 'GET' && url.pathname === '/productization') {
@@ -230,6 +232,138 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     connectionId: readRequiredBodyString(body, 'connectionId'),
                 });
                 return json(res, ok ? 200 : 404, ok ? { ok: true } : { error: 'Connection not found' });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/artifacts/upload-policy') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                if (!isArtifactObjectStorageConfigured(config)) {
+                    return json(res, 503, { error: 'Artifact object storage is not configured' });
+                }
+                const investorId = readRequiredBodyString(body, 'investorId');
+                const userId = readRequiredBodyString(body, 'userId');
+                const threadId = readRequiredBodyString(body, 'threadId');
+                const files = normalizeDirectUploadFiles(body.files);
+                if (files.length === 0)
+                    return json(res, 400, { error: 'files are required' });
+                const maxFiles = readPositiveIntegerEnv('ARTIFACT_OBJECT_STORAGE_MAX_FILES', 6);
+                if (files.length > maxFiles)
+                    return json(res, 400, { error: `You can upload up to ${maxFiles} files.` });
+                const oversized = files.find((file) => file.sizeBytes > config.artifactObjectStorageUploadMaxBytes);
+                if (oversized) {
+                    return json(res, 400, { error: `${oversized.name} exceeds the configured OSS upload size limit.` });
+                }
+                const artifacts = files.map((file) => {
+                    const artifactId = id('art');
+                    const policy = createDirectUploadPolicy(config, {
+                        artifactId,
+                        userId,
+                        investorId,
+                        threadId,
+                        name: file.name,
+                        mimeType: file.mimeType,
+                        sizeBytes: file.sizeBytes,
+                    });
+                    return {
+                        id: artifactId,
+                        name: file.name,
+                        mimeType: file.mimeType,
+                        sizeBytes: file.sizeBytes,
+                        kind: `uploaded_${getAttachmentKind(file.name, file.mimeType)}`,
+                        storageProvider: 'aliyun_oss',
+                        objectKey: policy.objectKey,
+                        expiresAt: policy.expiresAt,
+                        upload: policy.upload,
+                    };
+                });
+                await persistAgentArtifacts(config, artifacts.map((artifact) => ({
+                    id: artifact.id,
+                    investorId,
+                    threadId,
+                    kind: artifact.kind,
+                    name: artifact.name,
+                    mimeType: artifact.mimeType,
+                    sizeBytes: artifact.sizeBytes,
+                    contentText: null,
+                    metadata: {
+                        storageProvider: 'aliyun_oss',
+                        uploadStatus: 'pending',
+                        ossObjectKey: artifact.objectKey,
+                        originalName: artifact.name,
+                        uploadedByUserId: userId,
+                        createdBy: 'direct_upload_policy',
+                        uploadPolicyExpiresAt: artifact.expiresAt,
+                    },
+                })));
+                return json(res, 200, {
+                    ok: true,
+                    maxFileBytes: config.artifactObjectStorageUploadMaxBytes,
+                    artifacts,
+                });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/artifacts/complete-upload') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const investorId = readRequiredBodyString(body, 'investorId');
+                const threadId = readRequiredBodyString(body, 'threadId');
+                const artifactIds = normalizeArtifactIds(body.artifactIds || body.artifacts);
+                if (artifactIds.length === 0)
+                    return json(res, 400, { error: 'artifactIds are required' });
+                const artifacts = await getAgentContextArtifactsByIds(config, { investorId, threadId, artifactIds });
+                const foundIds = new Set(artifacts.map((artifact) => artifact.id));
+                for (const artifactId of artifactIds) {
+                    if (!foundIds.has(artifactId))
+                        continue;
+                    await patchAgentContextArtifactMetadata(config, {
+                        artifactId,
+                        investorId,
+                        threadId,
+                        metadata: {
+                            uploadStatus: 'uploaded',
+                            uploadedAt: new Date().toISOString(),
+                        },
+                    });
+                }
+                const updated = await getAgentContextArtifactsByIds(config, { investorId, threadId, artifactIds });
+                return json(res, 200, {
+                    ok: true,
+                    artifacts: updated.map(publicArtifactRecord),
+                    missingArtifactIds: artifactIds.filter((artifactId) => !foundIds.has(artifactId)),
+                });
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/artifacts/download-url') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                const investorId = readRequiredBodyString(body, 'investorId');
+                const artifactId = readRequiredBodyString(body, 'artifactId');
+                const threadId = typeof body.threadId === 'string' && body.threadId.trim() ? body.threadId.trim() : undefined;
+                const artifacts = await getAgentContextArtifactsByIds(config, { investorId, threadId, artifactIds: [artifactId] });
+                const artifact = artifacts[0];
+                if (!artifact)
+                    return json(res, 404, { error: 'Artifact not found' });
+                const objectKey = artifactMetadataString(artifact.metadata, 'ossObjectKey') || artifactMetadataString(artifact.metadata, 'objectKey');
+                if (!objectKey)
+                    return json(res, 404, { error: 'Artifact does not have an OSS object key' });
+                return json(res, 200, {
+                    ok: true,
+                    artifact: publicArtifactRecord(artifact),
+                    url: createSignedObjectUrl(config, { objectKey, method: 'GET' }),
+                    expiresInSeconds: config.artifactObjectStorageDownloadTtlSeconds,
+                });
             }
             if (req.method === 'GET' && url.pathname === '/v1/threads/status') {
                 if (!config)
@@ -1087,6 +1221,114 @@ function readRequiredBodyString(body, key) {
     if (typeof value !== 'string' || !value.trim())
         throw new Error(`${key} is required`);
     return value.trim();
+}
+function readPositiveIntegerEnv(key, fallback) {
+    const value = Number(process.env[key] || '');
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+function normalizeDirectUploadFiles(value) {
+    if (!Array.isArray(value))
+        return [];
+    return value
+        .map((item) => {
+        if (!isRecord(item))
+            return null;
+        const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : '';
+        const rawMimeType = typeof item.mimeType === 'string' ? item.mimeType : typeof item.type === 'string' ? item.type : '';
+        const mimeType = inferMimeType(name, rawMimeType);
+        const rawSize = typeof item.sizeBytes === 'number' ? item.sizeBytes : typeof item.size === 'number' ? item.size : 0;
+        const sizeBytes = Number.isFinite(rawSize) && rawSize > 0 ? Math.floor(rawSize) : 0;
+        if (!name || sizeBytes <= 0)
+            return null;
+        return { name, mimeType, sizeBytes };
+    })
+        .filter((item) => Boolean(item));
+}
+function normalizeArtifactIds(value) {
+    const rawItems = Array.isArray(value) ? value : [];
+    return Array.from(new Set(rawItems
+        .map((item) => {
+        if (typeof item === 'string')
+            return item.trim();
+        if (!isRecord(item))
+            return '';
+        return typeof item.id === 'string' ? item.id.trim() : typeof item.artifactId === 'string' ? item.artifactId.trim() : '';
+    })
+        .filter(Boolean)));
+}
+function publicArtifactRecord(artifact) {
+    const objectKey = artifactMetadataString(artifact.metadata, 'ossObjectKey') || artifactMetadataString(artifact.metadata, 'objectKey');
+    const downloadPath = objectKey ? `/api/investor/artifacts/download/${encodeURIComponent(artifact.id)}?threadId=${encodeURIComponent(artifact.threadId)}` : '';
+    return {
+        id: artifact.id,
+        threadId: artifact.threadId,
+        name: artifact.name,
+        kind: artifact.kind,
+        mimeType: artifact.mimeType,
+        sizeBytes: artifact.sizeBytes,
+        createdAt: artifact.createdAt,
+        updatedAt: artifact.updatedAt,
+        storageProvider: artifactMetadataString(artifact.metadata, 'storageProvider') || null,
+        uploadStatus: artifactMetadataString(artifact.metadata, 'uploadStatus') || null,
+        downloadPath: downloadPath || null,
+    };
+}
+function artifactMetadataString(metadata, key) {
+    const value = metadata[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+function inferMimeType(name, providedType) {
+    const normalizedType = providedType.trim().toLowerCase();
+    if (normalizedType === 'video/quicktime')
+        return 'video/mov';
+    if (normalizedType)
+        return normalizedType;
+    const lowerName = name.toLowerCase();
+    if (lowerName.endsWith('.pdf'))
+        return 'application/pdf';
+    if (lowerName.endsWith('.doc'))
+        return 'application/msword';
+    if (lowerName.endsWith('.docx'))
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (lowerName.endsWith('.xlsx'))
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (lowerName.endsWith('.csv'))
+        return 'text/csv';
+    if (lowerName.endsWith('.tsv'))
+        return 'text/tab-separated-values';
+    if (lowerName.endsWith('.txt'))
+        return 'text/plain';
+    if (lowerName.endsWith('.md'))
+        return 'text/markdown';
+    if (lowerName.endsWith('.png'))
+        return 'image/png';
+    if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg'))
+        return 'image/jpeg';
+    if (lowerName.endsWith('.webp'))
+        return 'image/webp';
+    if (lowerName.endsWith('.gif'))
+        return 'image/gif';
+    if (lowerName.endsWith('.mp4'))
+        return 'video/mp4';
+    if (lowerName.endsWith('.mov'))
+        return 'video/mov';
+    return 'application/octet-stream';
+}
+function getAttachmentKind(name, mimeType) {
+    const lowerName = name.toLowerCase();
+    if (mimeType.startsWith('image/'))
+        return 'image';
+    if (mimeType.startsWith('video/'))
+        return 'video';
+    if (mimeType === 'application/pdf' || lowerName.endsWith('.pdf'))
+        return 'pdf';
+    if (mimeType === 'application/msword' ||
+        mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        lowerName.endsWith('.doc') ||
+        lowerName.endsWith('.docx')) {
+        return 'document';
+    }
+    return 'file';
 }
 function publicPersonalConnection(connection) {
     return {

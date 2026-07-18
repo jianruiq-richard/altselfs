@@ -60,6 +60,15 @@ type UploadedAttachment = {
   kind: AttachmentKind;
 };
 
+type UploadedArtifactRef = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  kind: AttachmentKind;
+  downloadPath?: string | null;
+};
+
 type ConnectorScope = {
   enabledConnectorKeys?: string[];
   enabledConnectionIds?: string[];
@@ -73,6 +82,7 @@ type ParsedPostBody = {
   clientRequestId?: string | null;
   hermesModel: 'deepseek/deepseek-v3.2' | typeof DEFAULT_HERMES_MODEL;
   attachments: UploadedAttachment[];
+  uploadedArtifacts: UploadedArtifactRef[];
   connectorScope: ConnectorScope | null;
 };
 
@@ -124,6 +134,32 @@ function normalizeConnectorScope(value: unknown): ConnectorScope | null {
     ...(enabledConnectorKeys ? { enabledConnectorKeys } : {}),
     ...(enabledConnectionIds ? { enabledConnectionIds } : {}),
   };
+}
+
+function normalizeUploadedArtifacts(value: unknown): UploadedArtifactRef[] {
+  if (!Array.isArray(value)) return [];
+  const artifacts: UploadedArtifactRef[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const id = typeof item.id === 'string' ? item.id.trim() : '';
+    const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'attachment';
+    const type = inferMimeType(name, typeof item.type === 'string' ? item.type : typeof item.mimeType === 'string' ? item.mimeType : '');
+    const size = typeof item.size === 'number'
+      ? item.size
+      : typeof item.sizeBytes === 'number'
+        ? item.sizeBytes
+        : 0;
+    if (!id) continue;
+    artifacts.push({
+      id,
+      name,
+      type,
+      size: Number.isFinite(size) && size > 0 ? Math.floor(size) : 0,
+      kind: getAttachmentKind(name, type),
+      downloadPath: typeof item.downloadPath === 'string' ? item.downloadPath : null,
+    });
+  }
+  return artifacts;
 }
 
 function parseConnectorScopeJson(value: string) {
@@ -304,11 +340,13 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       hermesModel?: unknown;
       clientRequestId?: unknown;
       connectorScope?: unknown;
+      uploadedArtifacts?: unknown;
     };
     const messages = normalizeMessages(body.messages);
     const explicitMessage = typeof body.message === 'string' ? body.message.trim() : '';
     const displayMessage = typeof body.displayMessage === 'string' ? body.displayMessage.trim() : '';
-    const userMessage = explicitMessage || latestUserMessage(messages);
+    const uploadedArtifacts = normalizeUploadedArtifacts(body.uploadedArtifacts);
+    const userMessage = explicitMessage || latestUserMessage(messages) || (uploadedArtifacts.length > 0 ? 'Please analyze the attached files.' : '');
     return {
       threadId: body.threadId || null,
       messages: userMessage ? [{ role: 'user', content: userMessage }] : messages,
@@ -317,6 +355,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       clientRequestId: normalizeClientRequestId(body.clientRequestId),
       hermesModel: normalizeHermesModel(body.hermesModel),
       attachments: [],
+      uploadedArtifacts,
       connectorScope: normalizeConnectorScope(body.connectorScope),
     };
   }
@@ -362,6 +401,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     clientRequestId: normalizeClientRequestId(getStringFormValue(form.get('clientRequestId'))),
     hermesModel: normalizeHermesModel(getStringFormValue(form.get('hermesModel'))),
     attachments,
+    uploadedArtifacts: [],
     connectorScope: parseConnectorScopeJson(getStringFormValue(form.get('connectorScope'))),
   };
 }
@@ -376,6 +416,27 @@ function getAttachmentMetadata(attachments: UploadedAttachment[]) {
     type: attachment.type,
     size: attachment.size,
     kind: attachment.kind,
+  }));
+}
+
+function getUploadedArtifactMetadata(artifacts: UploadedArtifactRef[]) {
+  return artifacts.map((artifact) => ({
+    id: artifact.id,
+    name: artifact.name,
+    type: artifact.type,
+    size: artifact.size,
+    kind: artifact.kind,
+    ...(artifact.downloadPath ? { downloadPath: artifact.downloadPath } : {}),
+  }));
+}
+
+function getWorkspaceArtifactRefs(artifacts: UploadedArtifactRef[]) {
+  return artifacts.map((artifact) => ({
+    id: artifact.id,
+    name: artifact.name,
+    type: artifact.type,
+    size: artifact.size,
+    kind: artifact.kind,
   }));
 }
 
@@ -728,8 +789,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: detail }, { status });
   }
 
-  const { messages, userMessage, displayUserMessage, attachments, hermesModel, connectorScope } = parsedBody;
-  if (!userMessage && attachments.length === 0) return NextResponse.json({ error: 'Message or attachment is required.' }, { status: 400 });
+  const { messages, userMessage, displayUserMessage, attachments, uploadedArtifacts, hermesModel, connectorScope } = parsedBody;
+  if (!userMessage && attachments.length === 0 && uploadedArtifacts.length === 0) {
+    return NextResponse.json({ error: 'Message or attachment is required.' }, { status: 400 });
+  }
 
   const thread = await ensureThread({
     investorId: investor.id,
@@ -741,6 +804,13 @@ export async function POST(req: NextRequest) {
   const userMessageMeta = {
     ...(parsedBody.clientRequestId ? { clientRequestId: parsedBody.clientRequestId } : {}),
     ...(connectorScope ? { connectorScope } : {}),
+    ...(uploadedArtifacts.length > 0
+      ? {
+          attachments: getUploadedArtifactMetadata(uploadedArtifacts),
+          storedInObjectStorage: true,
+          storedInAgentWorkspace: false,
+        }
+      : {}),
     ...(attachments.length > 0
       ? {
           attachments: getAttachmentMetadata(attachments),
@@ -783,7 +853,8 @@ export async function POST(req: NextRequest) {
       currentUserMessage: userMessage,
       displayUserMessage: displayUserMessage || userMessage,
       currentMessageMetadata: userMessageMeta,
-      attachments: getAttachmentMetadata(attachments),
+      attachments: uploadedArtifacts.length > 0 ? getUploadedArtifactMetadata(uploadedArtifacts) : getAttachmentMetadata(attachments),
+      workspaceArtifactRefs: getWorkspaceArtifactRefs(uploadedArtifacts),
       workspaceAttachments: getAttachmentPayloads(attachments),
       enabledInfoSources,
       ...(connectorScope ? { connectorScope } : {}),

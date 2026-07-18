@@ -28,6 +28,7 @@ type AgentSessionSummary = {
 };
 
 type PendingAttachmentKind = 'image' | 'video' | 'pdf' | 'document' | 'file';
+type PendingAttachmentStatus = 'queued' | 'uploading' | 'uploaded' | 'error';
 
 type PendingAttachment = {
   id: string;
@@ -36,6 +37,30 @@ type PendingAttachment = {
   type: string;
   size: number;
   kind: PendingAttachmentKind;
+  uploadStatus: PendingAttachmentStatus;
+  artifactId?: string;
+  threadId?: string;
+  downloadPath?: string | null;
+  error?: string;
+};
+
+type DirectUploadArtifact = {
+  id: string;
+  name: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  downloadPath?: string | null;
+  upload?: {
+    method: 'POST';
+    url: string;
+    fields: Record<string, string>;
+  };
+};
+
+type UploadPolicyResponse = {
+  threadId?: string;
+  artifacts?: DirectUploadArtifact[];
+  error?: string;
 };
 
 type Briefing = {
@@ -221,9 +246,9 @@ const plannerStatusClass: Record<PlannerStepStatus, string> = {
 };
 
 const attachmentAccept =
-  'image/*,application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  'image/*,application/pdf,.pdf,.doc,.docx,.xlsx,.csv,.tsv,.txt,.md,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,text/markdown';
 const MAX_ATTACHMENT_FILES = 6;
-const MAX_ATTACHMENT_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_ATTACHMENT_FILE_BYTES = 50 * 1024 * 1024;
 
 function getPendingAttachmentKind(file: File): PendingAttachmentKind {
   const name = file.name.toLowerCase();
@@ -283,12 +308,43 @@ function createPendingAttachment(file: File): PendingAttachment {
     type: file.type,
     size: file.size,
     kind: getPendingAttachmentKind(file),
+    uploadStatus: 'queued',
   };
 }
 
 function formatAttachmentList(attachments: PendingAttachment[]) {
   if (attachments.length === 0) return '';
   return attachments.map((attachment) => `- ${attachment.name} (${formatBytes(attachment.size)})`).join('\n');
+}
+
+async function uploadAttachmentToOss(attachment: PendingAttachment, artifact: DirectUploadArtifact) {
+  if (!artifact.upload?.url || !artifact.upload.fields) {
+    throw new Error('Upload target is missing.');
+  }
+  const formData = new FormData();
+  Object.entries(artifact.upload.fields).forEach(([key, value]) => {
+    formData.append(key, value);
+  });
+  formData.append('file', attachment.file, attachment.name);
+  const response = await fetch(artifact.upload.url, {
+    method: artifact.upload.method || 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(`OSS upload failed with HTTP ${response.status}`);
+  }
+}
+
+function attachmentUploadStatusLabel(attachment: PendingAttachment) {
+  if (attachment.uploadStatus === 'uploaded') return 'Ready';
+  if (attachment.uploadStatus === 'uploading' || attachment.uploadStatus === 'queued') return 'Uploading';
+  return 'Failed';
+}
+
+function attachmentUploadStatusClass(attachment: PendingAttachment) {
+  if (attachment.uploadStatus === 'uploaded') return 'text-emerald-600';
+  if (attachment.uploadStatus === 'error') return 'text-red-600';
+  return 'text-slate-400';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -637,6 +693,30 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
       id: `${type}-${timestamp}-${index}`,
       title: 'Parse attachments',
       detail: count > 0 ? `Processed ${count} attachments` : 'No attachments or parse warnings',
+      status: Array.isArray(payload.warnings) && payload.warnings.length > 0 ? 'error' : 'completed',
+      timestamp,
+      method: type,
+      content,
+    };
+  }
+
+  if (type === 'workspace_artifacts.generated') {
+    const count = typeof payload.count === 'number' ? payload.count : 0;
+    const artifacts = Array.isArray(payload.artifacts) ? payload.artifacts : [];
+    const content = artifacts
+      .map((artifact) => {
+        if (!isRecord(artifact)) return '';
+        const name = typeof artifact.name === 'string' ? artifact.name : 'artifact';
+        const metadata = isRecord(artifact.metadata) ? artifact.metadata : {};
+        const downloadPath = typeof metadata.downloadPath === 'string' ? metadata.downloadPath : '';
+        return [name, downloadPath].filter(Boolean).join(' | ');
+      })
+      .filter(Boolean)
+      .join('\n');
+    return {
+      id: `${type}-${timestamp}-${index}`,
+      title: 'Publish generated files',
+      detail: count > 0 ? `Uploaded ${count} files` : 'No generated files',
       status: Array.isArray(payload.warnings) && payload.warnings.length > 0 ? 'error' : 'completed',
       timestamp,
       method: type,
@@ -1248,6 +1328,8 @@ export default function InvestorAgentChatPage() {
     hermesModelOptions.find((option) => option.value === hermesModel) ||
     hermesModelOptions.find((option) => option.value === DEFAULT_HERMES_MODEL) ||
     hermesModelOptions[0];
+  const attachmentUploadBusy = attachments.some((attachment) => attachment.uploadStatus === 'queued' || attachment.uploadStatus === 'uploading');
+  const attachmentUploadFailed = attachments.some((attachment) => attachment.uploadStatus === 'error');
 
   useEffect(() => {
     const stored = window.localStorage.getItem(HERMES_MODEL_STORAGE_KEY);
@@ -1799,6 +1881,116 @@ export default function InvestorAgentChatPage() {
     if (prompt) setInput(prompt);
   }, [searchParams]);
 
+  const uploadPendingAttachments = useCallback(async (items: PendingAttachment[]) => {
+    if (items.length === 0) return;
+    const itemIds = new Set(items.map((item) => item.id));
+    setAttachments((prev) => prev.map((attachment) => (
+      itemIds.has(attachment.id)
+        ? { ...attachment, uploadStatus: 'uploading' as const, error: undefined }
+        : attachment
+    )));
+
+    let uploadThreadId = threadId;
+    let policyData: UploadPolicyResponse;
+    try {
+      const policyRes = await fetch('/api/investor/artifacts/upload-policy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          threadId: uploadThreadId,
+          files: items.map((attachment) => ({
+            name: attachment.name,
+            mimeType: attachment.type || 'application/octet-stream',
+            sizeBytes: attachment.size,
+          })),
+        }),
+      });
+      policyData = (await policyRes.json().catch(() => ({}))) as UploadPolicyResponse;
+      if (!policyRes.ok) {
+        if (policyRes.status === 401) {
+          handleSessionExpired();
+          return;
+        }
+        throw new Error(policyData.error || 'Failed to prepare attachment upload');
+      }
+      uploadThreadId = typeof policyData.threadId === 'string' ? policyData.threadId : uploadThreadId;
+      if (uploadThreadId) setThreadId(uploadThreadId);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Failed to prepare attachment upload';
+      setError(detail);
+      setAttachments((prev) => prev.map((attachment) => (
+        itemIds.has(attachment.id)
+          ? { ...attachment, uploadStatus: 'error' as const, error: detail }
+          : attachment
+      )));
+      return;
+    }
+
+    const policyArtifacts = Array.isArray(policyData.artifacts) ? policyData.artifacts : [];
+    const completedIds: string[] = [];
+    for (const [index, attachment] of items.entries()) {
+      const artifact = policyArtifacts[index];
+      if (!artifact?.id) {
+        const detail = 'Upload policy did not return an artifact id.';
+        setAttachments((prev) => prev.map((item) => (
+          item.id === attachment.id ? { ...item, uploadStatus: 'error' as const, error: detail } : item
+        )));
+        continue;
+      }
+      try {
+        await uploadAttachmentToOss(attachment, artifact);
+        completedIds.push(artifact.id);
+        setAttachments((prev) => prev.map((item) => (
+          item.id === attachment.id
+            ? {
+                ...item,
+                uploadStatus: 'uploaded' as const,
+                artifactId: artifact.id,
+                threadId: uploadThreadId || undefined,
+                downloadPath: artifact.downloadPath || null,
+                error: undefined,
+              }
+            : item
+        )));
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Attachment upload failed';
+        setAttachments((prev) => prev.map((item) => (
+          item.id === attachment.id
+            ? { ...item, uploadStatus: 'error' as const, artifactId: artifact.id, error: detail }
+            : item
+        )));
+      }
+    }
+
+    if (!uploadThreadId || completedIds.length === 0) return;
+    try {
+      const completeRes = await fetch('/api/investor/artifacts/complete-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          threadId: uploadThreadId,
+          artifactIds: completedIds,
+        }),
+      });
+      const completeData = (await completeRes.json().catch(() => ({}))) as { artifacts?: DirectUploadArtifact[]; error?: string };
+      if (!completeRes.ok) throw new Error(completeData.error || 'Failed to finalize attachment upload');
+      const byId = new Map((completeData.artifacts || []).map((artifact) => [artifact.id, artifact]));
+      setAttachments((prev) => prev.map((attachment) => {
+        if (!attachment.artifactId) return attachment;
+        const artifact = byId.get(attachment.artifactId);
+        if (!artifact) return attachment;
+        return {
+          ...attachment,
+          downloadPath: artifact.downloadPath || attachment.downloadPath || null,
+        };
+      }));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to finalize attachment upload');
+    }
+  }, [handleSessionExpired, threadId]);
+
   const handleFilesSelected = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const selectedFiles = Array.from(files);
@@ -1808,7 +2000,14 @@ export default function InvestorAgentChatPage() {
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
-    setAttachments((prev) => [...prev, ...selectedFiles.map(createPendingAttachment)].slice(0, MAX_ATTACHMENT_FILES));
+    if (attachments.length + selectedFiles.length > MAX_ATTACHMENT_FILES) {
+      setError(`You can attach up to ${MAX_ATTACHMENT_FILES} files.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    const pending = selectedFiles.map(createPendingAttachment);
+    setAttachments((prev) => [...prev, ...pending].slice(0, MAX_ATTACHMENT_FILES));
+    void uploadPendingAttachments(pending);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -1950,6 +2149,25 @@ export default function InvestorAgentChatPage() {
     const requestAttachments = attachments;
     const hasAttachments = requestAttachments.length > 0;
     if ((!content && !hasAttachments) || sending || recoveringRunState || !isExecutive) return;
+    const unfinishedAttachment = requestAttachments.find((attachment) => attachment.uploadStatus !== 'uploaded');
+    if (unfinishedAttachment) {
+      setError(
+        unfinishedAttachment.uploadStatus === 'error'
+          ? `${unfinishedAttachment.name} failed to upload. Remove it or try attaching it again.`
+          : 'Please wait for attachments to finish uploading.'
+      );
+      return;
+    }
+    const uploadedArtifacts = requestAttachments.map((attachment) => ({
+      id: attachment.artifactId || '',
+      name: attachment.name,
+      type: attachment.type || 'application/octet-stream',
+      size: attachment.size,
+      kind: attachment.kind,
+      downloadPath: attachment.downloadPath || null,
+    })).filter((artifact) => artifact.id);
+    const attachmentThreadId = requestAttachments.find((attachment) => attachment.threadId)?.threadId || null;
+    const requestThreadId = threadId || attachmentThreadId;
 
     const attachmentList = formatAttachmentList(requestAttachments);
     const displayContent = [
@@ -1979,28 +2197,15 @@ export default function InvestorAgentChatPage() {
 
     try {
       const buildRequestBody = () => (
-        hasAttachments
-          ? (() => {
-          const formData = new FormData();
-          if (threadId) formData.append('threadId', threadId);
-          formData.append('message', content);
-          formData.append('displayMessage', displayContent);
-          formData.append('hermesModel', hermesModel);
-          formData.append('clientRequestId', clientRequestId);
-          formData.append('connectorScope', JSON.stringify(connectorScope));
-          requestAttachments.forEach((attachment) => {
-            formData.append('attachments', attachment.file, attachment.name);
-          });
-          return formData;
-        })()
-          : JSON.stringify({
-            threadId,
-            message: content,
-            displayMessage: displayContent,
-            hermesModel,
-            clientRequestId,
-            connectorScope,
-          })
+        JSON.stringify({
+          threadId: requestThreadId,
+          message: content,
+          displayMessage: displayContent,
+          hermesModel,
+          clientRequestId,
+          connectorScope,
+          uploadedArtifacts,
+        })
       );
 
       let res: Response | null = null;
@@ -2009,7 +2214,7 @@ export default function InvestorAgentChatPage() {
         try {
           res = await fetch('/api/investor/personal-agent?async=1', {
             method: 'POST',
-            ...(hasAttachments ? {} : { headers: { 'Content-Type': 'application/json' } }),
+            headers: { 'Content-Type': 'application/json' },
             body: buildRequestBody(),
             credentials: 'same-origin',
           });
@@ -2608,7 +2813,16 @@ export default function InvestorAgentChatPage() {
                   >
                     <span className="min-w-0 truncate">{attachment.name}</span>
                     <span className="shrink-0 text-slate-400">{formatBytes(attachment.size)}</span>
-                    <span className="hidden shrink-0 text-slate-400 sm:inline">Uploads on send</span>
+                    <span className={`hidden shrink-0 items-center gap-1 sm:inline-flex ${attachmentUploadStatusClass(attachment)}`}>
+                      {attachment.uploadStatus === 'uploaded' ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      ) : attachment.uploadStatus === 'error' ? (
+                        <AlertCircle className="h-3.5 w-3.5" />
+                      ) : (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      )}
+                      {attachmentUploadStatusLabel(attachment)}
+                    </span>
                     <button
                       type="button"
                       title="Remove attachment"
@@ -2649,7 +2863,7 @@ export default function InvestorAgentChatPage() {
                   type="button"
                   title="Add attachment"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={sending || recoveringRunState}
+                  disabled={sending || recoveringRunState || attachmentUploadBusy}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50 sm:h-9 sm:w-9"
                 >
                   <Paperclip className="h-4 w-4" />
@@ -2677,7 +2891,7 @@ export default function InvestorAgentChatPage() {
                 ) : (
                   <button
                     type="submit"
-                    disabled={!input.trim() && attachments.length === 0}
+                    disabled={(!input.trim() && attachments.length === 0) || attachmentUploadBusy || attachmentUploadFailed}
                     className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:py-2"
                   >
                     Send

@@ -362,5 +362,14 @@ export function loadConfig() {
         sandboxExecProxyUrl: process.env.SANDBOX_EXEC_PROXY_URL?.trim() || process.env.CODEX_OPENAI_PROXY_URL?.trim() || undefined,
         runtimeStateCacheTtlMs: readIntEnv('RUNTIME_STATE_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
         runtimeStateMaxArchiveBytes: readIntEnv('RUNTIME_STATE_MAX_ARCHIVE_BYTES', 16 * 1024 * 1024),
+        artifactObjectStorageEnabled: readBoolEnv('ARTIFACT_OBJECT_STORAGE_ENABLED', false),
+        artifactObjectStorageBucket: readEnv('ARTIFACT_OBJECT_STORAGE_BUCKET', ''),
+        artifactObjectStorageEndpoint: readEnv('ARTIFACT_OBJECT_STORAGE_ENDPOINT', 'https://oss-ap-southeast-1.aliyuncs.com'),
+        artifactObjectStorageInternalEndpoint: process.env.ARTIFACT_OBJECT_STORAGE_INTERNAL_ENDPOINT?.trim() || undefined,
+        artifactObjectStorageAccessKeyIdEnv: readEnv('ARTIFACT_OBJECT_STORAGE_ACCESS_KEY_ID_ENV', 'ALIYUN_OSS_ACCESS_KEY_ID'),
+        artifactObjectStorageAccessKeySecretEnv: readEnv('ARTIFACT_OBJECT_STORAGE_ACCESS_KEY_SECRET_ENV', 'ALIYUN_OSS_ACCESS_KEY_SECRET'),
+        artifactObjectStorageUploadMaxBytes: readIntEnv('ARTIFACT_OBJECT_STORAGE_UPLOAD_MAX_BYTES', 50 * 1024 * 1024),
+        artifactObjectStorageUploadTtlSeconds: readIntEnv('ARTIFACT_OBJECT_STORAGE_UPLOAD_TTL_SECONDS', 15 * 60),
+        artifactObjectStorageDownloadTtlSeconds: readIntEnv('ARTIFACT_OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS', 10 * 60),
     };
 }
