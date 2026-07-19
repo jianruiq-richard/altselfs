@@ -576,9 +576,7 @@ function parseConnectorScope(value) {
     const scope = isRecord(parsed) ? parsed : {};
     const enabledConnectorKeys = normalizeOptionalStringArray(scope.enabledConnectorKeys, true);
     const enabledConnectionIds = normalizeOptionalStringArray(scope.enabledConnectionIds, false);
-    const personalProviderKeys = enabledConnectorKeys
-        ? enabledConnectorKeys.filter((key) => key === 'gmail' || key === 'feishu' || key === 'meta')
-        : undefined;
+    const personalProviderKeys = enabledConnectorKeys.filter((key) => key === 'gmail' || key === 'feishu' || key === 'meta');
     return { enabledConnectorKeys, enabledConnectionIds, personalProviderKeys };
 }
 function parseEnabledInfoSources(value) {
@@ -614,7 +612,7 @@ function parseJson(value) {
 }
 function normalizeOptionalStringArray(value, lowercase) {
     if (!Array.isArray(value))
-        return undefined;
+        return [];
     return Array.from(new Set(value
         .map((item) => {
         if (typeof item !== 'string')
@@ -626,7 +624,7 @@ function normalizeOptionalStringArray(value, lowercase) {
 }
 function filterByConnectorScope(values, enabledConnectorKeys) {
     if (!enabledConnectorKeys)
-        return values;
+        return [];
     const allowed = new Set(enabledConnectorKeys);
     return values.filter((value) => allowed.has(value));
 }

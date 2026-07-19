@@ -185,6 +185,9 @@ export class HermesSourceRuntime {
             codexModel: codexModelSelection.model || null,
             codexModelProvider: codexModelSelection.provider || null,
             selectedAgentProfileId: selectedAgentProfileId || null,
+            enabledConnectorCount: connectorScope.enabledConnectorKeys.length,
+            enabledInfoSourceCount: enabledInfoSources.length,
+            enabledCompetitortoolCount: enabledCompetitortools.length,
             personalDatatoolCount: personalDatatoolNames.length,
             cleanUserMessageChars: currentUserMessage.length,
             ephemeralPromptChars: hermesEphemeralSystemPrompt.length,
@@ -863,7 +866,7 @@ function getEnabledInfoSourceNames(metadata, enabledConnectorKeys) {
     const value = metadata?.enabledInfoSources;
     if (!Array.isArray(value))
         return [];
-    const allowed = enabledConnectorKeys ? new Set(enabledConnectorKeys) : null;
+    const allowed = new Set(enabledConnectorKeys || []);
     const names = value
         .map((item) => {
         if (typeof item === 'string')
@@ -872,7 +875,7 @@ function getEnabledInfoSourceNames(metadata, enabledConnectorKeys) {
             return null;
         return typeof item.provider === 'string' ? item.provider.toLowerCase() : null;
     })
-        .filter((provider) => !allowed || (provider ? allowed.has(provider) : false))
+        .filter((provider) => provider ? allowed.has(provider) : false)
         .filter((item) => Boolean(item));
     return Array.from(new Set(names));
 }
@@ -880,14 +883,12 @@ function getConnectorScope(metadata) {
     const scope = isRecord(metadata?.connectorScope) ? metadata.connectorScope : null;
     const enabledConnectorKeys = normalizeOptionalStringArray(scope?.enabledConnectorKeys, true);
     const enabledConnectionIds = normalizeOptionalStringArray(scope?.enabledConnectionIds, false);
-    const personalProviderKeys = enabledConnectorKeys
-        ? enabledConnectorKeys.filter((key) => key === 'gmail' || key === 'feishu' || key === 'meta')
-        : undefined;
+    const personalProviderKeys = enabledConnectorKeys.filter((key) => key === 'gmail' || key === 'feishu' || key === 'meta');
     return { enabledConnectorKeys, enabledConnectionIds, personalProviderKeys };
 }
 function normalizeOptionalStringArray(value, lowercase) {
     if (!Array.isArray(value))
-        return undefined;
+        return [];
     return Array.from(new Set(value
         .map((item) => {
         if (typeof item !== 'string')
@@ -902,8 +903,8 @@ async function getPersonalDatatoolNames(config, investorId, userId, connectorSco
         const tools = await createPersonalDataDynamictools(config, {
             investorId,
             userId,
-            enabledProviders: connectorScope?.personalProviderKeys,
-            enabledConnectionIds: connectorScope?.enabledConnectionIds,
+            enabledProviders: connectorScope?.personalProviderKeys || [],
+            enabledConnectionIds: connectorScope?.enabledConnectionIds || [],
         });
         return tools
             .map((tool) => isRecord(tool) && typeof tool.name === 'string' ? tool.name : '')

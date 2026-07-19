@@ -597,9 +597,7 @@ function getConnectorScope(metadata: Record<string, unknown> | undefined) {
   const scope = isRecord(metadata?.connectorScope) ? metadata.connectorScope : null;
   const enabledConnectorKeys = normalizeOptionalStringArray(scope?.enabledConnectorKeys, true);
   const enabledConnectionIds = normalizeOptionalStringArray(scope?.enabledConnectionIds, false);
-  const personalProviderKeys = enabledConnectorKeys
-    ? enabledConnectorKeys.filter((key) => key === 'gmail' || key === 'feishu' || key === 'meta')
-    : undefined;
+  const personalProviderKeys = enabledConnectorKeys.filter((key) => key === 'gmail' || key === 'feishu' || key === 'meta');
   return {
     enabledConnectorKeys,
     enabledConnectionIds,
@@ -608,7 +606,7 @@ function getConnectorScope(metadata: Record<string, unknown> | undefined) {
 }
 
 function normalizeOptionalStringArray(value: unknown, lowercase: boolean) {
-  if (!Array.isArray(value)) return undefined;
+  if (!Array.isArray(value)) return [];
   return Array.from(new Set(
     value
       .map((item) => {
@@ -621,7 +619,7 @@ function normalizeOptionalStringArray(value: unknown, lowercase: boolean) {
 }
 
 function filterByConnectorScope(values: string[], enabledConnectorKeys?: string[]) {
-  if (!enabledConnectorKeys) return values;
+  if (!enabledConnectorKeys) return [];
   const allowed = new Set(enabledConnectorKeys);
   return values.filter((value) => allowed.has(value));
 }

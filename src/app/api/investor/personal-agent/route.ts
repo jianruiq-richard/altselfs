@@ -70,8 +70,8 @@ type UploadedArtifactRef = {
 };
 
 type ConnectorScope = {
-  enabledConnectorKeys?: string[];
-  enabledConnectionIds?: string[];
+  enabledConnectorKeys: string[];
+  enabledConnectionIds: string[];
 };
 
 type ParsedPostBody = {
@@ -83,7 +83,7 @@ type ParsedPostBody = {
   hermesModel: 'deepseek/deepseek-v3.2' | typeof DEFAULT_HERMES_MODEL;
   attachments: UploadedAttachment[];
   uploadedArtifacts: UploadedArtifactRef[];
-  connectorScope: ConnectorScope | null;
+  connectorScope: ConnectorScope;
 };
 
 function normalizeHermesModel(value: unknown): ParsedPostBody['hermesModel'] {
@@ -126,13 +126,20 @@ function normalizeStringArray(value: unknown, options: { lowercase: boolean }) {
   ));
 }
 
-function normalizeConnectorScope(value: unknown): ConnectorScope | null {
-  if (!isRecord(value)) return null;
+function normalizeConnectorScope(value: unknown): ConnectorScope {
+  if (!isRecord(value)) return createEmptyConnectorScope();
   const enabledConnectorKeys = normalizeStringArray(value.enabledConnectorKeys, { lowercase: true });
   const enabledConnectionIds = normalizeStringArray(value.enabledConnectionIds, { lowercase: false });
   return {
-    ...(enabledConnectorKeys ? { enabledConnectorKeys } : {}),
-    ...(enabledConnectionIds ? { enabledConnectionIds } : {}),
+    enabledConnectorKeys: enabledConnectorKeys || [],
+    enabledConnectionIds: enabledConnectionIds || [],
+  };
+}
+
+function createEmptyConnectorScope(): ConnectorScope {
+  return {
+    enabledConnectorKeys: [],
+    enabledConnectionIds: [],
   };
 }
 
@@ -163,7 +170,7 @@ function normalizeUploadedArtifacts(value: unknown): UploadedArtifactRef[] {
 }
 
 function parseConnectorScopeJson(value: string) {
-  if (!value) return null;
+  if (!value) return createEmptyConnectorScope();
   try {
     return normalizeConnectorScope(JSON.parse(value) as unknown);
   } catch {
@@ -630,9 +637,8 @@ async function getEnabledInfoSources(investorId: string) {
 
 function applyConnectorScopeToInfoSources(
   enabledInfoSources: Awaited<ReturnType<typeof getEnabledInfoSources>>,
-  connectorScope: ConnectorScope | null
+  connectorScope: ConnectorScope
 ) {
-  if (!connectorScope?.enabledConnectorKeys) return enabledInfoSources;
   const allowed = new Set(connectorScope.enabledConnectorKeys);
   return enabledInfoSources.filter((source) => allowed.has(source.provider));
 }
@@ -803,7 +809,7 @@ export async function POST(req: NextRequest) {
   const persistedUserContent = displayUserMessage || userMessage;
   const userMessageMeta = {
     ...(parsedBody.clientRequestId ? { clientRequestId: parsedBody.clientRequestId } : {}),
-    ...(connectorScope ? { connectorScope } : {}),
+    connectorScope,
     ...(uploadedArtifacts.length > 0
       ? {
           attachments: getUploadedArtifactMetadata(uploadedArtifacts),
@@ -857,7 +863,7 @@ export async function POST(req: NextRequest) {
       workspaceArtifactRefs: getWorkspaceArtifactRefs(uploadedArtifacts),
       workspaceAttachments: getAttachmentPayloads(attachments),
       enabledInfoSources,
-      ...(connectorScope ? { connectorScope } : {}),
+      connectorScope,
       hermesModel,
       runId: stableRunIdFromMessageId(userThreadMessage.id),
     },
