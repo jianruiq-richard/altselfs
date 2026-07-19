@@ -9,6 +9,11 @@ function summarizeThreadTitle(content: string) {
   return normalized.length > 28 ? `${normalized.slice(0, 28)}...` : normalized;
 }
 
+function isPlaceholderThreadTitle(title?: string | null) {
+  const normalized = title?.trim();
+  return !normalized || normalized === 'instruction' || normalized === 'New chat' || normalized === 'New conversation';
+}
+
 export async function getLatestThreadWithMessages(investorId: string, agentType: AgentType) {
   const thread = await prisma.agentThread.findFirst({
     where: { investorId, agentType },
@@ -50,7 +55,9 @@ export async function listAgentThreads(investorId: string, agentType: AgentType,
 
   return threads.map((thread) => ({
     id: thread.id,
-    title: thread.title || summarizeThreadTitle(thread.messages[0]?.content || ''),
+    title: isPlaceholderThreadTitle(thread.title)
+      ? summarizeThreadTitle(thread.messages[0]?.content || '')
+      : thread.title,
     createdAt: thread.createdAt.toISOString(),
     updatedAt: thread.updatedAt.toISOString(),
     messageCount: thread._count.messages,
@@ -177,7 +184,7 @@ export async function appendThreadMessage(params: {
     await prisma.agentThread.updateMany({
       where: {
         id: params.threadId,
-        OR: [{ title: null }, { title: 'instruction' }, { title: 'New chat' }],
+        OR: [{ title: null }, { title: { in: ['instruction', 'New chat', 'New conversation'] } }],
       },
       data: { title: summarizeThreadTitle(params.content) },
     });
