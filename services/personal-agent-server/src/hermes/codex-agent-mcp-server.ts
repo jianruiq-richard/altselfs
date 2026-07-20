@@ -255,6 +255,8 @@ async function runCodexAgentTool(argumentsValue: unknown) {
   let client: CodexJsonRpcClient | undefined;
   let finalText = '';
   let assistantBuffer = '';
+  let lastAssistantSnapshotAtMs = 0;
+  let lastAssistantSnapshotLength = 0;
   let codexThreadId = '';
   let resumed = false;
 
@@ -300,10 +302,35 @@ async function runCodexAgentTool(argumentsValue: unknown) {
       });
     });
 
+    const emitAssistantSnapshot = (status: 'delta' | 'final') => {
+      const message = (status === 'final' ? finalText : assistantBuffer).trim();
+      if (!message) return;
+      const nowMs = Date.now();
+      if (
+        status === 'delta' &&
+        nowMs - lastAssistantSnapshotAtMs < 700 &&
+        message.length - lastAssistantSnapshotLength < 160
+      ) {
+        return;
+      }
+      lastAssistantSnapshotAtMs = nowMs;
+      lastAssistantSnapshotLength = message.length;
+      emitTiming(status === 'final' ? 'codex.agent_message.final' : 'codex.agent_message.delta', {
+        message: truncate(message, 12000),
+      });
+    };
+
     activeClient.on('notification', (notification: Record<string, unknown>) => {
       const projected = projectCodexNotification(notification);
-      if (projected.assistantDelta) assistantBuffer += projected.assistantDelta;
-      if (projected.finalText) finalText = projected.finalText;
+      if (projected.assistantDelta) {
+        assistantBuffer += projected.assistantDelta;
+        emitAssistantSnapshot('delta');
+      }
+      if (projected.finalText) {
+        finalText = projected.finalText;
+        assistantBuffer = finalText || assistantBuffer;
+        emitAssistantSnapshot('final');
+      }
       emitTiming('codex.mcp.notification', {
         method: String(notification.method || ''),
         projected: Boolean(projected.finalText || projected.assistantDelta || projected.istoolIteration),

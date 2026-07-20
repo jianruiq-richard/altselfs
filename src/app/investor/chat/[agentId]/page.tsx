@@ -692,6 +692,27 @@ function formatStreamPayload(value: unknown, maxLength = 6000) {
   }
 }
 
+function isInternalAgentEventType(type: string) {
+  if (type === 'codex.timing' || type === 'hermes.timing') return true;
+  if (type === 'codex.server_request.item/tool/call') return true;
+  if (type === 'codex.mcp.notification' || type === 'codex.mcp.turn_started') return true;
+  if (type === 'codex.rollout.first_file_detected') return true;
+  if (type === 'codex.rollout.first_event_seen') return true;
+  if (type === 'codex.rollout.first_projected_event') return true;
+  if (type === 'codex.session.starting' || type === 'codex.thread.started' || type === 'codex.turn.started') return true;
+  if (type === 'hermes.profile.loaded' || type === 'hermes.profile.updated') return true;
+  if (type === 'hermes.source_runtime.starting' || type === 'hermes.source_runtime.completed') return true;
+  if (type.startsWith('runtime_state.')) return true;
+  if (
+    type.startsWith('agent_context.') &&
+    type !== 'agent_context.queue_timeout_requested' &&
+    type !== 'agent_context.sandbox_state_failed'
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function describeCodexItem(item: Record<string, unknown>) {
   const type = String(item.type || 'item');
   const command = typeof item.command === 'string' ? item.command : '';
@@ -738,6 +759,8 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   const type = String(event.type || 'agent.event');
   const timestamp = typeof event.timestamp === 'string' ? event.timestamp : now;
   const payload = getEventPayload(event);
+
+  if (isInternalAgentEventType(type)) return null;
 
   if (type === 'codex.server_request.item/tool/call') {
     const request = isRecord(payload.request) ? payload.request : {};
@@ -822,9 +845,26 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
     const message = typeof payload.message === 'string' ? payload.message : '';
     return {
       id: `${type}-${timestamp}-${index}`,
-      title: 'Generate intermediate reply',
-      detail: 'Codex assistant message',
+      title: 'Codex update',
+      detail: 'Assistant message',
       status: 'running',
+      timestamp,
+      method: type,
+      content: message,
+    };
+  }
+
+  if (type === 'codex.agent_message.delta' || type === 'codex.agent_message.final') {
+    const message = typeof payload.message === 'string'
+      ? payload.message
+      : typeof payload.delta === 'string'
+        ? payload.delta
+        : '';
+    return {
+      id: 'codex-agent-message-live',
+      title: type === 'codex.agent_message.final' ? 'Codex result' : 'Codex update',
+      detail: type === 'codex.agent_message.final' ? 'Final assistant message' : 'Writing assistant message',
+      status: type === 'codex.agent_message.final' ? 'completed' : 'running',
       timestamp,
       method: type,
       content: message,
@@ -1199,8 +1239,11 @@ function buildCompletedActivityFromStatus(params: {
 function codexActionLabel(item: CodexStreamItem) {
   const method = item.method || '';
   if (item.status === 'error') return item.title || 'Execution failed';
+  if (method.includes('codex.agent_message.delta')) return 'Codex is writing';
+  if (method.includes('codex.agent_message.final')) return 'Codex finished';
+  if (method.includes('codex.agent_message')) return 'Codex update';
   if (method.includes('tool') || item.title.includes('tool')) {
-    return item.status === 'completed' ? 'Called tool' : 'Calling tool';
+    return item.status === 'completed' ? 'Tool finished' : 'Using tool';
   }
   if (method.includes('queue_claimed')) return 'Starting task';
   if (method.includes('queue_timeout')) return 'Task timed out';
@@ -1216,7 +1259,10 @@ function codexActionLabel(item: CodexStreamItem) {
 function codexCompletedActionLabel(item: CodexStreamItem) {
   const method = item.method || '';
   if (item.status === 'error') return item.title || 'Execution failed';
-  if (method.includes('tool') || item.title.includes('tool')) return 'Call tool';
+  if (method.includes('codex.agent_message.delta')) return 'Codex update';
+  if (method.includes('codex.agent_message.final')) return 'Codex result';
+  if (method.includes('codex.agent_message')) return 'Codex update';
+  if (method.includes('tool') || item.title.includes('tool')) return item.status === 'running' ? 'Use tool' : 'Tool result';
   if (method.includes('queue_claimed')) return 'Start task';
   if (method.includes('queue_timeout')) return 'Task timeout';
   if (method.includes('plan') || item.title.includes('plan')) return 'Plan';
@@ -1259,6 +1305,74 @@ function formatCodexContent(content: string) {
   }
 }
 
+function shouldShowActivityContentInline(item: CodexStreamItem) {
+  const method = item.method || '';
+  return (
+    method === 'codex.agent_message' ||
+    method === 'codex.agent_message.delta' ||
+    method === 'codex.agent_message.final' ||
+    method === 'codex.task_complete' ||
+    method === 'codex.plan.updated'
+  );
+}
+
+function compactCodexStreamItems(items: CodexStreamItem[], limit = 18) {
+  const compacted: CodexStreamItem[] = [];
+  for (const item of items) {
+    if (!item) continue;
+    const existingIndex = compacted.findIndex((candidate) => candidate.id === item.id);
+    if (existingIndex >= 0) {
+      compacted[existingIndex] = {
+        ...compacted[existingIndex],
+        ...item,
+        content: item.content || compacted[existingIndex].content,
+      };
+    } else {
+      compacted.push(item);
+    }
+  }
+  const hasNativeActivity = compacted.some((item) => item.method);
+  const nativeVisible = hasNativeActivity
+    ? compacted.filter((item) => item.method || item.status === 'error')
+    : compacted;
+  const hasTaskComplete = nativeVisible.some((item) => item.method === 'codex.task_complete');
+  const visible = hasTaskComplete
+    ? nativeVisible.filter((item) => (
+        item.method !== 'codex.agent_message' &&
+        item.method !== 'codex.agent_message.delta' &&
+        item.method !== 'codex.agent_message.final'
+      ))
+    : nativeVisible;
+  return visible.slice(-limit);
+}
+
+function ActivityContent({ item, content }: { item: CodexStreamItem; content: string }) {
+  if (!content) return null;
+  if (shouldShowActivityContentInline(item)) {
+    return (
+      <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800">
+        <MarkdownMessage
+          content={content}
+          renderMediaPreview={({ href, label, kind, key }) => (
+            <InlineMediaPreview key={key} href={href} label={label} kind={kind} />
+          )}
+        />
+      </div>
+    );
+  }
+  return (
+    <details className="group/output mt-2">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
+        <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
+        Output
+      </summary>
+      <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
+        {content}
+      </pre>
+    </details>
+  );
+}
+
 function CodexActivityIcon({ item }: { item: CodexStreamItem }) {
   if (item.status === 'error') return <AlertCircle className="h-4 w-4 text-red-500" />;
   if (item.status === 'completed') return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
@@ -1266,7 +1380,7 @@ function CodexActivityIcon({ item }: { item: CodexStreamItem }) {
 }
 
 function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexActivity }) {
-  const items = activity.items.slice(-18);
+  const items = compactCodexStreamItems(activity.items, 18);
   const completedAtMs =
     timestampMs(activity.completedAt) ||
     timestampMs(items[items.length - 1]?.timestamp || '') ||
@@ -1301,7 +1415,6 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
                         <span className="min-w-0 break-words text-slate-500">{codexCompactDetail(item)}</span>
                       </div>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
-                        {item.method ? <span>Source {item.method}</span> : null}
                         <span>Duration {formatDuration(stepDuration(items, index, completedAtMs))}</span>
                       </div>
                       {links.length > 0 ? (
@@ -1319,17 +1432,7 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
                           ))}
                         </div>
                       ) : null}
-                      {content ? (
-                        <details className="group/output mt-2">
-                          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
-                            <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
-                            Output
-                          </summary>
-                          <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
-                            {content}
-                          </pre>
-                        </details>
-                      ) : null}
+                      <ActivityContent item={settledItem} content={content} />
                     </div>
                   </div>
                 </div>
@@ -1505,7 +1608,7 @@ async function waitForExecutiveRun(
 function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active: boolean }) {
   if (items.length === 0 && !active) return null;
   const visibleItems = items.length > 0
-    ? items.slice(-5)
+    ? compactCodexStreamItems(items, 5)
     : [
         {
           id: 'agent-stream-preparing',
@@ -1561,17 +1664,7 @@ function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active
                               <span className="font-medium text-slate-900">{codexCompletedActionLabel(item)}</span>
                               <span className="min-w-0 break-words text-slate-500">{codexCompactDetail(item)}</span>
                             </div>
-                            {content ? (
-                              <details className="group/output mt-2">
-                                <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
-                                  <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
-                                  Output
-                                </summary>
-                                <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
-                                  {content}
-                                </pre>
-                              </details>
-                            ) : null}
+                            <ActivityContent item={settledItem} content={content} />
                           </div>
                         </div>
                       </div>
@@ -1875,16 +1968,16 @@ export default function InvestorAgentChatPage() {
         setError(typeof data.error === 'string' ? data.error : 'Failed to stop task');
         return;
       }
-      setCodexStreamItems((prev) => [
+      setCodexStreamItems((prev) => compactCodexStreamItems([
         ...prev,
         {
           id: `personal-agent-stopped-${Date.now()}`,
           title: 'Stop requested',
-          detail: `runId: ${runId}`,
+          detail: 'The current task is being stopped',
           status: 'completed' as const,
           timestamp: new Date().toISOString(),
         },
-      ].slice(-18));
+      ]));
     } catch (err) {
       setError(err instanceof Error ? `Failed to stop task: ${err.message}` : 'Failed to stop task. Please try again.');
     } finally {
@@ -1957,7 +2050,7 @@ export default function InvestorAgentChatPage() {
         setActiveRunId(nextRunId);
         setSending(true);
         if (liveStreamRunIdRef.current === nextRunId) return 'active';
-        if (projected.length > 0) setCodexStreamItems(projected.slice(-18));
+        if (projected.length > 0) setCodexStreamItems(compactCodexStreamItems(projected));
         return 'active';
       }
 
@@ -2488,7 +2581,7 @@ export default function InvestorAgentChatPage() {
     expectedUserContent: string
   ): Promise<PersonalAgentStreamRecoveryResult> => {
     setRecoveringRunState(true);
-    setCodexStreamItems((prev) => [
+    setCodexStreamItems((prev) => compactCodexStreamItems([
       ...prev,
       {
         id: `stream-recovery-${Date.now()}`,
@@ -2497,7 +2590,7 @@ export default function InvestorAgentChatPage() {
         status: 'running' as const,
         timestamp: new Date().toISOString(),
       },
-    ].slice(-18));
+    ]));
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const knownRunId = activeRunIdRef.current || liveStreamRunIdRef.current || '';
@@ -2539,7 +2632,7 @@ export default function InvestorAgentChatPage() {
           const applied = await refreshPersonalAgentStatus(statusThreadId);
           if (applied !== 'active') return applied === 'success' || applied === 'terminal' ? 'recovered' : 'failed';
           setError(null);
-          setCodexStreamItems((prev) => [
+          setCodexStreamItems((prev) => compactCodexStreamItems([
             ...prev,
             {
               id: `stream-recovery-active-${Date.now()}`,
@@ -2548,7 +2641,7 @@ export default function InvestorAgentChatPage() {
               status: 'running' as const,
               timestamp: new Date().toISOString(),
             },
-          ].slice(-18));
+          ]));
           return 'active';
         }
 
@@ -2652,7 +2745,7 @@ export default function InvestorAgentChatPage() {
         } catch (err) {
           lastStartError = err;
           if (attempt >= 2) break;
-          setCodexStreamItems((prev) => [
+          setCodexStreamItems((prev) => compactCodexStreamItems([
             ...prev,
             {
               id: `personal-agent-start-retry-${clientRequestId}-${attempt}`,
@@ -2661,7 +2754,7 @@ export default function InvestorAgentChatPage() {
               status: 'running' as const,
               timestamp: new Date().toISOString(),
             },
-          ].slice(-18));
+          ]));
           await sleep(600 + attempt * 900);
         }
       }
@@ -2709,8 +2802,8 @@ export default function InvestorAgentChatPage() {
       setCodexStreamItems([
         {
           id: `async-run-${runId}`,
-          title: 'Background task started',
-          detail: `runId: ${runId}`,
+          title: 'Thinking',
+          detail: 'Starting the agent loop',
           status: 'running' as const,
           timestamp: new Date().toISOString(),
         },

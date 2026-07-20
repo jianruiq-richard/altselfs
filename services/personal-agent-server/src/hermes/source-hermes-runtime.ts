@@ -1557,6 +1557,17 @@ function emitRuntimeTimingFromStderrLine(
     const parsed = parseJsonValue(rawPayload);
     if (!isRecord(parsed)) return;
 
+    const passthroughType = typeof parsed.type === 'string' ? parsed.type : '';
+    if (passthroughType === 'codex.agent_message.delta' || passthroughType === 'codex.agent_message.final') {
+      const payload = isRecord(parsed.payload) ? parsed.payload : {};
+      emitTiming(passthroughType, {
+        source: timingPrefix.source,
+        timingTimestamp: typeof parsed.timestamp === 'string' ? parsed.timestamp : null,
+        ...safeJson(payload),
+      });
+      return;
+    }
+
     emitTiming(timingPrefix.eventType, {
       source: timingPrefix.source,
       ...safeJson(parsed),
