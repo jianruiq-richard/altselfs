@@ -607,6 +607,12 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
             existing: true,
           });
         }
+        if (turnRequest.threadId) {
+          await touchAgentRunHeartbeat(config, {
+            threadId: turnRequest.threadId,
+            runId: persisted.runId,
+          }).catch(() => null);
+        }
         const startedEvent: AgentEvent = {
           type: 'agent_context.async_turn_started',
           timestamp: new Date().toISOString(),

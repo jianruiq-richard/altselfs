@@ -597,6 +597,12 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                         existing: true,
                     });
                 }
+                if (turnRequest.threadId) {
+                    await touchAgentRunHeartbeat(config, {
+                        threadId: turnRequest.threadId,
+                        runId: persisted.runId,
+                    }).catch(() => null);
+                }
                 const startedEvent = {
                     type: 'agent_context.async_turn_started',
                     timestamp: new Date().toISOString(),

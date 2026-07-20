@@ -448,9 +448,11 @@ export async function getAgentThreadRuntimeStatus(config, input) {
     const sandbox = sandboxResult.rows[0] || null;
     const activeRunId = typeof sandbox?.active_run_id === 'string' ? sandbox.active_run_id : '';
     const requestedRun = requestedRunId ? runs.find((run) => run.id === requestedRunId) || null : null;
-    const activeRun = requestedRun || (activeRunId
+    const queuedOrRunningRun = runs.find((run) => run.status === 'RUNNING' || run.status === 'QUEUED') || null;
+    const sandboxActiveRun = activeRunId
         ? runs.find((run) => run.id === activeRunId) || null
-        : runs.find((run) => run.status === 'RUNNING' || run.status === 'QUEUED') || null);
+        : null;
+    const activeRun = requestedRun || queuedOrRunningRun || sandboxActiveRun || null;
     const eventRun = activeRun || runs[0] || null;
     const eventRunId = typeof eventRun?.id === 'string' ? eventRun.id : '';
     const runIds = eventRunId ? [eventRunId] : [];

@@ -2025,8 +2025,18 @@ export default function InvestorAgentChatPage() {
         : typeof activeRun.id === 'string'
           ? activeRun.id
           : '';
+      const expectedEventRunId = statusRunId || nextRunId;
       const recentEvents = Array.isArray(data.recentEvents) ? data.recentEvents : [];
       const projected = recentEvents
+        .filter((row) => {
+          if (!expectedEventRunId || !isRecord(row)) return true;
+          const rowRunId = typeof row.run_id === 'string'
+            ? row.run_id
+            : typeof row.runId === 'string'
+              ? row.runId
+              : '';
+          return !rowRunId || rowRunId === expectedEventRunId;
+        })
         .map((row, index) => {
           if (!isRecord(row)) return null;
           const storedPayload = isRecord(row.payload) ? row.payload : {};
