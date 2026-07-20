@@ -39,11 +39,20 @@ export async function POST(req: NextRequest) {
   const files = normalizeFiles(body.files);
   if (files.length === 0) return NextResponse.json({ error: 'files are required' }, { status: 400 });
 
-  const thread = await ensureThread({
-    investorId: investor.id,
-    agentType: PERSONAL_AGENT_TYPE,
-    threadId: typeof body.threadId === 'string' ? body.threadId.trim() || null : null,
-  });
+  let thread: Awaited<ReturnType<typeof ensureThread>>;
+  try {
+    thread = await ensureThread({
+      investorId: investor.id,
+      agentType: PERSONAL_AGENT_TYPE,
+      threadId: typeof body.threadId === 'string' ? body.threadId.trim() || null : null,
+    });
+  } catch (error) {
+    const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : 500;
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Thread is unavailable.' },
+      { status }
+    );
+  }
 
   try {
     const data = await personalAgentInternalFetch<UploadPolicyResponse>('/internal/artifacts/upload-policy', {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, CheckCircle2, ChevronDown, Download, ExternalLink, FileText, Film, ImageIcon, LoaderCircle, MessageSquare, Paperclip, Plug, Plus, Settings2, Square, X } from 'lucide-react';
+import { AlertCircle, Archive, CheckCircle2, ChevronDown, Download, ExternalLink, FileText, Film, ImageIcon, LoaderCircle, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -30,6 +30,7 @@ type ChatArtifact = {
 
 type AgentSessionSummary = {
   id: string;
+  status?: 'ACTIVE' | 'ARCHIVED' | 'DELETED';
   title: string;
   createdAt: string;
   updatedAt: string;
@@ -1612,6 +1613,8 @@ export default function InvestorAgentChatPage() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<AgentSessionSummary[]>([]);
   const [creatingSession, setCreatingSession] = useState(false);
+  const [openSessionMenuId, setOpenSessionMenuId] = useState<string | null>(null);
+  const [sessionActionBusyId, setSessionActionBusyId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
@@ -2147,8 +2150,82 @@ export default function InvestorAgentChatPage() {
     if (!targetThreadId || targetThreadId === threadId || sending || recoveringRunState) return;
     setInput('');
     setAttachments([]);
+    setOpenSessionMenuId(null);
     await loadData(targetThreadId);
   }, [loadData, recoveringRunState, sending, threadId]);
+
+  const handleSessionAction = useCallback(async (
+    session: AgentSessionSummary,
+    action: 'rename' | 'archive' | 'delete'
+  ) => {
+    if (sending || recoveringRunState || sessionActionBusyId) return;
+    setOpenSessionMenuId(null);
+
+    let title: string | undefined;
+    if (action === 'rename') {
+      const nextTitle = window.prompt('Rename conversation', session.title || 'New conversation');
+      if (nextTitle === null) return;
+      title = nextTitle.replace(/\s+/g, ' ').trim();
+      if (!title) {
+        setError('Conversation title cannot be empty.');
+        return;
+      }
+    }
+
+    if (action === 'delete') {
+      const confirmed = window.confirm('Delete this conversation? It will no longer be visible or accessible.');
+      if (!confirmed) return;
+    }
+
+    setSessionActionBusyId(session.id);
+    setError(null);
+    try {
+      const res = await fetch('/api/investor/personal-agent', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          action,
+          threadId: session.id,
+          ...(title ? { title } : {}),
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        sessions?: AgentSessionSummary[];
+      };
+      if (!res.ok) {
+        if (res.status === 401) {
+          handleSessionExpired();
+          return;
+        }
+        setError(data.error || `Failed to ${action} conversation`);
+        return;
+      }
+
+      const nextSessions = Array.isArray(data.sessions) ? data.sessions : [];
+      setSessions(nextSessions);
+
+      if ((action === 'archive' || action === 'delete') && session.id === threadId) {
+        await loadData(nextSessions[0]?.id || null);
+      }
+    } catch {
+      setError(`Failed to ${action} conversation. Please try again.`);
+    } finally {
+      setSessionActionBusyId(null);
+    }
+  }, [handleSessionExpired, loadData, recoveringRunState, sending, sessionActionBusyId, threadId]);
+
+  useEffect(() => {
+    if (!openSessionMenuId) return;
+    const closeMenu = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-session-menu-root="true"]')) return;
+      setOpenSessionMenuId(null);
+    };
+    window.addEventListener('click', closeMenu);
+    return () => window.removeEventListener('click', closeMenu);
+  }, [openSessionMenuId]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -2991,25 +3068,86 @@ export default function InvestorAgentChatPage() {
             {sessions.length > 0 ? (
               sessions.map((session) => {
                 const active = session.id === threadId;
+                const actionBusy = sessionActionBusyId === session.id;
                 return (
-                  <button
+                  <div
                     key={session.id}
-                    type="button"
-                    onClick={() => void switchSession(session.id)}
-                    disabled={active || sending || recoveringRunState}
-                    title={session.title}
+                    data-session-menu-root="true"
                     className={[
-                      'min-w-[11rem] max-w-[14rem] rounded-lg border px-3 py-2 text-left transition disabled:cursor-default',
+                      'group relative min-w-[11rem] max-w-[14rem] rounded-lg border transition',
                       active
                         ? 'border-blue-300 bg-blue-50 text-blue-900'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60',
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
                     ].join(' ')}
                   >
-                    <span className="block truncate text-sm font-medium">{session.title || 'New chat'}</span>
-                    <span className="mt-1 block text-xs text-slate-500">
-                      {session.messageCount} messages{formatSessionTime(session.updatedAt) ? ` · ${formatSessionTime(session.updatedAt)}` : ''}
-                    </span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => void switchSession(session.id)}
+                      disabled={active || sending || recoveringRunState || actionBusy}
+                      title={session.title}
+                      className="block w-full rounded-lg px-3 py-2 pr-10 text-left disabled:cursor-default disabled:opacity-60"
+                    >
+                      <span className="block truncate text-sm font-medium">{session.title || 'New chat'}</span>
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {session.messageCount} messages{formatSessionTime(session.updatedAt) ? ` · ${formatSessionTime(session.updatedAt)}` : ''}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      title="More Option"
+                      aria-label={`More options for ${session.title || 'conversation'}`}
+                      aria-haspopup="menu"
+                      aria-expanded={openSessionMenuId === session.id}
+                      disabled={sending || recoveringRunState || actionBusy}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setOpenSessionMenuId((current) => current === session.id ? null : session.id);
+                      }}
+                      className={[
+                        'absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md border text-slate-500 shadow-sm transition',
+                        openSessionMenuId === session.id
+                          ? 'border-slate-300 bg-white opacity-100'
+                          : 'border-transparent bg-white/80 opacity-0 hover:border-slate-200 hover:bg-white group-hover:opacity-100',
+                        'disabled:cursor-not-allowed disabled:opacity-40',
+                      ].join(' ')}
+                    >
+                      {actionBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                    </button>
+                    {openSessionMenuId === session.id ? (
+                      <div
+                        role="menu"
+                        className="absolute right-2 top-10 z-40 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-xl"
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => void handleSessionAction(session, 'rename')}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => void handleSessionAction(session, 'archive')}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                        >
+                          <Archive className="h-4 w-4" />
+                          Archive
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => void handleSessionAction(session, 'delete')}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })
             ) : (

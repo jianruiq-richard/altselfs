@@ -2,6 +2,9 @@ import { prisma } from '@/lib/prisma';
 
 export type AgentType = 'GMAIL' | 'FEISHU' | 'WECHAT' | 'XIAOHONGSHU' | 'EXECUTIVE' | 'PERSONAL';
 export type AgentMessageRole = 'USER' | 'ASSISTANT' | 'TOOL';
+export type AgentThreadStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED';
+
+const ACTIVE_THREAD_STATUS: AgentThreadStatus = 'ACTIVE';
 
 function summarizeThreadTitle(content: string) {
   const normalized = content.replace(/\s+/g, ' ').trim();
@@ -16,7 +19,7 @@ function isPlaceholderThreadTitle(title?: string | null) {
 
 export async function getLatestThreadWithMessages(investorId: string, agentType: AgentType) {
   const thread = await prisma.agentThread.findFirst({
-    where: { investorId, agentType },
+    where: { investorId, agentType, status: ACTIVE_THREAD_STATUS },
     orderBy: { updatedAt: 'desc' },
     include: {
       _count: {
@@ -36,9 +39,14 @@ export async function getLatestThreadWithMessages(investorId: string, agentType:
   return thread;
 }
 
-export async function listAgentThreads(investorId: string, agentType: AgentType, limit = 30) {
+export async function listAgentThreads(
+  investorId: string,
+  agentType: AgentType,
+  limit = 30,
+  status: AgentThreadStatus = ACTIVE_THREAD_STATUS
+) {
   const threads = await prisma.agentThread.findMany({
-    where: { investorId, agentType },
+    where: { investorId, agentType, status },
     orderBy: { updatedAt: 'desc' },
     take: Math.min(Math.max(limit, 1), 100),
     include: {
@@ -55,6 +63,7 @@ export async function listAgentThreads(investorId: string, agentType: AgentType,
 
   return threads.map((thread) => ({
     id: thread.id,
+    status: thread.status as AgentThreadStatus,
     title: isPlaceholderThreadTitle(thread.title)
       ? summarizeThreadTitle(thread.messages[0]?.content || '')
       : thread.title,
@@ -75,6 +84,7 @@ export async function createThread(params: {
       investorId: params.investorId,
       agentType: params.agentType,
       title: params.title?.trim() || 'New chat',
+      status: ACTIVE_THREAD_STATUS,
     },
   });
 }
@@ -92,6 +102,7 @@ export async function getThreadMessagesPage(params: {
       id: params.threadId,
       investorId: params.investorId,
       agentType: params.agentType,
+      status: ACTIVE_THREAD_STATUS,
     },
     select: { id: true },
   });
@@ -146,18 +157,60 @@ export async function ensureThread(params: {
     });
 
     if (existing && existing.investorId === params.investorId && existing.agentType === params.agentType) {
+      if (existing.status !== ACTIVE_THREAD_STATUS) {
+        throw Object.assign(new Error('Thread is not active.'), { status: 404 });
+      }
       return existing;
     }
   }
 
   const latest = await prisma.agentThread.findFirst({
-    where: { investorId: params.investorId, agentType: params.agentType },
+    where: { investorId: params.investorId, agentType: params.agentType, status: ACTIVE_THREAD_STATUS },
     orderBy: { updatedAt: 'desc' },
   });
 
   if (latest) return latest;
 
   return createThread(params);
+}
+
+export async function renameAgentThread(params: {
+  investorId: string;
+  agentType: AgentType;
+  threadId: string;
+  title: string;
+}) {
+  const title = params.title.replace(/\s+/g, ' ').trim();
+  if (!title) throw Object.assign(new Error('Title is required.'), { status: 400 });
+  if (title.length > 120) throw Object.assign(new Error('Title must be 120 characters or fewer.'), { status: 400 });
+  const result = await prisma.agentThread.updateMany({
+    where: {
+      id: params.threadId,
+      investorId: params.investorId,
+      agentType: params.agentType,
+      status: { not: 'DELETED' },
+    },
+    data: { title, updatedAt: new Date() },
+  });
+  if (result.count === 0) throw Object.assign(new Error('Thread not found.'), { status: 404 });
+}
+
+export async function updateAgentThreadStatus(params: {
+  investorId: string;
+  agentType: AgentType;
+  threadId: string;
+  status: AgentThreadStatus;
+}) {
+  const result = await prisma.agentThread.updateMany({
+    where: {
+      id: params.threadId,
+      investorId: params.investorId,
+      agentType: params.agentType,
+      status: { not: 'DELETED' },
+    },
+    data: { status: params.status, updatedAt: new Date() },
+  });
+  if (result.count === 0) throw Object.assign(new Error('Thread not found.'), { status: 404 });
 }
 
 export async function appendThreadMessage(params: {

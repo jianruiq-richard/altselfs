@@ -10,7 +10,10 @@ import {
   getLatestThreadWithMessages,
   getThreadMessagesPage,
   listAgentThreads,
+  renameAgentThread,
   toClientMessages,
+  updateAgentThreadStatus,
+  type AgentThreadStatus,
 } from '@/lib/agent-session';
 
 export const maxDuration = 800;
@@ -681,7 +684,9 @@ export async function GET(req: NextRequest) {
 
   const requestedThreadId = req.nextUrl.searchParams.get('threadId')?.trim();
   const includeSessions = req.nextUrl.searchParams.get('sessions') === '1';
-  const sessions = includeSessions ? await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE) : undefined;
+  const sessionStatusParam = req.nextUrl.searchParams.get('sessionStatus')?.trim().toLowerCase();
+  const sessionStatus: AgentThreadStatus = sessionStatusParam === 'archived' ? 'ARCHIVED' : 'ACTIVE';
+  const sessions = includeSessions ? await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE, 100, sessionStatus) : undefined;
   const statusRequested = req.nextUrl.searchParams.get('status') === '1';
   if (statusRequested) {
     const thread = requestedThreadId
@@ -814,6 +819,68 @@ export async function PUT(req: NextRequest) {
   });
 }
 
+export async function PATCH(req: NextRequest) {
+  const investor = await getInvestorOrNull();
+  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = (await req.json().catch(() => ({}))) as {
+    action?: unknown;
+    threadId?: unknown;
+    title?: unknown;
+  };
+  const action = typeof body.action === 'string' ? body.action.trim() : '';
+  const threadId = typeof body.threadId === 'string' ? body.threadId.trim() : '';
+  if (!threadId) return NextResponse.json({ error: 'threadId is required' }, { status: 400 });
+
+  try {
+    if (action === 'rename') {
+      const title = typeof body.title === 'string' ? body.title : '';
+      await renameAgentThread({
+        investorId: investor.id,
+        agentType: PERSONAL_AGENT_TYPE,
+        threadId,
+        title,
+      });
+    } else if (action === 'archive') {
+      await updateAgentThreadStatus({
+        investorId: investor.id,
+        agentType: PERSONAL_AGENT_TYPE,
+        threadId,
+        status: 'ARCHIVED',
+      });
+    } else if (action === 'unarchive') {
+      await updateAgentThreadStatus({
+        investorId: investor.id,
+        agentType: PERSONAL_AGENT_TYPE,
+        threadId,
+        status: 'ACTIVE',
+      });
+    } else if (action === 'delete' || action === 'permanent_delete') {
+      await updateAgentThreadStatus({
+        investorId: investor.id,
+        agentType: PERSONAL_AGENT_TYPE,
+        threadId,
+        status: 'DELETED',
+      });
+    } else {
+      return NextResponse.json({ error: 'Unsupported thread action.' }, { status: 400 });
+    }
+
+    const [sessions, archivedSessions] = await Promise.all([
+      listAgentThreads(investor.id, PERSONAL_AGENT_TYPE, 100, 'ACTIVE'),
+      listAgentThreads(investor.id, PERSONAL_AGENT_TYPE, 100, 'ARCHIVED'),
+    ]);
+
+    return NextResponse.json({ ok: true, sessions, archivedSessions });
+  } catch (error) {
+    const status = isRecord(error) && typeof error.status === 'number' ? error.status : 500;
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update thread.' },
+      { status }
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   const investor = await getInvestorOrNull();
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -832,11 +899,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Message or attachment is required.' }, { status: 400 });
   }
 
-  const thread = await ensureThread({
-    investorId: investor.id,
-    agentType: PERSONAL_AGENT_TYPE,
-    threadId: parsedBody.threadId || null,
-  });
+  let thread: Awaited<ReturnType<typeof ensureThread>>;
+  try {
+    thread = await ensureThread({
+      investorId: investor.id,
+      agentType: PERSONAL_AGENT_TYPE,
+      threadId: parsedBody.threadId || null,
+    });
+  } catch (error) {
+    const status = isRecord(error) && typeof error.status === 'number' ? error.status : 500;
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Thread is unavailable.' },
+      { status }
+    );
+  }
 
   const persistedUserContent = displayUserMessage || userMessage;
   const userMessageMeta = {
