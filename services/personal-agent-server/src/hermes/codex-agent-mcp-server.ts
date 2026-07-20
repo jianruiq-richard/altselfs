@@ -387,7 +387,7 @@ async function runCodexAgentTool(argumentsValue: unknown) {
     );
     emitTiming('codex.mcp.turn_started', { codexThreadId, raw: truncate(JSON.stringify(turn), 2000) });
 
-    await waitForTurnCompletion(activeClient);
+    await waitForTurnCompletion(activeClient, config.codexTurnTimeoutMs);
     const reply = normalizeAssistantReply(finalText || assistantBuffer || 'Codex completed the delegated task without a final message.');
     await writeStatePatch(runtime.statePath, {
       codexSessionId: codexThreadId,
@@ -580,12 +580,13 @@ function buildCodexDeveloperInstructions() {
   ].join('\n');
 }
 
-function waitForTurnCompletion(client: CodexJsonRpcClient) {
+function waitForTurnCompletion(client: CodexJsonRpcClient, timeoutMs: number) {
   return new Promise<void>((resolve, reject) => {
+    const effectiveTimeoutMs = Math.max(1_000, timeoutMs);
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error('codex turn timed out after 10 minutes'));
-    }, 600_000);
+      reject(new Error(`codex turn timed out after ${effectiveTimeoutMs}ms`));
+    }, effectiveTimeoutMs);
 
     const onNotification = (notification: Record<string, unknown>) => {
       if (notification.method !== 'turn/completed') return;

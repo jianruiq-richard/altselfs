@@ -394,6 +394,19 @@ CODEX_BIN=/opt/altselfs/codex-bin/codex
 UV_BIN=/usr/local/bin/altselfs-hermes-run
 ```
 
+Long-running task timeout knobs:
+
+```text
+AGENT_TURN_RUN_TIMEOUT_MS=4800000
+HERMES_SOURCE_RUNTIME_TIMEOUT_MS=4800000
+CODEX_TURN_TIMEOUT_MS=4800000
+SANDBOX_EXEC_TIMEOUT_MS=4800000
+```
+
+These values are milliseconds. The current defaults are 80 minutes for the
+overall worker run, Hermes source runtime process, Codex turn completion, and
+sandbox execution.
+
 Use `docker-compose.production.yml` only as the temporary product-side fallback.
 
 Main-agent memory path:

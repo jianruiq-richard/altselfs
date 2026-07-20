@@ -300,7 +300,7 @@ async function runCodexAgentTool(argumentsValue) {
             },
         }, 20_000);
         emitTiming('codex.mcp.turn_started', { codexThreadId, raw: truncate(JSON.stringify(turn), 2000) });
-        await waitForTurnCompletion(activeClient);
+        await waitForTurnCompletion(activeClient, config.codexTurnTimeoutMs);
         const reply = normalizeAssistantReply(finalText || assistantBuffer || 'Codex completed the delegated task without a final message.');
         await writeStatePatch(runtime.statePath, {
             codexSessionId: codexThreadId,
@@ -450,6 +450,8 @@ function buildCodexTaskPrompt(args, runtime) {
         'Hermes delegated the following step to Codex.',
         'Return useful results to Hermes. Natural language is allowed. Do not force structured output unless Hermes explicitly requested it.',
         'Hermes remains responsible for the final user-facing answer.',
+        'Do not include internal absolute paths, runtime homes, workspace roots, state/session files, database names, cloud hosts, IPs, credentials, environment variables, or backend implementation details in your return text.',
+        'If you create or transform a file, report the filename and outcome only. The product will attach or link generated files automatically.',
         '',
         `Altselfs thread: ${runtime.threadId}`,
         `Delegation mode: ${mode}`,
@@ -467,6 +469,8 @@ function buildCodexDeveloperInstructions() {
         'Answer in the user language unless Hermes asks otherwise.',
         'Use available web research capabilities when public current facts are required. Prefer native provider web search when available; otherwise use a registered web-search tool if one is available.',
         'Use registered sandbox execution tools only when deterministic computation, parsing, or small workspace file transformations are truly needed. Keep commands scoped to the provided workspace.',
+        'Internal paths, runtime homes, workspace roots, state databases, JSONL/session files, source paths, container/cloud hosts, IP addresses, credentials, and environment variables are execution-only. Do not include them in text returned to Hermes or the user.',
+        'When you create or transform a file, mention the filename and result only. Do not mention the absolute path; Hermes/product UI will attach or link generated files automatically.',
         'Never claim that you searched, read private accounts, used a platform, or called a tool unless the corresponding tool was actually called.',
         'Return the result to Hermes directly. Do not say you will call another tool after the turn ends; either call it or report the limitation.',
         'Use private personal-data tools only when the delegated task asks for private-channel content such as Gmail, Feishu/Lark, calendar, docs, messages, or connected accounts.',
@@ -474,12 +478,13 @@ function buildCodexDeveloperInstructions() {
         'For tasks that do not need external tools, reason directly and keep the response focused.',
     ].join('\n');
 }
-function waitForTurnCompletion(client) {
+function waitForTurnCompletion(client, timeoutMs) {
     return new Promise((resolve, reject) => {
+        const effectiveTimeoutMs = Math.max(1_000, timeoutMs);
         const timeout = setTimeout(() => {
             cleanup();
-            reject(new Error('codex turn timed out after 10 minutes'));
-        }, 600_000);
+            reject(new Error(`codex turn timed out after ${effectiveTimeoutMs}ms`));
+        }, effectiveTimeoutMs);
         const onNotification = (notification) => {
             if (notification.method !== 'turn/completed')
                 return;

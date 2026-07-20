@@ -500,9 +500,10 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
 
   private waitForTurnCompletion(client: CodexJsonRpcClient, emit: (event: AgentEvent) => Promise<void>) {
     return new Promise<void>((resolve, reject) => {
+      const timeoutMs = Math.max(1_000, this.config.codexTurnTimeoutMs);
       const timeout = setTimeout(() => {
-        reject(new Error('codex turn timed out after 10 minutes'));
-      }, 600_000);
+        reject(new Error(`codex turn timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       const onNotification = (notification: Record<string, unknown>) => {
         if (notification.method === 'turn/completed') {

@@ -728,13 +728,15 @@ export class HermesSourceRuntime {
       let firstStdoutAtMs: number | null = null;
       let firstStderrAtMs: number | null = null;
       let stderrTimingBuffer = '';
+      const timeoutMs = Math.max(1_000, this.config.hermesSourceRuntimeTimeoutMs);
       const timeout = setTimeout(() => {
         emitTiming('hermes.process.timeout', {
           durationMs: Date.now() - spawnedAtMs,
+          timeoutMs,
         });
         child.kill('SIGTERM');
-        reject(new Error('Hermes source runtime timed out after 10 minutes'));
-      }, 600_000);
+        reject(new Error(`Hermes source runtime timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
