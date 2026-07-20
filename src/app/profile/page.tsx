@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArchiveRestore, CreditCard, RotateCcw, Trash2, UserCircle, WalletCards } from 'lucide-react';
+import { CreditCard, RotateCcw, Trash2, UserCircle, WalletCards } from 'lucide-react';
 import { displayEmail } from '@/lib/user-identifier';
 import { FigmaShell } from '@/components/figma-shell';
 
@@ -42,7 +42,6 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [assetsOpen, setAssetsOpen] = useState(false);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [archivedError, setArchivedError] = useState<string | null>(null);
   const [archivedSessions, setArchivedSessions] = useState<ArchivedConversation[]>([]);
@@ -79,7 +78,7 @@ export default function ProfilePage() {
     void load();
   }, []);
 
-  const loadArchivedSessions = async () => {
+  const loadArchivedSessions = useCallback(async () => {
     setArchivedLoading(true);
     setArchivedError(null);
     try {
@@ -98,12 +97,11 @@ export default function ProfilePage() {
     } finally {
       setArchivedLoading(false);
     }
-  };
+  }, []);
 
-  const openAssets = () => {
-    setAssetsOpen(true);
+  useEffect(() => {
     void loadArchivedSessions();
-  };
+  }, [loadArchivedSessions]);
 
   const updateArchivedSession = async (session: ArchivedConversation, action: 'unarchive' | 'permanent_delete') => {
     if (assetActionId) return;
@@ -229,68 +227,56 @@ export default function ProfilePage() {
       </div>
 
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-950">Personal assets</h2>
-            <p className="mt-1 text-sm text-slate-500">Manage archived conversations and assets connected to your account.</p>
-          </div>
-          <button
-            type="button"
-            onClick={openAssets}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-          >
-            <ArchiveRestore className="h-4 w-4" />
-            View archived conversations
-          </button>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">Personal assets</h2>
+          <p className="mt-1 text-sm text-slate-500">Manage archived conversations and assets connected to your account.</p>
         </div>
 
-        {assetsOpen ? (
-          <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
-            <div className="hidden grid-cols-[minmax(0,1fr)_12rem_8rem] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
-              <span>Name</span>
-              <span>Date created</span>
-              <span className="text-right">Actions</span>
-            </div>
-            {archivedLoading ? (
-              <div className="px-4 py-6 text-sm text-slate-500">Loading archived conversations...</div>
-            ) : archivedSessions.length > 0 ? (
-              <div className="divide-y divide-slate-200">
-                {archivedSessions.map((session) => (
-                  <div key={session.id} className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_12rem_8rem] md:items-center">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">{session.title || 'New conversation'}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{session.messageCount} messages</p>
-                    </div>
-                    <p className="text-sm text-slate-500">{formatDateTime(session.createdAt)}</p>
-                    <div className="flex justify-start gap-1 md:justify-end">
-                      <button
-                        type="button"
-                        title="Unarchive"
-                        disabled={assetActionId === session.id}
-                        onClick={() => void updateArchivedSession(session, 'unarchive')}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Delete permanently"
-                        disabled={assetActionId === session.id}
-                        onClick={() => void updateArchivedSession(session, 'permanent_delete')}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-100 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="px-4 py-6 text-sm text-slate-500">No archived conversations yet.</div>
-            )}
-            {archivedError ? <div className="border-t border-slate-200 px-4 py-3 text-sm text-red-600">{archivedError}</div> : null}
+        <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+          <div className="hidden grid-cols-[minmax(0,1fr)_12rem_8rem] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+            <span>Name</span>
+            <span>Date created</span>
+            <span className="text-right">Actions</span>
           </div>
-        ) : null}
+          {archivedLoading ? (
+            <div className="px-4 py-6 text-sm text-slate-500">Loading archived conversations...</div>
+          ) : archivedSessions.length > 0 ? (
+            <div className="divide-y divide-slate-200">
+              {archivedSessions.map((session) => (
+                <div key={session.id} className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_12rem_8rem] md:items-center">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900">{session.title || 'New conversation'}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{session.messageCount} messages</p>
+                  </div>
+                  <p className="text-sm text-slate-500">{formatDateTime(session.createdAt)}</p>
+                  <div className="flex justify-start gap-1 md:justify-end">
+                    <button
+                      type="button"
+                      title="Unarchive"
+                      disabled={assetActionId === session.id}
+                      onClick={() => void updateArchivedSession(session, 'unarchive')}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete permanently"
+                      disabled={assetActionId === session.id}
+                      onClick={() => void updateArchivedSession(session, 'permanent_delete')}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-100 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="px-4 py-6 text-sm text-slate-500">No archived conversations yet.</div>
+          )}
+          {archivedError ? <div className="border-t border-slate-200 px-4 py-3 text-sm text-red-600">{archivedError}</div> : null}
+        </div>
       </div>
 
       <form onSubmit={onSave} className="max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
