@@ -375,6 +375,7 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                     threadId,
                     investorId: url.searchParams.get('investorId')?.trim() || undefined,
                     userId: url.searchParams.get('userId')?.trim() || undefined,
+                    runId: url.searchParams.get('runId')?.trim() || undefined,
                     recentEventLimit: Number(url.searchParams.get('recentEventLimit') || 20),
                 });
                 return json(res, 200, {

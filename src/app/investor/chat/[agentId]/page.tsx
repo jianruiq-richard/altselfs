@@ -1993,6 +1993,8 @@ export default function InvestorAgentChatPage() {
         status: '1',
       });
       if (targetThreadId) query.set('threadId', targetThreadId);
+      const statusRunId = activeRunIdRef.current || activeRunId || '';
+      if (statusRunId) query.set('runId', statusRunId);
       const res = await fetch(`/api/investor/personal-agent?${query.toString()}`, {
         cache: 'no-store',
         credentials: 'same-origin',
@@ -2128,7 +2130,7 @@ export default function InvestorAgentChatPage() {
       // Status recovery is best-effort; the normal send flow still reports errors.
       return 'unavailable';
     }
-  }, [handleSessionExpired]);
+  }, [activeRunId, handleSessionExpired]);
 
   const resetPersonalAgentRunState = useCallback(() => {
     activeRunIdRef.current = null;

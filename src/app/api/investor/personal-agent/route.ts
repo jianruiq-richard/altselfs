@@ -727,6 +727,8 @@ export async function GET(req: NextRequest) {
         userId: investor.email || investor.id,
         recentEventLimit: '100',
       });
+      const runId = req.nextUrl.searchParams.get('runId')?.trim();
+      if (runId) query.set('runId', runId);
       const response = await fetch(`${getPersonalAgentServerUrl()}/v1/threads/status?${query.toString()}`, {
         cache: 'no-store',
       });

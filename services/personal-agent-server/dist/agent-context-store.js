@@ -426,17 +426,34 @@ export async function getAgentThreadRuntimeStatus(config, input) {
             'limit 5',
         ].join(' '), input.investorId ? [input.threadId, input.investorId] : [input.threadId]),
     ]);
+    let runs = runsResult.rows;
+    const requestedRunId = typeof input.runId === 'string' && input.runId.trim() ? input.runId.trim() : '';
+    if (requestedRunId && !runs.some((run) => run.id === requestedRunId)) {
+        const values = [input.threadId, requestedRunId];
+        const where = ['thread_id = $1', 'id = $2'];
+        if (input.investorId) {
+            values.push(input.investorId);
+            where.push(`investor_id = $${values.length}`);
+        }
+        const requestedRunResult = await pool.query([
+            'select id, investor_id, thread_id, status, route, result, error, queued_at, started_at, completed_at,',
+            'worker_id, worker_heartbeat_at, attempt_count, model_provider, model, created_at, updated_at',
+            'from agent_context_runs',
+            `where ${where.join(' and ')}`,
+            'limit 1',
+        ].join(' '), values);
+        if (requestedRunResult.rows[0])
+            runs = [requestedRunResult.rows[0], ...runs];
+    }
     const sandbox = sandboxResult.rows[0] || null;
     const activeRunId = typeof sandbox?.active_run_id === 'string' ? sandbox.active_run_id : '';
-    const activeRun = activeRunId
-        ? runsResult.rows.find((run) => run.id === activeRunId) || null
-        : runsResult.rows.find((run) => run.status === 'RUNNING' || run.status === 'QUEUED') || null;
-    const runIds = activeRunId
-        ? [activeRunId]
-        : runsResult.rows
-            .map((run) => (typeof run.id === 'string' ? run.id : ''))
-            .filter(Boolean)
-            .slice(0, 3);
+    const requestedRun = requestedRunId ? runs.find((run) => run.id === requestedRunId) || null : null;
+    const activeRun = requestedRun || (activeRunId
+        ? runs.find((run) => run.id === activeRunId) || null
+        : runs.find((run) => run.status === 'RUNNING' || run.status === 'QUEUED') || null);
+    const eventRun = activeRun || runs[0] || null;
+    const eventRunId = typeof eventRun?.id === 'string' ? eventRun.id : '';
+    const runIds = eventRunId ? [eventRunId] : [];
     let recentEvents = [];
     if (runIds.length > 0) {
         const placeholders = runIds.map((_, index) => `$${index + 1}`).join(', ');
@@ -454,7 +471,7 @@ export async function getAgentThreadRuntimeStatus(config, input) {
         thread: threadResult.rows[0] || null,
         sandbox,
         activeRun,
-        recentRuns: runsResult.rows,
+        recentRuns: runs,
         recentEvents,
     };
 }
