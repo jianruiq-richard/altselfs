@@ -4,6 +4,12 @@ type MarkdownMessageProps = {
   content: string;
   inverted?: boolean;
   compact?: boolean;
+  renderMediaPreview?: (args: {
+    href: string;
+    label: string;
+    kind: 'image' | 'link' | 'code' | 'bare';
+    key: string;
+  }) => ReactNode | null;
 };
 
 type MarkdownBlock =
@@ -110,9 +116,12 @@ function normalizeHref(href: string) {
   return '#';
 }
 
+type InlineRenderOptions = Pick<MarkdownMessageProps, 'renderMediaPreview'>;
+
 function findToken(text: string) {
-  const candidates: Array<{ index: number; type: 'code' | 'link' | 'strong' | 'em'; marker?: string }> = [];
+  const candidates: Array<{ index: number; type: 'code' | 'image' | 'link' | 'strong' | 'em'; marker?: string }> = [];
   const codeIndex = text.indexOf('`');
+  const imageIndex = text.indexOf('![');
   const linkIndex = text.indexOf('[');
   const strongAsteriskIndex = text.indexOf('**');
   const strongUnderscoreIndex = text.indexOf('__');
@@ -120,6 +129,7 @@ function findToken(text: string) {
   const emUnderscoreIndex = text.indexOf('_');
 
   if (codeIndex >= 0) candidates.push({ index: codeIndex, type: 'code' });
+  if (imageIndex >= 0) candidates.push({ index: imageIndex, type: 'image' });
   if (linkIndex >= 0) candidates.push({ index: linkIndex, type: 'link' });
   if (strongAsteriskIndex >= 0) candidates.push({ index: strongAsteriskIndex, type: 'strong', marker: '**' });
   if (strongUnderscoreIndex >= 0) candidates.push({ index: strongUnderscoreIndex, type: 'strong', marker: '__' });
@@ -129,23 +139,75 @@ function findToken(text: string) {
   return candidates.sort((a, b) => a.index - b.index)[0] || null;
 }
 
-function parseInline(text: string, keyPrefix = 'inline'): ReactNode[] {
+function renderInlineMediaPreview(
+  options: InlineRenderOptions | undefined,
+  args: {
+    href: string;
+    label?: string;
+    kind: 'image' | 'link' | 'code' | 'bare';
+    key: string;
+  }
+) {
+  return options?.renderMediaPreview?.({
+    href: args.href,
+    label: args.label || '',
+    kind: args.kind,
+    key: args.key,
+  }) || null;
+}
+
+function parseInline(text: string, keyPrefix = 'inline', options?: InlineRenderOptions): ReactNode[] {
   const token = findToken(text);
-  if (!token) return splitLineBreaks(text, `${keyPrefix}-text`);
+  if (!token) return splitLineBreaks(text, `${keyPrefix}-text`, options);
 
   const before = text.slice(0, token.index);
   const afterStart = text.slice(token.index);
-  const nodes: ReactNode[] = [...splitLineBreaks(before, `${keyPrefix}-before`)];
+  const nodes: ReactNode[] = [...splitLineBreaks(before, `${keyPrefix}-before`, options)];
 
   if (token.type === 'code') {
     const end = afterStart.indexOf('`', 1);
     if (end > 0) {
+      const codeText = afterStart.slice(1, end);
+      const mediaPreview = renderInlineMediaPreview(options, {
+        href: codeText,
+        kind: 'code',
+        key: `${keyPrefix}-code-media`,
+      });
+      if (mediaPreview) {
+        nodes.push(mediaPreview);
+        nodes.push(...parseInline(afterStart.slice(end + 1), `${keyPrefix}-after-code`, options));
+        return nodes;
+      }
       nodes.push(
         <code key={`${keyPrefix}-code`} className="rounded bg-black/10 px-1 py-0.5 font-mono text-[0.92em]">
-          {afterStart.slice(1, end)}
+          {codeText}
         </code>
       );
-      nodes.push(...parseInline(afterStart.slice(end + 1), `${keyPrefix}-after-code`));
+      nodes.push(...parseInline(afterStart.slice(end + 1), `${keyPrefix}-after-code`, options));
+      return nodes;
+    }
+  }
+
+  if (token.type === 'image') {
+    const labelEnd = afterStart.indexOf(']');
+    const hrefStart = labelEnd >= 0 ? afterStart.indexOf('(', labelEnd) : -1;
+    const hrefEnd = hrefStart >= 0 ? afterStart.indexOf(')', hrefStart) : -1;
+    if (labelEnd > 1 && hrefStart === labelEnd + 1 && hrefEnd > hrefStart) {
+      const label = afterStart.slice(2, labelEnd);
+      const href = afterStart.slice(hrefStart + 1, hrefEnd);
+      const mediaPreview = renderInlineMediaPreview(options, {
+        href,
+        label,
+        kind: 'image',
+        key: `${keyPrefix}-image-media`,
+      });
+      if (mediaPreview) {
+        nodes.push(mediaPreview);
+        nodes.push(...parseInline(afterStart.slice(hrefEnd + 1), `${keyPrefix}-after-image`, options));
+        return nodes;
+      }
+      nodes.push(label || href);
+      nodes.push(...parseInline(afterStart.slice(hrefEnd + 1), `${keyPrefix}-after-image`, options));
       return nodes;
     }
   }
@@ -155,7 +217,20 @@ function parseInline(text: string, keyPrefix = 'inline'): ReactNode[] {
     const hrefStart = labelEnd >= 0 ? afterStart.indexOf('(', labelEnd) : -1;
     const hrefEnd = hrefStart >= 0 ? afterStart.indexOf(')', hrefStart) : -1;
     if (labelEnd > 0 && hrefStart === labelEnd + 1 && hrefEnd > hrefStart) {
-      const href = normalizeHref(afterStart.slice(hrefStart + 1, hrefEnd));
+      const label = afterStart.slice(1, labelEnd);
+      const rawHref = afterStart.slice(hrefStart + 1, hrefEnd);
+      const mediaPreview = renderInlineMediaPreview(options, {
+        href: rawHref,
+        label,
+        kind: 'link',
+        key: `${keyPrefix}-link-media`,
+      });
+      if (mediaPreview) {
+        nodes.push(mediaPreview);
+        nodes.push(...parseInline(afterStart.slice(hrefEnd + 1), `${keyPrefix}-after-link`, options));
+        return nodes;
+      }
+      const href = normalizeHref(rawHref);
       const external = /^https?:/i.test(href);
       nodes.push(
         <a
@@ -165,10 +240,10 @@ function parseInline(text: string, keyPrefix = 'inline'): ReactNode[] {
           rel={external ? 'noreferrer' : undefined}
           className="font-medium underline underline-offset-2"
         >
-          {parseInline(afterStart.slice(1, labelEnd), `${keyPrefix}-link-label`)}
+          {parseInline(label, `${keyPrefix}-link-label`, options)}
         </a>
       );
-      nodes.push(...parseInline(afterStart.slice(hrefEnd + 1), `${keyPrefix}-after-link`));
+      nodes.push(...parseInline(afterStart.slice(hrefEnd + 1), `${keyPrefix}-after-link`, options));
       return nodes;
     }
   }
@@ -178,10 +253,10 @@ function parseInline(text: string, keyPrefix = 'inline'): ReactNode[] {
     if (end > token.marker.length) {
       nodes.push(
         <strong key={`${keyPrefix}-strong`} className="font-semibold">
-          {parseInline(afterStart.slice(token.marker.length, end), `${keyPrefix}-strong-text`)}
+          {parseInline(afterStart.slice(token.marker.length, end), `${keyPrefix}-strong-text`, options)}
         </strong>
       );
-      nodes.push(...parseInline(afterStart.slice(end + token.marker.length), `${keyPrefix}-after-strong`));
+      nodes.push(...parseInline(afterStart.slice(end + token.marker.length), `${keyPrefix}-after-strong`, options));
       return nodes;
     }
   }
@@ -191,33 +266,60 @@ function parseInline(text: string, keyPrefix = 'inline'): ReactNode[] {
     if (end > token.marker.length) {
       nodes.push(
         <em key={`${keyPrefix}-em`} className="italic">
-          {parseInline(afterStart.slice(token.marker.length, end), `${keyPrefix}-em-text`)}
+          {parseInline(afterStart.slice(token.marker.length, end), `${keyPrefix}-em-text`, options)}
         </em>
       );
-      nodes.push(...parseInline(afterStart.slice(end + token.marker.length), `${keyPrefix}-after-em`));
+      nodes.push(...parseInline(afterStart.slice(end + token.marker.length), `${keyPrefix}-after-em`, options));
       return nodes;
     }
   }
 
   nodes.push(afterStart[0]);
-  nodes.push(...parseInline(afterStart.slice(1), `${keyPrefix}-fallback`));
+  nodes.push(...parseInline(afterStart.slice(1), `${keyPrefix}-fallback`, options));
   return nodes;
 }
 
-function splitLineBreaks(text: string, keyPrefix: string): ReactNode[] {
+function splitBareMediaUrls(text: string, keyPrefix: string, options?: InlineRenderOptions): ReactNode[] {
+  if (!text || !options?.renderMediaPreview) return [text];
+  const nodes: ReactNode[] = [];
+  const mediaUrlPattern = /((?:https?:\/\/|\/(?!\/))[^\s<>()`]+)/g;
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(mediaUrlPattern)) {
+    const href = match[1] || '';
+    const index = match.index ?? 0;
+    const mediaPreview = renderInlineMediaPreview(options, {
+      href,
+      kind: 'bare',
+      key: `${keyPrefix}-media-${index}`,
+    });
+    if (!mediaPreview) continue;
+    if (index > lastIndex) nodes.push(text.slice(lastIndex, index));
+    nodes.push(mediaPreview);
+    lastIndex = index + href.length;
+  }
+
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes.length > 0 ? nodes : [text];
+}
+
+function splitLineBreaks(text: string, keyPrefix: string, options?: InlineRenderOptions): ReactNode[] {
   if (!text) return [];
   const parts = text.split('\n');
   return parts.flatMap((part, index) =>
-    index === 0 ? [part] : [<br key={`${keyPrefix}-br-${index}`} />, part]
+    index === 0
+      ? splitBareMediaUrls(part, `${keyPrefix}-line-${index}`, options)
+      : [<br key={`${keyPrefix}-br-${index}`} />, ...splitBareMediaUrls(part, `${keyPrefix}-line-${index}`, options)]
   );
 }
 
-export function MarkdownMessage({ content, inverted = false, compact = false }: MarkdownMessageProps) {
+export function MarkdownMessage({ content, inverted = false, compact = false, renderMediaPreview }: MarkdownMessageProps) {
   const blocks = parseBlocks(content);
   const tone = inverted ? 'text-white' : 'text-current';
   const subtleTone = inverted ? 'border-white/30 text-white/90' : 'border-slate-300 text-slate-700';
   const codeTone = inverted ? 'bg-white/15 text-white' : 'bg-slate-950 text-slate-100';
   const headingClass = compact ? 'text-sm font-semibold leading-6' : 'text-base font-semibold leading-7';
+  const inlineOptions = { renderMediaPreview };
 
   return (
     <div className={`space-y-2 break-words text-sm leading-6 ${tone}`}>
@@ -225,19 +327,19 @@ export function MarkdownMessage({ content, inverted = false, compact = false }: 
         if (block.type === 'heading') {
           return (
             <div key={index} className={headingClass}>
-              {parseInline(block.text, `heading-${index}`)}
+              {parseInline(block.text, `heading-${index}`, inlineOptions)}
             </div>
           );
         }
 
         if (block.type === 'paragraph') {
-          return <p key={index}>{parseInline(block.text, `paragraph-${index}`)}</p>;
+          return <div key={index}>{parseInline(block.text, `paragraph-${index}`, inlineOptions)}</div>;
         }
 
         if (block.type === 'quote') {
           return (
             <blockquote key={index} className={`border-l-2 pl-3 ${subtleTone}`}>
-              {parseInline(block.text, `quote-${index}`)}
+              {parseInline(block.text, `quote-${index}`, inlineOptions)}
             </blockquote>
           );
         }
@@ -255,7 +357,7 @@ export function MarkdownMessage({ content, inverted = false, compact = false }: 
           return (
             <Tag key={index} className={`${block.ordered ? 'list-decimal' : 'list-disc'} space-y-1 pl-5`}>
               {block.items.map((item, itemIndex) => (
-                <li key={itemIndex}>{parseInline(item, `list-${index}-${itemIndex}`)}</li>
+                <li key={itemIndex}>{parseInline(item, `list-${index}-${itemIndex}`, inlineOptions)}</li>
               ))}
             </Tag>
           );

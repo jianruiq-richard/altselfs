@@ -505,30 +505,10 @@ function stripGeneratedFileLinks(content: string) {
   return content.replace(/(?:^|\n)Generated files:\s*\n(?:\s*[-*]\s+\[[^\]]+]\([^)]+\)\s*\n?)+\s*$/i, '').trim();
 }
 
-function stripPreviewMediaLinks(content: string) {
-  const withoutGeneratedLinks = stripGeneratedFileLinks(content);
-  return withoutGeneratedLinks
-    .replace(/!\[([^\]]*)]\(([^)]+)\)/g, (match, label: string, href: string) => (
-      previewArtifactFromUrl(href, label, 'linked_image') ? '' : match
-    ))
-    .replace(/^\s*\[([^\]]+)]\(([^)]+)\)\s*$/gm, (match, label: string, href: string) => (
-      previewArtifactFromUrl(href, label) ? '' : match
-    ))
-    .replace(/^\s*`((?:https?:\/\/|\/)[^`\s]+)`\s*$/gm, (match, href: string) => (
-      previewArtifactFromUrl(href) ? '' : match
-    ))
-    .replace(/^\s*((?:https?:\/\/|\/)[^\s<>()]+)\s*$/gm, (match, href: string) => (
-      previewArtifactFromUrl(href) ? '' : match
-    ))
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 function messageArtifacts(message: ChatMessage) {
   const structured = normalizeChatArtifacts(message.artifacts);
   const parsed = message.role === 'assistant'
-    ? [...extractGeneratedFileLinks(message.content), ...extractPreviewMediaLinks(message.content)]
+    ? extractGeneratedFileLinks(message.content)
     : [];
   const seen = new Set<string>();
   return [...structured, ...parsed].filter((artifact) => {
@@ -1361,8 +1341,7 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
   );
 }
 
-function GeneratedArtifactPreviews({ artifacts, inverted = false }: { artifacts: ChatArtifact[]; inverted?: boolean }) {
-  if (artifacts.length === 0) return null;
+function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArtifact; inverted?: boolean }) {
   const borderClass = inverted ? 'border-white/25 bg-white/10' : 'border-slate-200 bg-white';
   const mutedClass = inverted ? 'text-blue-100' : 'text-slate-500';
   const titleClass = inverted ? 'text-white' : 'text-slate-900';
@@ -1370,76 +1349,106 @@ function GeneratedArtifactPreviews({ artifacts, inverted = false }: { artifacts:
   const actionClass = inverted
     ? 'border-white/20 bg-white/10 text-white hover:bg-white/20'
     : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700';
+  const previewBackgroundClass = inverted ? 'bg-white/10' : 'bg-slate-50';
+  const image = isImageArtifact(artifact);
+  const playableVideo = isPlayableVideoArtifact(artifact);
+  const video = playableVideo || isExternalVideoArtifact(artifact);
+  const sizeText = typeof artifact.sizeBytes === 'number' && artifact.sizeBytes > 0 ? formatBytes(artifact.sizeBytes) : '';
+  const typeText = artifactTypeLabel(artifact);
+  const mediaMimeType = inferArtifactMimeType(artifact.name, artifact.mimeType);
 
+  return (
+    <div className={`overflow-hidden rounded-xl border ${borderClass}`}>
+      {image ? (
+        <a
+          href={artifact.downloadPath}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`Open ${artifact.name}`}
+          className={`flex max-h-[min(60vh,32rem)] items-center justify-center overflow-hidden ${previewBackgroundClass}`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={artifact.downloadPath}
+            alt={artifact.name}
+            loading="lazy"
+            className="h-auto max-h-[min(60vh,32rem)] max-w-full object-contain"
+          />
+        </a>
+      ) : null}
+      {playableVideo ? (
+        <video
+          controls
+          preload="metadata"
+          playsInline
+          aria-label={`Preview ${artifact.name}`}
+          className="block max-h-[min(65vh,28rem)] w-full bg-black"
+        >
+          <source src={artifact.downloadPath} type={mediaMimeType || undefined} />
+          Your browser does not support video playback.
+        </video>
+      ) : null}
+      <div className="flex min-w-0 items-center gap-3 p-3">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${iconClass}`}>
+          {image ? <ImageIcon className="h-5 w-5" /> : video ? <Film className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className={`truncate text-sm font-medium ${titleClass}`}>{artifact.name}</p>
+          <p className={`text-xs ${mutedClass}`}>{[typeText, sizeText].filter(Boolean).join(' · ')}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <a
+            href={artifact.downloadPath}
+            target="_blank"
+            rel="noreferrer"
+            title={`Open ${artifact.name}`}
+            aria-label={`Open ${artifact.name}`}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${actionClass}`}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+          <a
+            href={artifact.downloadPath}
+            download={artifact.name}
+            title={`Download ${artifact.name}`}
+            aria-label={`Download ${artifact.name}`}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${actionClass}`}
+          >
+            <Download className="h-4 w-4" />
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InlineMediaPreview({
+  href,
+  label,
+  kind,
+  inverted = false,
+}: {
+  href: string;
+  label: string;
+  kind: 'image' | 'link' | 'code' | 'bare';
+  inverted?: boolean;
+}) {
+  const artifact = previewArtifactFromUrl(href, label, kind === 'image' ? 'linked_image' : undefined);
+  if (!artifact) return null;
+  return (
+    <div className="my-2 max-w-full">
+      <ArtifactPreviewCard artifact={artifact} inverted={inverted} />
+    </div>
+  );
+}
+
+function GeneratedArtifactPreviews({ artifacts, inverted = false }: { artifacts: ChatArtifact[]; inverted?: boolean }) {
+  if (artifacts.length === 0) return null;
   return (
     <div className="mt-3 space-y-2">
       {artifacts.map((artifact, index) => {
-        const image = isImageArtifact(artifact);
-        const playableVideo = isPlayableVideoArtifact(artifact);
-        const video = playableVideo || isExternalVideoArtifact(artifact);
         const key = artifact.id || `${artifact.downloadPath}-${index}`;
-        const sizeText = typeof artifact.sizeBytes === 'number' && artifact.sizeBytes > 0 ? formatBytes(artifact.sizeBytes) : '';
-        const typeText = artifactTypeLabel(artifact);
-        const mediaMimeType = inferArtifactMimeType(artifact.name, artifact.mimeType);
-        const previewStyle = image
-          ? { backgroundImage: `url("${artifact.downloadPath.replace(/"/g, '\\"')}")` }
-          : undefined;
-        return (
-          <div key={key} className={`overflow-hidden rounded-xl border ${borderClass}`}>
-            {image ? (
-              <a
-                href={artifact.downloadPath}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={`Open ${artifact.name}`}
-                className="block h-44 bg-slate-100 bg-cover bg-center"
-                style={previewStyle}
-              />
-            ) : null}
-            {playableVideo ? (
-              <video
-                controls
-                preload="metadata"
-                playsInline
-                aria-label={`Preview ${artifact.name}`}
-                className="block max-h-72 w-full bg-black"
-              >
-                <source src={artifact.downloadPath} type={mediaMimeType || undefined} />
-                Your browser does not support video playback.
-              </video>
-            ) : null}
-            <div className="flex min-w-0 items-center gap-3 p-3">
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${iconClass}`}>
-                {image ? <ImageIcon className="h-5 w-5" /> : video ? <Film className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className={`truncate text-sm font-medium ${titleClass}`}>{artifact.name}</p>
-                <p className={`text-xs ${mutedClass}`}>{[typeText, sizeText].filter(Boolean).join(' · ')}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <a
-                  href={artifact.downloadPath}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={`Open ${artifact.name}`}
-                  aria-label={`Open ${artifact.name}`}
-                  className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${actionClass}`}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-                <a
-                  href={artifact.downloadPath}
-                  download={artifact.name}
-                  title={`Download ${artifact.name}`}
-                  aria-label={`Download ${artifact.name}`}
-                  className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${actionClass}`}
-                >
-                  <Download className="h-4 w-4" />
-                </a>
-              </div>
-            </div>
-          </div>
-        );
+        return <ArtifactPreviewCard key={key} artifact={artifact} inverted={inverted} />;
       })}
     </div>
   );
@@ -1582,7 +1591,12 @@ function StreamingAssistantMessage({ content }: { content: string }) {
   return (
     <div className="flex justify-start">
       <div className="max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-slate-900 sm:max-w-2xl">
-        <MarkdownMessage content={content} />
+        <MarkdownMessage
+          content={content}
+          renderMediaPreview={({ href, label, kind, key }) => (
+            <InlineMediaPreview key={key} href={href} label={label} kind={kind} />
+          )}
+        />
       </div>
     </div>
   );
@@ -3040,9 +3054,10 @@ export default function InvestorAgentChatPage() {
                   !assistantDraft;
                 const artifacts = messageArtifacts(message);
                 const visibleContent = message.role === 'assistant' && artifacts.length > 0
-                  ? stripPreviewMediaLinks(message.content)
+                  ? stripGeneratedFileLinks(message.content)
                   : message.content;
-                const bubbleWidthClass = message.role === 'assistant' && artifacts.length > 0
+                const hasInlineMedia = message.role === 'assistant' && extractPreviewMediaLinks(visibleContent).length > 0;
+                const bubbleWidthClass = message.role === 'assistant' && (artifacts.length > 0 || hasInlineMedia)
                   ? 'max-w-[92%] sm:max-w-2xl lg:max-w-3xl'
                   : 'max-w-[85%] sm:max-w-xs lg:max-w-md';
                 return (
@@ -3054,7 +3069,15 @@ export default function InvestorAgentChatPage() {
                           message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
                         }`}
                       >
-                        {visibleContent ? <MarkdownMessage content={visibleContent} inverted={message.role === 'user'} /> : null}
+                        {visibleContent ? (
+                          <MarkdownMessage
+                            content={visibleContent}
+                            inverted={message.role === 'user'}
+                            renderMediaPreview={({ href, label, kind, key }) => (
+                              <InlineMediaPreview key={key} href={href} label={label} kind={kind} inverted={message.role === 'user'} />
+                            )}
+                          />
+                        ) : null}
                         <GeneratedArtifactPreviews artifacts={artifacts} inverted={message.role === 'user'} />
                       </div>
                     </div>
