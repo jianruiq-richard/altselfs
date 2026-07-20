@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, CheckCircle2, ChevronDown, LoaderCircle, MessageSquare, Paperclip, Plug, Plus, Settings2, Square, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, Download, ExternalLink, FileText, ImageIcon, LoaderCircle, MessageSquare, Paperclip, Plug, Plus, Settings2, Square, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -16,6 +16,16 @@ type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
   createdAt?: string;
+  artifacts?: ChatArtifact[];
+};
+
+type ChatArtifact = {
+  id?: string;
+  name: string;
+  kind?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  downloadPath: string;
 };
 
 type AgentSessionSummary = {
@@ -289,6 +299,91 @@ function formatBytes(bytes: number) {
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / 1024 ** exponent;
   return `${value >= 10 || exponent === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[exponent]}`;
+}
+
+function inferArtifactMimeType(name: string, mimeType?: string | null) {
+  const normalized = mimeType?.trim().toLowerCase();
+  if (normalized) return normalized;
+  const lowerName = name.toLowerCase();
+  if (lowerName.endsWith('.png')) return 'image/png';
+  if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'image/jpeg';
+  if (lowerName.endsWith('.webp')) return 'image/webp';
+  if (lowerName.endsWith('.gif')) return 'image/gif';
+  if (lowerName.endsWith('.svg')) return 'image/svg+xml';
+  if (lowerName.endsWith('.pdf')) return 'application/pdf';
+  if (lowerName.endsWith('.csv')) return 'text/csv';
+  if (lowerName.endsWith('.tsv')) return 'text/tab-separated-values';
+  if (lowerName.endsWith('.txt')) return 'text/plain';
+  if (lowerName.endsWith('.md')) return 'text/markdown';
+  if (lowerName.endsWith('.doc')) return 'application/msword';
+  if (lowerName.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (lowerName.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  return '';
+}
+
+function isImageArtifact(artifact: ChatArtifact) {
+  return inferArtifactMimeType(artifact.name, artifact.mimeType).startsWith('image/');
+}
+
+function artifactTypeLabel(artifact: ChatArtifact) {
+  const mimeType = inferArtifactMimeType(artifact.name, artifact.mimeType);
+  if (mimeType.startsWith('image/')) return mimeType.replace('image/', '').toUpperCase();
+  if (mimeType === 'application/pdf') return 'PDF';
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return 'Spreadsheet';
+  if (mimeType.includes('wordprocessing') || mimeType === 'application/msword') return 'Document';
+  if (mimeType === 'text/csv') return 'CSV';
+  if (mimeType === 'text/markdown') return 'Markdown';
+  if (mimeType.startsWith('text/')) return 'Text';
+  return 'File';
+}
+
+function normalizeChatArtifacts(value: unknown): ChatArtifact[] {
+  if (!Array.isArray(value)) return [];
+  const artifacts: ChatArtifact[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'artifact';
+    const downloadPath = typeof item.downloadPath === 'string' ? item.downloadPath.trim() : '';
+    if (!downloadPath) continue;
+    artifacts.push({
+      id: typeof item.id === 'string' ? item.id : undefined,
+      name,
+      kind: typeof item.kind === 'string' ? item.kind : null,
+      mimeType: typeof item.mimeType === 'string' ? item.mimeType : null,
+      sizeBytes: typeof item.sizeBytes === 'number' ? item.sizeBytes : null,
+      downloadPath,
+    });
+  }
+  return artifacts;
+}
+
+function extractGeneratedFileLinks(content: string): ChatArtifact[] {
+  const match = /(?:^|\n)Generated files:\s*\n([\s\S]*)$/i.exec(content);
+  if (!match) return [];
+  const artifacts: ChatArtifact[] = [];
+  for (const item of match[1].matchAll(/^\s*[-*]\s+\[([^\]]+)]\(([^)]+)\)/gm)) {
+    const name = item[1]?.replace(/\\]/g, ']').replace(/\\\\/g, '\\').trim() || 'artifact';
+    const downloadPath = item[2]?.trim() || '';
+    if (!downloadPath) continue;
+    artifacts.push({ name, downloadPath });
+  }
+  return artifacts;
+}
+
+function stripGeneratedFileLinks(content: string) {
+  return content.replace(/(?:^|\n)Generated files:\s*\n(?:\s*[-*]\s+\[[^\]]+]\([^)]+\)\s*\n?)+\s*$/i, '').trim();
+}
+
+function messageArtifacts(message: ChatMessage) {
+  const structured = normalizeChatArtifacts(message.artifacts);
+  const parsed = message.role === 'assistant' ? extractGeneratedFileLinks(message.content) : [];
+  const seen = new Set<string>();
+  return [...structured, ...parsed].filter((artifact) => {
+    const key = `${artifact.downloadPath}::${artifact.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function formatSessionTime(value: string) {
@@ -1109,6 +1204,75 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
           </div>
         </details>
       </div>
+    </div>
+  );
+}
+
+function GeneratedArtifactPreviews({ artifacts, inverted = false }: { artifacts: ChatArtifact[]; inverted?: boolean }) {
+  if (artifacts.length === 0) return null;
+  const borderClass = inverted ? 'border-white/25 bg-white/10' : 'border-slate-200 bg-white';
+  const mutedClass = inverted ? 'text-blue-100' : 'text-slate-500';
+  const titleClass = inverted ? 'text-white' : 'text-slate-900';
+  const iconClass = inverted ? 'border-white/20 bg-white/15 text-white' : 'border-slate-200 bg-slate-50 text-slate-600';
+  const actionClass = inverted
+    ? 'border-white/20 bg-white/10 text-white hover:bg-white/20'
+    : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700';
+
+  return (
+    <div className="mt-3 space-y-2">
+      {artifacts.map((artifact, index) => {
+        const image = isImageArtifact(artifact);
+        const key = artifact.id || `${artifact.downloadPath}-${index}`;
+        const sizeText = typeof artifact.sizeBytes === 'number' && artifact.sizeBytes > 0 ? formatBytes(artifact.sizeBytes) : '';
+        const typeText = artifactTypeLabel(artifact);
+        const previewStyle = image
+          ? { backgroundImage: `url("${artifact.downloadPath.replace(/"/g, '\\"')}")` }
+          : undefined;
+        return (
+          <div key={key} className={`overflow-hidden rounded-xl border ${borderClass}`}>
+            {image ? (
+              <a
+                href={artifact.downloadPath}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open ${artifact.name}`}
+                className="block h-44 bg-slate-100 bg-cover bg-center"
+                style={previewStyle}
+              />
+            ) : null}
+            <div className="flex min-w-0 items-center gap-3 p-3">
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${iconClass}`}>
+                {image ? <ImageIcon className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`truncate text-sm font-medium ${titleClass}`}>{artifact.name}</p>
+                <p className={`text-xs ${mutedClass}`}>{[typeText, sizeText].filter(Boolean).join(' · ')}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <a
+                  href={artifact.downloadPath}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Open ${artifact.name}`}
+                  aria-label={`Open ${artifact.name}`}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${actionClass}`}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+                <a
+                  href={artifact.downloadPath}
+                  download={artifact.name}
+                  title={`Download ${artifact.name}`}
+                  aria-label={`Download ${artifact.name}`}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${actionClass}`}
+                >
+                  <Download className="h-4 w-4" />
+                </a>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -2699,16 +2863,24 @@ export default function InvestorAgentChatPage() {
                   index === messages.length - 1 &&
                   !sending &&
                   !assistantDraft;
+                const artifacts = messageArtifacts(message);
+                const visibleContent = message.role === 'assistant' && artifacts.length > 0
+                  ? stripGeneratedFileLinks(message.content)
+                  : message.content;
+                const bubbleWidthClass = message.role === 'assistant' && artifacts.length > 0
+                  ? 'max-w-[92%] sm:max-w-2xl lg:max-w-3xl'
+                  : 'max-w-[85%] sm:max-w-xs lg:max-w-md';
                 return (
                   <div key={message.id || `${message.role}-${index}`} className="space-y-3">
                     {showCompletedActivity ? <CompletedCodexActivitySummary activity={completedCodexActivity} /> : null}
                     <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div
-                        className={`max-w-[85%] rounded-2xl px-4 py-3 sm:max-w-xs lg:max-w-md ${
+                        className={`${bubbleWidthClass} rounded-2xl px-4 py-3 ${
                           message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
                         }`}
                       >
-                        <MarkdownMessage content={message.content} inverted={message.role === 'user'} />
+                        {visibleContent ? <MarkdownMessage content={visibleContent} inverted={message.role === 'user'} /> : null}
+                        <GeneratedArtifactPreviews artifacts={artifacts} inverted={message.role === 'user'} />
                       </div>
                     </div>
                   </div>

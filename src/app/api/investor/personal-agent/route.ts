@@ -26,6 +26,16 @@ type ClientMessage = {
   role: 'user' | 'assistant';
   content: string;
   createdAt?: string;
+  artifacts?: ClientArtifact[];
+};
+
+type ClientArtifact = {
+  id?: string;
+  name: string;
+  kind?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  downloadPath: string;
 };
 
 type PersonalAgentResponse = {
@@ -516,7 +526,29 @@ function displayMessages(messages: ClientMessage[]) {
     role: message.role,
     content: message.content,
     ...(message.createdAt ? { createdAt: message.createdAt } : {}),
+    ...(message.artifacts && message.artifacts.length > 0 ? { artifacts: message.artifacts } : {}),
   }));
+}
+
+function extractGeneratedArtifacts(raw: unknown): ClientArtifact[] {
+  const record = isRecord(raw) ? raw : {};
+  const generated = Array.isArray(record.generatedArtifacts) ? record.generatedArtifacts : [];
+  const artifacts: ClientArtifact[] = [];
+  for (const item of generated) {
+    if (!isRecord(item)) continue;
+    const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'artifact';
+    const downloadPath = typeof item.downloadPath === 'string' ? item.downloadPath.trim() : '';
+    if (!downloadPath) continue;
+    artifacts.push({
+      id: typeof item.id === 'string' ? item.id : undefined,
+      name,
+      kind: typeof item.kind === 'string' ? item.kind : null,
+      mimeType: typeof item.mimeType === 'string' ? item.mimeType : null,
+      sizeBytes: typeof item.sizeBytes === 'number' ? item.sizeBytes : null,
+      downloadPath,
+    });
+  }
+  return artifacts;
 }
 
 function storedRunEventToAgentEvent(row: unknown) {
@@ -951,6 +983,7 @@ export async function POST(req: NextRequest) {
   const reply = typeof result.reply === 'string' && result.reply.trim()
     ? result.reply.trim()
     : 'Agent run completed, but no reply was returned.';
+  const generatedArtifacts = extractGeneratedArtifacts(result.raw);
 
   await appendThreadMessage({
     threadId: thread.id,
@@ -973,7 +1006,7 @@ export async function POST(req: NextRequest) {
     runId: result.runId,
     reply,
     route: result.route,
-    messages: displayMessages([...messages, { role: 'assistant', content: reply }]),
+    messages: displayMessages([...messages, { role: 'assistant', content: reply, artifacts: generatedArtifacts }]),
     sessions,
   });
 }
@@ -1122,6 +1155,7 @@ function streamPersonalAgentTurn(params: {
           const reply = typeof finalResult?.reply === 'string' && finalResult.reply.trim()
             ? finalResult.reply.trim()
             : 'Agent run completed, but no reply was returned.';
+          const generatedArtifacts = extractGeneratedArtifacts(finalResult?.raw);
 
           if (finalResult?.cancelled || finalResult?.error) {
             const finalErrorMessage = finalResult.error || (finalResult.cancelled ? 'Run stopped.' : 'Send failed');
@@ -1185,7 +1219,7 @@ function streamPersonalAgentTurn(params: {
               runId: finalResult?.runId,
               reply,
               route: finalResult?.route,
-              messages: displayMessages([...params.messages, { role: 'assistant', content: reply }]),
+              messages: displayMessages([...params.messages, { role: 'assistant', content: reply, artifacts: generatedArtifacts }]),
               sessions,
             },
           });

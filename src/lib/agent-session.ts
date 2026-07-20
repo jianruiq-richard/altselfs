@@ -219,21 +219,59 @@ export function toClientMessages(
     role: string;
     content: string;
     createdAt?: Date | string;
+    meta?: unknown;
   }>
 ) {
   return messages
     .filter((message) => message.role === 'USER' || message.role === 'ASSISTANT')
-    .map((message) => ({
-      ...(message.id ? { id: message.id } : {}),
-      role: message.role === 'USER' ? ('user' as const) : ('assistant' as const),
-      content: message.content,
-      ...(message.createdAt
-        ? {
-            createdAt:
-              message.createdAt instanceof Date
-                ? message.createdAt.toISOString()
-                : message.createdAt,
-          }
-        : {}),
-    }));
+    .map((message) => {
+      const artifacts = extractMessageArtifacts(message.meta);
+      return {
+        ...(message.id ? { id: message.id } : {}),
+        role: message.role === 'USER' ? ('user' as const) : ('assistant' as const),
+        content: message.content,
+        ...(message.createdAt
+          ? {
+              createdAt:
+                message.createdAt instanceof Date
+                  ? message.createdAt.toISOString()
+                  : message.createdAt,
+            }
+          : {}),
+        ...(artifacts.length > 0 ? { artifacts } : {}),
+      };
+    });
+}
+
+function extractMessageArtifacts(meta: unknown) {
+  const record = isRecord(meta) ? meta : {};
+  const raw = isRecord(record.raw) ? record.raw : {};
+  const generated = Array.isArray(raw.generatedArtifacts) ? raw.generatedArtifacts : [];
+  return generated
+    .map((item) => {
+      if (!isRecord(item)) return null;
+      const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'artifact';
+      const downloadPath = typeof item.downloadPath === 'string' ? item.downloadPath.trim() : '';
+      if (!downloadPath) return null;
+      return {
+        id: typeof item.id === 'string' ? item.id : '',
+        name,
+        kind: typeof item.kind === 'string' ? item.kind : 'generated_file',
+        mimeType: typeof item.mimeType === 'string' ? item.mimeType : null,
+        sizeBytes: typeof item.sizeBytes === 'number' ? item.sizeBytes : null,
+        downloadPath,
+      };
+    })
+    .filter((item): item is {
+      id: string;
+      name: string;
+      kind: string;
+      mimeType: string | null;
+      sizeBytes: number | null;
+      downloadPath: string;
+    } => Boolean(item));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
