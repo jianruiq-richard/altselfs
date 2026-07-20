@@ -259,6 +259,11 @@ const attachmentAccept =
   'image/*,application/pdf,.pdf,.doc,.docx,.xlsx,.csv,.tsv,.txt,.md,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,text/markdown';
 const MAX_ATTACHMENT_FILES = 6;
 const MAX_ATTACHMENT_FILE_BYTES = 50 * 1024 * 1024;
+const MESSAGE_AUTO_FOLLOW_BOTTOM_THRESHOLD_PX = 120;
+
+function isNearMessagesBottom(viewport: HTMLDivElement) {
+  return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= MESSAGE_AUTO_FOLLOW_BOTTOM_THRESHOLD_PX;
+}
 
 function getPendingAttachmentKind(file: File): PendingAttachmentKind {
   const name = file.name.toLowerCase();
@@ -483,6 +488,11 @@ function extractPreviewMediaLinks(content: string): ChatArtifact[] {
     if (artifact) artifacts.push(artifact);
   }
 
+  for (const item of source.matchAll(/`((?:https?:\/\/|\/)[^`\s]+)`/g)) {
+    const artifact = previewArtifactFromUrl(item[1] || '');
+    if (artifact) artifacts.push(artifact);
+  }
+
   for (const item of source.matchAll(/(?:^|[\s(])((?:https?:\/\/|\/)[^\s<>()]+)/g)) {
     const artifact = previewArtifactFromUrl(item[1] || '');
     if (artifact) artifacts.push(artifact);
@@ -503,6 +513,9 @@ function stripPreviewMediaLinks(content: string) {
     ))
     .replace(/^\s*\[([^\]]+)]\(([^)]+)\)\s*$/gm, (match, label: string, href: string) => (
       previewArtifactFromUrl(href, label) ? '' : match
+    ))
+    .replace(/^\s*`((?:https?:\/\/|\/)[^`\s]+)`\s*$/gm, (match, href: string) => (
+      previewArtifactFromUrl(href) ? '' : match
     ))
     .replace(/^\s*((?:https?:\/\/|\/)[^\s<>()]+)\s*$/gm, (match, href: string) => (
       previewArtifactFromUrl(href) ? '' : match
@@ -1621,6 +1634,7 @@ export default function InvestorAgentChatPage() {
   const liveStreamRunIdRef = useRef<string | null>(null);
   const requestedStopRunIdRef = useRef<string | null>(null);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const messagesAutoFollowRef = useRef(true);
   const loadingOlderMessagesRef = useRef(false);
   const suppressNextAutoScrollRef = useRef(false);
   const codexEventIndexRef = useRef(0);
@@ -2044,6 +2058,7 @@ export default function InvestorAgentChatPage() {
       setThreadId(data.threadId || null);
       setSessions(Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : []);
       const loadedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+      messagesAutoFollowRef.current = true;
       setMessages(loadedMessages);
       setHasMoreMessages(Boolean(data.hasMore));
       setBriefing(null);
@@ -2097,6 +2112,7 @@ export default function InvestorAgentChatPage() {
       }
       resetPersonalAgentRunState();
       setThreadId(typeof data.threadId === 'string' ? data.threadId : null);
+      messagesAutoFollowRef.current = true;
       setMessages([]);
       setHasMoreMessages(false);
       setSessions(Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : []);
@@ -2126,6 +2142,7 @@ export default function InvestorAgentChatPage() {
         suppressNextAutoScrollRef.current = false;
         return;
       }
+      if (!messagesAutoFollowRef.current) return;
       const viewport = messagesViewportRef.current;
       if (viewport) viewport.scrollTop = viewport.scrollHeight;
     });
@@ -2190,7 +2207,9 @@ export default function InvestorAgentChatPage() {
 
   const handleMessagesScroll = useCallback(() => {
     const viewport = messagesViewportRef.current;
-    if (!viewport || viewport.scrollTop > 80) return;
+    if (!viewport) return;
+    messagesAutoFollowRef.current = isNearMessagesBottom(viewport);
+    if (viewport.scrollTop > 80) return;
     if (!hasMoreMessages || loadingOlderMessagesRef.current || loading) return;
     void loadOlderMessages();
   }, [hasMoreMessages, loadOlderMessages, loading]);
@@ -2496,6 +2515,7 @@ export default function InvestorAgentChatPage() {
       .filter(Boolean)
       .join('\n\n');
     const nextMessages = [...messages, { role: 'user' as const, content: displayContent }];
+    messagesAutoFollowRef.current = true;
     setMessages(nextMessages);
     setInput('');
     setAttachments([]);
