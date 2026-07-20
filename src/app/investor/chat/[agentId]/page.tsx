@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, CheckCircle2, ChevronDown, Download, ExternalLink, FileText, ImageIcon, LoaderCircle, MessageSquare, Paperclip, Plug, Plus, Settings2, Square, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, Download, ExternalLink, FileText, Film, ImageIcon, LoaderCircle, MessageSquare, Paperclip, Plug, Plus, Settings2, Square, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -310,6 +310,12 @@ function inferArtifactMimeType(name: string, mimeType?: string | null) {
   if (lowerName.endsWith('.webp')) return 'image/webp';
   if (lowerName.endsWith('.gif')) return 'image/gif';
   if (lowerName.endsWith('.svg')) return 'image/svg+xml';
+  if (lowerName.endsWith('.avif')) return 'image/avif';
+  if (lowerName.endsWith('.mp4')) return 'video/mp4';
+  if (lowerName.endsWith('.webm')) return 'video/webm';
+  if (lowerName.endsWith('.mov')) return 'video/quicktime';
+  if (lowerName.endsWith('.m4v')) return 'video/x-m4v';
+  if (lowerName.endsWith('.mpeg') || lowerName.endsWith('.mpg')) return 'video/mpeg';
   if (lowerName.endsWith('.pdf')) return 'application/pdf';
   if (lowerName.endsWith('.csv')) return 'text/csv';
   if (lowerName.endsWith('.tsv')) return 'text/tab-separated-values';
@@ -325,9 +331,24 @@ function isImageArtifact(artifact: ChatArtifact) {
   return inferArtifactMimeType(artifact.name, artifact.mimeType).startsWith('image/');
 }
 
+function isVideoArtifact(artifact: ChatArtifact) {
+  return inferArtifactMimeType(artifact.name, artifact.mimeType).startsWith('video/');
+}
+
+function isExternalVideoArtifact(artifact: ChatArtifact) {
+  return artifact.kind === 'external_video_link';
+}
+
+function isPlayableVideoArtifact(artifact: ChatArtifact) {
+  return isVideoArtifact(artifact) && !isExternalVideoArtifact(artifact);
+}
+
 function artifactTypeLabel(artifact: ChatArtifact) {
   const mimeType = inferArtifactMimeType(artifact.name, artifact.mimeType);
+  if (isExternalVideoArtifact(artifact)) return 'External video';
+  if (mimeType === 'image/unknown') return 'Image';
   if (mimeType.startsWith('image/')) return mimeType.replace('image/', '').toUpperCase();
+  if (mimeType.startsWith('video/')) return 'Video';
   if (mimeType === 'application/pdf') return 'PDF';
   if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return 'Spreadsheet';
   if (mimeType.includes('wordprocessing') || mimeType === 'application/msword') return 'Document';
@@ -357,6 +378,84 @@ function normalizeChatArtifacts(value: unknown): ChatArtifact[] {
   return artifacts;
 }
 
+function safeMediaUrl(value: string) {
+  const trimmed = value.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^\/(?!\/)/.test(trimmed)) return trimmed;
+  return '';
+}
+
+function stripTrailingMediaUrlPunctuation(value: string) {
+  return value.trim().replace(/[),.;!?]+$/g, '');
+}
+
+function mediaUrlPathname(value: string) {
+  const href = safeMediaUrl(value);
+  if (!href) return '';
+  if (href.startsWith('/')) return href.split(/[?#]/)[0] || '';
+  try {
+    return new URL(href).pathname;
+  } catch {
+    return '';
+  }
+}
+
+function isDirectImageUrl(value: string) {
+  return /\.(?:png|jpe?g|webp|gif|svg|avif)$/i.test(mediaUrlPathname(value));
+}
+
+function isDirectVideoUrl(value: string) {
+  return /\.(?:mp4|webm|mov|m4v|mpeg|mpg)$/i.test(mediaUrlPathname(value));
+}
+
+function externalVideoServiceName(value: string) {
+  const href = safeMediaUrl(value);
+  if (!/^https?:\/\//i.test(href)) return '';
+  try {
+    const host = new URL(href).hostname.toLowerCase().replace(/^www\./, '');
+    if (host === 'youtu.be' || host.endsWith('youtube.com')) return 'YouTube';
+    if (host.endsWith('vimeo.com')) return 'Vimeo';
+    if (host.endsWith('bilibili.com') || host.endsWith('b23.tv')) return 'Bilibili';
+    if (host.endsWith('tiktok.com')) return 'TikTok';
+    if (host.endsWith('instagram.com')) return 'Instagram';
+    if (host.endsWith('loom.com')) return 'Loom';
+  } catch {
+    return '';
+  }
+  return '';
+}
+
+function mediaNameFromUrl(value: string, label?: string) {
+  const trimmedLabel = label?.trim();
+  if (trimmedLabel) return trimmedLabel;
+  const serviceName = externalVideoServiceName(value);
+  if (serviceName) return `${serviceName} video`;
+  const pathname = mediaUrlPathname(value);
+  const basename = pathname.split('/').filter(Boolean).pop();
+  if (!basename) return 'media';
+  try {
+    return decodeURIComponent(basename);
+  } catch {
+    return basename;
+  }
+}
+
+function previewArtifactFromUrl(rawUrl: string, label?: string, forcedKind?: 'linked_image') {
+  const downloadPath = safeMediaUrl(stripTrailingMediaUrlPunctuation(rawUrl));
+  if (!downloadPath) return null;
+  const externalVideo = externalVideoServiceName(downloadPath);
+  const image = forcedKind === 'linked_image' || isDirectImageUrl(downloadPath);
+  const video = isDirectVideoUrl(downloadPath);
+  if (!image && !video && !externalVideo) return null;
+  return {
+    name: mediaNameFromUrl(downloadPath, label),
+    kind: externalVideo && !video ? 'external_video_link' : image ? 'linked_image' : 'linked_video',
+    mimeType: image ? 'image/unknown' : video ? inferArtifactMimeType(downloadPath) : null,
+    sizeBytes: null,
+    downloadPath,
+  };
+}
+
 function extractGeneratedFileLinks(content: string): ChatArtifact[] {
   const match = /(?:^|\n)Generated files:\s*\n([\s\S]*)$/i.exec(content);
   if (!match) return [];
@@ -370,13 +469,54 @@ function extractGeneratedFileLinks(content: string): ChatArtifact[] {
   return artifacts;
 }
 
+function extractPreviewMediaLinks(content: string): ChatArtifact[] {
+  const source = stripGeneratedFileLinks(content);
+  const artifacts: ChatArtifact[] = [];
+
+  for (const item of source.matchAll(/!\[([^\]]*)]\(([^)\s]+)\)/g)) {
+    const artifact = previewArtifactFromUrl(item[2] || '', item[1] || '', 'linked_image');
+    if (artifact) artifacts.push(artifact);
+  }
+
+  for (const item of source.matchAll(/(^|[^!])\[([^\]]+)]\(([^)\s]+)\)/g)) {
+    const artifact = previewArtifactFromUrl(item[3] || '', item[2] || '');
+    if (artifact) artifacts.push(artifact);
+  }
+
+  for (const item of source.matchAll(/(?:^|[\s(])((?:https?:\/\/|\/)[^\s<>()]+)/g)) {
+    const artifact = previewArtifactFromUrl(item[1] || '');
+    if (artifact) artifacts.push(artifact);
+  }
+
+  return artifacts;
+}
+
 function stripGeneratedFileLinks(content: string) {
   return content.replace(/(?:^|\n)Generated files:\s*\n(?:\s*[-*]\s+\[[^\]]+]\([^)]+\)\s*\n?)+\s*$/i, '').trim();
 }
 
+function stripPreviewMediaLinks(content: string) {
+  const withoutGeneratedLinks = stripGeneratedFileLinks(content);
+  return withoutGeneratedLinks
+    .replace(/!\[([^\]]*)]\(([^)]+)\)/g, (match, label: string, href: string) => (
+      previewArtifactFromUrl(href, label, 'linked_image') ? '' : match
+    ))
+    .replace(/^\s*\[([^\]]+)]\(([^)]+)\)\s*$/gm, (match, label: string, href: string) => (
+      previewArtifactFromUrl(href, label) ? '' : match
+    ))
+    .replace(/^\s*((?:https?:\/\/|\/)[^\s<>()]+)\s*$/gm, (match, href: string) => (
+      previewArtifactFromUrl(href) ? '' : match
+    ))
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function messageArtifacts(message: ChatMessage) {
   const structured = normalizeChatArtifacts(message.artifacts);
-  const parsed = message.role === 'assistant' ? extractGeneratedFileLinks(message.content) : [];
+  const parsed = message.role === 'assistant'
+    ? [...extractGeneratedFileLinks(message.content), ...extractPreviewMediaLinks(message.content)]
+    : [];
   const seen = new Set<string>();
   return [...structured, ...parsed].filter((artifact) => {
     const key = `${artifact.downloadPath}::${artifact.name}`;
@@ -1222,9 +1362,12 @@ function GeneratedArtifactPreviews({ artifacts, inverted = false }: { artifacts:
     <div className="mt-3 space-y-2">
       {artifacts.map((artifact, index) => {
         const image = isImageArtifact(artifact);
+        const playableVideo = isPlayableVideoArtifact(artifact);
+        const video = playableVideo || isExternalVideoArtifact(artifact);
         const key = artifact.id || `${artifact.downloadPath}-${index}`;
         const sizeText = typeof artifact.sizeBytes === 'number' && artifact.sizeBytes > 0 ? formatBytes(artifact.sizeBytes) : '';
         const typeText = artifactTypeLabel(artifact);
+        const mediaMimeType = inferArtifactMimeType(artifact.name, artifact.mimeType);
         const previewStyle = image
           ? { backgroundImage: `url("${artifact.downloadPath.replace(/"/g, '\\"')}")` }
           : undefined;
@@ -1240,9 +1383,21 @@ function GeneratedArtifactPreviews({ artifacts, inverted = false }: { artifacts:
                 style={previewStyle}
               />
             ) : null}
+            {playableVideo ? (
+              <video
+                controls
+                preload="metadata"
+                playsInline
+                aria-label={`Preview ${artifact.name}`}
+                className="block max-h-72 w-full bg-black"
+              >
+                <source src={artifact.downloadPath} type={mediaMimeType || undefined} />
+                Your browser does not support video playback.
+              </video>
+            ) : null}
             <div className="flex min-w-0 items-center gap-3 p-3">
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${iconClass}`}>
-                {image ? <ImageIcon className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+                {image ? <ImageIcon className="h-5 w-5" /> : video ? <Film className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
               </div>
               <div className="min-w-0 flex-1">
                 <p className={`truncate text-sm font-medium ${titleClass}`}>{artifact.name}</p>
@@ -2865,7 +3020,7 @@ export default function InvestorAgentChatPage() {
                   !assistantDraft;
                 const artifacts = messageArtifacts(message);
                 const visibleContent = message.role === 'assistant' && artifacts.length > 0
-                  ? stripGeneratedFileLinks(message.content)
+                  ? stripPreviewMediaLinks(message.content)
                   : message.content;
                 const bubbleWidthClass = message.role === 'assistant' && artifacts.length > 0
                   ? 'max-w-[92%] sm:max-w-2xl lg:max-w-3xl'
