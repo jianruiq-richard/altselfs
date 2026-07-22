@@ -3005,12 +3005,12 @@ export default function InvestorAgentChatPage() {
   const latestWorkItem = codexStreamItems[codexStreamItems.length - 1];
 
   const sessionSidebar = (
-    <div className="px-2.5 pb-5">
+    <div className="min-w-0 max-w-full px-2.5 pb-5">
       <div className="mb-2 mt-5 flex items-center justify-between px-2 text-[10px] font-extrabold uppercase text-zinc-600">
         <span>Conversations</span>
         <span>{sessions.length}</span>
       </div>
-      <div className="grid gap-0.5">
+      <div className="grid min-w-0 max-w-full gap-0.5">
         {sessions.map((session) => {
           const active = session.id === threadId;
           const actionBusy = sessionActionBusyId === session.id;
@@ -3018,17 +3018,17 @@ export default function InvestorAgentChatPage() {
             <div
               key={session.id}
               data-session-menu-root="true"
-              className={`group relative rounded-[7px] ${active ? 'bg-white/[0.075]' : 'hover:bg-white/[0.05]'}`}
+              className={`group relative grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)_32px] items-center overflow-visible rounded-[7px] ${active ? 'bg-white/[0.075]' : 'hover:bg-white/[0.05]'}`}
             >
               <button
                 type="button"
                 onClick={() => void switchSession(session.id)}
                 disabled={active || sending || recoveringRunState || actionBusy}
                 title={session.title}
-                className="block min-h-[54px] w-full rounded-[7px] px-2.5 py-2 pr-10 text-left disabled:cursor-default"
+                className="block min-h-[54px] min-w-0 max-w-full overflow-hidden rounded-l-[7px] py-2 pl-2.5 pr-1 text-left disabled:cursor-default"
               >
-                <span className={`block truncate text-[13px] font-semibold ${active ? 'text-white' : 'text-zinc-400'}`}>{session.title || 'New discussion'}</span>
-                <span className="mt-1 block truncate text-[10px] text-zinc-600">
+                <span className={`block min-w-0 max-w-full truncate text-[13px] font-semibold ${active ? 'text-white' : 'text-zinc-400'}`}>{session.title || 'New discussion'}</span>
+                <span className="mt-1 block min-w-0 max-w-full truncate text-[10px] text-zinc-600">
                   {formatSessionTime(session.updatedAt) || 'Recent'} · {session.messageCount} messages
                 </span>
               </button>
@@ -3043,10 +3043,10 @@ export default function InvestorAgentChatPage() {
                   event.stopPropagation();
                   setOpenSessionMenuId((current) => current === session.id ? null : session.id);
                 }}
-                className={`absolute right-1.5 top-2 grid h-7 w-7 place-items-center rounded-md border text-zinc-500 transition ${
+                className={`relative z-10 grid h-7 w-7 place-items-center justify-self-center rounded-md border text-zinc-500 transition ${
                   openSessionMenuId === session.id
                     ? 'border-white/10 bg-[#1a1b1d] opacity-100 text-white'
-                    : 'border-transparent bg-[#0c0d0e]/85 opacity-0 hover:border-white/10 hover:text-white group-hover:opacity-100'
+                    : 'pointer-events-none border-transparent bg-[#17181a] opacity-0 hover:border-white/10 hover:text-white group-hover:pointer-events-auto group-hover:opacity-100'
                 }`}
               >
                 {actionBusy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <MoreHorizontal className="h-3.5 w-3.5" />}
@@ -3072,7 +3072,7 @@ export default function InvestorAgentChatPage() {
         <strong className="text-sm text-zinc-100">Discussion context</strong>
         <span className="inline-flex items-center gap-2 text-[11px] text-zinc-400"><i className="h-1.5 w-1.5 rounded-full bg-[#46d19a] shadow-[0_0_9px_rgba(70,209,154,.5)]" />Ready</span>
       </div>
-      <div className="min-h-0 overflow-y-auto px-4 py-5">
+      <div className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-5">
         <section className="mb-8">
           <div className="mb-3 flex items-center justify-between"><h2 className="text-[13px] font-semibold text-zinc-200">Active work</h2><Clock3 className="h-3.5 w-3.5 text-zinc-600" /></div>
           {sending || latestWorkItem ? (
@@ -3145,7 +3145,7 @@ export default function InvestorAgentChatPage() {
           </div>
         </header>
 
-        <main ref={messagesViewportRef} onScroll={handleMessagesScroll} className="min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+        <main ref={messagesViewportRef} onScroll={handleMessagesScroll} className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-[820px]">
             {showBlockingConversationLoading ? (
               <div className="grid min-h-[50vh] place-items-center text-xs text-zinc-600"><span className="inline-flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" />Loading discussion...</span></div>
@@ -3201,12 +3201,12 @@ export default function InvestorAgentChatPage() {
 
         <div className="bg-[linear-gradient(180deg,rgba(9,10,10,0),#090a0a_20%)] px-3 pb-3 pt-2 sm:px-6 md:px-8 md:pb-5">
           {messages.length === 0 ? (
-            <div className="mx-auto mb-2 flex max-w-[820px] gap-1.5 overflow-x-auto">
+            <div className="astromar-scrollbar mx-auto mb-2 flex max-w-[820px] gap-1.5 overflow-x-auto">
               {suggestedQuestions.map((question) => <button key={question} type="button" onClick={() => setInput(question)} disabled={sending} className="h-7 shrink-0 rounded-md border border-white/[0.09] px-2.5 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50">{question}</button>)}
             </div>
           ) : null}
           <form onSubmit={(event) => { event.preventDefault(); void handleSend(); }} className="mx-auto w-full max-w-[820px] rounded-[8px] border border-white/[0.16] bg-[linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025)),#111214] shadow-[0_20px_60px_rgba(0,0,0,.34),inset_0_1px_0_rgba(255,255,255,.06)]">
-            <div className="flex items-center gap-1.5 overflow-x-auto px-2.5 pt-2">
+            <div className="astromar-scrollbar flex items-center gap-1.5 overflow-x-auto px-2.5 pt-2">
               {connectedConnectors.map((connector) => {
                 const selected = selectedConnectorKeys.includes(connector.key);
                 return <button key={connector.key} type="button" onClick={() => toggleConnector(connector.key)} disabled={sending || recoveringRunState} className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[10px] ${selected ? 'border-[#8eb3ff]/25 bg-[#8eb3ff]/[0.07] text-[#dfe8ff]' : 'border-white/[0.09] text-zinc-600 hover:text-zinc-300'} disabled:opacity-50`}><i className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-[#8eb3ff]' : 'bg-zinc-600'}`} />{connector.label}</button>;

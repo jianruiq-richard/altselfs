@@ -123,7 +123,7 @@ export function AstromarConnectorsPage() {
           </button>
         </header>
 
-        <main className="min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <div className="mx-auto w-full max-w-[1180px]">
             <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
               <div>
@@ -149,7 +149,7 @@ export function AstromarConnectorsPage() {
               </label>
             </div>
 
-            <nav className="mb-5 flex gap-1 overflow-x-auto" aria-label="Connector categories">
+            <nav className="astromar-scrollbar mb-5 flex gap-1 overflow-x-auto" aria-label="Connector categories">
               {categories.map((item) => (
                 <button
                   key={item.key}

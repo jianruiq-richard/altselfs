@@ -83,6 +83,7 @@ button {
 }
 
 .agent-activity-text {
+  color-scheme: dark;
   font-family:
     Inter,
     ui-sans-serif,
@@ -91,6 +92,37 @@ button {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+}
+
+.astromar-scrollbar {
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  scrollbar-width: thin;
+}
+
+.astromar-scrollbar-stable {
+  scrollbar-gutter: stable;
+}
+
+.astromar-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.astromar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.astromar-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.astromar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.astromar-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 @keyframes briefing-progress-line-in {

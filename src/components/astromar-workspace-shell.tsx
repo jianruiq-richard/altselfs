@@ -153,7 +153,7 @@ export function AstromarWorkspaceShell({
         })}
       </nav>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">{sidebarContent}</div>
+      <div className="astromar-scrollbar astromar-scrollbar-stable min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{sidebarContent}</div>
 
       <div className="shrink-0 border-t border-white/[0.09] bg-[#0c0d0e] p-3">
         <Link

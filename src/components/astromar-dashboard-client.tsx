@@ -146,7 +146,7 @@ export function AstromarDashboardClient({
           Ready
         </span>
       </div>
-      <div className="min-h-0 overflow-y-auto px-4 py-5">
+      <div className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-5">
         <section className="mb-8">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13px] font-semibold text-zinc-200">Active work</h2>
@@ -238,7 +238,7 @@ export function AstromarDashboardClient({
           </button>
         </header>
 
-        <main className="min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+        <main className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-[980px]">
             <div className="mb-6">
               <p className="mb-1 text-[11px] font-extrabold uppercase text-zinc-600">{dateLabel}</p>
@@ -357,7 +357,7 @@ export function AstromarDashboardClient({
               placeholder="What should we decide, research, or move forward?"
             />
             <div className="flex items-center justify-between gap-3 px-3 pb-3">
-              <div className="flex min-w-0 gap-1.5 overflow-x-auto">
+              <div className="astromar-scrollbar flex min-w-0 gap-1.5 overflow-x-auto">
                 {promptSuggestions.map((suggestion) => (
                   <button key={suggestion} type="button" onClick={() => setPrompt(suggestion)} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-white/[0.09] px-2 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-zinc-200">
                     <Search className="h-3 w-3" />
