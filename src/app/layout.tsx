@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#f9fafb',
+  themeColor: '#090a0a',
   interactiveWidget: 'resizes-visual',
 };
 
@@ -20,7 +20,7 @@ export default async function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en-US" className="h-full antialiased">
-        <body className="min-h-full bg-gray-50">{children}</body>
+        <body className="min-h-full bg-[#090a0a]">{children}</body>
       </html>
     </ClerkProvider>
   );

@@ -99,19 +99,28 @@ export async function GET() {
     warnings.push(error instanceof Error ? error.message : 'personal-agent-server unavailable');
   }
 
-  const integrations = await prisma.investorIntegration.findMany({
-    where: {
-      investorId: investor.id,
-      provider: {
-        in: COMPETITIVE_CONNECTORS.map((connector) => connector.dbProvider),
+  const [integrations, wechatSources] = await Promise.all([
+    prisma.investorIntegration.findMany({
+      where: {
+        investorId: investor.id,
+        provider: {
+          in: [...COMPETITIVE_CONNECTORS.map((connector) => connector.dbProvider), 'XIAOHONGSHU'],
+        },
       },
-    },
-    select: {
-      provider: true,
-      status: true,
-      updatedAt: true,
-    },
-  });
+      select: {
+        provider: true,
+        status: true,
+        accountEmail: true,
+        accountName: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.investorWechatSource.findMany({
+      where: { investorId: investor.id },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, displayName: true, updatedAt: true },
+    }),
+  ]);
   const integrationMap = new Map(integrations.map((integration) => [integration.provider, integration]));
   const rapidApiConfigured = Boolean(process.env.RAPIDAPI_KEY?.trim());
 
@@ -124,12 +133,57 @@ export async function GET() {
       description: connector.description,
       connected: accounts.length > 0,
       enabledByDefault: accounts.length > 0,
+      conversationAvailable: true,
       connectionIds: accounts.map((account) => account.connectionId).filter(Boolean),
       accounts,
       connectHref: connector.connectHref,
       manageHref: '/investor/info-ops',
     };
   });
+
+  const xiaohongshu = integrationMap.get('XIAOHONGSHU');
+  const managedSources = [
+    {
+      key: 'wechat',
+      type: 'app' as ConnectorType,
+      label: 'WeChat',
+      description: 'Manage selected Official Account sources and their latest updates.',
+      connected: wechatSources.length > 0,
+      enabledByDefault: false,
+      conversationAvailable: false,
+      connectionIds: [],
+      accounts: wechatSources.map((source) => ({
+        connectionId: source.id,
+        provider: 'wechat',
+        accountEmail: '',
+        displayName: source.displayName,
+        status: 'connected',
+        updatedAt: source.updatedAt.toISOString(),
+      })),
+      manageHref: '/investor/info-ops?assistant=wechat',
+    },
+    {
+      key: 'xiaohongshu',
+      type: 'app' as ConnectorType,
+      label: 'Xiaohongshu',
+      description: 'Manage the connected Xiaohongshu collection workflow and content signals.',
+      connected: xiaohongshu?.status === 'CONNECTED',
+      enabledByDefault: false,
+      conversationAvailable: false,
+      connectionIds: [],
+      accounts: xiaohongshu?.status === 'CONNECTED'
+        ? [{
+            connectionId: 'xiaohongshu',
+            provider: 'xiaohongshu',
+            accountEmail: xiaohongshu.accountEmail || '',
+            displayName: xiaohongshu.accountName || 'Xiaohongshu workflow',
+            status: 'connected',
+            updatedAt: xiaohongshu.updatedAt.toISOString(),
+          }]
+        : [],
+      manageHref: '/investor/info-ops?assistant=xiaohongshu',
+    },
+  ];
 
   const competitive = COMPETITIVE_CONNECTORS.map((connector) => {
     const integration = integrationMap.get(connector.dbProvider);
@@ -141,6 +195,7 @@ export async function GET() {
       description: connector.description,
       connected,
       enabledByDefault: connected,
+      conversationAvailable: true,
       connectionIds: [],
       accounts: [],
       platformConfigured: rapidApiConfigured,
@@ -150,7 +205,7 @@ export async function GET() {
   });
 
   return NextResponse.json({
-    connectors: [...personal, ...competitive],
+    connectors: [...personal, ...managedSources, ...competitive],
     warnings,
   });
 }

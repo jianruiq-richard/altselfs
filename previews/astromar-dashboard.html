@@ -3,166 +3,464 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Workspace | Astromar</title>
-  <meta name="description" content="Astromar AI cofounder workspace dashboard preview." />
+  <title>Home | Astromar</title>
+  <meta name="description" content="Astromar AI cofounder dashboard preview." />
   <style>
     :root {
       color-scheme: dark;
-      --bg:#090a0a; --sidebar:#0c0d0e; --surface:#111214; --surface-2:#161719; --surface-3:#1a1b1e;
-      --line:rgba(255,255,255,.1); --line-strong:rgba(255,255,255,.16); --text:#f4f4f2;
-      --muted:rgba(255,255,255,.62); --subtle:rgba(255,255,255,.4); --green:#46d19a;
-      --blue:#79a8ff; --amber:#efbd59; --coral:#ff7464; --radius:8px;
+      --bg:#090a0a; --side:#0c0d0e; --panel:#101113; --raised:#17181a; --raised-2:#1d1e20;
+      --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.16); --text:#f4f4f2;
+      --muted:rgba(255,255,255,.61); --subtle:rgba(255,255,255,.37); --green:#46d19a;
+      --blue:#8eb3ff; --amber:#e9b85a; --red:#ff7d73; --radius:8px;
     }
-    *{box-sizing:border-box}html,body{height:100%}
-    body{margin:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.5}
-    button,textarea,input{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}
-    .app{display:grid;grid-template-columns:244px minmax(0,1fr);height:100svh;overflow:hidden}
-    .sidebar{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--line);background:var(--sidebar)}
-    .side-head{display:flex;align-items:center;justify-content:space-between;height:64px;padding:0 16px}
-    .brand{display:inline-flex;align-items:center;gap:10px;font-size:15px;font-weight:760}
-    .brand-mark{display:grid;place-items:center;width:27px;height:27px;border:1px solid var(--line-strong);border-radius:7px;background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.03));box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
-    .brand-mark::after{width:9px;height:9px;border-radius:50%;background:white;box-shadow:0 0 18px rgba(255,255,255,.72);content:""}
-    .icon-btn{display:grid;place-items:center;width:34px;height:34px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--subtle)}.icon-btn:hover{border-color:var(--line);background:rgba(255,255,255,.05);color:white}
-    .new-task{display:flex;align-items:center;justify-content:center;gap:8px;min-height:42px;margin:4px 12px 12px;border:1px solid rgba(255,255,255,.88);border-radius:var(--radius);background:#f7f7f5;color:#0a0a0a;font-size:13px;font-weight:760}.new-task:hover{background:white}
-    .side-scroll{flex:1;overflow-y:auto;padding:0 10px 18px}.side-scroll::-webkit-scrollbar{width:6px}.side-scroll::-webkit-scrollbar-thumb{border-radius:10px;background:rgba(255,255,255,.12)}
-    .nav-list{display:grid;gap:2px}.nav-item{display:flex;align-items:center;gap:10px;width:100%;min-height:38px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:13px;text-align:left}.nav-item:hover{background:rgba(255,255,255,.045);color:white}.nav-item.active{background:rgba(255,255,255,.085);color:white}.nav-item svg{flex:0 0 auto}.nav-item span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .side-label{display:flex;align-items:center;justify-content:space-between;margin:20px 10px 7px;color:var(--subtle);font-size:10px;font-weight:800;text-transform:uppercase}.side-label button{border:0;background:transparent;color:var(--subtle)}
-    .project-dot{width:8px;height:8px;border-radius:2px;background:var(--blue);box-shadow:0 0 10px rgba(121,168,255,.34)}.project-dot.amber{background:var(--amber)}
-    .recent-item{align-items:flex-start;height:auto;padding-block:8px;line-height:1.35}.recent-item svg{margin-top:2px}.recent-copy{display:grid;min-width:0}.recent-copy small{margin-top:3px;color:var(--subtle);font-size:10px}
-    .side-foot{padding:12px;border-top:1px solid var(--line)}
-    .usage{margin-bottom:10px;padding:10px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03)}.usage-head{display:flex;justify-content:space-between;color:var(--muted);font-size:11px}.usage-track{height:3px;margin-top:8px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.1)}.usage-track i{display:block;width:34%;height:100%;background:linear-gradient(90deg,#fff,#aeb4bd)}
-    .profile{display:grid;grid-template-columns:30px 1fr 24px;align-items:center;gap:9px;min-height:42px;padding:5px;border-radius:7px}.profile:hover{background:rgba(255,255,255,.04)}.avatar{display:grid;place-items:center;width:30px;height:30px;border-radius:7px;background:#d9dde3;color:#171717;font-size:11px;font-weight:800}.profile-copy{display:grid;min-width:0}.profile-copy strong{overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.profile-copy span{color:var(--subtle);font-size:10px}
-    .main-shell{display:grid;grid-template-rows:64px minmax(0,1fr);min-width:0;overflow:hidden;background:var(--bg)}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:0 22px;border-bottom:1px solid var(--line);background:rgba(9,10,10,.82);backdrop-filter:blur(18px)}
-    .crumb{display:flex;align-items:center;gap:9px;color:var(--subtle);font-size:12px}.crumb strong{color:rgba(255,255,255,.82);font-weight:700}.system-status{display:inline-flex;align-items:center;gap:7px;margin-left:12px;padding-left:14px;border-left:1px solid var(--line);color:var(--muted)}.system-status::before{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 10px rgba(70,209,154,.6);content:""}
-    .top-actions{display:flex;align-items:center;gap:6px}.top-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:34px;padding:0 11px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.035);color:var(--muted);font-size:12px;font-weight:650}.top-button:hover{background:rgba(255,255,255,.07);color:white}.mobile-menu{display:none}
-    .workspace{display:grid;grid-template-columns:minmax(0,1fr) 304px;min-width:0;overflow:hidden}
-    .content{min-width:0;overflow-y:auto;padding:32px 34px 56px}.content::-webkit-scrollbar,.rail::-webkit-scrollbar{width:7px}.content::-webkit-scrollbar-thumb,.rail::-webkit-scrollbar-thumb{border-radius:10px;background:rgba(255,255,255,.11)}
-    .content-inner{width:min(100%,960px);margin:0 auto}
-    .welcome{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-bottom:22px}.welcome p{margin:0 0 5px;color:var(--subtle);font-size:12px;font-weight:750;text-transform:uppercase}.welcome h1{margin:0;font-size:28px;line-height:1.15}.date{color:var(--subtle);font-size:12px;white-space:nowrap}
-    .composer{border:1px solid var(--line-strong);border-radius:var(--radius);background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.035)),var(--surface);box-shadow:0 24px 70px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.08)}
-    .composer textarea{display:block;width:100%;height:112px;resize:none;border:0;outline:0;background:transparent;color:white;padding:20px 20px 8px;font-size:18px;line-height:1.5}.composer textarea::placeholder{color:rgba(255,255,255,.32)}
-    .composer-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px 12px}.composer-tools,.composer-send{display:flex;align-items:center;gap:6px}.tool-button{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);font-size:12px}.tool-button:hover{border-color:var(--line);background:rgba(255,255,255,.045);color:white}.tool-button.mode{border-color:var(--line);background:rgba(255,255,255,.04)}
-    .send{display:grid;place-items:center;width:36px;height:36px;border:1px solid white;border-radius:7px;background:white;color:#090909}.send:hover{background:#e9eaec}.shortcut{color:var(--subtle);font-size:10px}
-    .quick-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.quick{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.025);color:var(--muted);font-size:11px}.quick:hover{border-color:var(--line-strong);background:rgba(255,255,255,.055);color:white}
-    .section-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:34px 0 12px}.section-head h2{margin:0;font-size:15px}.section-head span{color:var(--subtle);font-size:11px}.section-head button{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--muted);font-size:11px}
-    .brief{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
-    .brief-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;padding:17px 18px;border-bottom:1px solid var(--line)}.brief-summary p{margin:0;color:var(--muted);font-size:13px;line-height:1.55}.signal-badge{display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid rgba(70,209,154,.22);border-radius:999px;background:rgba(70,209,154,.07);color:var(--green);font-size:10px;font-weight:800;white-space:nowrap}.signal-badge::before{width:6px;height:6px;border-radius:50%;background:var(--green);content:""}
-    .brief-list{display:grid}.brief-item{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:13px;min-height:86px;padding:14px 18px;border-bottom:1px solid var(--line);transition:background .16s ease}.brief-item:last-child{border-bottom:0}.brief-item:hover{background:rgba(255,255,255,.025)}
-    .brief-icon{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--line);border-radius:7px;background:rgba(121,168,255,.07);color:var(--blue)}.brief-item:nth-child(2) .brief-icon{background:rgba(239,189,89,.07);color:var(--amber)}.brief-item:nth-child(3) .brief-icon{background:rgba(70,209,154,.07);color:var(--green)}
-    .brief-copy{min-width:0}.brief-copy h3{margin:0 0 4px;font-size:13px}.brief-copy p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}.brief-meta{display:grid;justify-items:end;gap:6px;color:var(--subtle);font-size:10px}.priority{padding:4px 7px;border-radius:999px;background:rgba(121,168,255,.09);color:var(--blue);font-weight:800}.priority.amber{background:rgba(239,189,89,.09);color:var(--amber)}.priority.green{background:rgba(70,209,154,.09);color:var(--green)}
-    .recent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.conversation{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:12px;min-height:74px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(255,255,255,.025)}.conversation:hover{background:rgba(255,255,255,.045)}.conversation-icon{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--line);border-radius:7px;color:var(--muted)}.conversation-copy{min-width:0}.conversation-copy strong,.conversation-copy span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.conversation-copy strong{font-size:12px}.conversation-copy span{margin-top:3px;color:var(--subtle);font-size:10px}.conversation>span{color:var(--subtle);font-size:10px}
-    .rail{min-width:0;overflow-y:auto;padding:20px 16px 36px;border-left:1px solid var(--line);background:#0c0d0e}.rail-section{margin-bottom:26px}.rail-head{display:flex;align-items:center;justify-content:space-between;margin:0 3px 10px}.rail-head h2{margin:0;font-size:12px}.rail-head button{border:0;background:transparent;color:var(--subtle)}
-    .task-list,.context-list{display:grid;gap:7px}.task{padding:11px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03)}.task-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.task h3{margin:0;font-size:11px;line-height:1.45}.task-state{display:inline-flex;align-items:center;gap:5px;color:var(--blue);font-size:9px;font-weight:800;text-transform:uppercase;white-space:nowrap}.task-state::before{width:5px;height:5px;border-radius:50%;background:var(--blue);box-shadow:0 0 8px rgba(121,168,255,.5);content:""}.task-state.ready{color:var(--green)}.task-state.ready::before{background:var(--green)}.task p{margin:7px 0 0;color:var(--subtle);font-size:10px;line-height:1.45}.progress{height:3px;margin-top:10px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.08)}.progress i{display:block;width:68%;height:100%;background:linear-gradient(90deg,var(--blue),#d3deff)}.task:nth-child(2) .progress i{width:100%;background:var(--green)}
-    .context{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:9px;min-height:48px;padding:7px 9px;border:1px solid transparent;border-radius:7px}.context:hover{border-color:var(--line);background:rgba(255,255,255,.025)}.context-icon{display:grid;place-items:center;width:29px;height:29px;border:1px solid var(--line);border-radius:6px;color:var(--muted)}.context-copy{display:grid;min-width:0}.context-copy strong{font-size:11px}.context-copy span{color:var(--subtle);font-size:9px}.context-status{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 9px rgba(70,209,154,.42)}.context-status.off{background:rgba(255,255,255,.16);box-shadow:none}
-    .memory{padding:12px;border:1px solid var(--line);border-radius:7px;background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.02))}.memory-head{display:flex;align-items:center;gap:8px;color:rgba(255,255,255,.82);font-size:11px;font-weight:750}.memory p{margin:8px 0 0;color:var(--muted);font-size:10px;line-height:1.55}.memory-stats{display:flex;gap:14px;margin-top:11px;color:var(--subtle);font-size:9px}.memory-stats b{color:white;font-size:11px}
-    .toast{position:fixed;z-index:30;right:22px;bottom:22px;display:flex;align-items:center;gap:10px;max-width:340px;padding:12px 14px;border:1px solid var(--line-strong);border-radius:8px;background:#17181a;color:rgba(255,255,255,.85);font-size:12px;box-shadow:0 18px 60px rgba(0,0,0,.45);opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .2s ease,transform .2s ease}.toast.show{opacity:1;transform:translateY(0)}.toast i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px rgba(70,209,154,.5)}
+    *{box-sizing:border-box}html,body{height:100%}[hidden]{display:none!important}
+    body{margin:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.5;letter-spacing:0}
+    button,textarea,input,select{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}svg{display:block}
+    .app{display:grid;grid-template-columns:232px minmax(520px,1fr) 296px;height:100vh;height:100dvh;overflow:hidden}
+
+    /* Sidebar */
+    .sidebar{position:relative;z-index:20;display:flex;height:100vh;height:100dvh;min-width:0;overflow:hidden;flex-direction:column;border-right:1px solid var(--line);background:var(--side)}
+    .side-head{display:flex;align-items:center;justify-content:space-between;height:58px;padding:0 13px 0 15px}
+    .brand{display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:770}
+    .brand-mark{display:grid;place-items:center;width:27px;height:27px;border:1px solid var(--line-strong);border-radius:7px;background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.025));box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+    .brand-mark::after{width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 16px rgba(255,255,255,.62);content:""}
+    .icon-btn{display:grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--subtle)}
+    .icon-btn:hover,.icon-btn.active{border-color:var(--line);background:rgba(255,255,255,.05);color:#fff}
+    .new-chat{display:flex;align-items:center;justify-content:center;gap:8px;min-height:40px;margin:3px 11px 12px;border:1px solid rgba(255,255,255,.78);border-radius:7px;background:#f2f2f0;color:#0b0b0b;font-size:12px;font-weight:760}
+    .new-chat:hover{background:#fff}
+    .primary-nav{display:grid;gap:2px;padding:0 9px 13px;border-bottom:1px solid var(--line)}
+    .nav-item{display:flex;align-items:center;gap:10px;min-height:37px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:12px;text-align:left}
+    .nav-item:hover{background:rgba(255,255,255,.045);color:#fff}.nav-item.active{background:rgba(255,255,255,.085);color:#fff}.nav-item svg{flex:0 0 auto}
+    .side-scroll{min-height:0;flex:1 1 0;overflow-y:auto;padding:0 9px 18px}.side-scroll::-webkit-scrollbar{width:5px}.side-scroll::-webkit-scrollbar-thumb{border-radius:99px;background:rgba(255,255,255,.11)}
+    .side-label{display:flex;align-items:center;justify-content:space-between;margin:15px 9px 7px;color:var(--subtle);font-size:9px;font-weight:800;text-transform:uppercase}
+    .side-label-actions{display:flex;gap:1px}.side-label button{display:grid;place-items:center;width:23px;height:23px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--subtle)}.side-label button:hover{background:rgba(255,255,255,.05);color:#fff}
+    .session-list{display:grid;gap:2px}.session{position:relative;min-width:0;border-radius:7px}.session:hover,.session.selected{background:rgba(255,255,255,.05)}.session.selected{background:rgba(255,255,255,.075)}
+    .session-main{display:block;width:100%;min-height:48px;padding:7px 35px 7px 9px;border:0;border-radius:7px;background:transparent;color:var(--muted);text-align:left}
+    .session.selected .session-main{color:#fff}.session-title{display:block;overflow:hidden;font-size:11px;font-weight:630;text-overflow:ellipsis;white-space:nowrap}.session-meta{display:block;margin-top:2px;color:var(--subtle);font-size:9px}
+    .session-more{position:absolute;top:8px;right:6px;display:grid;place-items:center;width:27px;height:27px;padding:0;border:1px solid transparent;border-radius:6px;background:rgba(12,13,14,.86);color:var(--subtle);opacity:0;transition:opacity .15s ease}
+    .session:hover .session-more,.session-more.active{opacity:1}.session-more:hover,.session-more.active{border-color:var(--line);background:#1a1b1d;color:#fff}
+    .session-menu{position:absolute;z-index:50;top:38px;right:5px;display:none;width:142px;overflow:hidden;padding:4px;border:1px solid var(--line-strong);border-radius:7px;background:#18191b;box-shadow:0 18px 48px rgba(0,0,0,.55)}.session-menu.open{display:block}
+    .session-menu button{display:flex;align-items:center;gap:8px;width:100%;min-height:32px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:rgba(255,255,255,.75);font-size:11px;text-align:left}.session-menu button:hover{background:rgba(255,255,255,.07);color:#fff}.session-menu button.danger{color:#ffaaa4}.session-menu button.danger:hover{background:rgba(255,93,84,.09)}
+    .side-foot{position:relative;z-index:2;flex:0 0 auto;margin-top:auto;padding:10px;border-top:1px solid var(--line);background:var(--side)}
+    .profile{display:grid;grid-template-columns:36px minmax(0,1fr) 20px;align-items:center;gap:9px;width:100%;min-height:56px;padding:7px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.025);color:#fff;text-align:left}.profile:hover{border-color:var(--line-strong);background:rgba(255,255,255,.05)}
+    .avatar{display:grid;place-items:center;width:36px;height:36px;border-radius:7px;background:#d9dce1;color:#161616;font-size:10px;font-weight:850}.profile-copy{display:grid;min-width:0}.profile-copy strong,.profile-copy span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.profile-copy strong{font-size:11px}.profile-copy span{color:var(--subtle);font-size:9px}.sign-out{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;margin-top:6px;padding:0 9px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);font-size:11px;font-weight:650;text-align:left}.sign-out:hover{border-color:rgba(255,125,115,.14);background:rgba(255,125,115,.065);color:#ffaaa4}
+
+    /* Conversation */
+    .conversation{display:grid;grid-template-rows:58px minmax(0,1fr) auto;min-width:0;overflow:hidden;background:var(--bg)}
+    .conversation-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 18px;border-bottom:1px solid var(--line);background:rgba(9,10,10,.86);backdrop-filter:blur(16px)}
+    .conversation-title{display:flex;min-width:0;align-items:center;gap:10px}.mobile-menu{display:none}.conversation-title-copy{min-width:0}.conversation-title-copy strong,.conversation-title-copy span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.conversation-title-copy strong{font-size:12px}.conversation-title-copy span{margin-top:1px;color:var(--subtle);font-size:9px}
+    .head-actions{display:flex;align-items:center;gap:5px}.model-select{height:32px;padding:0 27px 0 9px;border:1px solid var(--line);border-radius:7px;background:#111214;color:var(--muted);font-size:10px;font-weight:650;outline:0}.model-select:hover{border-color:var(--line-strong);color:#fff}
+    .messages{min-height:0;overflow-y:auto;padding:32px 26px 22px;scroll-behavior:smooth}.messages::-webkit-scrollbar,.rail-scroll::-webkit-scrollbar{width:6px}.messages::-webkit-scrollbar-thumb,.rail-scroll::-webkit-scrollbar-thumb{border-radius:99px;background:rgba(255,255,255,.1)}
+    .message-flow{width:min(100%,760px);margin:0 auto}.day-divider{display:flex;align-items:center;gap:12px;margin:0 0 28px;color:var(--subtle);font-size:9px;text-transform:uppercase}.day-divider::before,.day-divider::after{height:1px;flex:1;background:var(--line);content:""}
+    .message{display:grid;grid-template-columns:26px minmax(0,1fr);gap:11px;margin-bottom:27px}.message.user{grid-template-columns:minmax(0,1fr);justify-items:end;margin-bottom:29px}
+    .agent-avatar{display:grid;place-items:center;width:26px;height:26px;border:1px solid var(--line-strong);border-radius:7px;background:linear-gradient(145deg,rgba(255,255,255,.15),rgba(255,255,255,.03))}.agent-avatar::after{width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 12px rgba(255,255,255,.52);content:""}
+    .message-body{min-width:0}.message-by{margin:2px 0 7px;color:var(--subtle);font-size:9px;font-weight:750;text-transform:uppercase}.message-text{color:rgba(255,255,255,.78);font-size:13px;line-height:1.66}.message-text p{margin:0 0 11px}.message-text p:last-child{margin-bottom:0}.message-text strong{color:#fff;font-weight:700}
+    .user-bubble{max-width:78%;padding:10px 13px;border:1px solid var(--line);border-radius:8px 8px 2px 8px;background:rgba(255,255,255,.075);color:rgba(255,255,255,.89);font-size:12px;line-height:1.55}
+    .decision-block{margin-top:14px;border-left:2px solid rgba(255,255,255,.34);padding:3px 0 3px 13px}.decision-label{display:flex;align-items:center;gap:7px;margin-bottom:5px;color:var(--green);font-size:9px;font-weight:850;text-transform:uppercase}.decision-block p{margin:0;color:rgba(255,255,255,.85);font-size:12px;line-height:1.6}
+    .source-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:13px}.source{display:inline-flex;align-items:center;gap:5px;min-height:25px;padding:0 7px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.025);color:var(--subtle);font-size:9px}.source i{width:5px;height:5px;border-radius:50%;background:var(--blue)}
+    .run-card{margin-top:13px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025)}.run-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 11px;border-bottom:1px solid var(--line)}.run-head strong{display:flex;align-items:center;gap:7px;font-size:10px}.run-status{display:flex;align-items:center;gap:6px;color:var(--blue);font-size:9px;font-weight:750}.run-status i{width:5px;height:5px;border-radius:50%;background:var(--blue);box-shadow:0 0 8px rgba(142,179,255,.6);animation:pulse 1.5s infinite}.run-steps{display:grid}.run-step{display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:37px;padding:0 11px;border-bottom:1px solid rgba(255,255,255,.055);color:var(--muted);font-size:10px}.run-step:last-child{border-bottom:0}.run-step svg{color:var(--green)}.run-step.pending svg{color:var(--subtle)}.run-step span:last-child{color:var(--subtle);font-size:8px}
+    .empty-state{display:none;min-height:100%;place-content:center;text-align:center}.empty-state.show{display:grid}.empty-mark{display:grid;place-items:center;width:42px;height:42px;margin:0 auto 15px;border:1px solid var(--line-strong);border-radius:8px;background:linear-gradient(145deg,rgba(255,255,255,.13),rgba(255,255,255,.02))}.empty-mark::after{width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 20px rgba(255,255,255,.55);content:""}.empty-state h1{margin:0;font-size:22px;line-height:1.2}.empty-state p{margin:8px 0 0;color:var(--muted);font-size:12px}
+
+    /* Composer */
+    .composer-wrap{padding:0 24px 20px;background:linear-gradient(180deg,rgba(9,10,10,0),var(--bg) 22%)}
+    .composer{width:min(100%,780px);margin:0 auto;border:1px solid var(--line-strong);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025)),#111214;box-shadow:0 20px 60px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.06)}
+    .connector-strip{display:flex;align-items:center;gap:6px;overflow-x:auto;padding:8px 10px 0}.connector-strip::-webkit-scrollbar{display:none}.context-chip{display:inline-flex;flex:0 0 auto;align-items:center;gap:6px;min-height:25px;padding:0 7px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.025);color:var(--subtle);font-size:9px}.context-chip.on{border-color:rgba(142,179,255,.22);background:rgba(142,179,255,.07);color:rgba(223,232,255,.78)}.context-chip i{width:5px;height:5px;border-radius:50%;background:var(--subtle)}.context-chip.on i{background:var(--blue)}
+    .composer textarea{display:block;width:100%;height:70px;resize:none;padding:13px 13px 5px;border:0;outline:0;background:transparent;color:#fff;font-size:13px;line-height:1.5}.composer textarea::placeholder{color:rgba(255,255,255,.31)}
+    .composer-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px 9px}.composer-tools,.composer-actions{display:flex;align-items:center;gap:4px}.tool{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 8px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--subtle);font-size:9px}.tool:hover,.tool.active{border-color:var(--line);background:rgba(255,255,255,.04);color:#fff}.send{display:grid;place-items:center;width:31px;height:31px;padding:0;border:1px solid #fff;border-radius:6px;background:#f4f4f2;color:#090909}.send:hover{background:#fff}.send:disabled{cursor:default;opacity:.35}
+
+    /* Right rail */
+    .rail{display:grid;grid-template-rows:58px minmax(0,1fr);min-width:0;border-left:1px solid var(--line);background:var(--side)}
+    .rail-top{display:flex;align-items:center;justify-content:space-between;padding:0 13px;border-bottom:1px solid var(--line)}.rail-top strong{font-size:11px}.status{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:9px}.status i{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 9px rgba(70,209,154,.5)}
+    .rail-scroll{min-height:0;overflow-y:auto;padding:16px 12px 28px}.rail-section{margin-bottom:25px}.rail-head{display:flex;align-items:center;justify-content:space-between;margin:0 2px 8px}.rail-head h2{margin:0;color:rgba(255,255,255,.78);font-size:10px}.rail-head button{display:grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--subtle)}.rail-head button:hover{background:rgba(255,255,255,.05);color:#fff}
+    .work-list{display:grid;gap:7px}.work{padding:10px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.027)}.work-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.work h3{margin:0;font-size:10px;line-height:1.45}.work-state{display:flex;flex:0 0 auto;align-items:center;gap:5px;color:var(--blue);font-size:8px;font-weight:800;text-transform:uppercase}.work-state::before{width:5px;height:5px;border-radius:50%;background:var(--blue);content:""}.work-state.ready{color:var(--green)}.work-state.ready::before{background:var(--green)}.work p{margin:6px 0 0;color:var(--subtle);font-size:9px;line-height:1.5}.progress{height:3px;margin-top:9px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.08)}.progress i{display:block;width:68%;height:100%;background:linear-gradient(90deg,var(--blue),#e2e8f6)}.work:nth-child(2) .progress i{width:100%;background:var(--green)}
+    .context-list{display:grid;gap:2px}.context{display:grid;grid-template-columns:27px minmax(0,1fr) 30px;align-items:center;gap:8px;min-height:44px;padding:5px 6px;border:1px solid transparent;border-radius:7px}.context:hover{border-color:var(--line);background:rgba(255,255,255,.025)}.context-icon{display:grid;place-items:center;width:27px;height:27px;border:1px solid var(--line);border-radius:6px;color:var(--muted)}.context-copy{display:grid;min-width:0}.context-copy strong{font-size:10px}.context-copy span{overflow:hidden;color:var(--subtle);font-size:8px;text-overflow:ellipsis;white-space:nowrap}
+    .switch{position:relative;width:29px;height:17px;padding:0;border:1px solid var(--line-strong);border-radius:99px;background:rgba(255,255,255,.05)}.switch::after{position:absolute;top:3px;left:3px;width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.4);transition:transform .16s ease,background .16s ease;content:""}.switch.on{border-color:rgba(70,209,154,.24);background:rgba(70,209,154,.11)}.switch.on::after{background:var(--green);transform:translateX(12px)}
+    .context-note{display:flex;align-items:flex-start;gap:8px;margin-top:9px;padding:9px;border-top:1px solid var(--line);color:var(--subtle);font-size:8px;line-height:1.45}.context-note svg{flex:0 0 auto;margin-top:1px}
+
+    /* Overlays */
+    .toast{position:fixed;z-index:100;right:18px;bottom:18px;display:flex;align-items:center;gap:9px;max-width:330px;padding:10px 12px;border:1px solid var(--line-strong);border-radius:7px;background:#1a1b1d;color:rgba(255,255,255,.82);font-size:10px;box-shadow:0 20px 60px rgba(0,0,0,.5);opacity:0;pointer-events:none;transform:translateY(9px);transition:.18s ease}.toast.show{opacity:1;transform:translateY(0)}.toast i{width:6px;height:6px;border-radius:50%;background:var(--green)}
+    .modal-backdrop{position:fixed;z-index:110;inset:0;display:none;place-items:center;padding:20px;background:rgba(0,0,0,.67);backdrop-filter:blur(5px)}.modal-backdrop.open{display:grid}.modal{width:min(100%,390px);padding:17px;border:1px solid var(--line-strong);border-radius:8px;background:#151618;box-shadow:0 30px 90px rgba(0,0,0,.62)}.modal h2{margin:0;font-size:14px}.modal p{margin:5px 0 13px;color:var(--muted);font-size:10px}.modal input{width:100%;height:39px;padding:0 10px;border:1px solid var(--line-strong);border-radius:7px;outline:0;background:rgba(255,255,255,.045);color:#fff;font-size:12px}.modal input:focus{border-color:rgba(255,255,255,.35);box-shadow:0 0 0 3px rgba(255,255,255,.05)}.modal-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:13px}.modal-actions button{min-height:33px;padding:0 11px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.04);color:var(--muted);font-size:10px;font-weight:700}.modal-actions button.primary{border-color:#fff;background:#fff;color:#090909}
     .scrim{display:none}
-    @media(max-width:1120px){.workspace{grid-template-columns:minmax(0,1fr)}.rail{display:none}}
-    @media(max-width:820px){body{overflow:auto}.app{grid-template-columns:1fr;height:auto;min-height:100svh}.sidebar{position:fixed;z-index:40;top:0;bottom:0;left:0;width:244px;transform:translateX(-102%);transition:transform .22s ease}.sidebar.open{transform:translateX(0)}.scrim{position:fixed;z-index:35;inset:0;display:block;background:rgba(0,0,0,.62);opacity:0;pointer-events:none;transition:opacity .22s ease}.scrim.show{opacity:1;pointer-events:auto}.main-shell{min-height:100svh}.mobile-menu{display:grid}.content{padding:26px 20px 48px}.system-status{display:none}}
-    @media(max-width:600px){.topbar{padding:0 12px}.top-button span{display:none}.content{padding:22px 14px 42px}.welcome{align-items:flex-start}.welcome h1{font-size:23px}.date{display:none}.composer textarea{height:104px;padding:16px 15px 7px;font-size:16px}.composer-bar{align-items:flex-end}.composer-tools{flex-wrap:wrap}.tool-button{padding:0 8px}.shortcut{display:none}.quick-actions{flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px}.quick{flex:0 0 auto}.brief-summary{grid-template-columns:1fr}.signal-badge{width:max-content}.brief-item{grid-template-columns:34px minmax(0,1fr)}.brief-meta{grid-column:2;grid-template-columns:auto auto;justify-content:start}.recent-grid{grid-template-columns:1fr}.section-head{margin-top:28px}.toast{right:14px;bottom:14px;left:14px}}
+
+    /* Restored type scale from the previous dashboard preview. */
+    .brand{font-size:15px}.new-chat,.nav-item{font-size:13px}.side-label{font-size:10px}
+    .session-title{font-size:13px}.session-meta{font-size:10px}.session-menu button{font-size:12px}
+    .avatar{font-size:11px}.profile-copy strong{font-size:12px}.profile-copy span{font-size:10px}
+    .conversation-title-copy strong{font-size:13px}.conversation-title-copy span,.model-select{font-size:10px}
+    .day-divider,.message-by{font-size:10px}.message-text{font-size:14px}.user-bubble{font-size:13px}
+    .decision-label{font-size:10px}.decision-block p{font-size:13px}.source{font-size:10px}
+    .run-head strong{font-size:11px}.run-status{font-size:10px}.run-step{font-size:11px}.run-step span:last-child{font-size:9px}
+    .empty-state p{font-size:13px}.context-chip,.tool{font-size:10px}.composer textarea{font-size:16px}
+    .rail-top strong{font-size:12px}.status{font-size:10px}.rail-head h2{font-size:11px}
+    .work h3{font-size:11px}.work-state{font-size:9px}.work p{font-size:10px}
+    .context-copy strong{font-size:11px}.context-copy span,.context-note{font-size:9px}
+    .toast{font-size:11px}.modal h2{font-size:15px}.modal p,.modal-actions button{font-size:11px}.modal input{font-size:13px}
+
+    /* Restored panel proportions and spacing from the previous preview. */
+    .app{grid-template-columns:244px minmax(520px,1fr) 304px}
+    .side-head{height:64px;padding:0 16px}.new-chat{min-height:42px;margin:4px 12px 12px}
+    .primary-nav{padding:0 10px 14px}.nav-item{min-height:38px}.side-scroll{padding:0 10px 18px}
+    .side-label{margin:20px 10px 7px}.session-main{min-height:52px;padding:8px 38px 8px 10px}
+    .session-more{top:10px;right:7px}.side-foot{padding:12px}
+    .conversation{grid-template-rows:64px minmax(0,1fr) auto}.conversation-head{padding:0 22px}
+    .messages{padding:32px 34px 24px}.message-flow{width:min(100%,780px)}
+    .composer-wrap{padding:0 28px 22px}.composer{width:min(100%,820px)}
+    .rail{grid-template-rows:64px minmax(0,1fr)}.rail-top{padding:0 16px}.rail-scroll{padding:20px 16px 36px}
+    .work{padding:11px}.context{grid-template-columns:30px minmax(0,1fr) 30px;min-height:48px;padding:7px 8px}.context-icon{width:29px;height:29px}
+
+    /* Home dashboard */
+    .home-dashboard{min-height:0;overflow-y:auto;padding:28px 32px 34px}.home-dashboard::-webkit-scrollbar{width:6px}.home-dashboard::-webkit-scrollbar-thumb{border-radius:99px;background:rgba(255,255,255,.1)}
+    .dashboard-inner{width:min(100%,980px);margin:0 auto}.dashboard-welcome{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-bottom:22px}.dashboard-welcome p{margin:0 0 5px;color:var(--subtle);font-size:11px;font-weight:800;text-transform:uppercase}.dashboard-welcome h1{margin:0;font-size:28px;line-height:1.15}.customize{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03);color:var(--muted);font-size:11px;font-weight:700}.customize:hover{border-color:var(--line-strong);background:rgba(255,255,255,.06);color:#fff}
+    .metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:24px}.metric{min-width:0;padding:14px 15px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025)}.metric-head{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--muted);font-size:11px}.metric-head svg{color:var(--subtle)}.metric-value{display:flex;align-items:baseline;gap:8px;margin-top:8px}.metric-value strong{font-size:24px;line-height:1}.metric-value span{color:var(--green);font-size:10px;font-weight:750}
+    .dashboard-section-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 10px}.dashboard-section-head h2{margin:0;font-size:15px}.dashboard-section-head button,.dashboard-section-head span{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--subtle);font-size:10px}
+    .brief-panel{margin-bottom:24px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.022)}.brief-intro{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;border-bottom:1px solid var(--line)}.brief-intro p{margin:0;color:var(--muted);font-size:12px;line-height:1.55}.signal-badge{display:inline-flex;flex:0 0 auto;align-items:center;gap:6px;min-height:27px;padding:0 8px;border:1px solid rgba(70,209,154,.24);border-radius:99px;background:rgba(70,209,154,.07);color:var(--green);font-size:10px;font-weight:800}.signal-badge::before{width:5px;height:5px;border-radius:50%;background:var(--green);content:""}
+    .brief-rows{display:grid}.brief-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:72px;padding:11px 16px;border-bottom:1px solid var(--line)}.brief-row:last-child{border-bottom:0}.brief-row:hover{background:rgba(255,255,255,.02)}.brief-icon{display:grid;place-items:center;width:33px;height:33px;border:1px solid var(--line);border-radius:7px;color:var(--blue)}.brief-row:nth-child(2) .brief-icon{color:var(--amber)}.brief-row:nth-child(3) .brief-icon{color:var(--green)}.brief-copy{min-width:0}.brief-copy strong{display:block;font-size:12px}.brief-copy span{display:block;margin-top:3px;overflow:hidden;color:var(--muted);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.brief-action{display:grid;justify-items:end;gap:4px}.brief-action b{padding:3px 6px;border-radius:99px;background:rgba(142,179,255,.09);color:var(--blue);font-size:9px}.brief-action span{color:var(--subtle);font-size:9px}
+    .dashboard-split{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:12px}.dashboard-panel{min-width:0;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.02)}.panel-title{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 13px;border-bottom:1px solid var(--line)}.panel-title strong{font-size:12px}.panel-title span{color:var(--subtle);font-size:9px}.signal-line,.next-move{display:grid;grid-template-columns:7px minmax(0,1fr) auto;align-items:center;gap:9px;min-height:48px;padding:7px 13px;border-bottom:1px solid rgba(255,255,255,.055)}.signal-line:last-child,.next-move:last-child{border-bottom:0}.signal-line>i{width:6px;height:6px;border-radius:50%;background:var(--green)}.signal-copy,.move-copy{display:grid;min-width:0}.signal-copy strong,.move-copy strong{font-size:10px}.signal-copy span,.move-copy span{overflow:hidden;color:var(--subtle);font-size:9px;text-overflow:ellipsis;white-space:nowrap}.signal-line>span,.next-move>span{color:var(--subtle);font-size:9px}.next-move{grid-template-columns:22px minmax(0,1fr) auto}.move-index{display:grid;place-items:center;width:20px;height:20px;border:1px solid var(--line);border-radius:5px;color:var(--muted);font-size:9px;font-style:normal}
+
+    /* Connector management */
+    .app.connector-page{grid-template-columns:244px minmax(0,1fr)}
+    .connectors-view{min-height:0;overflow-y:auto;padding:30px 34px 48px}.connectors-view::-webkit-scrollbar{width:6px}.connectors-view::-webkit-scrollbar-thumb{border-radius:99px;background:rgba(255,255,255,.1)}
+    .connectors-inner{width:min(100%,1180px);margin:0 auto}.connector-summary{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:22px}.connector-summary h1{margin:0;font-size:28px;line-height:1.15}.connector-summary p{margin:7px 0 0;color:var(--muted);font-size:12px}.connected-count{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 9px;border:1px solid rgba(70,209,154,.22);border-radius:99px;background:rgba(70,209,154,.06);color:var(--green);font-size:10px;font-weight:800}.connected-count::before{width:6px;height:6px;border-radius:50%;background:var(--green);content:""}
+    .connector-search{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;margin-bottom:14px}.search-field{position:relative}.search-field svg{position:absolute;top:50%;left:13px;color:var(--subtle);transform:translateY(-50%)}.search-field input{width:100%;height:46px;padding:0 14px 0 40px;border:1px solid var(--line);border-radius:8px;outline:0;background:rgba(255,255,255,.035);color:#fff;font-size:13px}.search-field input::placeholder{color:var(--subtle)}.search-field input:focus{border-color:rgba(255,255,255,.24);box-shadow:0 0 0 3px rgba(255,255,255,.035)}.custom-connector{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:46px;padding:0 13px;border:1px solid var(--line-strong);border-radius:8px;background:rgba(255,255,255,.045);color:var(--text);font-size:11px;font-weight:750}.custom-connector:hover{background:rgba(255,255,255,.075)}
+    .connector-tabs{display:flex;align-items:center;gap:5px;overflow-x:auto;margin-bottom:18px;padding-bottom:2px}.connector-tabs::-webkit-scrollbar{display:none}.connector-tab{flex:0 0 auto;min-height:34px;padding:0 11px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);font-size:11px;font-weight:700}.connector-tab:hover{background:rgba(255,255,255,.04);color:#fff}.connector-tab.active{border-color:var(--line);background:rgba(255,255,255,.075);color:#fff}
+    .connector-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.connector-card{display:grid;grid-template-columns:48px minmax(0,1fr) 38px;align-items:center;gap:14px;min-height:104px;padding:15px 16px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.022);transition:border-color .16s ease,background .16s ease}.connector-card:hover{border-color:var(--line-strong);background:rgba(255,255,255,.04)}.connector-card.connected{background:linear-gradient(135deg,rgba(70,209,154,.035),rgba(255,255,255,.02))}.connector-logo{display:grid;place-items:center;width:48px;height:48px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.045);color:var(--muted)}.connector-logo.gmail{color:#ff7d73}.connector-logo.lark{color:#8eb3ff}.connector-logo.semrush{color:#e9b85a}.connector-logo.wechat{color:#46d19a}.connector-logo.xhs{color:#ff7464}.connector-logo.instagram{color:#f38eea}.connector-logo.meta{color:#79a8ff}.connector-logo.youtube{color:#ff7464}.connector-logo.drive{color:#8eb3ff}.connector-logo.notion{color:#f4f4f2}
+    .connector-card-copy{min-width:0}.connector-card-copy strong{display:block;font-size:15px}.connector-card-copy p{display:-webkit-box;overflow:hidden;margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.45;-webkit-box-orient:vertical;-webkit-line-clamp:2}.connector-account{display:block;margin-top:6px;overflow:hidden;color:var(--subtle);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+    .connector-action{display:grid;place-items:center;width:38px;height:38px;padding:0;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);color:var(--muted)}.connector-action:hover{border-color:var(--line-strong);background:rgba(255,255,255,.065);color:#fff}.connector-action.connected{border-color:rgba(70,209,154,.21);background:rgba(70,209,154,.075);color:var(--green)}.connector-empty{display:none;grid-column:1/-1;padding:52px 20px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:12px;text-align:center}.connector-empty.show{display:block}
+
+    /* Roomier right rail */
+    .rail-top strong{font-size:14px}.status{font-size:11px}.rail-scroll{padding:22px 16px 38px}.rail-section{margin-bottom:30px}.rail-head{margin-bottom:11px}.rail-head h2{font-size:13px}
+    .work-list{gap:9px}.work{min-height:92px;padding:14px}.work h3{font-size:13px}.work-state{font-size:10px}.work p{margin-top:8px;font-size:11px;line-height:1.55}.progress{height:4px;margin-top:11px}
+    .context-list{gap:3px}.context{grid-template-columns:34px minmax(0,1fr) 30px;min-height:56px;padding:8px}.context-icon{width:32px;height:32px}.context-copy strong{font-size:12px}.context-copy span{font-size:10px}.context-note{margin-top:11px;padding:11px 8px;font-size:10px;line-height:1.5}
+    @keyframes pulse{50%{opacity:.35}}
+
+    @media(max-width:1180px){.app{grid-template-columns:244px minmax(520px,1fr)}.rail{display:none}}
+    @media(max-width:900px){.connector-grid{grid-template-columns:1fr}}
+    @media(max-width:760px){body{overflow:hidden}.app,.conversation{width:100%;max-width:100vw;min-width:0}.app,.app.connector-page{grid-template-columns:minmax(0,1fr)}.sidebar{position:fixed;inset:0 auto 0 0;width:244px;transform:translateX(-102%);transition:transform .2s ease}.sidebar.open{transform:translateX(0)}.scrim{position:fixed;z-index:15;inset:0;display:block;background:rgba(0,0,0,.62);opacity:0;pointer-events:none;transition:opacity .2s ease}.scrim.show{opacity:1;pointer-events:auto}.mobile-menu{display:grid}.conversation-head{padding:0 11px}.conversation-title{min-width:0;flex:1}.head-actions .model-select{display:none}.messages{max-width:100vw;overflow-x:hidden;padding:24px 15px 16px}.message-flow,.message,.message-body,.message-text,.run-card{min-width:0;max-width:100%}.message-text,.user-bubble,.run-step span{overflow-wrap:anywhere}.home-dashboard,.connectors-view{padding:22px 15px 26px}.metric-grid{grid-template-columns:1fr}.dashboard-split{grid-template-columns:1fr}.composer-wrap{max-width:100vw;padding:0 12px 12px}.composer{max-width:100%}.head-actions>.icon-btn:first-of-type{display:none}}
+    @media(max-width:480px){.conversation-head{height:54px}.conversation{grid-template-rows:54px minmax(0,1fr) auto}.conversation-title-copy span{display:none}.messages{padding-inline:12px}.message{grid-template-columns:23px minmax(0,1fr);gap:8px}.agent-avatar{width:23px;height:23px}.message-text{font-size:13px}.user-bubble{width:fit-content;max-width:88%}.run-step{grid-template-columns:15px minmax(0,1fr)}.run-step span:last-child{display:none}.dashboard-welcome{align-items:flex-start}.dashboard-welcome h1{font-size:24px}.customize span{display:none}.brief-intro{align-items:flex-start;flex-direction:column}.brief-row{grid-template-columns:32px minmax(0,1fr)}.brief-action{grid-column:2;grid-auto-flow:column;justify-content:start}.connector-summary{align-items:flex-start;flex-direction:column}.connector-summary h1{font-size:24px}.connector-search{grid-template-columns:1fr}.connector-card{grid-template-columns:44px minmax(0,1fr) 36px;padding:13px 12px}.connector-logo{width:44px;height:44px}.composer-wrap{padding-inline:8px}.connector-strip{padding-top:7px}.composer textarea{height:62px}.tool span{display:none}.toast{right:10px;bottom:10px;left:10px}}
   </style>
 </head>
 <body>
-  <div class="app">
+  <div class="app" id="app">
     <aside class="sidebar" id="sidebar">
-      <div class="side-head"><a class="brand" href="astromar-landing.html"><span class="brand-mark"></span><span>Astromar</span></a><button class="icon-btn" title="Collapse sidebar"><i data-lucide="panel-left-close" width="16"></i></button></div>
-      <button class="new-task" id="newTask"><i data-lucide="plus" width="16"></i>New decision</button>
+      <div class="side-head">
+        <a class="brand" href="astromar-landing.html"><span class="brand-mark"></span><span>Astromar</span></a>
+        <button class="icon-btn" id="collapseSidebar" title="Collapse sidebar"><i data-lucide="panel-left-close" width="15"></i></button>
+      </div>
+      <button class="new-chat" id="newChat"><i data-lucide="square-pen" width="14"></i>New conversation</button>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <button class="nav-item active" data-page="Home"><i data-lucide="house" width="15"></i><span>Home</span></button>
+        <button class="nav-item" data-page="Discussion"><i data-lucide="messages-square" width="15"></i><span>Discussion</span></button>
+        <button class="nav-item" data-page="Connectors"><i data-lucide="plug" width="15"></i><span>Connectors</span></button>
+        <button class="nav-item" data-page="Settings"><i data-lucide="settings" width="15"></i><span>Settings</span></button>
+      </nav>
       <div class="side-scroll">
-        <nav class="nav-list" aria-label="Workspace">
-          <button class="nav-item active"><i data-lucide="house" width="16"></i><span>Home</span></button>
-          <button class="nav-item"><i data-lucide="search" width="16"></i><span>Search</span></button>
-          <button class="nav-item"><i data-lucide="list-checks" width="16"></i><span>Tasks</span></button>
-          <button class="nav-item"><i data-lucide="notebook-tabs" width="16"></i><span>Decision brief</span></button>
-          <button class="nav-item"><i data-lucide="plug" width="16"></i><span>Connectors</span></button>
-        </nav>
-        <div class="side-label"><span>Projects</span><button title="Add project"><i data-lucide="plus" width="13"></i></button></div>
-        <div class="nav-list"><button class="nav-item"><i class="project-dot"></i><span>Competitor radar</span></button><button class="nav-item"><i class="project-dot amber"></i><span>Fall launch</span></button></div>
-        <div class="side-label"><span>Recent</span><button title="More"><i data-lucide="ellipsis" width="13"></i></button></div>
-        <div class="nav-list">
-          <button class="nav-item recent-item"><i data-lucide="message-square" width="15"></i><span class="recent-copy"><span>Opus Clip counter-strategy</span><small>12 min ago</small></span></button>
-          <button class="nav-item recent-item"><i data-lucide="message-square" width="15"></i><span class="recent-copy"><span>Early adopter outreach</span><small>Yesterday</small></span></button>
-          <button class="nav-item recent-item"><i data-lucide="message-square" width="15"></i><span class="recent-copy"><span>Pricing page decision</span><small>Monday</small></span></button>
+        <div id="conversationArchive" hidden>
+          <div class="side-label">
+          <span>Conversations</span>
+          <div class="side-label-actions"><button title="Search conversations"><i data-lucide="search" width="12"></i></button><button id="showArchive" title="Archived conversations"><i data-lucide="archive" width="12"></i></button></div>
+        </div>
+          <div class="session-list" id="sessions">
+          <div class="session selected" data-session="Opus Clip response plan">
+            <button class="session-main"><span class="session-title">Opus Clip response plan</span><span class="session-meta">Active now · 18 messages</span></button>
+            <button class="session-more" aria-label="Conversation options"><i data-lucide="ellipsis" width="15"></i></button>
+            <div class="session-menu"><button data-action="rename"><i data-lucide="pencil" width="13"></i>Rename</button><button data-action="archive"><i data-lucide="archive" width="13"></i>Archive</button><button class="danger" data-action="delete"><i data-lucide="trash-2" width="13"></i>Delete</button></div>
+          </div>
+          <div class="session" data-session="Early adopter outreach">
+            <button class="session-main"><span class="session-title">Early adopter outreach</span><span class="session-meta">Yesterday · 11 messages</span></button>
+            <button class="session-more" aria-label="Conversation options"><i data-lucide="ellipsis" width="15"></i></button>
+            <div class="session-menu"><button data-action="rename"><i data-lucide="pencil" width="13"></i>Rename</button><button data-action="archive"><i data-lucide="archive" width="13"></i>Archive</button><button class="danger" data-action="delete"><i data-lucide="trash-2" width="13"></i>Delete</button></div>
+          </div>
+          <div class="session" data-session="Onboarding activation review">
+            <button class="session-main"><span class="session-title">Onboarding activation review</span><span class="session-meta">Monday · 24 messages</span></button>
+            <button class="session-more" aria-label="Conversation options"><i data-lucide="ellipsis" width="15"></i></button>
+            <div class="session-menu"><button data-action="rename"><i data-lucide="pencil" width="13"></i>Rename</button><button data-action="archive"><i data-lucide="archive" width="13"></i>Archive</button><button class="danger" data-action="delete"><i data-lucide="trash-2" width="13"></i>Delete</button></div>
+          </div>
+          <div class="session" data-session="Founder pricing interviews">
+            <button class="session-main"><span class="session-title">Founder pricing interviews</span><span class="session-meta">Jul 18 · 8 messages</span></button>
+            <button class="session-more" aria-label="Conversation options"><i data-lucide="ellipsis" width="15"></i></button>
+            <div class="session-menu"><button data-action="rename"><i data-lucide="pencil" width="13"></i>Rename</button><button data-action="archive"><i data-lucide="archive" width="13"></i>Archive</button><button class="danger" data-action="delete"><i data-lucide="trash-2" width="13"></i>Delete</button></div>
+          </div>
+          <div class="session" data-session="Fall launch sequencing">
+            <button class="session-main"><span class="session-title">Fall launch sequencing</span><span class="session-meta">Jul 16 · 16 messages</span></button>
+            <button class="session-more" aria-label="Conversation options"><i data-lucide="ellipsis" width="15"></i></button>
+            <div class="session-menu"><button data-action="rename"><i data-lucide="pencil" width="13"></i>Rename</button><button data-action="archive"><i data-lucide="archive" width="13"></i>Archive</button><button class="danger" data-action="delete"><i data-lucide="trash-2" width="13"></i>Delete</button></div>
+          </div>
+          </div>
         </div>
       </div>
       <div class="side-foot">
-        <div class="usage"><div class="usage-head"><span>Monthly usage</span><span>34%</span></div><div class="usage-track"><i></i></div></div>
-        <button class="profile"><span class="avatar">AJ</span><span class="profile-copy"><strong>Alex Johnson</strong><span>Founder workspace</span></span><i data-lucide="chevrons-up-down" width="14"></i></button>
+        <button class="profile" id="accountProfile" title="Account settings"><span class="avatar">AJ</span><span class="profile-copy"><strong>Alex Johnson</strong><span>alex@astromar.ai</span></span><i data-lucide="chevron-right" width="13"></i></button>
+        <button class="sign-out" id="signOut"><i data-lucide="log-out" width="14"></i><span>Sign out</span></button>
       </div>
     </aside>
 
-    <div class="main-shell">
-      <header class="topbar">
-        <div class="crumb"><button class="icon-btn mobile-menu" id="menuButton"><i data-lucide="menu" width="17"></i></button><strong>Home</strong><span class="system-status">All context ready</span></div>
-        <div class="top-actions"><button class="top-button"><i data-lucide="user-plus" width="14"></i><span>Invite</span></button><button class="top-button"><i data-lucide="bell" width="14"></i></button><button class="top-button"><i data-lucide="settings-2" width="14"></i></button></div>
+    <main class="conversation">
+      <header class="conversation-head" id="homeHeader">
+        <div class="conversation-title">
+          <button class="icon-btn mobile-menu mobile-menu-trigger" title="Open sidebar"><i data-lucide="menu" width="16"></i></button>
+          <div class="conversation-title-copy"><strong>Home</strong><span>Founder operating view · All context ready</span></div>
+        </div>
+        <div class="head-actions">
+          <button class="icon-btn" title="Notifications"><i data-lucide="bell" width="15"></i></button>
+        </div>
       </header>
 
-      <div class="workspace">
-        <main class="content">
-          <div class="content-inner">
-            <div class="welcome"><div><p>Tuesday, July 22</p><h1>Good morning, Alex.</h1></div><span class="date">Last briefing updated 9:42 AM</span></div>
-            <section class="composer" aria-label="Start a decision">
-              <textarea id="prompt" placeholder="What should we decide, research, or move forward?"></textarea>
-              <div class="composer-bar">
-                <div class="composer-tools"><button class="tool-button"><i data-lucide="paperclip" width="15"></i>Attach</button><button class="tool-button mode"><i data-lucide="brain-circuit" width="15"></i>Think deeply</button><button class="tool-button"><i data-lucide="calendar-clock" width="15"></i>Schedule</button></div>
-                <div class="composer-send"><span class="shortcut">⌘ Enter</span><button class="send" id="sendPrompt" title="Start task"><i data-lucide="arrow-up" width="17"></i></button></div>
-              </div>
-            </section>
-            <div class="quick-actions" aria-label="Quick starts">
-              <button class="quick" data-prompt="Tell me what our top competitor changed in the last 24 hours and what decision it creates for us."><i data-lucide="radar" width="13"></i>Analyze a competitor</button>
-              <button class="quick" data-prompt="Review everything that changed across our connected channels and prioritize today's top three moves."><i data-lucide="activity" width="13"></i>Prioritize today</button>
-              <button class="quick" data-prompt="Help me identify our highest-potential early adopters and plan the first outreach sequence."><i data-lucide="users" width="13"></i>Find early adopters</button>
-              <button class="quick" data-prompt="Read the full context behind this conversation and draft the reply that moves it forward."><i data-lucide="message-square-text" width="13"></i>Draft a reply</button>
-            </div>
+      <header class="conversation-head" id="discussionHeader" hidden>
+        <div class="conversation-title">
+          <button class="icon-btn mobile-menu mobile-menu-trigger" title="Open sidebar"><i data-lucide="menu" width="16"></i></button>
+          <div class="conversation-title-copy"><strong id="activeTitle">Opus Clip response plan</strong><span>AI cofounder workspace · Context shared across conversations</span></div>
+        </div>
+        <div class="head-actions">
+          <select class="model-select" aria-label="Model"><option>Hermes 3 70B</option><option>Hermes 3 8B · Fast</option><option>Auto select</option></select>
+          <button class="icon-btn" title="Conversation details"><i data-lucide="info" width="15"></i></button>
+          <button class="icon-btn" title="More"><i data-lucide="ellipsis" width="16"></i></button>
+        </div>
+      </header>
 
-            <div class="section-head"><h2>Today&apos;s decision brief</h2><button><i data-lucide="refresh-cw" width="13"></i>Refresh</button></div>
-            <section class="brief">
-              <div class="brief-summary"><p>Three signals deserve your attention. One competitive move is time-sensitive; the others can be handled after today&apos;s activation review.</p><span class="signal-badge">High signal</span></div>
-              <div class="brief-list">
-                <article class="brief-item"><div class="brief-icon"><i data-lucide="radar" width="17"></i></div><div class="brief-copy"><h3>Opus Clip launched a new creator bundle</h3><p>Do not mirror the broad push. Test the under-defended webinar repurposing wedge first.</p></div><div class="brief-meta"><span class="priority">Decide today</span><span>18 sources</span></div></article>
-                <article class="brief-item"><div class="brief-icon"><i data-lucide="chart-no-axes-combined" width="17"></i></div><div class="brief-copy"><h3>Activation dropped at onboarding step three</h3><p>The decline is isolated to teams connecting a second workspace. Review the permission copy.</p></div><div class="brief-meta"><span class="priority amber">Review</span><span>Product data</span></div></article>
-                <article class="brief-item"><div class="brief-icon"><i data-lucide="mail-check" width="17"></i></div><div class="brief-copy"><h3>Two founder replies are ready to move forward</h3><p>Both mention competitive monitoring. One is a strong early-design-partner candidate.</p></div><div class="brief-meta"><span class="priority green">Actionable</span><span>Gmail</span></div></article>
-              </div>
-            </section>
+      <header class="conversation-head" id="connectorsHeader" hidden>
+        <div class="conversation-title">
+          <button class="icon-btn mobile-menu mobile-menu-trigger" title="Open sidebar"><i data-lucide="menu" width="16"></i></button>
+          <div class="conversation-title-copy"><strong>Connectors</strong><span>Workspace connections</span></div>
+        </div>
+        <div class="head-actions">
+          <button class="icon-btn" title="Connection activity"><i data-lucide="history" width="15"></i></button>
+        </div>
+      </header>
 
-            <div class="section-head"><h2>Recent conversations</h2><span>View all</span></div>
-            <div class="recent-grid">
-              <a class="conversation" href="#"><span class="conversation-icon"><i data-lucide="messages-square" width="16"></i></span><span class="conversation-copy"><strong>Opus Clip counter-strategy</strong><span>Research complete · 14 sources</span></span><span>12m</span></a>
-              <a class="conversation" href="#"><span class="conversation-icon"><i data-lucide="users" width="16"></i></span><span class="conversation-copy"><strong>Early adopter outreach</strong><span>Draft sequence ready</span></span><span>1d</span></a>
-              <a class="conversation" href="#"><span class="conversation-icon"><i data-lucide="panel-top" width="16"></i></span><span class="conversation-copy"><strong>Pricing page decision</strong><span>Waiting for your review</span></span><span>2d</span></a>
-              <a class="conversation" href="#"><span class="conversation-icon"><i data-lucide="rocket" width="16"></i></span><span class="conversation-copy"><strong>Fall launch plan</strong><span>7 tasks completed</span></span><span>4d</span></a>
-            </div>
+      <section class="home-dashboard" id="homeView" aria-label="Home dashboard">
+        <div class="dashboard-inner">
+          <div class="dashboard-welcome">
+            <div><p>Tuesday, July 22</p><h1>Good morning, Alex.</h1></div>
+            <button class="customize" id="designDashboard"><i data-lucide="layout-dashboard" width="14"></i><span>Design dashboard</span></button>
           </div>
-        </main>
 
-        <aside class="rail">
-          <section class="rail-section"><div class="rail-head"><h2>Active work</h2><button><i data-lucide="ellipsis" width="14"></i></button></div><div class="task-list">
-            <article class="task"><div class="task-top"><h3>Map Opus Clip&apos;s last 7 days</h3><span class="task-state">Running</span></div><p>Scanning creator posts, paid search, traffic, and landing-page changes.</p><div class="progress"><i></i></div></article>
-            <article class="task"><div class="task-top"><h3>Draft early adopter sequence</h3><span class="task-state ready">Ready</span></div><p>Three audience segments and six outreach angles are ready to review.</p><div class="progress"><i></i></div></article>
-          </div></section>
-          <section class="rail-section"><div class="rail-head"><h2>Connected context</h2><button><i data-lucide="plus" width="14"></i></button></div><div class="context-list">
-            <div class="context"><span class="context-icon"><i data-lucide="mail" width="14"></i></span><span class="context-copy"><strong>Gmail</strong><span>Synced 4 min ago</span></span><i class="context-status"></i></div>
-            <div class="context"><span class="context-icon"><i data-lucide="message-circle" width="14"></i></span><span class="context-copy"><strong>Slack</strong><span>8 channels connected</span></span><i class="context-status"></i></div>
-            <div class="context"><span class="context-icon"><i data-lucide="notebook" width="14"></i></span><span class="context-copy"><strong>Notion</strong><span>12 pages indexed</span></span><i class="context-status"></i></div>
-            <div class="context"><span class="context-icon"><i data-lucide="video" width="14"></i></span><span class="context-copy"><strong>YouTube</strong><span>Competitor watch</span></span><i class="context-status"></i></div>
-            <div class="context"><span class="context-icon"><i data-lucide="plug" width="14"></i></span><span class="context-copy"><strong>Add a connector</strong><span>Bring in more context</span></span><i class="context-status off"></i></div>
-          </div></section>
-          <section class="rail-section"><div class="rail-head"><h2>Cofounder memory</h2><button><i data-lucide="arrow-up-right" width="14"></i></button></div><div class="memory"><div class="memory-head"><i data-lucide="brain-circuit" width="15"></i>Learning how you decide</div><p>You favor narrow tests before scaling, direct founder outreach, and reversible decisions when evidence is incomplete.</p><div class="memory-stats"><span><b>28</b> decisions</span><span><b>11</b> corrections</span></div></div></section>
-        </aside>
+          <div class="metric-grid">
+            <article class="metric"><div class="metric-head"><span>Decisions to make</span><i data-lucide="compass" width="15"></i></div><div class="metric-value"><strong>3</strong><span>1 time-sensitive</span></div></article>
+            <article class="metric"><div class="metric-head"><span>Signals today</span><i data-lucide="activity" width="15"></i></div><div class="metric-value"><strong>18</strong><span>+6 since yesterday</span></div></article>
+            <article class="metric"><div class="metric-head"><span>Active work</span><i data-lucide="loader-circle" width="15"></i></div><div class="metric-value"><strong>2</strong><span>1 ready to review</span></div></article>
+          </div>
+
+          <div class="dashboard-section-head"><h2>Today&apos;s decision brief</h2><button><i data-lucide="refresh-cw" width="12"></i>Refresh</button></div>
+          <section class="brief-panel">
+            <div class="brief-intro"><p>Three signals deserve attention. The competitive move is time-sensitive; the others can follow today&apos;s activation review.</p><span class="signal-badge">High signal</span></div>
+            <div class="brief-rows">
+              <article class="brief-row"><span class="brief-icon"><i data-lucide="radar" width="15"></i></span><span class="brief-copy"><strong>Opus Clip launched a new creator bundle</strong><span>Test the under-defended webinar repurposing wedge before mirroring their channel.</span></span><span class="brief-action"><b>Decide today</b><span>18 sources</span></span></article>
+              <article class="brief-row"><span class="brief-icon"><i data-lucide="chart-no-axes-combined" width="15"></i></span><span class="brief-copy"><strong>Activation dropped at onboarding step three</strong><span>The decline is isolated to teams connecting a second workspace.</span></span><span class="brief-action"><b>Review</b><span>Product data</span></span></article>
+              <article class="brief-row"><span class="brief-icon"><i data-lucide="mail-check" width="15"></i></span><span class="brief-copy"><strong>Two founder replies are ready to move forward</strong><span>One is a strong early design-partner candidate.</span></span><span class="brief-action"><b>Actionable</b><span>Gmail</span></span></article>
+            </div>
+          </section>
+
+          <div class="dashboard-split">
+            <section><div class="dashboard-section-head"><h2>Operating signals</h2><span>Live</span></div><div class="dashboard-panel"><div class="panel-title"><strong>Across your workspace</strong><span>Updated now</span></div><div class="signal-line"><i></i><span class="signal-copy"><strong>Competitor traffic is concentrating</strong><span>Creator bundle page gained traction from YouTube.</span></span><span>12m</span></div><div class="signal-line"><i></i><span class="signal-copy"><strong>Founder outreach reply rate improved</strong><span>The problem-first opener is outperforming feature-led copy.</span></span><span>1h</span></div><div class="signal-line"><i></i><span class="signal-copy"><strong>Lark launch notes changed</strong><span>Two scope decisions need confirmation.</span></span><span>2h</span></div></div></section>
+            <section><div class="dashboard-section-head"><h2>Next moves</h2><span>Prioritized</span></div><div class="dashboard-panel"><div class="panel-title"><strong>Recommended for today</strong><span>3 items</span></div><div class="next-move"><i class="move-index">1</i><span class="move-copy"><strong>Approve the Friday wedge test</strong><span>Experiment brief is being drafted.</span></span><span>Now</span></div><div class="next-move"><i class="move-index">2</i><span class="move-copy"><strong>Review onboarding permission copy</strong><span>One bottleneck identified.</span></span><span>Today</span></div><div class="next-move"><i class="move-index">3</i><span class="move-copy"><strong>Reply to two founder leads</strong><span>Drafts are ready.</span></span><span>Today</span></div></div></section>
+          </div>
+        </div>
+      </section>
+
+      <section class="connectors-view" id="connectorsView" aria-label="Connector management" hidden>
+        <div class="connectors-inner">
+          <div class="connector-summary">
+            <div>
+              <h1>Connectors</h1>
+              <p>Connect once, then choose the context available to each discussion.</p>
+            </div>
+            <span class="connected-count" id="connectedCount">4 connected</span>
+          </div>
+
+          <div class="connector-search">
+            <label class="search-field" for="connectorSearch"><i data-lucide="search" width="16"></i><input id="connectorSearch" type="search" placeholder="Search connectors" autocomplete="off" /></label>
+            <button class="custom-connector" id="createConnector"><i data-lucide="plus" width="15"></i>Custom connector</button>
+          </div>
+
+          <nav class="connector-tabs" aria-label="Connector categories">
+            <button class="connector-tab active" data-connector-filter="all">All</button>
+            <button class="connector-tab" data-connector-filter="communication">Communication</button>
+            <button class="connector-tab" data-connector-filter="social">Social</button>
+            <button class="connector-tab" data-connector-filter="intelligence">Intelligence</button>
+            <button class="connector-tab" data-connector-filter="files">Files</button>
+          </nav>
+
+          <div class="connector-grid" id="connectorGrid">
+            <article class="connector-card connected" data-name="Gmail" data-category="communication" data-connected="true">
+              <span class="connector-logo gmail"><i data-lucide="mail" width="23"></i></span>
+              <div class="connector-card-copy"><strong>Gmail</strong><p>Search inbox threads, summarize messages, and draft replies.</p><span class="connector-account">alex@astromar.ai</span></div>
+              <button class="connector-action connected" data-connector="Gmail" title="Gmail connected" aria-label="Gmail connected"><i data-lucide="check" width="18"></i></button>
+            </article>
+            <article class="connector-card connected" data-name="Lark" data-category="communication" data-connected="true">
+              <span class="connector-logo lark"><i data-lucide="message-square" width="23"></i></span>
+              <div class="connector-card-copy"><strong>Lark</strong><p>Bring workspace messages, docs, and team updates into context.</p><span class="connector-account">Astromar workspace</span></div>
+              <button class="connector-action connected" data-connector="Lark" title="Lark connected" aria-label="Lark connected"><i data-lucide="check" width="18"></i></button>
+            </article>
+            <article class="connector-card connected" data-name="Semrush" data-category="intelligence" data-connected="true">
+              <span class="connector-logo semrush"><i data-lucide="chart-no-axes-combined" width="23"></i></span>
+              <div class="connector-card-copy"><strong>Semrush</strong><p>Track competitor traffic, keywords, paid search, and market movement.</p><span class="connector-account">3 competitors tracked</span></div>
+              <button class="connector-action connected" data-connector="Semrush" title="Semrush connected" aria-label="Semrush connected"><i data-lucide="check" width="18"></i></button>
+            </article>
+            <article class="connector-card connected" data-name="WeChat" data-category="communication" data-connected="true">
+              <span class="connector-logo wechat"><i data-lucide="messages-square" width="23"></i></span>
+              <div class="connector-card-copy"><strong>WeChat</strong><p>Search selected conversations and bring customer signals into decisions.</p><span class="connector-account">6 sources connected</span></div>
+              <button class="connector-action connected" data-connector="WeChat" title="WeChat connected" aria-label="WeChat connected"><i data-lucide="check" width="18"></i></button>
+            </article>
+            <article class="connector-card" data-name="Xiaohongshu" data-category="social" data-connected="false">
+              <span class="connector-logo xhs"><i data-lucide="image" width="23"></i></span>
+              <div class="connector-card-copy"><strong>Xiaohongshu</strong><p>Monitor creator posts, audience response, and emerging content angles.</p><span class="connector-account">Not connected</span></div>
+              <button class="connector-action" data-connector="Xiaohongshu" title="Connect Xiaohongshu" aria-label="Connect Xiaohongshu"><i data-lucide="plus" width="18"></i></button>
+            </article>
+            <article class="connector-card" data-name="Instagram" data-category="social" data-connected="false">
+              <span class="connector-logo instagram"><i data-lucide="camera" width="23"></i></span>
+              <div class="connector-card-copy"><strong>Instagram</strong><p>Follow competitor posts, Reels, creator mentions, and engagement shifts.</p><span class="connector-account">Not connected</span></div>
+              <button class="connector-action" data-connector="Instagram" title="Connect Instagram" aria-label="Connect Instagram"><i data-lucide="plus" width="18"></i></button>
+            </article>
+            <article class="connector-card" data-name="Meta Ads" data-category="intelligence" data-connected="false">
+              <span class="connector-logo meta"><i data-lucide="megaphone" width="23"></i></span>
+              <div class="connector-card-copy"><strong>Meta Ads</strong><p>Compare campaigns, creative signals, spend trends, and acquisition activity.</p><span class="connector-account">Not connected</span></div>
+              <button class="connector-action" data-connector="Meta Ads" title="Connect Meta Ads" aria-label="Connect Meta Ads"><i data-lucide="plus" width="18"></i></button>
+            </article>
+            <article class="connector-card" data-name="YouTube" data-category="social" data-connected="false">
+              <span class="connector-logo youtube"><i data-lucide="video" width="23"></i></span>
+              <div class="connector-card-copy"><strong>YouTube</strong><p>Track videos, Shorts, creator partnerships, and distribution patterns.</p><span class="connector-account">Not connected</span></div>
+              <button class="connector-action" data-connector="YouTube" title="Connect YouTube" aria-label="Connect YouTube"><i data-lucide="plus" width="18"></i></button>
+            </article>
+            <article class="connector-card" data-name="Google Drive" data-category="files" data-connected="false">
+              <span class="connector-logo drive"><i data-lucide="hard-drive" width="23"></i></span>
+              <div class="connector-card-copy"><strong>Google Drive</strong><p>Search product plans, research, launch docs, and workspace files.</p><span class="connector-account">Not connected</span></div>
+              <button class="connector-action" data-connector="Google Drive" title="Connect Google Drive" aria-label="Connect Google Drive"><i data-lucide="plus" width="18"></i></button>
+            </article>
+            <article class="connector-card" data-name="Notion" data-category="files" data-connected="false">
+              <span class="connector-logo notion"><i data-lucide="notebook-tabs" width="23"></i></span>
+              <div class="connector-card-copy"><strong>Notion</strong><p>Search workspace knowledge, decisions, specs, and operating notes.</p><span class="connector-account">Not connected</span></div>
+              <button class="connector-action" data-connector="Notion" title="Connect Notion" aria-label="Connect Notion"><i data-lucide="plus" width="18"></i></button>
+            </article>
+            <div class="connector-empty" id="connectorEmpty">No connectors match this search.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="messages" id="messageViewport" aria-label="Discussion" hidden>
+        <div class="message-flow" id="messageFlow">
+          <div class="day-divider">Today</div>
+          <article class="message user"><div class="user-bubble">What did Opus Clip do yesterday, and should we respond this week?</div></article>
+          <article class="message">
+            <span class="agent-avatar"></span>
+            <div class="message-body">
+              <div class="message-by">Astromar</div>
+              <div class="message-text">
+                <p>They concentrated yesterday's push around <strong>YouTube creator distribution</strong>: three KOC videos, two Shorts hooks gaining traction, and a new discount landing page aimed at small content teams.</p>
+                <p>The useful signal is not the promotion volume. It is the audience they are choosing: creators already producing long-form video.</p>
+              </div>
+              <div class="decision-block"><div class="decision-label"><i data-lucide="compass" width="12"></i>Recommended move</div><p>Do not mirror the channel this week. Run a narrow test around webinar and founder-interview repurposing, where their new campaign leaves the use case under-defended.</p></div>
+              <div class="source-row"><span class="source"><i></i>YouTube · 8 signals</span><span class="source"><i></i>Semrush · Traffic</span><span class="source"><i></i>Web · 6 changes</span></div>
+            </div>
+          </article>
+          <article class="message user"><div class="user-bubble">Map the test. Keep it small enough to launch by Friday.</div></article>
+          <article class="message">
+            <span class="agent-avatar"></span>
+            <div class="message-body">
+              <div class="message-by">Astromar</div>
+              <div class="message-text"><p>I’m turning that into a three-day launch plan and checking it against your current activation bottleneck.</p></div>
+              <div class="run-card">
+                <div class="run-head"><strong><i data-lucide="list-checks" width="13"></i>Friday wedge test</strong><span class="run-status"><i></i>Running</span></div>
+                <div class="run-steps"><div class="run-step"><i data-lucide="circle-check" width="13"></i><span>Review competitor hooks and landing-page changes</span><span>Done</span></div><div class="run-step"><i data-lucide="circle-check" width="13"></i><span>Cross-check recent founder interviews</span><span>Done</span></div><div class="run-step pending"><i data-lucide="loader-circle" width="13"></i><span>Draft experiment brief and outreach sequence</span><span>Working</span></div></div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="empty-state" id="emptyState"><div><span class="empty-mark"></span><h1>What should we move forward?</h1><p>Start with a decision, question, or task.</p></div></div>
+      </section>
+
+      <div class="composer-wrap" id="globalComposer">
+        <section class="composer" aria-label="Message composer">
+          <div class="connector-strip"><button class="context-chip on"><i></i>Gmail</button><button class="context-chip on"><i></i>Lark</button><button class="context-chip on"><i></i>Semrush</button><button class="context-chip"><i></i>WeChat</button><button class="context-chip"><i></i>Xiaohongshu</button></div>
+          <textarea id="prompt" placeholder="Ask your AI cofounder anything..."></textarea>
+          <div class="composer-bar">
+            <div class="composer-tools"><button class="tool" title="Attach files"><i data-lucide="paperclip" width="14"></i><span>Attach</span></button><button class="tool active" title="Plan before acting"><i data-lucide="brain-circuit" width="14"></i><span>Think</span></button><button class="tool" title="Schedule"><i data-lucide="calendar-clock" width="14"></i><span>Schedule</span></button></div>
+            <div class="composer-actions"><button class="icon-btn" title="Voice input"><i data-lucide="mic" width="14"></i></button><button class="send" id="send" title="Send"><i data-lucide="arrow-up" width="16"></i></button></div>
+          </div>
+        </section>
       </div>
+    </main>
+
+    <aside class="rail" id="workspaceRail">
+      <div class="rail-top"><strong>Workspace context</strong><span class="status"><i></i>Ready</span></div>
+      <div class="rail-scroll">
+        <section class="rail-section">
+          <div class="rail-head"><h2>Active work</h2><button title="Active work options"><i data-lucide="ellipsis" width="13"></i></button></div>
+          <div class="work-list">
+            <article class="work"><div class="work-top"><h3>Friday wedge test</h3><span class="work-state">Running</span></div><p>Drafting experiment scope, copy, and founder outreach sequence.</p><div class="progress"><i></i></div></article>
+            <article class="work"><div class="work-top"><h3>Opus Clip signal scan</h3><span class="work-state ready">Ready</span></div><p>18 market signals collected across creators, traffic, and web changes.</p><div class="progress"><i></i></div></article>
+          </div>
+        </section>
+        <section class="rail-section">
+          <div class="rail-head"><h2>Connector context</h2><button id="manageConnectors" title="Manage connectors"><i data-lucide="settings-2" width="13"></i></button></div>
+          <div class="context-list">
+            <div class="context"><span class="context-icon"><i data-lucide="mail" width="13"></i></span><span class="context-copy"><strong>Gmail</strong><span>Synced 4 min ago</span></span><button class="switch on" aria-label="Toggle Gmail"></button></div>
+            <div class="context"><span class="context-icon"><i data-lucide="message-square" width="13"></i></span><span class="context-copy"><strong>Lark</strong><span>12 workspace updates</span></span><button class="switch on" aria-label="Toggle Lark"></button></div>
+            <div class="context"><span class="context-icon"><i data-lucide="chart-no-axes-combined" width="13"></i></span><span class="context-copy"><strong>Semrush</strong><span>3 competitors tracked</span></span><button class="switch on" aria-label="Toggle Semrush"></button></div>
+            <div class="context"><span class="context-icon"><i data-lucide="message-circle" width="13"></i></span><span class="context-copy"><strong>WeChat</strong><span>6 sources connected</span></span><button class="switch" aria-label="Toggle WeChat"></button></div>
+            <div class="context"><span class="context-icon"><i data-lucide="image" width="13"></i></span><span class="context-copy"><strong>Xiaohongshu</strong><span>Connector available</span></span><button class="switch" aria-label="Toggle Xiaohongshu"></button></div>
+          </div>
+          <div class="context-note"><i data-lucide="shield-check" width="13"></i><span>Enabled sources are available to this conversation. Workspace memory remains shared across sessions.</span></div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="toast" id="toast"><i></i><span id="toastText"></span></div>
+  <div class="modal-backdrop" id="renameModal">
+    <form class="modal" id="renameForm"><h2>Rename conversation</h2><p>Use a short name that is easy to scan in your history.</p><input id="renameInput" maxlength="64" autocomplete="off" /><div class="modal-actions"><button type="button" id="cancelRename">Cancel</button><button class="primary" type="submit">Save</button></div></form>
+  </div>
+  <div class="modal-backdrop" id="connectorModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="connectorModalTitle">
+      <h2 id="connectorModalTitle">Connect a tool</h2>
+      <p id="connectorModalCopy">Authorize this connector for your Astromar workspace.</p>
+      <div class="modal-actions"><button type="button" id="closeConnectorModal">Cancel</button><button class="primary" type="button" id="confirmConnectorAction">Continue</button></div>
     </div>
   </div>
-  <div class="scrim" id="scrim"></div><div class="toast" id="toast"><i></i><span>Decision room created. Astromar is building the plan.</span></div>
-  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script defer src="https://unpkg.com/lucide@latest"></script>
   <script>
-    if(window.lucide)window.lucide.createIcons();
-    const prompt=document.getElementById('prompt'),toast=document.getElementById('toast'),sidebar=document.getElementById('sidebar'),scrim=document.getElementById('scrim');
-    document.querySelectorAll('[data-prompt]').forEach(button=>button.addEventListener('click',()=>{prompt.value=button.dataset.prompt;prompt.focus()}));
-    document.getElementById('newTask').addEventListener('click',()=>{prompt.value='';prompt.focus();sidebar.classList.remove('open');scrim.classList.remove('show')});
-    const send=()=>{if(!prompt.value.trim())return;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2800)};
-    document.getElementById('sendPrompt').addEventListener('click',send);prompt.addEventListener('keydown',event=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter')send()});
-    document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('click',()=>{document.querySelectorAll('.nav-item').forEach(node=>node.classList.remove('active'));item.classList.add('active')}));
-    document.getElementById('menuButton').addEventListener('click',()=>{sidebar.classList.add('open');scrim.classList.add('show')});scrim.addEventListener('click',()=>{sidebar.classList.remove('open');scrim.classList.remove('show')});
+    const renderIcons=()=>{if(window.lucide)window.lucide.createIcons()};renderIcons();document.addEventListener('DOMContentLoaded',renderIcons);
+    const app=document.getElementById('app'),sidebar=document.getElementById('sidebar'),scrim=document.getElementById('scrim'),toast=document.getElementById('toast'),toastText=document.getElementById('toastText');
+    const prompt=document.getElementById('prompt'),viewport=document.getElementById('messageViewport'),flow=document.getElementById('messageFlow'),empty=document.getElementById('emptyState'),activeTitle=document.getElementById('activeTitle');
+    const modal=document.getElementById('renameModal'),renameInput=document.getElementById('renameInput'),homeHeader=document.getElementById('homeHeader'),discussionHeader=document.getElementById('discussionHeader'),connectorsHeader=document.getElementById('connectorsHeader'),homeView=document.getElementById('homeView'),connectorsView=document.getElementById('connectorsView'),conversationArchive=document.getElementById('conversationArchive'),globalComposer=document.getElementById('globalComposer'),workspaceRail=document.getElementById('workspaceRail');let renameTarget=null;
+    const connectorModal=document.getElementById('connectorModal'),connectorModalTitle=document.getElementById('connectorModalTitle'),connectorModalCopy=document.getElementById('connectorModalCopy'),confirmConnectorAction=document.getElementById('confirmConnectorAction'),closeConnectorModal=document.getElementById('closeConnectorModal');let pendingConnectorCard=null;
+    const notify=text=>{toastText.textContent=text;toast.classList.add('show');clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>toast.classList.remove('show'),2400)};
+    const setView=page=>{const home=page==='Home',discussion=page==='Discussion',connectors=page==='Connectors';homeHeader.hidden=!home;homeView.hidden=!home;discussionHeader.hidden=!discussion;viewport.hidden=!discussion;connectorsHeader.hidden=!connectors;connectorsView.hidden=!connectors;conversationArchive.hidden=!discussion;globalComposer.hidden=connectors;workspaceRail.hidden=connectors;app.classList.toggle('connector-page',connectors);document.title=page+' | Astromar';document.querySelectorAll('.nav-item').forEach(item=>item.classList.toggle('active',item.dataset.page===page));sidebar.classList.remove('open');scrim.classList.remove('show')};
+    const closeMenus=()=>document.querySelectorAll('.session-menu.open').forEach(menu=>{menu.classList.remove('open');menu.previousElementSibling.classList.remove('active')});
+    document.querySelectorAll('.session-more').forEach(button=>button.addEventListener('click',event=>{event.stopPropagation();const menu=button.nextElementSibling,open=menu.classList.contains('open');closeMenus();if(!open){menu.classList.add('open');button.classList.add('active')}}));
+    document.addEventListener('click',event=>{if(!event.target.closest('.session'))closeMenus()});
+    document.querySelectorAll('.session-main').forEach(button=>button.addEventListener('click',()=>{const session=button.closest('.session');document.querySelectorAll('.session').forEach(item=>item.classList.remove('selected'));session.classList.add('selected');activeTitle.textContent=session.dataset.session;flow.style.display='block';empty.classList.remove('show');setView('Discussion');notify('Discussion opened')}));
+    document.querySelectorAll('.session-menu button').forEach(button=>button.addEventListener('click',event=>{event.stopPropagation();const session=button.closest('.session'),action=button.dataset.action;closeMenus();if(action==='rename'){renameTarget=session;renameInput.value=session.dataset.session;modal.classList.add('open');setTimeout(()=>renameInput.select(),20);return}const title=session.dataset.session;session.remove();if(action==='archive')notify('“'+title+'” archived');else notify('“'+title+'” deleted')}));
+    document.getElementById('renameForm').addEventListener('submit',event=>{event.preventDefault();const name=renameInput.value.trim();if(!name||!renameTarget)return;renameTarget.dataset.session=name;renameTarget.querySelector('.session-title').textContent=name;if(renameTarget.classList.contains('selected'))activeTitle.textContent=name;modal.classList.remove('open');notify('Conversation renamed');renameTarget=null});
+    document.getElementById('cancelRename').addEventListener('click',()=>{modal.classList.remove('open');renameTarget=null});modal.addEventListener('click',event=>{if(event.target===modal){modal.classList.remove('open');renameTarget=null}});
+    document.getElementById('newChat').addEventListener('click',()=>{document.querySelectorAll('.session').forEach(item=>item.classList.remove('selected'));activeTitle.textContent='New discussion';flow.style.display='none';empty.classList.add('show');setView('Discussion');prompt.value='';prompt.focus()});
+    document.querySelectorAll('.nav-item').forEach(button=>button.addEventListener('click',()=>{const page=button.dataset.page;if(page==='Home'||page==='Discussion'||page==='Connectors')setView(page);else notify(page+' preview will follow this workspace shell')}));
+    document.querySelectorAll('.switch').forEach(button=>button.addEventListener('click',()=>{button.classList.toggle('on');const name=button.closest('.context').querySelector('strong').textContent;notify(name+(button.classList.contains('on')?' enabled':' disabled')+' for this conversation')}));
+    document.querySelectorAll('.context-chip').forEach(button=>button.addEventListener('click',()=>button.classList.toggle('on')));
+    const sendMessage=()=>{const text=prompt.value.trim();if(!text)return;setView('Discussion');flow.style.display='block';empty.classList.remove('show');const article=document.createElement('article');article.className='message user';const bubble=document.createElement('div');bubble.className='user-bubble';bubble.textContent=text;article.appendChild(bubble);flow.appendChild(article);prompt.value='';viewport.scrollTop=viewport.scrollHeight;notify('Astromar is working on it')};
+    document.getElementById('send').addEventListener('click',sendMessage);prompt.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}});
+    document.querySelectorAll('.mobile-menu-trigger').forEach(button=>button.addEventListener('click',()=>{sidebar.classList.add('open');scrim.classList.add('show')}));scrim.addEventListener('click',()=>{sidebar.classList.remove('open');scrim.classList.remove('show')});
+    document.getElementById('collapseSidebar').addEventListener('click',()=>{if(innerWidth<=760){sidebar.classList.remove('open');scrim.classList.remove('show')}else notify('Sidebar collapse is available in the production shell')});
+    document.getElementById('showArchive').addEventListener('click',()=>notify('2 archived conversations'));
+    document.getElementById('manageConnectors').addEventListener('click',()=>setView('Connectors'));
+    document.getElementById('designDashboard').addEventListener('click',()=>notify('Dashboard design mode'));
+    document.getElementById('accountProfile').addEventListener('click',()=>notify('Account settings'));
+    document.getElementById('signOut').addEventListener('click',()=>notify('Sign out'));
+
+    const connectorCards=[...document.querySelectorAll('.connector-card')],connectorSearch=document.getElementById('connectorSearch'),connectorEmpty=document.getElementById('connectorEmpty'),connectedCount=document.getElementById('connectedCount');let connectorFilter='all';
+    const updateConnectedCount=()=>{const count=connectorCards.filter(card=>card.dataset.connected==='true').length;connectedCount.textContent=count+' connected'};
+    const applyConnectorFilter=()=>{const query=connectorSearch.value.trim().toLowerCase();let visible=0;connectorCards.forEach(card=>{const categoryMatch=connectorFilter==='all'||card.dataset.category===connectorFilter;const searchMatch=!query||card.textContent.toLowerCase().includes(query);card.hidden=!(categoryMatch&&searchMatch);if(!card.hidden)visible+=1});connectorEmpty.classList.toggle('show',visible===0)};
+    document.querySelectorAll('.connector-tab').forEach(button=>button.addEventListener('click',()=>{connectorFilter=button.dataset.connectorFilter;document.querySelectorAll('.connector-tab').forEach(tab=>tab.classList.toggle('active',tab===button));applyConnectorFilter()}));
+    connectorSearch.addEventListener('input',applyConnectorFilter);
+    const showConnectorModal=card=>{pendingConnectorCard=card;const name=card.dataset.name,connected=card.dataset.connected==='true',account=card.querySelector('.connector-account').textContent;connectorModalTitle.textContent=connected?name+' is connected':'Connect '+name;connectorModalCopy.textContent=connected?account+'. Choose whether this source is available inside each discussion.':'Authorize Astromar to add '+name+' to your workspace. It will stay off until selected inside a discussion.';confirmConnectorAction.textContent=connected?'Done':'Continue';closeConnectorModal.textContent=connected?'Close':'Cancel';connectorModal.classList.add('open')};
+    document.querySelectorAll('.connector-action').forEach(button=>button.addEventListener('click',()=>showConnectorModal(button.closest('.connector-card'))));
+    document.getElementById('createConnector').addEventListener('click',()=>{pendingConnectorCard=null;connectorModalTitle.textContent='Create custom connector';connectorModalCopy.textContent='Add a private API or MCP connection to this workspace.';confirmConnectorAction.textContent='Create';closeConnectorModal.textContent='Cancel';connectorModal.classList.add('open')});
+    const dismissConnectorModal=()=>{connectorModal.classList.remove('open');pendingConnectorCard=null};
+    closeConnectorModal.addEventListener('click',dismissConnectorModal);connectorModal.addEventListener('click',event=>{if(event.target===connectorModal)dismissConnectorModal()});
+    confirmConnectorAction.addEventListener('click',()=>{if(!pendingConnectorCard){dismissConnectorModal();notify('Custom connector setup opened');return}const name=pendingConnectorCard.dataset.name;if(pendingConnectorCard.dataset.connected==='false'){pendingConnectorCard.dataset.connected='true';pendingConnectorCard.classList.add('connected');const account=pendingConnectorCard.querySelector('.connector-account'),action=pendingConnectorCard.querySelector('.connector-action');account.textContent='Connected just now';action.classList.add('connected');action.title=name+' connected';action.setAttribute('aria-label',name+' connected');action.innerHTML='<i data-lucide="check" width="18"></i>';renderIcons();updateConnectedCount();notify(name+' connected')}dismissConnectorModal()});
+    updateConnectedCount();
+    setView(location.hash==='#connectors'?'Connectors':location.hash==='#discussion'?'Discussion':'Home');
   </script>
 </body>
 </html>

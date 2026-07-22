@@ -66,6 +66,33 @@ button {
   animation: briefing-progress-line-in 220ms ease-out both;
 }
 
+.agent-activity-enter {
+  animation: agent-activity-enter 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.agent-activity-pulse {
+  animation: agent-activity-pulse 1.15s ease-in-out infinite;
+}
+
+.agent-activity-glow {
+  animation: agent-activity-glow 1.8s ease-in-out infinite;
+}
+
+.agent-activity-stream {
+  animation: agent-activity-stream 900ms ease-in-out infinite;
+}
+
+.agent-activity-text {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
 @keyframes briefing-progress-line-in {
   from {
     opacity: 0;
@@ -74,6 +101,49 @@ button {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes agent-activity-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes agent-activity-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.52;
+    transform: scale(0.72);
+  }
+}
+
+@keyframes agent-activity-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(52, 120, 246, 0);
+  }
+  50% {
+    box-shadow: 0 0 36px rgba(52, 120, 246, 0.28);
+  }
+}
+
+@keyframes agent-activity-stream {
+  0%,
+  100% {
+    opacity: 0.48;
+  }
+  50% {
+    opacity: 1;
   }
 }
 

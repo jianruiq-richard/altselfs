@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, Archive, CheckCircle2, ChevronDown, Download, ExternalLink, FileText, Film, ImageIcon, LoaderCircle, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, Square, Trash2, X } from 'lucide-react';
+import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
+import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
 import {
   EXECUTIVE_UPDATE_BRIEFING_PROMPT,
   ExecutiveDailyBriefingBrowser,
@@ -177,6 +178,7 @@ type ConnectorItem = {
   description: string;
   connected: boolean;
   enabledByDefault: boolean;
+  conversationAvailable?: boolean;
   connectionIds: string[];
   accounts: Array<{
     connectionId: string;
@@ -1336,7 +1338,11 @@ function compactCodexStreamItems(items: CodexStreamItem[], limit = 18) {
     ? compacted.filter((item) => item.method || item.status === 'error')
     : compacted;
   const hasTaskComplete = nativeVisible.some((item) => item.method === 'codex.task_complete');
-  const visible = hasTaskComplete
+  const hasLiveAgentMessage = nativeVisible.some((item) => (
+    item.method === 'codex.agent_message.delta' ||
+    item.method === 'codex.agent_message.final'
+  ));
+  const visible = hasTaskComplete && !hasLiveAgentMessage
     ? nativeVisible.filter((item) => (
         item.method !== 'codex.agent_message' &&
         item.method !== 'codex.agent_message.delta' &&
@@ -1350,7 +1356,7 @@ function ActivityContent({ item, content }: { item: CodexStreamItem; content: st
   if (!content) return null;
   if (shouldShowActivityContentInline(item)) {
     return (
-      <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800">
+      <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.055] px-4 py-3 text-sm leading-6 text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
         <MarkdownMessage
           content={content}
           renderMediaPreview={({ href, label, kind, key }) => (
@@ -1362,11 +1368,11 @@ function ActivityContent({ item, content }: { item: CodexStreamItem; content: st
   }
   return (
     <details className="group/output mt-2">
-      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-xs font-semibold text-zinc-400 hover:border-white/20 hover:text-zinc-100">
         <ChevronDown className="h-3 w-3 transition group-open/output:rotate-180" />
         Output
       </summary>
-      <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 px-3 py-2 text-xs leading-5 text-slate-100">
+      <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/[0.35] px-3 py-2 text-xs leading-5 text-zinc-200">
         {content}
       </pre>
     </details>
@@ -1374,9 +1380,111 @@ function ActivityContent({ item, content }: { item: CodexStreamItem; content: st
 }
 
 function CodexActivityIcon({ item }: { item: CodexStreamItem }) {
-  if (item.status === 'error') return <AlertCircle className="h-4 w-4 text-red-500" />;
-  if (item.status === 'completed') return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-  return <LoaderCircle className="h-4 w-4 animate-spin text-blue-600" />;
+  if (item.status === 'error') {
+    return (
+      <span className="grid h-8 w-8 place-items-center rounded-xl border border-red-400/25 bg-red-400/10">
+        <AlertCircle className="h-4 w-4 text-red-300" />
+      </span>
+    );
+  }
+  if (item.status === 'completed') {
+    return (
+      <span className="grid h-8 w-8 place-items-center rounded-xl border border-emerald-400/25 bg-emerald-400/10">
+        <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+      </span>
+    );
+  }
+  return (
+    <span className="grid h-8 w-8 place-items-center rounded-xl border border-blue-400/25 bg-blue-400/10">
+      <span className="h-3.5 w-3.5 rounded-full bg-gradient-to-br from-blue-400 to-violet-400 shadow-[0_0_18px_rgba(52,120,246,0.65)] agent-activity-pulse" />
+    </span>
+  );
+}
+
+function ActivityStepShell({
+  item,
+  index,
+  total,
+  durationMs,
+  active,
+}: {
+  item: CodexStreamItem;
+  index: number;
+  total: number;
+  durationMs?: number;
+  active?: boolean;
+}) {
+  const content = item.content ? formatCodexContent(item.content) : '';
+  const links = extractLinks(item.detail, content);
+  const status = active && item.status !== 'error' ? 'running' : item.status === 'error' ? 'error' : 'completed';
+  const displayItem: CodexStreamItem = { ...item, status };
+  const showExpanded = active || status === 'error' || Boolean(content) || links.length > 0;
+
+  return (
+    <article
+      className={[
+        'agent-activity-enter relative grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3',
+        index < total - 1 ? 'pb-3' : '',
+      ].join(' ')}
+      style={{ animationDelay: `${Math.min(index * 45, 240)}ms` }}
+    >
+      <div className="relative z-10">
+        <CodexActivityIcon item={displayItem} />
+        {index < total - 1 ? (
+          <span className="absolute left-4 top-9 h-[calc(100%+0.5rem)] w-px bg-gradient-to-b from-white/18 to-white/5" />
+        ) : null}
+      </div>
+      <div
+        className={[
+          'min-w-0 rounded-2xl border px-4 py-3 transition-all',
+          active
+            ? 'border-white/[0.14] bg-white/[0.065] shadow-[0_22px_70px_rgba(0,0,0,0.34)] agent-activity-glow'
+            : 'border-transparent bg-transparent',
+        ].join(' ')}
+      >
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="break-words text-[0.98rem] font-semibold text-zinc-50">
+                {active ? codexActionLabel(item) : codexCompletedActionLabel(item)}
+              </span>
+              {item.method ? (
+                <span className="max-w-full truncate rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-xs font-semibold text-zinc-400">
+                  {item.method.replace(/^codex\./, '')}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 break-words text-sm leading-6 text-zinc-400">{codexCompactDetail(item)}</p>
+          </div>
+          <div className="shrink-0 text-right text-xs text-zinc-500">
+            <div>{index + 1} / {total}</div>
+            {typeof durationMs === 'number' && durationMs > 0 ? <div className="mt-1">{formatDuration(durationMs)}</div> : null}
+          </div>
+        </div>
+
+        {showExpanded ? (
+          <div className="mt-3 border-l border-white/10 pl-4">
+            {links.length > 0 ? (
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {links.map((link) => (
+                  <a
+                    key={link}
+                    href={link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="max-w-full truncate rounded-full border border-blue-300/20 bg-blue-400/10 px-2.5 py-1 text-xs font-medium text-blue-200 hover:border-blue-200/40 hover:bg-blue-400/20"
+                  >
+                    {link}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+            <ActivityContent item={displayItem} content={content} />
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
 }
 
 function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexActivity }) {
@@ -1386,58 +1494,35 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
     timestampMs(items[items.length - 1]?.timestamp || '') ||
     0;
 
+  if (items.length === 0) return null;
+
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-2xl border-b border-slate-200 pb-3 text-sm text-slate-600">
-        <details className="group">
-          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md px-0 py-1 text-sm font-medium text-slate-500 hover:text-slate-900">
-            <span>Processed {formatDuration(activity.durationMs)}</span>
-            <ChevronDown className="h-4 w-4 transition group-open:rotate-180" />
+      <div className="w-full max-w-4xl rounded-[1.65rem] border border-white/10 bg-[#1f1f1f] px-4 py-4 text-sm text-zinc-300 shadow-[0_24px_90px_rgba(0,0,0,0.34)]">
+        <details className="group" open>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid h-8 w-8 place-items-center rounded-xl border border-emerald-400/25 bg-emerald-400/10">
+                <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-semibold text-zinc-50">Processed {formatDuration(activity.durationMs)}</p>
+                <p className="truncate text-xs text-zinc-500">{items.length} execution updates captured</p>
+              </div>
+            </div>
+            <ChevronDown className="h-4 w-4 shrink-0 text-zinc-500 transition group-open:rotate-180" />
           </summary>
 
-          <div className="mt-3 space-y-2">
-            {items.map((item, index) => {
-              const settledItem: CodexStreamItem = {
-                ...item,
-                status: item.status === 'error' ? 'error' : 'completed',
-              };
-              const content = item.content ? formatCodexContent(item.content) : '';
-              const links = extractLinks(item.detail, content);
-              return (
-                <div key={`${item.id}-${index}`} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                  <div className="flex min-w-0 items-start gap-2">
-                    <div className="mt-0.5 shrink-0">
-                      <CodexActivityIcon item={settledItem} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <span className="font-medium text-slate-900">{codexCompletedActionLabel(settledItem)}</span>
-                        <span className="min-w-0 break-words text-slate-500">{codexCompactDetail(item)}</span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
-                        <span>Duration {formatDuration(stepDuration(items, index, completedAtMs))}</span>
-                      </div>
-                      {links.length > 0 ? (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {links.map((link) => (
-                            <a
-                              key={link}
-                              href={link}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="max-w-full truncate rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-blue-700 hover:border-blue-200 hover:bg-blue-50"
-                            >
-                              {link}
-                            </a>
-                          ))}
-                        </div>
-                      ) : null}
-                      <ActivityContent item={settledItem} content={content} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="mt-4">
+            {items.map((item, index) => (
+              <ActivityStepShell
+                key={`${item.id}-${index}`}
+                item={{ ...item, status: item.status === 'error' ? 'error' : 'completed' }}
+                index={index}
+                total={items.length}
+                durationMs={stepDuration(items, index, completedAtMs)}
+              />
+            ))}
           </div>
         </details>
       </div>
@@ -1446,14 +1531,14 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
 }
 
 function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArtifact; inverted?: boolean }) {
-  const borderClass = inverted ? 'border-white/25 bg-white/10' : 'border-slate-200 bg-white';
-  const mutedClass = inverted ? 'text-blue-100' : 'text-slate-500';
-  const titleClass = inverted ? 'text-white' : 'text-slate-900';
-  const iconClass = inverted ? 'border-white/20 bg-white/15 text-white' : 'border-slate-200 bg-slate-50 text-slate-600';
+  const borderClass = inverted ? 'border-white/25 bg-white/10' : 'border-white/10 bg-white/[0.045]';
+  const mutedClass = inverted ? 'text-blue-100' : 'text-zinc-500';
+  const titleClass = inverted ? 'text-white' : 'text-zinc-100';
+  const iconClass = inverted ? 'border-white/20 bg-white/15 text-white' : 'border-white/10 bg-white/[0.06] text-zinc-300';
   const actionClass = inverted
     ? 'border-white/20 bg-white/10 text-white hover:bg-white/20'
-    : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700';
-  const previewBackgroundClass = inverted ? 'bg-white/10' : 'bg-slate-50';
+    : 'border-white/10 bg-white/[0.06] text-zinc-300 hover:border-blue-300/30 hover:bg-blue-400/10 hover:text-blue-200';
+  const previewBackgroundClass = inverted ? 'bg-white/10' : 'bg-black/20';
   const image = isImageArtifact(artifact);
   const playableVideo = isPlayableVideoArtifact(artifact);
   const video = playableVideo || isExternalVideoArtifact(artifact);
@@ -1607,8 +1692,9 @@ async function waitForExecutiveRun(
 
 function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active: boolean }) {
   if (items.length === 0 && !active) return null;
+  const hasRealItems = items.length > 0;
   const visibleItems = items.length > 0
-    ? compactCodexStreamItems(items, 5)
+    ? compactCodexStreamItems(items, 8)
     : [
         {
           id: 'agent-stream-preparing',
@@ -1624,54 +1710,42 @@ function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-2xl py-1">
-        <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-900 shadow-sm ring-1 ring-slate-200/70">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white shadow-sm ring-1 ring-slate-200">
+      <div className="w-full max-w-4xl py-1 agent-activity-text">
+        <div className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#1f1f1f] text-zinc-100 shadow-[0_26px_90px_rgba(0,0,0,0.36)]">
+          <div className="flex min-w-0 items-start gap-4 px-4 py-4 sm:px-5">
+            <div className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/[0.055]">
               {active ? (
-                <LoaderCircle className="h-4 w-4 animate-spin text-blue-600" />
+                <span className="h-4 w-4 rounded-full bg-gradient-to-br from-blue-400 to-violet-400 shadow-[0_0_22px_rgba(52,120,246,0.75)] agent-activity-pulse" />
               ) : (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                <CheckCircle2 className="h-5 w-5 text-emerald-300" />
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="shrink-0 font-medium text-slate-950">{active ? activeTitle : 'Completed'}</span>
-                {active ? <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" /> : null}
-                <span className="min-w-0 truncate text-slate-500">{active ? activeDetail : 'Reply generated'}</span>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="shrink-0 text-base font-semibold text-zinc-50">{active ? activeTitle : 'Completed'}</span>
+                {active ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-300 agent-activity-stream" /> : null}
+                <span className="min-w-0 truncate text-sm text-zinc-400">{active ? activeDetail : 'Reply generated'}</span>
               </div>
-              <details className="group mt-2">
-                <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900">
-                  <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
-                  View details
-                </summary>
+              {hasRealItems ? (
+                <details className="group mt-3" open>
+                  <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:border-white/20 hover:text-zinc-50">
+                    <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
+                    Activity
+                  </summary>
 
-                <div className="mt-3 space-y-2 border-l border-slate-200 pl-3">
-                  {visibleItems.map((item) => {
-                    const settledItem: CodexStreamItem = {
-                      ...item,
-                      status: item.status === 'error' ? 'error' : 'completed',
-                    };
-                    const content = item.content ? formatCodexContent(item.content) : '';
-                    return (
-                      <div key={item.id} className="min-w-0 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-200/70">
-                        <div className="flex min-w-0 items-start gap-2">
-                          <div className="mt-0.5 shrink-0">
-                            <CodexActivityIcon item={settledItem} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-                              <span className="font-medium text-slate-900">{codexCompletedActionLabel(item)}</span>
-                              <span className="min-w-0 break-words text-slate-500">{codexCompactDetail(item)}</span>
-                            </div>
-                            <ActivityContent item={settledItem} content={content} />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </details>
+                  <div className="mt-4">
+                    {visibleItems.map((item, index) => (
+                      <ActivityStepShell
+                        key={`${item.id}-${index}`}
+                        item={item}
+                        index={index}
+                        total={visibleItems.length}
+                        active={active && item.id === latestItem?.id}
+                      />
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1684,7 +1758,7 @@ function StreamingAssistantMessage({ content }: { content: string }) {
   if (!content.trim()) return null;
   return (
     <div className="flex justify-start">
-      <div className="max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-slate-900 sm:max-w-2xl">
+      <div className="max-w-[92%] rounded-[1.35rem] border border-white/10 bg-white/[0.055] px-4 py-3 text-zinc-100 shadow-[0_16px_50px_rgba(0,0,0,0.18)] sm:max-w-2xl agent-activity-text">
         <MarkdownMessage
           content={content}
           renderMediaPreview={({ href, label, kind, key }) => (
@@ -1750,6 +1824,7 @@ export default function InvestorAgentChatPage() {
   const codexEventIndexRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const connectorSelectionInitializedRef = useRef(false);
+  const initialLoadStartedRef = useRef(false);
 
   const handleSessionExpired = useCallback(() => {
     setError(AUTH_EXPIRED_MESSAGE);
@@ -1773,6 +1848,7 @@ export default function InvestorAgentChatPage() {
     hermesModelOptions[0];
   const attachmentUploadBusy = attachments.some((attachment) => attachment.uploadStatus === 'queued' || attachment.uploadStatus === 'uploading');
   const attachmentUploadFailed = attachments.some((attachment) => attachment.uploadStatus === 'error');
+  const showBlockingConversationLoading = loading && messages.length === 0 && !sending;
 
   useEffect(() => {
     const stored = window.localStorage.getItem(HERMES_MODEL_STORAGE_KEY);
@@ -2155,9 +2231,13 @@ export default function InvestorAgentChatPage() {
     setAssistantDraft('');
   }, []);
 
-  const loadData = useCallback(async (targetThreadId?: string | null) => {
+  const loadData = useCallback(async (
+    targetThreadId?: string | null,
+    options?: { showBlockingLoading?: boolean }
+  ) => {
     if (!isExecutive) return;
-    setLoading(true);
+    const showBlockingLoading = options?.showBlockingLoading ?? true;
+    if (showBlockingLoading) setLoading(true);
     setRecoveringRunState(true);
     setError(null);
     try {
@@ -2195,7 +2275,7 @@ export default function InvestorAgentChatPage() {
     } catch {
       setError('Network error. Please try again later.');
     } finally {
-      setLoading(false);
+      if (showBlockingLoading) setLoading(false);
       setRecoveringRunState(false);
     }
   }, [handleSessionExpired, isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, showExecutiveControls]);
@@ -2209,7 +2289,9 @@ export default function InvestorAgentChatPage() {
   }, [activeRunId, refreshPersonalAgentStatus, threadId]);
 
   useEffect(() => {
-    void loadData();
+    if (initialLoadStartedRef.current) return;
+    initialLoadStartedRef.current = true;
+    void loadData(null, { showBlockingLoading: true });
   }, [loadData]);
 
   const createNewSession = useCallback(async () => {
@@ -2256,7 +2338,7 @@ export default function InvestorAgentChatPage() {
     setInput('');
     setAttachments([]);
     setOpenSessionMenuId(null);
-    await loadData(targetThreadId);
+    await loadData(targetThreadId, { showBlockingLoading: true });
   }, [loadData, recoveringRunState, sending, threadId]);
 
   const handleSessionAction = useCallback(async (
@@ -2312,7 +2394,7 @@ export default function InvestorAgentChatPage() {
       setSessions(nextSessions);
 
       if ((action === 'archive' || action === 'delete') && session.id === threadId) {
-        await loadData(nextSessions[0]?.id || null);
+        await loadData(nextSessions[0]?.id || null, { showBlockingLoading: true });
       }
     } catch {
       setError(`Failed to ${action} conversation. Please try again.`);
@@ -2343,7 +2425,7 @@ export default function InvestorAgentChatPage() {
       if (viewport) viewport.scrollTop = viewport.scrollHeight;
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [messages, loading, sending, codexStreamItems, assistantDraft]);
+  }, [messages, sending, codexStreamItems, assistantDraft]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!threadId || !hasMoreMessages || loadingOlderMessagesRef.current) return;
@@ -2918,605 +3000,251 @@ export default function InvestorAgentChatPage() {
     );
   }
 
-  return (
-    <FigmaShell
-      homeHref="/dashboard"
-      title={title}
-      subtitle="Long-term memory, live research, and multi-agent task execution"
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          {showExecutiveControls ? (
-            <button
-              type="button"
-              onClick={openPromptEditor}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              {promptEditorOpen ? 'Collapse system prompt' : 'Edit system prompt'}
-            </button>
-          ) : null}
-          <Link href="/dashboard" className="px-2 text-sm text-blue-700 hover:underline">
-            Back to workspace
-          </Link>
-        </div>
-      }
-    >
-      {showExecutiveControls && promptEditorOpen ? (
-        <div ref={promptEditorRef} className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Executive Assistant system prompt</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Account-level instructions for Momo. Saved changes apply to future replies.
-              </p>
-            </div>
-            <span
-              className={`self-start rounded-full px-2 py-1 text-xs ${
-                hasCustomPrompt ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
-              }`}
-            >
-              {hasCustomPrompt ? 'Custom' : 'Default'}
-            </span>
-          </div>
+  const activeSession = sessions.find((session) => session.id === threadId);
+  const connectedConnectors = connectors.filter((connector) => connector.connected && connector.conversationAvailable !== false);
+  const latestWorkItem = codexStreamItems[codexStreamItems.length - 1];
 
-          <textarea
-            value={promptDraft}
-            onChange={(e) => {
-              setPromptDraft(e.target.value);
-              setPromptMessage(null);
-            }}
-            rows={14}
-            className="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 font-mono text-sm leading-6 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter the system prompt for Executive Assistant Momo..."
-          />
-
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-slate-500">
-              Current length {promptDraft.length}/30000
-              {promptDraft !== promptSaved ? ' · Unsaved changes' : ''}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={promptSaving || promptDraft === promptSaved}
-                onClick={() => {
-                  setPromptDraft(promptSaved);
-                  setPromptMessage(null);
-                }}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Discard changes
-              </button>
-              <button
-                type="button"
-                disabled={promptSaving || !defaultPrompt}
-                onClick={() => void savePrompt(true)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Restore default
-              </button>
-              <button
-                type="button"
-                disabled={promptSaving || !promptDraft.trim()}
-                onClick={() => void savePrompt(false)}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {promptSaving ? 'Saving...' : 'Save and apply'}
-              </button>
-            </div>
-          </div>
-          {promptMessage ? (
-            <p className={`mt-3 text-sm ${promptMessage.includes('failed') || promptMessage.includes('Error') || promptMessage.includes('empty') ? 'text-red-600' : 'text-emerald-700'}`}>
-              {promptMessage}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {showExecutiveControls ? (
-      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Momo Planner</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Momo generates a plan for each request. The panel opens during execution and collapses when the task is done.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {sending && activeRunId ? (
-              <button
-                type="button"
-                onClick={() => void stopExecutiveRun()}
-                disabled={stoppingRun}
-                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-              >
-                {stoppingRun ? 'Stopping...' : 'Force stop'}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setPlannerPanelOpen((open) => !open)}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                hasPlannerErrors
-                  ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
-                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              {plannerPanelOpen ? 'Collapse details' : plannerButtonText}
-            </button>
-          </div>
-        </div>
-
-        {plannerPanelOpen ? (
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <h3 className="text-sm font-semibold text-slate-900">Current plan</h3>
-              <div className="mt-3 space-y-2">
-                {plannerSteps.length > 0 ? (
-                  plannerSteps.map((step) => {
-                    const trace = latestPlannerStatuses.get(step.id);
-                    const status = trace?.status || 'PENDING';
-                    return (
-                      <div key={step.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium text-slate-900">
-                              {step.title}
-                              {step.agentType ? <span className="ml-2 text-xs text-slate-400">{step.agentType}</span> : null}
-                            </p>
-                            <p className="mt-1 text-xs leading-5 text-slate-500">{step.description}</p>
-                          </div>
-                          <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${plannerStatusClass[status]}`}>
-                            {plannerStatusLabel[status]}
-                          </span>
-                        </div>
-                        {trace?.detail ? <p className="mt-2 text-xs text-slate-600">{trace.detail}</p> : null}
-                        {trace?.error ? <p className="mt-2 text-xs text-red-600">{trace.error}</p> : null}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-sm text-slate-500">Send a request to see the plan Momo generates for this task.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-950 p-3 text-slate-100">
-              <h3 className="text-sm font-semibold">Execution details</h3>
-              <div className="mt-3 max-h-96 space-y-3 overflow-y-auto pr-1">
-                {plannerTrace.length > 0 ? (
-                  plannerTrace.map((item, index) => {
-                    const payloadText = formatPlannerPayload(item.payload);
-                    return (
-                      <div key={`${item.id}-${item.timestamp}-${index}`} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium">{item.title}</p>
-                            <p className="mt-1 text-xs text-slate-400">{item.timestamp || 'Time unavailable'}</p>
-                          </div>
-                          <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${plannerStatusClass[item.status]}`}>
-                            {plannerStatusLabel[item.status]}
-                          </span>
-                        </div>
-                        {item.detail ? <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-300">{item.detail}</p> : null}
-                        {item.error ? <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-red-300">{item.error}</p> : null}
-                        {payloadText ? (
-                          <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-2 text-[11px] leading-5 text-slate-300">
-                            {payloadText}
-                          </pre>
-                        ) : null}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-sm text-slate-400">Send a message to start a new turn.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : null}
+  const sessionSidebar = (
+    <div className="px-2.5 pb-5">
+      <div className="mb-2 mt-5 flex items-center justify-between px-2 text-[10px] font-extrabold uppercase text-zinc-600">
+        <span>Conversations</span>
+        <span>{sessions.length}</span>
       </div>
-      ) : null}
-
-      {showExecutiveControls && briefing ? (
-        <ExecutiveDailyBriefingBrowser
-          briefing={briefing}
-          persistedBriefing={persistedBriefing}
-          updating={sending}
-          onUpdateBriefing={() => void handleSend(EXECUTIVE_UPDATE_BRIEFING_PROMPT)}
-          onPromptRequest={(prompt) => setInput(prompt)}
-        />
-      ) : null}
-
-      <div className="rounded-2xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <MessageSquare className="h-4 w-4 text-slate-500" />
-                <span>Conversation</span>
-              </div>
-              <p className="mt-1 text-xs text-slate-500">
-                Profile memory and long-term preferences are shared across chats. Conversation context, attachments, and workspace files stay scoped to each chat.
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <label className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                <span className="text-xs font-medium text-slate-500">Hermes</span>
-                <select
-                  value={hermesModel}
-                  onChange={(event) => setHermesModel(normalizeHermesModelOption(event.target.value))}
-                  disabled={sending || recoveringRunState}
-                  title={`Current: ${selectedHermesModel.detail}`}
-                  className="bg-transparent text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {hermesModelOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+      <div className="grid gap-0.5">
+        {sessions.map((session) => {
+          const active = session.id === threadId;
+          const actionBusy = sessionActionBusyId === session.id;
+          return (
+            <div
+              key={session.id}
+              data-session-menu-root="true"
+              className={`group relative rounded-[7px] ${active ? 'bg-white/[0.075]' : 'hover:bg-white/[0.05]'}`}
+            >
               <button
                 type="button"
-                onClick={() => void createNewSession()}
-                disabled={creatingSession || sending || recoveringRunState}
-                title="New chat"
-                className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                onClick={() => void switchSession(session.id)}
+                disabled={active || sending || recoveringRunState || actionBusy}
+                title={session.title}
+                className="block min-h-[54px] w-full rounded-[7px] px-2.5 py-2 pr-10 text-left disabled:cursor-default"
               >
-                <Plus className="h-4 w-4" />
-                {creatingSession ? 'Creating...' : 'New chat'}
+                <span className={`block truncate text-[13px] font-semibold ${active ? 'text-white' : 'text-zinc-400'}`}>{session.title || 'New discussion'}</span>
+                <span className="mt-1 block truncate text-[10px] text-zinc-600">
+                  {formatSessionTime(session.updatedAt) || 'Recent'} · {session.messageCount} messages
+                </span>
               </button>
+              <button
+                type="button"
+                title="Conversation options"
+                aria-label={`More options for ${session.title || 'conversation'}`}
+                aria-haspopup="menu"
+                aria-expanded={openSessionMenuId === session.id}
+                disabled={sending || recoveringRunState || actionBusy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenSessionMenuId((current) => current === session.id ? null : session.id);
+                }}
+                className={`absolute right-1.5 top-2 grid h-7 w-7 place-items-center rounded-md border text-zinc-500 transition ${
+                  openSessionMenuId === session.id
+                    ? 'border-white/10 bg-[#1a1b1d] opacity-100 text-white'
+                    : 'border-transparent bg-[#0c0d0e]/85 opacity-0 hover:border-white/10 hover:text-white group-hover:opacity-100'
+                }`}
+              >
+                {actionBusy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <MoreHorizontal className="h-3.5 w-3.5" />}
+              </button>
+              {openSessionMenuId === session.id ? (
+                <div role="menu" className="absolute right-1.5 top-10 z-40 w-[142px] overflow-hidden rounded-[7px] border border-white/15 bg-[#18191b] p-1 text-xs shadow-[0_18px_48px_rgba(0,0,0,.55)]">
+                  <button type="button" role="menuitem" onClick={() => void handleSessionAction(session, 'rename')} className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-zinc-300 hover:bg-white/[0.07] hover:text-white"><Pencil className="h-3.5 w-3.5" />Rename</button>
+                  <button type="button" role="menuitem" onClick={() => void handleSessionAction(session, 'archive')} className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-zinc-300 hover:bg-white/[0.07] hover:text-white"><Archive className="h-3.5 w-3.5" />Archive</button>
+                  <button type="button" role="menuitem" onClick={() => void handleSessionAction(session, 'delete')} className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-red-300 hover:bg-red-400/[0.09]"><Trash2 className="h-3.5 w-3.5" />Delete</button>
+                </div>
+              ) : null}
             </div>
-          </div>
+          );
+        })}
+        {!loading && sessions.length === 0 ? <p className="px-2 py-6 text-center text-[11px] text-zinc-600">No discussions yet.</p> : null}
+      </div>
+    </div>
+  );
 
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-            {sessions.length > 0 ? (
-              sessions.map((session) => {
-                const active = session.id === threadId;
-                const actionBusy = sessionActionBusyId === session.id;
-                return (
-                  <div
-                    key={session.id}
-                    data-session-menu-root="true"
-                    className={[
-                      'group relative min-w-[11rem] max-w-[14rem] rounded-lg border transition',
-                      active
-                        ? 'border-blue-300 bg-blue-50 text-blue-900'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                    ].join(' ')}
+  const rightRail = (
+    <div className="grid h-full min-h-0 grid-rows-[64px_minmax(0,1fr)]">
+      <div className="flex items-center justify-between border-b border-white/[0.09] px-4">
+        <strong className="text-sm text-zinc-100">Discussion context</strong>
+        <span className="inline-flex items-center gap-2 text-[11px] text-zinc-400"><i className="h-1.5 w-1.5 rounded-full bg-[#46d19a] shadow-[0_0_9px_rgba(70,209,154,.5)]" />Ready</span>
+      </div>
+      <div className="min-h-0 overflow-y-auto px-4 py-5">
+        <section className="mb-8">
+          <div className="mb-3 flex items-center justify-between"><h2 className="text-[13px] font-semibold text-zinc-200">Active work</h2><Clock3 className="h-3.5 w-3.5 text-zinc-600" /></div>
+          {sending || latestWorkItem ? (
+            <div className="rounded-[7px] border border-white/[0.09] bg-white/[0.027] p-3.5">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="text-[12px] font-semibold leading-5 text-zinc-100">{latestWorkItem?.title || activeSession?.title || 'Agent task'}</h3>
+                <span className={`inline-flex shrink-0 items-center gap-1.5 text-[9px] font-extrabold uppercase ${sending ? 'text-[#8eb3ff]' : 'text-[#46d19a]'}`}><i className={`h-1.5 w-1.5 rounded-full ${sending ? 'bg-[#8eb3ff]' : 'bg-[#46d19a]'}`} />{sending ? 'Running' : 'Ready'}</span>
+              </div>
+              <p className="mt-2 text-[10px] leading-4 text-zinc-500">{latestWorkItem?.detail || (sending ? 'Astromar is working through the current request.' : 'The latest result is ready in this discussion.')}</p>
+              <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/[0.08]"><i className={`block h-full ${sending ? 'w-2/3 bg-[#8eb3ff]' : 'w-full bg-[#46d19a]'}`} /></div>
+            </div>
+          ) : (
+            <div className="rounded-[7px] border border-dashed border-white/[0.09] px-3 py-5 text-center text-[11px] text-zinc-600">No active work in this discussion.</div>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <div><h2 className="text-[13px] font-semibold text-zinc-200">Connector context</h2><p className="mt-1 text-[9px] text-zinc-600">{activeConnectors.length}/{connectedConnectors.length} enabled</p></div>
+            <Link href="/connectors" className="grid h-7 w-7 place-items-center rounded-md text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors"><Settings2 className="h-3.5 w-3.5" /></Link>
+          </div>
+          <div className="grid gap-1">
+            {connectedConnectors.map((connector) => {
+              const selected = selectedConnectorKeys.includes(connector.key);
+              const accountLabel = connector.accounts.map((account) => account.displayName || account.accountEmail).filter(Boolean).join(', ') || 'Connected';
+              return (
+                <div key={connector.key} className="grid min-h-14 grid-cols-[34px_minmax(0,1fr)_30px] items-center gap-2.5 rounded-[7px] px-2 hover:bg-white/[0.025]">
+                  <span className="grid h-8 w-8 place-items-center rounded-md border border-white/[0.09] text-zinc-400"><Plug className="h-3.5 w-3.5" /></span>
+                  <span className="grid min-w-0"><strong className="truncate text-xs text-zinc-100">{connector.label}</strong><span className="truncate text-[10px] text-zinc-600">{accountLabel}</span></span>
+                  <button
+                    type="button"
+                    onClick={() => toggleConnector(connector.key)}
+                    disabled={sending || recoveringRunState}
+                    aria-pressed={selected}
+                    aria-label={`${selected ? 'Disable' : 'Enable'} ${connector.label}`}
+                    className={`relative h-[18px] w-[30px] rounded-full border transition disabled:opacity-50 ${selected ? 'border-[#46d19a]/25 bg-[#46d19a]/10' : 'border-white/15 bg-white/5'}`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => void switchSession(session.id)}
-                      disabled={active || sending || recoveringRunState || actionBusy}
-                      title={session.title}
-                      className="block w-full rounded-lg px-3 py-2 pr-10 text-left disabled:cursor-default disabled:opacity-60"
-                    >
-                      <span className="block truncate text-sm font-medium">{session.title || 'New chat'}</span>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        {session.messageCount} messages{formatSessionTime(session.updatedAt) ? ` · ${formatSessionTime(session.updatedAt)}` : ''}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      title="More Option"
-                      aria-label={`More options for ${session.title || 'conversation'}`}
-                      aria-haspopup="menu"
-                      aria-expanded={openSessionMenuId === session.id}
-                      disabled={sending || recoveringRunState || actionBusy}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setOpenSessionMenuId((current) => current === session.id ? null : session.id);
-                      }}
-                      className={[
-                        'absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md border text-slate-500 shadow-sm transition',
-                        openSessionMenuId === session.id
-                          ? 'border-slate-300 bg-white opacity-100'
-                          : 'border-transparent bg-white/80 opacity-0 hover:border-slate-200 hover:bg-white group-hover:opacity-100',
-                        'disabled:cursor-not-allowed disabled:opacity-40',
-                      ].join(' ')}
-                    >
-                      {actionBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
-                    </button>
-                    {openSessionMenuId === session.id ? (
-                      <div
-                        role="menu"
-                        className="absolute right-2 top-10 z-40 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-xl"
-                      >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => void handleSessionAction(session, 'rename')}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => void handleSessionAction(session, 'archive')}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
-                        >
-                          <Archive className="h-4 w-4" />
-                          Archive
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => void handleSessionAction(session, 'delete')}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })
+                    <span className={`absolute top-[3px] h-[10px] w-[10px] rounded-full transition-transform ${selected ? 'left-[15px] bg-[#46d19a]' : 'left-[3px] bg-zinc-500'}`} />
+                  </button>
+                </div>
+              );
+            })}
+            {!connectorsLoading && connectedConnectors.length === 0 ? <Link href="/connectors" className="rounded-[7px] border border-dashed border-white/[0.09] px-3 py-4 text-center text-[11px] text-zinc-500 hover:text-zinc-300">Connect a source</Link> : null}
+          </div>
+          <div className="mt-4 flex items-start gap-2 border-t border-white/[0.09] px-2 pt-3 text-[10px] leading-4 text-zinc-600"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Enabled sources are available only to this discussion. Workspace memory remains shared.</span></div>
+        </section>
+      </div>
+    </div>
+  );
+
+  return (
+    <AstromarWorkspaceShell
+      mobileTitle={activeSession?.title || 'Discussion'}
+      sidebarContent={sessionSidebar}
+      rightRail={rightRail}
+      onNewConversation={() => void createNewSession()}
+      newConversationBusy={creatingSession || sending || recoveringRunState}
+    >
+      <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] md:grid-rows-[64px_minmax(0,1fr)_auto]">
+        <header className="hidden items-center justify-between gap-4 border-b border-white/[0.09] px-6 md:flex">
+          <div className="min-w-0">
+            <strong className="block truncate text-[13px] text-zinc-100">{activeSession?.title || 'New discussion'}</strong>
+            <span className="mt-0.5 block truncate text-[10px] text-zinc-600">AI cofounder workspace · Context scoped to this discussion</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <select value={hermesModel} onChange={(event) => setHermesModel(normalizeHermesModelOption(event.target.value))} disabled={sending || recoveringRunState} title={`Current: ${selectedHermesModel.detail}`} className="h-9 rounded-[7px] border border-white/[0.09] bg-[#111214] px-3 text-[11px] font-semibold text-zinc-300 outline-none hover:border-white/15 disabled:opacity-50">
+              {hermesModelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <button type="button" className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/5 hover:text-white" title="Discussion details"><Info className="h-4 w-4" /></button>
+          </div>
+        </header>
+
+        <main ref={messagesViewportRef} onScroll={handleMessagesScroll} className="min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-[820px]">
+            {showBlockingConversationLoading ? (
+              <div className="grid min-h-[50vh] place-items-center text-xs text-zinc-600"><span className="inline-flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" />Loading discussion...</span></div>
             ) : (
-              <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-500">
-                Send the first message to create a chat.
+              <div className="space-y-7">
+                {messages.length > 0 ? (
+                  <div className="flex items-center gap-3 text-[9px] uppercase text-zinc-700"><i className="h-px flex-1 bg-white/[0.09]" /><span>Today</span><i className="h-px flex-1 bg-white/[0.09]" /></div>
+                ) : null}
+                {hasMoreMessages ? (
+                  <div className="flex justify-center"><button type="button" onClick={() => void loadOlderMessages()} disabled={loadingOlderMessages} className="rounded-full border border-white/[0.09] px-3 py-1 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50">{loadingOlderMessages ? 'Loading...' : 'Load earlier messages'}</button></div>
+                ) : null}
+                {messages.map((message, index) => {
+                  const artifacts = messageArtifacts(message);
+                  const visibleContent = message.role === 'assistant' && artifacts.length > 0 ? stripGeneratedFileLinks(message.content) : message.content;
+                  const showCompletedActivity = completedCodexActivity && message.role === 'assistant' && index === messages.length - 1 && !sending && !assistantDraft;
+                  if (message.role === 'user') {
+                    return (
+                      <div key={message.id || `user-${index}`} className="flex justify-end">
+                        <div className="max-w-[82%] rounded-[8px_8px_2px_8px] border border-white/[0.09] bg-white/[0.075] px-4 py-3 text-[13px] leading-6 text-zinc-100">
+                          <MarkdownMessage content={visibleContent} inverted renderMediaPreview={({ href, label, kind, key }) => <InlineMediaPreview key={key} href={href} label={label} kind={kind} inverted />} />
+                          <GeneratedArtifactPreviews artifacts={artifacts} inverted />
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={message.id || `assistant-${index}`} className="space-y-3">
+                      {showCompletedActivity ? <CompletedCodexActivitySummary activity={completedCodexActivity} /> : null}
+                      <div className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
+                        <span className="grid h-7 w-7 place-items-center rounded-[7px] border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,.15),rgba(255,255,255,.03))]"><i className="h-2 w-2 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,.52)]" /></span>
+                        <div className="min-w-0">
+                          <div className="mb-2 text-[10px] font-bold uppercase text-zinc-600">Astromar</div>
+                          <div className="text-[14px] leading-7 text-zinc-300">
+                            {visibleContent ? <MarkdownMessage content={visibleContent} renderMediaPreview={({ href, label, kind, key }) => <InlineMediaPreview key={key} href={href} label={label} kind={kind} />} /> : null}
+                            <GeneratedArtifactPreviews artifacts={artifacts} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <CodexStreamOutput items={codexStreamItems} active={sending} />
+                <StreamingAssistantMessage content={assistantDraft} />
+                {messages.length === 0 ? (
+                  <div className="grid min-h-[42vh] place-items-center text-center">
+                    <div><span className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[8px] border border-white/15 bg-white/[0.035]"><MessageSquare className="h-4 w-4 text-zinc-500" /></span><h1 className="text-xl font-semibold text-zinc-100">What should we move forward?</h1><p className="mt-2 text-xs text-zinc-500">Start with a decision, question, or task.</p></div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
-        </div>
+        </main>
 
-        <div
-          ref={messagesViewportRef}
-          onScroll={handleMessagesScroll}
-          className="h-[52vh] overflow-y-auto p-4 sm:h-[56vh] sm:p-5"
-        >
-          {loading ? (
-            <div className="py-8 text-center text-slate-600">Loading...</div>
-          ) : (
-            <div className="mx-auto max-w-3xl space-y-4">
-              {messages.length > 0 ? (
-                <div className="flex justify-center">
-                  {hasMoreMessages ? (
-                    <button
-                      type="button"
-                      onClick={() => void loadOlderMessages()}
-                      disabled={loadingOlderMessages}
-                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {loadingOlderMessages ? 'Loading...' : 'Load earlier messages'}
-                    </button>
-                  ) : (
-                    <span className="text-xs text-slate-400">Beginning of chat</span>
-                  )}
-                </div>
-              ) : null}
-              {messages.map((message, index) => {
-                const showCompletedActivity =
-                  completedCodexActivity &&
-                  message.role === 'assistant' &&
-                  index === messages.length - 1 &&
-                  !sending &&
-                  !assistantDraft;
-                const artifacts = messageArtifacts(message);
-                const visibleContent = message.role === 'assistant' && artifacts.length > 0
-                  ? stripGeneratedFileLinks(message.content)
-                  : message.content;
-                const hasInlineMedia = message.role === 'assistant' && extractPreviewMediaLinks(visibleContent).length > 0;
-                const bubbleWidthClass = message.role === 'assistant' && (artifacts.length > 0 || hasInlineMedia)
-                  ? 'max-w-[92%] sm:max-w-2xl lg:max-w-3xl'
-                  : 'max-w-[85%] sm:max-w-xs lg:max-w-md';
-                return (
-                  <div key={message.id || `${message.role}-${index}`} className="space-y-3">
-                    {showCompletedActivity ? <CompletedCodexActivitySummary activity={completedCodexActivity} /> : null}
-                    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div
-                        className={`${bubbleWidthClass} rounded-2xl px-4 py-3 ${
-                          message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
-                        }`}
-                      >
-                        {visibleContent ? (
-                          <MarkdownMessage
-                            content={visibleContent}
-                            inverted={message.role === 'user'}
-                            renderMediaPreview={({ href, label, kind, key }) => (
-                              <InlineMediaPreview key={key} href={href} label={label} kind={kind} inverted={message.role === 'user'} />
-                            )}
-                          />
-                        ) : null}
-                        <GeneratedArtifactPreviews artifacts={artifacts} inverted={message.role === 'user'} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              <CodexStreamOutput items={codexStreamItems} active={sending} />
-              <StreamingAssistantMessage content={assistantDraft} />
-              {messages.length === 0 ? <div className="py-8 text-center text-slate-500">Start a conversation with your Hermes Agent.</div> : null}
+        <div className="bg-[linear-gradient(180deg,rgba(9,10,10,0),#090a0a_20%)] px-3 pb-3 pt-2 sm:px-6 md:px-8 md:pb-5">
+          {messages.length === 0 ? (
+            <div className="mx-auto mb-2 flex max-w-[820px] gap-1.5 overflow-x-auto">
+              {suggestedQuestions.map((question) => <button key={question} type="button" onClick={() => setInput(question)} disabled={sending} className="h-7 shrink-0 rounded-md border border-white/[0.09] px-2.5 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50">{question}</button>)}
             </div>
-          )}
-        </div>
-
-        <div className="border-t border-slate-200 p-4 [padding-bottom:max(1rem,env(safe-area-inset-bottom))]">
-          <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2">
-            {suggestedQuestions.map((question) => (
-              <button
-                key={question}
-                type="button"
-                onClick={() => void handleSend(question)}
-                disabled={sending}
-                className="rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {question}
-              </button>
-            ))}
-          </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void handleSend();
-            }}
-            className="mx-auto flex max-w-3xl flex-col gap-3"
-          >
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-600">
-                  <Plug className="h-3.5 w-3.5 shrink-0" />
-                  <span>Connectors for this turn</span>
-                  <span className="text-slate-400">
-                    {connectorsLoading ? 'Loading' : `${activeConnectors.length}/${connectors.filter((connector) => connector.connected).length} enabled`}
-                  </span>
-                </div>
-                <Link
-                  href="/investor/info-ops"
-                  className="inline-flex items-center gap-1 self-start text-xs font-medium text-blue-700 hover:underline sm:self-auto"
-                >
-                  <Settings2 className="h-3.5 w-3.5" />
-                  Manage connectors
-                </Link>
-              </div>
-              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                {connectors.length > 0 ? (
-                  connectors.map((connector) => {
-                    const selected = connector.connected && selectedConnectorKeys.includes(connector.key);
-                    const disabled = sending || recoveringRunState || !connector.connected;
-                    const accountLabel = connector.accounts.length > 0
-                      ? connector.accounts.map((account) => account.displayName || account.accountEmail).filter(Boolean).join(', ')
-                      : connector.platformConfigured === false
-                        ? 'Platform credentials are not configured'
-                        : connector.connected
-                          ? 'Connected'
-                          : 'Not connected';
-                    return (
-                      <button
-                        key={connector.key}
-                        type="button"
-                        onClick={() => {
-                          if (connector.connected) toggleConnector(connector.key);
-                        }}
-                        disabled={disabled}
-                        title={`${connector.label}: ${connector.description}${accountLabel ? `\n${accountLabel}` : ''}`}
-                        className={[
-                          'inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border px-2.5 text-xs transition disabled:cursor-not-allowed',
-                          selected
-                            ? 'border-blue-300 bg-blue-50 text-blue-800'
-                            : connector.connected
-                              ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-60'
-                              : 'border-slate-200 bg-white text-slate-400 opacity-75',
-                        ].join(' ')}
-                      >
-                        <span className={`h-2 w-2 rounded-full ${selected ? 'bg-blue-600' : connector.connected ? 'bg-slate-300' : 'bg-slate-200'}`} />
-                        <span className="max-w-36 truncate">{connector.label}</span>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <span className="text-xs text-slate-400">
-                    {connectorsError || (connectorsLoading ? 'Loading connectors...' : 'No connectors available')}
-                  </span>
-                )}
-              </div>
-              {connectorsError ? <p className="mt-1 text-xs text-amber-700">{connectorsError}</p> : null}
+          ) : null}
+          <form onSubmit={(event) => { event.preventDefault(); void handleSend(); }} className="mx-auto w-full max-w-[820px] rounded-[8px] border border-white/[0.16] bg-[linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025)),#111214] shadow-[0_20px_60px_rgba(0,0,0,.34),inset_0_1px_0_rgba(255,255,255,.06)]">
+            <div className="flex items-center gap-1.5 overflow-x-auto px-2.5 pt-2">
+              {connectedConnectors.map((connector) => {
+                const selected = selectedConnectorKeys.includes(connector.key);
+                return <button key={connector.key} type="button" onClick={() => toggleConnector(connector.key)} disabled={sending || recoveringRunState} className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[10px] ${selected ? 'border-[#8eb3ff]/25 bg-[#8eb3ff]/[0.07] text-[#dfe8ff]' : 'border-white/[0.09] text-zinc-600 hover:text-zinc-300'} disabled:opacity-50`}><i className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-[#8eb3ff]' : 'bg-zinc-600'}`} />{connector.label}</button>;
+              })}
+              <Link href="/connectors" className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/[0.09] text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors"><Plus className="h-3.5 w-3.5" /></Link>
+              {connectorsLoading ? <span className="px-2 text-[10px] text-zinc-600">Loading context...</span> : null}
             </div>
 
             {attachments.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5 px-3 pt-2">
                 {attachments.map((attachment) => (
-                  <div
-                    key={attachment.id}
-                    className="flex max-w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700"
-                  >
-                    <span className="min-w-0 truncate">{attachment.name}</span>
-                    <span className="shrink-0 text-slate-400">{formatBytes(attachment.size)}</span>
-                    <span className={`hidden shrink-0 items-center gap-1 sm:inline-flex ${attachmentUploadStatusClass(attachment)}`}>
-                      {attachment.uploadStatus === 'uploaded' ? (
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                      ) : attachment.uploadStatus === 'error' ? (
-                        <AlertCircle className="h-3.5 w-3.5" />
-                      ) : (
-                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                      )}
-                      {attachmentUploadStatusLabel(attachment)}
-                    </span>
-                    <button
-                      type="button"
-                      title="Remove attachment"
-                      onClick={() => removeAttachment(attachment.id)}
-                      className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                  <div key={attachment.id} className="flex max-w-full items-center gap-2 rounded-md border border-white/[0.09] bg-white/[0.04] px-2 py-1 text-[10px] text-zinc-400">
+                    <span className="max-w-52 truncate">{attachment.name}</span><span className="text-zinc-600">{formatBytes(attachment.size)}</span>
+                    {attachment.uploadStatus === 'uploaded' ? <CheckCircle2 className="h-3 w-3 text-[#46d19a]" /> : attachment.uploadStatus === 'error' ? <AlertCircle className="h-3 w-3 text-red-300" /> : <LoaderCircle className="h-3 w-3 animate-spin" />}
+                    <button type="button" onClick={() => removeAttachment(attachment.id)} title="Remove attachment"><X className="h-3 w-3" /></button>
                   </div>
                 ))}
               </div>
             ) : null}
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Type your question..."
-                rows={3}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    void handleSend();
-                  }
-                }}
-                className="min-h-[7rem] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-0 sm:py-2"
-              />
-              <div className="flex gap-2 sm:self-end">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={attachmentAccept}
-                  className="hidden"
-                  onChange={(e) => handleFilesSelected(e.target.files)}
-                />
-                <button
-                  type="button"
-                  title="Add attachment"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={sending || recoveringRunState || attachmentUploadBusy}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50 sm:h-9 sm:w-9"
-                >
-                  <Paperclip className="h-4 w-4" />
-                </button>
-                {sending || recoveringRunState ? (
-                  <button
-                    type="button"
-                    onClick={() => void stopPersonalAgentRun()}
-                    disabled={recoveringRunState || stoppingRun || !activeRunId}
-                    className={[
-                      'inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:py-2',
-                      recoveringRunState ? 'bg-slate-500' : 'bg-red-600 hover:bg-red-700',
-                    ].join(' ')}
-                    title={
-                      recoveringRunState
-                        ? 'Recovering task state'
-                        : activeRunId
-                          ? 'Stop this task'
-                          : 'Preparing task'
-                    }
-                  >
-                    {recoveringRunState ? null : <Square className="h-3.5 w-3.5 fill-current" />}
-                    {recoveringRunState ? 'Recovering...' : stoppingRun ? 'Stopping...' : activeRunId ? 'Stop' : 'Preparing...'}
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={(!input.trim() && attachments.length === 0) || attachmentUploadBusy || attachmentUploadFailed}
-                    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:py-2"
-                  >
-                    Send
-                  </button>
-                )}
+            <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask your AI cofounder anything..." rows={3} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} className="block h-[76px] w-full resize-none bg-transparent px-4 py-3 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-600" />
+            <div className="flex items-center justify-between gap-3 px-2.5 pb-2.5">
+              <div className="flex items-center gap-1">
+                <input ref={fileInputRef} type="file" multiple accept={attachmentAccept} className="hidden" onChange={(event) => handleFilesSelected(event.target.files)} />
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending || recoveringRunState || attachmentUploadBusy} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-50" title="Attach files"><Paperclip className="h-3.5 w-3.5" />Attach</button>
+                <span className="hidden items-center gap-1.5 rounded-md border border-white/[0.09] px-2 py-1.5 text-[10px] text-zinc-500 sm:inline-flex"><Check className="h-3.5 w-3.5" />Think</span>
               </div>
+              {sending || recoveringRunState ? (
+                <button type="button" onClick={() => void stopPersonalAgentRun()} disabled={recoveringRunState || stoppingRun || !activeRunId} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-red-500/85 px-3 text-[11px] font-semibold text-white hover:bg-red-500 disabled:opacity-50"><Square className="h-3 w-3 fill-current" />{recoveringRunState ? 'Recovering' : stoppingRun ? 'Stopping' : 'Stop'}</button>
+              ) : (
+                <button type="submit" disabled={(!input.trim() && attachments.length === 0) || attachmentUploadBusy || attachmentUploadFailed} className="grid h-8 w-8 place-items-center rounded-md border border-white bg-zinc-100 text-[#090909] hover:bg-white disabled:opacity-35" title="Send"><ArrowUp className="h-4 w-4" /></button>
+              )}
             </div>
           </form>
-
-          {error ? <p className="mx-auto mt-3 max-w-3xl text-sm text-red-600">{error}</p> : null}
+          {connectorsError ? <p className="mx-auto mt-2 max-w-[820px] text-[10px] text-amber-300">{connectorsError}</p> : null}
+          {error ? <p className="mx-auto mt-2 max-w-[820px] text-[11px] text-red-300">{error}</p> : null}
         </div>
       </div>
-    </FigmaShell>
+    </AstromarWorkspaceShell>
   );
 }
