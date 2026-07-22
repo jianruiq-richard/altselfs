@@ -1,35 +1,117 @@
+const transparent = 'rgba(0,0,0,0)';
+const inputBackground = 'rgba(255,255,255,0.045)';
+const line = 'rgba(255,255,255,0.11)';
+
 export const clerkAuthAppearance = {
   variables: {
-    colorPrimary: '#ffffff',
-    colorBackground: 'transparent',
-    colorInputBackground: 'rgba(255,255,255,0.045)',
-    colorInputText: '#ffffff',
-    colorText: '#f7f7f5',
-    colorTextSecondary: 'rgba(255,255,255,0.62)',
+    colorPrimary: '#f7f7f5',
+    colorPrimaryForeground: '#090909',
+    colorForeground: '#f7f7f5',
+    colorMutedForeground: 'rgba(255,255,255,0.56)',
+    colorBackground: transparent,
+    colorInput: inputBackground,
+    colorInputForeground: '#ffffff',
+    colorMuted: 'rgba(255,255,255,0.055)',
     colorNeutral: '#ffffff',
+    colorBorder: line,
+    colorRing: 'rgba(255,255,255,0.24)',
+    colorShadow: '#000000',
     borderRadius: '8px',
+    spacing: '0.85rem',
     fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   },
   elements: {
-    rootBox: 'w-full max-w-full',
-    cardBox: 'w-full max-w-full shadow-none',
-    card: 'w-full max-w-full gap-3 bg-transparent p-0 shadow-none',
-    header: 'hidden',
-    socialButtonsBlockButton:
-      'min-h-11 rounded-lg border border-white/20 bg-white/[0.07] text-white shadow-none hover:bg-white/10',
-    socialButtonsBlockButtonText: 'font-semibold text-white',
-    dividerLine: 'bg-white/10',
-    dividerText: 'text-xs text-white/40',
-    formFieldLabel: 'text-[13px] font-semibold text-white/75',
-    formFieldInput:
-      'min-h-11 rounded-lg border border-white/10 bg-white/[0.045] text-white shadow-none placeholder:text-white/30 focus:border-white/30 focus:ring-2 focus:ring-white/5',
-    formButtonPrimary:
-      'min-h-11 rounded-lg border border-white bg-white text-sm font-bold text-black shadow-[0_14px_38px_rgba(255,255,255,0.10)] hover:bg-[#f2f3f4]',
-    footer: 'hidden',
-    formFieldAction: 'text-white/65 hover:text-white',
-    formResendCodeLink: 'text-white/75 hover:text-white',
-    identityPreview: 'border border-white/10 bg-white/[0.045]',
-    identityPreviewText: 'text-white',
-    identityPreviewEditButton: 'text-white/65',
+    rootBox: {
+      width: '100%',
+      maxWidth: '100%',
+    },
+    cardBox: {
+      width: '100%',
+      maxWidth: '100%',
+      boxShadow: 'none',
+    },
+    card: {
+      width: '100%',
+      maxWidth: '100%',
+      padding: 0,
+      border: 0,
+      background: transparent,
+      boxShadow: 'none',
+    },
+    header: {
+      display: 'none',
+    },
+    socialButtonsBlockButton: {
+      minHeight: '44px',
+      border: '1px solid rgba(255,255,255,0.18)',
+      borderRadius: '8px',
+      background: 'rgba(255,255,255,0.07)',
+      boxShadow: 'none',
+      color: '#ffffff',
+      '&:hover, &:focus': {
+        background: 'rgba(255,255,255,0.10)',
+      },
+    },
+    socialButtonsBlockButtonText: {
+      color: '#ffffff',
+      fontWeight: 650,
+    },
+    dividerLine: {
+      background: line,
+    },
+    dividerText: {
+      color: 'rgba(255,255,255,0.40)',
+      fontSize: '12px',
+    },
+    formFieldLabel: {
+      color: 'rgba(255,255,255,0.76)',
+      fontSize: '13px',
+      fontWeight: 650,
+    },
+    formFieldInput: {
+      minHeight: '44px',
+      border: `1px solid ${line}`,
+      borderRadius: '8px',
+      background: inputBackground,
+      boxShadow: 'none',
+      color: '#ffffff',
+      '&:focus': {
+        borderColor: 'rgba(255,255,255,0.32)',
+        boxShadow: '0 0 0 3px rgba(255,255,255,0.055)',
+      },
+    },
+    formButtonPrimary: {
+      minHeight: '44px',
+      border: '1px solid #ffffff',
+      borderRadius: '8px',
+      background: '#ffffff',
+      boxShadow: '0 14px 38px rgba(255,255,255,0.10)',
+      color: '#090909',
+      fontSize: '14px',
+      fontWeight: 750,
+      textTransform: 'none',
+      '&:hover, &:focus, &:active': {
+        background: '#f2f3f4',
+      },
+    },
+    formFieldAction: {
+      color: 'rgba(255,255,255,0.65)',
+    },
+    formResendCodeLink: {
+      color: 'rgba(255,255,255,0.75)',
+    },
+    identityPreview: {
+      border: `1px solid ${line}`,
+      background: inputBackground,
+    },
+    identityPreviewText: {
+      color: '#ffffff',
+    },
+    identityPreviewEditButton: {
+      color: 'rgba(255,255,255,0.65)',
+    },
+    footer: {
+      display: 'none',
+    },
   },
 };
