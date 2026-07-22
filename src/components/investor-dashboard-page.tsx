@@ -18,7 +18,7 @@ const providerLabels: Record<string, string> = {
 
 function readableThreadTitle(title: string | null) {
   const value = title?.trim();
-  if (!value || ['instruction', 'New chat', 'New conversation'].includes(value)) return 'New discussion';
+  if (!value || ['instruction', 'New chat', 'New conversation', 'New discussion'].includes(value)) return 'New discussion';
   return value;
 }
 

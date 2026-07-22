@@ -24,8 +24,9 @@ type AstromarWorkspaceShellProps = {
   mobileTitle: string;
   sidebarContent?: React.ReactNode;
   rightRail?: React.ReactNode;
-  onNewConversation?: () => void;
-  newConversationBusy?: boolean;
+  onNewDiscussion?: () => void;
+  newDiscussionBusy?: boolean;
+  newDiscussionDisabled?: boolean;
   homeHref?: string;
 };
 
@@ -54,8 +55,9 @@ export function AstromarWorkspaceShell({
   mobileTitle,
   sidebarContent,
   rightRail,
-  onNewConversation,
-  newConversationBusy = false,
+  onNewDiscussion,
+  newDiscussionBusy = false,
+  newDiscussionDisabled = false,
   homeHref = '/dashboard',
 }: AstromarWorkspaceShellProps) {
   const pathname = usePathname();
@@ -109,18 +111,18 @@ export function AstromarWorkspaceShell({
         <PanelLeftClose className="hidden h-4 w-4 text-zinc-600 md:block" />
       </div>
 
-      {onNewConversation ? (
+      {onNewDiscussion ? (
         <button
           type="button"
           onClick={() => {
             setMobileSidebarOpen(false);
-            onNewConversation();
+            onNewDiscussion();
           }}
-          disabled={newConversationBusy}
+          disabled={newDiscussionBusy || newDiscussionDisabled}
           className="mx-3 mb-3 inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[7px] border border-white/80 bg-[#f2f2f0] px-4 text-[13px] font-bold text-[#0b0b0b] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
         >
           <SquarePen className="h-4 w-4" />
-          {newConversationBusy ? 'Creating...' : 'New conversation'}
+          {newDiscussionBusy ? 'Creating...' : 'New discussion'}
         </button>
       ) : (
         <Link
@@ -129,7 +131,7 @@ export function AstromarWorkspaceShell({
           className="mx-3 mb-3 inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[7px] border border-white/80 bg-[#f2f2f0] px-4 text-[13px] font-bold text-[#0b0b0b] hover:bg-white"
         >
           <SquarePen className="h-4 w-4" />
-          New conversation
+          New discussion
         </Link>
       )}
 

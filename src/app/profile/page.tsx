@@ -131,7 +131,7 @@ export default function ProfilePage() {
   const filteredArchivedSessions = useMemo(() => {
     const query = archiveQuery.trim().toLowerCase();
     if (!query) return archivedSessions;
-    return archivedSessions.filter((session) => (session.title || 'New conversation').toLowerCase().includes(query));
+    return archivedSessions.filter((session) => (session.title || 'New discussion').toLowerCase().includes(query));
   }, [archiveQuery, archivedSessions]);
 
   const saveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -169,7 +169,7 @@ export default function ProfilePage() {
     if (archiveActionId) return;
     if (action === 'permanent_delete') {
       const confirmed = window.confirm(
-        `Delete “${session.title || 'New conversation'}” permanently? This action cannot be undone.`,
+        `Delete “${session.title || 'New discussion'}” permanently? This action cannot be undone.`,
       );
       if (!confirmed) return;
     }
@@ -438,7 +438,7 @@ export default function ProfilePage() {
                         return (
                           <article key={session.id} className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/[0.09] py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_130px_76px]">
                             <span className="grid min-w-0">
-                              <strong className="truncate text-xs text-zinc-100">{session.title || 'New conversation'}</strong>
+                              <strong className="truncate text-xs text-zinc-100">{session.title || 'New discussion'}</strong>
                               <span className="mt-1 text-[10px] text-zinc-600">{session.messageCount} messages</span>
                             </span>
                             <span className="hidden text-[10px] text-zinc-600 sm:block">{formatDateTime(session.createdAt)}</span>

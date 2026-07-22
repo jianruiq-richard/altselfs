@@ -2253,7 +2253,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || 'Failed to load conversation');
+        setError(data.error || 'Failed to load discussion');
         return;
       }
       resetPersonalAgentRunState();
@@ -2311,7 +2311,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || 'Failed to create a new chat');
+        setError(data.error || 'Failed to create a new discussion');
         return;
       }
       resetPersonalAgentRunState();
@@ -2326,7 +2326,7 @@ export default function InvestorAgentChatPage() {
         messagesViewportRef.current?.scrollTo({ top: 0 });
       });
     } catch {
-      setError('Failed to create a new chat. Please try again.');
+      setError('Failed to create a new discussion. Please try again.');
     } finally {
       setCreatingSession(false);
       setRecoveringRunState(false);
@@ -2350,17 +2350,17 @@ export default function InvestorAgentChatPage() {
 
     let title: string | undefined;
     if (action === 'rename') {
-      const nextTitle = window.prompt('Rename conversation', session.title || 'New conversation');
+      const nextTitle = window.prompt('Rename discussion', session.title || 'New discussion');
       if (nextTitle === null) return;
       title = nextTitle.replace(/\s+/g, ' ').trim();
       if (!title) {
-        setError('Conversation title cannot be empty.');
+        setError('Discussion title cannot be empty.');
         return;
       }
     }
 
     if (action === 'delete') {
-      const confirmed = window.confirm('Delete this conversation? It will no longer be visible or accessible.');
+      const confirmed = window.confirm('Delete this discussion? It will no longer be visible or accessible.');
       if (!confirmed) return;
     }
 
@@ -2386,7 +2386,7 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || `Failed to ${action} conversation`);
+        setError(data.error || `Failed to ${action} discussion`);
         return;
       }
 
@@ -3007,7 +3007,7 @@ export default function InvestorAgentChatPage() {
   const sessionSidebar = (
     <div className="min-w-0 max-w-full px-2.5 pb-5">
       <div className="mb-2 mt-5 flex items-center justify-between px-2 text-[10px] font-extrabold uppercase text-zinc-600">
-        <span>Conversations</span>
+        <span>Discussions</span>
         <span>{sessions.length}</span>
       </div>
       <div className="grid min-w-0 max-w-full gap-0.5">
@@ -3034,8 +3034,8 @@ export default function InvestorAgentChatPage() {
               </button>
               <button
                 type="button"
-                title="Conversation options"
-                aria-label={`More options for ${session.title || 'conversation'}`}
+                title="Discussion options"
+                aria-label={`More options for ${session.title || 'discussion'}`}
                 aria-haspopup="menu"
                 aria-expanded={openSessionMenuId === session.id}
                 disabled={sending || recoveringRunState || actionBusy}
@@ -3128,8 +3128,9 @@ export default function InvestorAgentChatPage() {
       mobileTitle={activeSession?.title || 'Discussion'}
       sidebarContent={sessionSidebar}
       rightRail={rightRail}
-      onNewConversation={() => void createNewSession()}
-      newConversationBusy={creatingSession || sending || recoveringRunState}
+      onNewDiscussion={() => void createNewSession()}
+      newDiscussionBusy={creatingSession}
+      newDiscussionDisabled={sending || recoveringRunState || loading}
     >
       <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] md:grid-rows-[64px_minmax(0,1fr)_auto]">
         <header className="hidden items-center justify-between gap-4 border-b border-white/[0.09] px-6 md:flex">

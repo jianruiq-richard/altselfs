@@ -809,7 +809,7 @@ export async function PUT(req: NextRequest) {
   const thread = await createThread({
     investorId: investor.id,
     agentType: PERSONAL_AGENT_TYPE,
-    title: title || 'New conversation',
+    title: title || 'New discussion',
   });
   const sessions = await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE);
 
