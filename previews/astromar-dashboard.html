@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Workspace | Astromar</title>
+  <meta name="description" content="Astromar AI cofounder workspace dashboard preview." />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#090a0a; --sidebar:#0c0d0e; --surface:#111214; --surface-2:#161719; --surface-3:#1a1b1e;
+      --line:rgba(255,255,255,.1); --line-strong:rgba(255,255,255,.16); --text:#f4f4f2;
+      --muted:rgba(255,255,255,.62); --subtle:rgba(255,255,255,.4); --green:#46d19a;
+      --blue:#79a8ff; --amber:#efbd59; --coral:#ff7464; --radius:8px;
+    }
+    *{box-sizing:border-box}html,body{height:100%}
+    body{margin:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.5}
+    button,textarea,input{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}
+    .app{display:grid;grid-template-columns:244px minmax(0,1fr);height:100svh;overflow:hidden}
+    .sidebar{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--line);background:var(--sidebar)}
+    .side-head{display:flex;align-items:center;justify-content:space-between;height:64px;padding:0 16px}
+    .brand{display:inline-flex;align-items:center;gap:10px;font-size:15px;font-weight:760}
+    .brand-mark{display:grid;place-items:center;width:27px;height:27px;border:1px solid var(--line-strong);border-radius:7px;background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.03));box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+    .brand-mark::after{width:9px;height:9px;border-radius:50%;background:white;box-shadow:0 0 18px rgba(255,255,255,.72);content:""}
+    .icon-btn{display:grid;place-items:center;width:34px;height:34px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--subtle)}.icon-btn:hover{border-color:var(--line);background:rgba(255,255,255,.05);color:white}
+    .new-task{display:flex;align-items:center;justify-content:center;gap:8px;min-height:42px;margin:4px 12px 12px;border:1px solid rgba(255,255,255,.88);border-radius:var(--radius);background:#f7f7f5;color:#0a0a0a;font-size:13px;font-weight:760}.new-task:hover{background:white}
+    .side-scroll{flex:1;overflow-y:auto;padding:0 10px 18px}.side-scroll::-webkit-scrollbar{width:6px}.side-scroll::-webkit-scrollbar-thumb{border-radius:10px;background:rgba(255,255,255,.12)}
+    .nav-list{display:grid;gap:2px}.nav-item{display:flex;align-items:center;gap:10px;width:100%;min-height:38px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:13px;text-align:left}.nav-item:hover{background:rgba(255,255,255,.045);color:white}.nav-item.active{background:rgba(255,255,255,.085);color:white}.nav-item svg{flex:0 0 auto}.nav-item span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .side-label{display:flex;align-items:center;justify-content:space-between;margin:20px 10px 7px;color:var(--subtle);font-size:10px;font-weight:800;text-transform:uppercase}.side-label button{border:0;background:transparent;color:var(--subtle)}
+    .project-dot{width:8px;height:8px;border-radius:2px;background:var(--blue);box-shadow:0 0 10px rgba(121,168,255,.34)}.project-dot.amber{background:var(--amber)}
+    .recent-item{align-items:flex-start;height:auto;padding-block:8px;line-height:1.35}.recent-item svg{margin-top:2px}.recent-copy{display:grid;min-width:0}.recent-copy small{margin-top:3px;color:var(--subtle);font-size:10px}
+    .side-foot{padding:12px;border-top:1px solid var(--line)}
+    .usage{margin-bottom:10px;padding:10px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03)}.usage-head{display:flex;justify-content:space-between;color:var(--muted);font-size:11px}.usage-track{height:3px;margin-top:8px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.1)}.usage-track i{display:block;width:34%;height:100%;background:linear-gradient(90deg,#fff,#aeb4bd)}
+    .profile{display:grid;grid-template-columns:30px 1fr 24px;align-items:center;gap:9px;min-height:42px;padding:5px;border-radius:7px}.profile:hover{background:rgba(255,255,255,.04)}.avatar{display:grid;place-items:center;width:30px;height:30px;border-radius:7px;background:#d9dde3;color:#171717;font-size:11px;font-weight:800}.profile-copy{display:grid;min-width:0}.profile-copy strong{overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.profile-copy span{color:var(--subtle);font-size:10px}
+    .main-shell{display:grid;grid-template-rows:64px minmax(0,1fr);min-width:0;overflow:hidden;background:var(--bg)}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:0 22px;border-bottom:1px solid var(--line);background:rgba(9,10,10,.82);backdrop-filter:blur(18px)}
+    .crumb{display:flex;align-items:center;gap:9px;color:var(--subtle);font-size:12px}.crumb strong{color:rgba(255,255,255,.82);font-weight:700}.system-status{display:inline-flex;align-items:center;gap:7px;margin-left:12px;padding-left:14px;border-left:1px solid var(--line);color:var(--muted)}.system-status::before{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 10px rgba(70,209,154,.6);content:""}
+    .top-actions{display:flex;align-items:center;gap:6px}.top-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:34px;padding:0 11px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.035);color:var(--muted);font-size:12px;font-weight:650}.top-button:hover{background:rgba(255,255,255,.07);color:white}.mobile-menu{display:none}
+    .workspace{display:grid;grid-template-columns:minmax(0,1fr) 304px;min-width:0;overflow:hidden}
+    .content{min-width:0;overflow-y:auto;padding:32px 34px 56px}.content::-webkit-scrollbar,.rail::-webkit-scrollbar{width:7px}.content::-webkit-scrollbar-thumb,.rail::-webkit-scrollbar-thumb{border-radius:10px;background:rgba(255,255,255,.11)}
+    .content-inner{width:min(100%,960px);margin:0 auto}
+    .welcome{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-bottom:22px}.welcome p{margin:0 0 5px;color:var(--subtle);font-size:12px;font-weight:750;text-transform:uppercase}.welcome h1{margin:0;font-size:28px;line-height:1.15}.date{color:var(--subtle);font-size:12px;white-space:nowrap}
+    .composer{border:1px solid var(--line-strong);border-radius:var(--radius);background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.035)),var(--surface);box-shadow:0 24px 70px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.08)}
+    .composer textarea{display:block;width:100%;height:112px;resize:none;border:0;outline:0;background:transparent;color:white;padding:20px 20px 8px;font-size:18px;line-height:1.5}.composer textarea::placeholder{color:rgba(255,255,255,.32)}
+    .composer-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px 12px}.composer-tools,.composer-send{display:flex;align-items:center;gap:6px}.tool-button{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);font-size:12px}.tool-button:hover{border-color:var(--line);background:rgba(255,255,255,.045);color:white}.tool-button.mode{border-color:var(--line);background:rgba(255,255,255,.04)}
+    .send{display:grid;place-items:center;width:36px;height:36px;border:1px solid white;border-radius:7px;background:white;color:#090909}.send:hover{background:#e9eaec}.shortcut{color:var(--subtle);font-size:10px}
+    .quick-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.quick{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.025);color:var(--muted);font-size:11px}.quick:hover{border-color:var(--line-strong);background:rgba(255,255,255,.055);color:white}
+    .section-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:34px 0 12px}.section-head h2{margin:0;font-size:15px}.section-head span{color:var(--subtle);font-size:11px}.section-head button{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--muted);font-size:11px}
+    .brief{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+    .brief-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;padding:17px 18px;border-bottom:1px solid var(--line)}.brief-summary p{margin:0;color:var(--muted);font-size:13px;line-height:1.55}.signal-badge{display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid rgba(70,209,154,.22);border-radius:999px;background:rgba(70,209,154,.07);color:var(--green);font-size:10px;font-weight:800;white-space:nowrap}.signal-badge::before{width:6px;height:6px;border-radius:50%;background:var(--green);content:""}
+    .brief-list{display:grid}.brief-item{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:13px;min-height:86px;padding:14px 18px;border-bottom:1px solid var(--line);transition:background .16s ease}.brief-item:last-child{border-bottom:0}.brief-item:hover{background:rgba(255,255,255,.025)}
+    .brief-icon{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--line);border-radius:7px;background:rgba(121,168,255,.07);color:var(--blue)}.brief-item:nth-child(2) .brief-icon{background:rgba(239,189,89,.07);color:var(--amber)}.brief-item:nth-child(3) .brief-icon{background:rgba(70,209,154,.07);color:var(--green)}
+    .brief-copy{min-width:0}.brief-copy h3{margin:0 0 4px;font-size:13px}.brief-copy p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}.brief-meta{display:grid;justify-items:end;gap:6px;color:var(--subtle);font-size:10px}.priority{padding:4px 7px;border-radius:999px;background:rgba(121,168,255,.09);color:var(--blue);font-weight:800}.priority.amber{background:rgba(239,189,89,.09);color:var(--amber)}.priority.green{background:rgba(70,209,154,.09);color:var(--green)}
+    .recent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.conversation{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:12px;min-height:74px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(255,255,255,.025)}.conversation:hover{background:rgba(255,255,255,.045)}.conversation-icon{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--line);border-radius:7px;color:var(--muted)}.conversation-copy{min-width:0}.conversation-copy strong,.conversation-copy span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.conversation-copy strong{font-size:12px}.conversation-copy span{margin-top:3px;color:var(--subtle);font-size:10px}.conversation>span{color:var(--subtle);font-size:10px}
+    .rail{min-width:0;overflow-y:auto;padding:20px 16px 36px;border-left:1px solid var(--line);background:#0c0d0e}.rail-section{margin-bottom:26px}.rail-head{display:flex;align-items:center;justify-content:space-between;margin:0 3px 10px}.rail-head h2{margin:0;font-size:12px}.rail-head button{border:0;background:transparent;color:var(--subtle)}
+    .task-list,.context-list{display:grid;gap:7px}.task{padding:11px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.03)}.task-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.task h3{margin:0;font-size:11px;line-height:1.45}.task-state{display:inline-flex;align-items:center;gap:5px;color:var(--blue);font-size:9px;font-weight:800;text-transform:uppercase;white-space:nowrap}.task-state::before{width:5px;height:5px;border-radius:50%;background:var(--blue);box-shadow:0 0 8px rgba(121,168,255,.5);content:""}.task-state.ready{color:var(--green)}.task-state.ready::before{background:var(--green)}.task p{margin:7px 0 0;color:var(--subtle);font-size:10px;line-height:1.45}.progress{height:3px;margin-top:10px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.08)}.progress i{display:block;width:68%;height:100%;background:linear-gradient(90deg,var(--blue),#d3deff)}.task:nth-child(2) .progress i{width:100%;background:var(--green)}
+    .context{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:9px;min-height:48px;padding:7px 9px;border:1px solid transparent;border-radius:7px}.context:hover{border-color:var(--line);background:rgba(255,255,255,.025)}.context-icon{display:grid;place-items:center;width:29px;height:29px;border:1px solid var(--line);border-radius:6px;color:var(--muted)}.context-copy{display:grid;min-width:0}.context-copy strong{font-size:11px}.context-copy span{color:var(--subtle);font-size:9px}.context-status{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 9px rgba(70,209,154,.42)}.context-status.off{background:rgba(255,255,255,.16);box-shadow:none}
+    .memory{padding:12px;border:1px solid var(--line);border-radius:7px;background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.02))}.memory-head{display:flex;align-items:center;gap:8px;color:rgba(255,255,255,.82);font-size:11px;font-weight:750}.memory p{margin:8px 0 0;color:var(--muted);font-size:10px;line-height:1.55}.memory-stats{display:flex;gap:14px;margin-top:11px;color:var(--subtle);font-size:9px}.memory-stats b{color:white;font-size:11px}
+    .toast{position:fixed;z-index:30;right:22px;bottom:22px;display:flex;align-items:center;gap:10px;max-width:340px;padding:12px 14px;border:1px solid var(--line-strong);border-radius:8px;background:#17181a;color:rgba(255,255,255,.85);font-size:12px;box-shadow:0 18px 60px rgba(0,0,0,.45);opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .2s ease,transform .2s ease}.toast.show{opacity:1;transform:translateY(0)}.toast i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px rgba(70,209,154,.5)}
+    .scrim{display:none}
+    @media(max-width:1120px){.workspace{grid-template-columns:minmax(0,1fr)}.rail{display:none}}
+    @media(max-width:820px){body{overflow:auto}.app{grid-template-columns:1fr;height:auto;min-height:100svh}.sidebar{position:fixed;z-index:40;top:0;bottom:0;left:0;width:244px;transform:translateX(-102%);transition:transform .22s ease}.sidebar.open{transform:translateX(0)}.scrim{position:fixed;z-index:35;inset:0;display:block;background:rgba(0,0,0,.62);opacity:0;pointer-events:none;transition:opacity .22s ease}.scrim.show{opacity:1;pointer-events:auto}.main-shell{min-height:100svh}.mobile-menu{display:grid}.content{padding:26px 20px 48px}.system-status{display:none}}
+    @media(max-width:600px){.topbar{padding:0 12px}.top-button span{display:none}.content{padding:22px 14px 42px}.welcome{align-items:flex-start}.welcome h1{font-size:23px}.date{display:none}.composer textarea{height:104px;padding:16px 15px 7px;font-size:16px}.composer-bar{align-items:flex-end}.composer-tools{flex-wrap:wrap}.tool-button{padding:0 8px}.shortcut{display:none}.quick-actions{flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px}.quick{flex:0 0 auto}.brief-summary{grid-template-columns:1fr}.signal-badge{width:max-content}.brief-item{grid-template-columns:34px minmax(0,1fr)}.brief-meta{grid-column:2;grid-template-columns:auto auto;justify-content:start}.recent-grid{grid-template-columns:1fr}.section-head{margin-top:28px}.toast{right:14px;bottom:14px;left:14px}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="side-head"><a class="brand" href="astromar-landing.html"><span class="brand-mark"></span><span>Astromar</span></a><button class="icon-btn" title="Collapse sidebar"><i data-lucide="panel-left-close" width="16"></i></button></div>
+      <button class="new-task" id="newTask"><i data-lucide="plus" width="16"></i>New decision</button>
+      <div class="side-scroll">
+        <nav class="nav-list" aria-label="Workspace">
+          <button class="nav-item active"><i data-lucide="house" width="16"></i><span>Home</span></button>
+          <button class="nav-item"><i data-lucide="search" width="16"></i><span>Search</span></button>
+          <button class="nav-item"><i data-lucide="list-checks" width="16"></i><span>Tasks</span></button>
+          <button class="nav-item"><i data-lucide="notebook-tabs" width="16"></i><span>Decision brief</span></button>
+          <button class="nav-item"><i data-lucide="plug" width="16"></i><span>Connectors</span></button>
+        </nav>
+        <div class="side-label"><span>Projects</span><button title="Add project"><i data-lucide="plus" width="13"></i></button></div>
+        <div class="nav-list"><button class="nav-item"><i class="project-dot"></i><span>Competitor radar</span></button><button class="nav-item"><i class="project-dot amber"></i><span>Fall launch</span></button></div>
+        <div class="side-label"><span>Recent</span><button title="More"><i data-lucide="ellipsis" width="13"></i></button></div>
+        <div class="nav-list">
+          <button class="nav-item recent-item"><i data-lucide="message-square" width="15"></i><span class="recent-copy"><span>Opus Clip counter-strategy</span><small>12 min ago</small></span></button>
+          <button class="nav-item recent-item"><i data-lucide="message-square" width="15"></i><span class="recent-copy"><span>Early adopter outreach</span><small>Yesterday</small></span></button>
+          <button class="nav-item recent-item"><i data-lucide="message-square" width="15"></i><span class="recent-copy"><span>Pricing page decision</span><small>Monday</small></span></button>
+        </div>
+      </div>
+      <div class="side-foot">
+        <div class="usage"><div class="usage-head"><span>Monthly usage</span><span>34%</span></div><div class="usage-track"><i></i></div></div>
+        <button class="profile"><span class="avatar">AJ</span><span class="profile-copy"><strong>Alex Johnson</strong><span>Founder workspace</span></span><i data-lucide="chevrons-up-down" width="14"></i></button>
+      </div>
+    </aside>
+
+    <div class="main-shell">
+      <header class="topbar">
+        <div class="crumb"><button class="icon-btn mobile-menu" id="menuButton"><i data-lucide="menu" width="17"></i></button><strong>Home</strong><span class="system-status">All context ready</span></div>
+        <div class="top-actions"><button class="top-button"><i data-lucide="user-plus" width="14"></i><span>Invite</span></button><button class="top-button"><i data-lucide="bell" width="14"></i></button><button class="top-button"><i data-lucide="settings-2" width="14"></i></button></div>
+      </header>
+
+      <div class="workspace">
+        <main class="content">
+          <div class="content-inner">
+            <div class="welcome"><div><p>Tuesday, July 22</p><h1>Good morning, Alex.</h1></div><span class="date">Last briefing updated 9:42 AM</span></div>
+            <section class="composer" aria-label="Start a decision">
+              <textarea id="prompt" placeholder="What should we decide, research, or move forward?"></textarea>
+              <div class="composer-bar">
+                <div class="composer-tools"><button class="tool-button"><i data-lucide="paperclip" width="15"></i>Attach</button><button class="tool-button mode"><i data-lucide="brain-circuit" width="15"></i>Think deeply</button><button class="tool-button"><i data-lucide="calendar-clock" width="15"></i>Schedule</button></div>
+                <div class="composer-send"><span class="shortcut">⌘ Enter</span><button class="send" id="sendPrompt" title="Start task"><i data-lucide="arrow-up" width="17"></i></button></div>
+              </div>
+            </section>
+            <div class="quick-actions" aria-label="Quick starts">
+              <button class="quick" data-prompt="Tell me what our top competitor changed in the last 24 hours and what decision it creates for us."><i data-lucide="radar" width="13"></i>Analyze a competitor</button>
+              <button class="quick" data-prompt="Review everything that changed across our connected channels and prioritize today's top three moves."><i data-lucide="activity" width="13"></i>Prioritize today</button>
+              <button class="quick" data-prompt="Help me identify our highest-potential early adopters and plan the first outreach sequence."><i data-lucide="users" width="13"></i>Find early adopters</button>
+              <button class="quick" data-prompt="Read the full context behind this conversation and draft the reply that moves it forward."><i data-lucide="message-square-text" width="13"></i>Draft a reply</button>
+            </div>
+
+            <div class="section-head"><h2>Today&apos;s decision brief</h2><button><i data-lucide="refresh-cw" width="13"></i>Refresh</button></div>
+            <section class="brief">
+              <div class="brief-summary"><p>Three signals deserve your attention. One competitive move is time-sensitive; the others can be handled after today&apos;s activation review.</p><span class="signal-badge">High signal</span></div>
+              <div class="brief-list">
+                <article class="brief-item"><div class="brief-icon"><i data-lucide="radar" width="17"></i></div><div class="brief-copy"><h3>Opus Clip launched a new creator bundle</h3><p>Do not mirror the broad push. Test the under-defended webinar repurposing wedge first.</p></div><div class="brief-meta"><span class="priority">Decide today</span><span>18 sources</span></div></article>
+                <article class="brief-item"><div class="brief-icon"><i data-lucide="chart-no-axes-combined" width="17"></i></div><div class="brief-copy"><h3>Activation dropped at onboarding step three</h3><p>The decline is isolated to teams connecting a second workspace. Review the permission copy.</p></div><div class="brief-meta"><span class="priority amber">Review</span><span>Product data</span></div></article>
+                <article class="brief-item"><div class="brief-icon"><i data-lucide="mail-check" width="17"></i></div><div class="brief-copy"><h3>Two founder replies are ready to move forward</h3><p>Both mention competitive monitoring. One is a strong early-design-partner candidate.</p></div><div class="brief-meta"><span class="priority green">Actionable</span><span>Gmail</span></div></article>
+              </div>
+            </section>
+
+            <div class="section-head"><h2>Recent conversations</h2><span>View all</span></div>
+            <div class="recent-grid">
+              <a class="conversation" href="#"><span class="conversation-icon"><i data-lucide="messages-square" width="16"></i></span><span class="conversation-copy"><strong>Opus Clip counter-strategy</strong><span>Research complete · 14 sources</span></span><span>12m</span></a>
+              <a class="conversation" href="#"><span class="conversation-icon"><i data-lucide="users" width="16"></i></span><span class="conversation-copy"><strong>Early adopter outreach</strong><span>Draft sequence ready</span></span><span>1d</span></a>
+              <a class="conversation" href="#"><span class="conversation-icon"><i data-lucide="panel-top" width="16"></i></span><span class="conversation-copy"><strong>Pricing page decision</strong><span>Waiting for your review</span></span><span>2d</span></a>
+              <a class="conversation" href="#"><span class="conversation-icon"><i data-lucide="rocket" width="16"></i></span><span class="conversation-copy"><strong>Fall launch plan</strong><span>7 tasks completed</span></span><span>4d</span></a>
+            </div>
+          </div>
+        </main>
+
+        <aside class="rail">
+          <section class="rail-section"><div class="rail-head"><h2>Active work</h2><button><i data-lucide="ellipsis" width="14"></i></button></div><div class="task-list">
+            <article class="task"><div class="task-top"><h3>Map Opus Clip&apos;s last 7 days</h3><span class="task-state">Running</span></div><p>Scanning creator posts, paid search, traffic, and landing-page changes.</p><div class="progress"><i></i></div></article>
+            <article class="task"><div class="task-top"><h3>Draft early adopter sequence</h3><span class="task-state ready">Ready</span></div><p>Three audience segments and six outreach angles are ready to review.</p><div class="progress"><i></i></div></article>
+          </div></section>
+          <section class="rail-section"><div class="rail-head"><h2>Connected context</h2><button><i data-lucide="plus" width="14"></i></button></div><div class="context-list">
+            <div class="context"><span class="context-icon"><i data-lucide="mail" width="14"></i></span><span class="context-copy"><strong>Gmail</strong><span>Synced 4 min ago</span></span><i class="context-status"></i></div>
+            <div class="context"><span class="context-icon"><i data-lucide="message-circle" width="14"></i></span><span class="context-copy"><strong>Slack</strong><span>8 channels connected</span></span><i class="context-status"></i></div>
+            <div class="context"><span class="context-icon"><i data-lucide="notebook" width="14"></i></span><span class="context-copy"><strong>Notion</strong><span>12 pages indexed</span></span><i class="context-status"></i></div>
+            <div class="context"><span class="context-icon"><i data-lucide="video" width="14"></i></span><span class="context-copy"><strong>YouTube</strong><span>Competitor watch</span></span><i class="context-status"></i></div>
+            <div class="context"><span class="context-icon"><i data-lucide="plug" width="14"></i></span><span class="context-copy"><strong>Add a connector</strong><span>Bring in more context</span></span><i class="context-status off"></i></div>
+          </div></section>
+          <section class="rail-section"><div class="rail-head"><h2>Cofounder memory</h2><button><i data-lucide="arrow-up-right" width="14"></i></button></div><div class="memory"><div class="memory-head"><i data-lucide="brain-circuit" width="15"></i>Learning how you decide</div><p>You favor narrow tests before scaling, direct founder outreach, and reversible decisions when evidence is incomplete.</p><div class="memory-stats"><span><b>28</b> decisions</span><span><b>11</b> corrections</span></div></div></section>
+        </aside>
+      </div>
+    </div>
+  </div>
+  <div class="scrim" id="scrim"></div><div class="toast" id="toast"><i></i><span>Decision room created. Astromar is building the plan.</span></div>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    if(window.lucide)window.lucide.createIcons();
+    const prompt=document.getElementById('prompt'),toast=document.getElementById('toast'),sidebar=document.getElementById('sidebar'),scrim=document.getElementById('scrim');
+    document.querySelectorAll('[data-prompt]').forEach(button=>button.addEventListener('click',()=>{prompt.value=button.dataset.prompt;prompt.focus()}));
+    document.getElementById('newTask').addEventListener('click',()=>{prompt.value='';prompt.focus();sidebar.classList.remove('open');scrim.classList.remove('show')});
+    const send=()=>{if(!prompt.value.trim())return;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2800)};
+    document.getElementById('sendPrompt').addEventListener('click',send);prompt.addEventListener('keydown',event=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter')send()});
+    document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('click',()=>{document.querySelectorAll('.nav-item').forEach(node=>node.classList.remove('active'));item.classList.add('active')}));
+    document.getElementById('menuButton').addEventListener('click',()=>{sidebar.classList.add('open');scrim.classList.add('show')});scrim.addEventListener('click',()=>{sidebar.classList.remove('open');scrim.classList.remove('show')});
+  </script>
+</body>
+</html>

@@ -1,0 +1,765 @@
+.authPage {
+  --auth-bg: #080909;
+  --auth-panel: #111213;
+  --auth-line: rgba(255, 255, 255, 0.11);
+  --auth-line-strong: rgba(255, 255, 255, 0.18);
+  --auth-text: #f7f7f5;
+  --auth-muted: rgba(255, 255, 255, 0.62);
+  --auth-subtle: rgba(255, 255, 255, 0.4);
+  --auth-green: #45d39b;
+  --auth-blue: #79a8ff;
+  --auth-amber: #f2bf5b;
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
+  overflow: hidden;
+  background: var(--auth-bg);
+  color: var(--auth-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+.authPage::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 64px 64px;
+  content: "";
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.78), transparent 82%);
+  pointer-events: none;
+}
+
+.authPage a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.topbar {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 24px 32px;
+}
+
+.brandLockup,
+.brand {
+  display: inline-flex;
+  align-items: center;
+}
+
+.brandLockup {
+  gap: 14px;
+}
+
+.brand {
+  gap: 10px;
+  font-weight: 750;
+}
+
+.brandMark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--auth-line-strong);
+  border-radius: 7px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.brandMark::after {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.78);
+  content: "";
+}
+
+.brandTagline {
+  padding-left: 14px;
+  border-left: 1px solid var(--auth-line-strong);
+  background: linear-gradient(105deg, #ffffff 0%, #d7dbe1 52%, #ffffff 100%);
+  background-clip: text;
+  color: transparent;
+  font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 600;
+  -webkit-background-clip: text;
+}
+
+.topAction {
+  color: var(--auth-muted);
+  font-size: 13px;
+}
+
+.topAction a {
+  margin-left: 7px;
+  color: white;
+  font-weight: 700;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(430px, 0.88fr) minmax(560px, 1.12fr);
+  min-height: 100svh;
+}
+
+.authSide {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 106px 48px 48px;
+  border-right: 1px solid var(--auth-line);
+  background: rgba(8, 9, 9, 0.82);
+}
+
+.authWrap {
+  width: min(100%, 430px);
+}
+
+.eyebrow {
+  margin: 0 0 14px;
+  color: var(--auth-green);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.eyebrowSignIn {
+  color: var(--auth-blue);
+}
+
+.authWrap h1 {
+  margin: 0;
+  font-size: 38px;
+  font-weight: 760;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.intro {
+  margin: 14px 0 0;
+  color: var(--auth-muted);
+  font-size: 15px;
+}
+
+.modeTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 26px;
+  padding: 4px;
+  border: 1px solid var(--auth-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.modeTab,
+.modeTabActive {
+  display: grid;
+  place-items: center;
+  min-height: 40px;
+  border-radius: 6px;
+  color: var(--auth-muted) !important;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.modeTabActive {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  color: white !important;
+}
+
+.authContent {
+  margin-top: 18px;
+}
+
+.productSide {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  padding: 112px 56px 56px;
+  background:
+    radial-gradient(circle at 62% 22%, rgba(255, 255, 255, 0.08), transparent 26rem),
+    rgba(11, 12, 13, 0.7);
+}
+
+.productSide::before {
+  position: absolute;
+  inset: 9% 7%;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.decisionRoom,
+.onboarding {
+  position: relative;
+  width: min(100%, 760px);
+}
+
+.roomHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.roomHead p,
+.onboardingHead p {
+  margin: 0 0 6px;
+  color: var(--auth-subtle);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.roomHead h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 720;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.contextStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--auth-green);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.contextStatus::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--auth-green);
+  box-shadow: 0 0 13px rgba(69, 211, 155, 0.66);
+  content: "";
+}
+
+.roomFrame,
+.setupFrame {
+  overflow: hidden;
+  border: 1px solid var(--auth-line-strong);
+  border-radius: 8px;
+  background: rgba(15, 16, 18, 0.9);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.roomBar,
+.setupBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--auth-line);
+  color: var(--auth-subtle);
+  font-size: 11px;
+}
+
+.roomDots {
+  display: flex;
+  gap: 6px;
+}
+
+.roomDots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.roomBody {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+}
+
+.message {
+  max-width: 88%;
+  padding: 13px 14px;
+  border: 1px solid var(--auth-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.messageYou {
+  justify-self: end;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.message small {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--auth-blue);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.messageYou small {
+  color: var(--auth-subtle);
+}
+
+.signalList {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.signal {
+  display: grid;
+  grid-template-columns: 9px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--auth-line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 12px;
+}
+
+.signal i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--auth-blue);
+  box-shadow: 0 0 12px rgba(121, 168, 255, 0.5);
+}
+
+.signal:nth-child(2) i {
+  background: var(--auth-amber);
+  box-shadow: 0 0 12px rgba(242, 191, 91, 0.5);
+}
+
+.signal:nth-child(3) i {
+  background: var(--auth-green);
+  box-shadow: 0 0 12px rgba(69, 211, 155, 0.5);
+}
+
+.signal b {
+  color: white;
+}
+
+.signal > span:last-child {
+  color: var(--auth-subtle);
+}
+
+.roomNote {
+  margin: 12px 0 0;
+  color: var(--auth-subtle);
+  font-size: 11px;
+  text-align: center;
+}
+
+.onboarding {
+  width: min(100%, 720px);
+}
+
+.onboardingHead {
+  max-width: 600px;
+  margin-bottom: 24px;
+}
+
+.onboardingHead h2 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 720;
+  line-height: 1.14;
+  letter-spacing: 0;
+}
+
+.onboardingHead > span {
+  display: block;
+  margin-top: 12px;
+  color: var(--auth-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.setupBar {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 12px;
+}
+
+.setupBar strong {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.setupList {
+  display: grid;
+}
+
+.setupStep {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 96px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--auth-line);
+}
+
+.setupStep:last-child {
+  border-bottom: 0;
+}
+
+.stepIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--auth-line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--auth-blue);
+}
+
+.setupStep:nth-child(2) .stepIcon {
+  color: var(--auth-green);
+}
+
+.setupStep:nth-child(3) .stepIcon {
+  color: var(--auth-amber);
+}
+
+.stepCopy {
+  display: grid;
+}
+
+.stepCopy b {
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+
+.stepCopy span {
+  color: var(--auth-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.stepStatus {
+  padding: 5px 8px;
+  border: 1px solid var(--auth-line);
+  border-radius: 999px;
+  color: var(--auth-subtle);
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.stepStatusReady {
+  border-color: rgba(69, 211, 155, 0.24);
+  background: rgba(69, 211, 155, 0.08);
+  color: var(--auth-green);
+}
+
+.trustRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 18px;
+  color: var(--auth-subtle);
+  font-size: 12px;
+}
+
+.trustRow span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.phoneForm {
+  display: grid;
+  gap: 14px;
+}
+
+.phoneField {
+  display: grid;
+  gap: 7px;
+}
+
+.phoneField label {
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.phoneRow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 8px;
+}
+
+.phoneInput,
+.phoneSelect {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--auth-line);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.045);
+  color: white;
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.phoneInput {
+  padding: 0 14px;
+}
+
+.phoneSelect {
+  padding: 0 10px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.phoneSelect option {
+  background: #171719;
+  color: white;
+}
+
+.phoneInput::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.phoneInput:focus,
+.phoneSelect:focus {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.065);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.055);
+}
+
+.phoneInput:disabled,
+.phoneSelect:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.phoneError {
+  margin: 0;
+  color: #ff8b82;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.phoneSubmit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border: 1px solid white;
+  border-radius: 8px;
+  background: white;
+  color: #090909;
+  font-size: 14px;
+  font-weight: 780;
+  box-shadow: 0 14px 38px rgba(255, 255, 255, 0.1);
+}
+
+.phoneSubmit:hover:not(:disabled) {
+  background: #f2f3f4;
+}
+
+.phoneSubmit:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.phoneFinePrint {
+  margin: -2px 0 0;
+  color: var(--auth-subtle);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@media (max-width: 1000px) {
+  .authPage {
+    overflow: auto;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .authSide {
+    min-height: 100svh;
+    border-right: 0;
+  }
+
+  .productSide {
+    display: none;
+  }
+}
+
+@media (min-width: 1001px) and (max-height: 820px) {
+  .topbar {
+    padding: 16px 28px;
+  }
+
+  .authSide {
+    padding: 72px 40px 16px;
+  }
+
+  .authWrap {
+    width: min(100%, 400px);
+  }
+
+  .eyebrow {
+    margin-bottom: 8px;
+  }
+
+  .authWrap h1 {
+    font-size: 32px;
+  }
+
+  .intro {
+    margin-top: 8px;
+    font-size: 14px;
+  }
+
+  .modeTabs {
+    margin-top: 16px;
+  }
+
+  .modeTab,
+  .modeTabActive {
+    min-height: 36px;
+  }
+
+  .authContent {
+    margin-top: 13px;
+  }
+
+  .productSide {
+    padding: 72px 44px 18px;
+  }
+
+  .roomHead {
+    margin-bottom: 12px;
+  }
+
+  .roomHead h2 {
+    font-size: 24px;
+  }
+
+  .roomBody {
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .message {
+    padding: 10px 12px;
+  }
+
+  .signal {
+    min-height: 36px;
+  }
+
+  .roomNote {
+    margin-top: 10px;
+  }
+
+  .onboardingHead {
+    margin-bottom: 14px;
+  }
+
+  .onboardingHead h2 {
+    font-size: 27px;
+  }
+
+  .onboardingHead > span {
+    margin-top: 8px;
+    font-size: 13px;
+  }
+
+  .setupBar {
+    min-height: 38px;
+  }
+
+  .setupStep {
+    min-height: 76px;
+    padding: 12px 16px;
+  }
+
+  .stepCopy span {
+    font-size: 12px;
+  }
+
+  .trustRow {
+    margin-top: 12px;
+  }
+
+  .phoneForm {
+    gap: 10px;
+  }
+
+  .phoneField {
+    gap: 5px;
+  }
+
+  .phoneInput,
+  .phoneSelect {
+    min-height: 41px;
+  }
+
+  .phoneSubmit {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 600px) {
+  .topbar {
+    padding: 18px 16px;
+  }
+
+  .brandTagline,
+  .topAction span {
+    display: none;
+  }
+
+  .topAction {
+    font-size: 12px;
+  }
+
+  .authSide {
+    place-items: start center;
+    padding: 100px 16px 32px;
+  }
+
+  .authWrap h1 {
+    font-size: 32px;
+  }
+
+  .phoneRow {
+    grid-template-columns: 100px 1fr;
+  }
+}

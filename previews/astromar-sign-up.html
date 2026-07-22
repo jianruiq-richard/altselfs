@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Create account | Astromar</title>
+  <meta name="description" content="Create your Astromar AI cofounder account." />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#080909; --panel:#111213; --line:rgba(255,255,255,.11); --line-strong:rgba(255,255,255,.18);
+      --text:#f7f7f5; --muted:rgba(255,255,255,.62); --subtle:rgba(255,255,255,.4);
+      --green:#45d39b; --blue:#79a8ff; --amber:#f2bf5b; --radius:8px;
+    }
+    *{box-sizing:border-box} html,body{min-height:100%}
+    body{margin:0;overflow-x:hidden;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.5}
+    body::before{position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:64px 64px;content:"";mask-image:linear-gradient(to bottom,rgba(0,0,0,.78),transparent 82%);pointer-events:none}
+    a{color:inherit;text-decoration:none} button,input,select{font:inherit} button{cursor:pointer}
+    .shell{position:relative;z-index:1;min-height:100svh}
+    .topbar{position:absolute;z-index:3;top:0;left:0;display:flex;align-items:center;justify-content:space-between;width:100%;padding:24px 32px}
+    .brand-lockup,.brand{display:inline-flex;align-items:center}.brand-lockup{position:fixed;z-index:5;top:24px;left:32px;gap:14px}.brand{gap:10px;font-weight:750}
+    .brand-mark{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--line-strong);border-radius:7px;background:linear-gradient(145deg,rgba(255,255,255,.18),rgba(255,255,255,.03));box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+    .brand-mark::after{width:10px;height:10px;border-radius:50%;background:white;box-shadow:0 0 20px rgba(255,255,255,.78);content:""}
+    .brand-tagline{padding-left:14px;border-left:1px solid var(--line-strong);color:rgba(255,255,255,.62);font-family:"Avenir Next","Helvetica Neue",sans-serif;font-size:12px;font-style:italic;font-weight:600}
+    .top-action{margin-left:auto;color:var(--muted);font-size:13px}.top-action a{margin-left:7px;color:white;font-weight:700}
+    .layout{display:grid;grid-template-columns:minmax(430px,.88fr) minmax(560px,1.12fr);min-height:100svh}
+    .auth-side{display:grid;place-items:center;min-width:0;padding:106px 48px 48px;border-right:1px solid var(--line);background:rgba(8,9,9,.82)}
+    .auth-wrap{width:min(100%,430px)}
+    .eyebrow{margin:0 0 14px;color:var(--green);font-size:12px;font-weight:800;text-transform:uppercase}
+    h1{margin:0;font-size:38px;line-height:1.08}.intro{margin:14px 0 0;color:var(--muted);font-size:15px}
+    .mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:26px;padding:4px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(255,255,255,.035)}
+    .mode-tab{min-height:40px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:13px;font-weight:700}.mode-tab.active{background:rgba(255,255,255,.1);color:white;box-shadow:inset 0 1px 0 rgba(255,255,255,.09)}
+    .auth-form{display:grid;gap:14px;margin-top:20px}.hidden{display:none}
+    .oauth{display:flex;align-items:center;justify-content:center;gap:10px;min-height:48px;border:1px solid var(--line-strong);border-radius:var(--radius);background:rgba(255,255,255,.07);color:white;font-weight:700}.oauth:hover{background:rgba(255,255,255,.1)}
+    .google-mark{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:white;color:#171717;font-family:Arial,sans-serif;font-size:12px;font-weight:800}
+    .divider{display:flex;align-items:center;gap:12px;color:var(--subtle);font-size:12px}.divider::before,.divider::after{height:1px;flex:1;background:var(--line);content:""}
+    .field{display:grid;gap:8px}.field label{color:rgba(255,255,255,.76);font-size:13px;font-weight:650}
+    .control,.phone-row select{width:100%;min-height:46px;border:1px solid var(--line);border-radius:var(--radius);outline:0;background:rgba(255,255,255,.045);color:white;transition:border-color .18s ease,background .18s ease,box-shadow .18s ease}.control{padding:0 14px}.control::placeholder{color:rgba(255,255,255,.3)}
+    .control:focus,.phone-row select:focus{border-color:rgba(255,255,255,.32);background:rgba(255,255,255,.065);box-shadow:0 0 0 3px rgba(255,255,255,.055)}
+    .password-wrap{position:relative}.password-wrap .control{padding-right:48px}
+    .icon-button{position:absolute;top:50%;right:8px;display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:6px;background:transparent;color:var(--subtle);transform:translateY(-50%)}.icon-button:hover{background:rgba(255,255,255,.06);color:white}
+    .phone-row{display:grid;grid-template-columns:118px 1fr;gap:8px}.phone-row select{padding:0 10px;color:rgba(255,255,255,.82)}
+    .password-note{margin:-2px 0 0;color:var(--subtle);font-size:11px}
+    .check-row{display:flex;align-items:flex-start;gap:9px;color:var(--muted);font-size:12px;line-height:1.5}.check-row input{width:15px;height:15px;margin:2px 0 0;accent-color:white}.check-row a{color:white}
+    .primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;border:1px solid white;border-radius:var(--radius);background:white;color:#090909;font-weight:780;box-shadow:0 14px 38px rgba(255,255,255,.1)}.primary:hover{background:#f2f3f4}
+    .fine-print{margin:0;color:var(--subtle);font-size:11px;line-height:1.55;text-align:center}
+    .product-side{position:relative;display:flex;align-items:center;justify-content:center;min-width:0;overflow:hidden;padding:112px 56px 56px;background:radial-gradient(circle at 62% 22%,rgba(255,255,255,.08),transparent 26rem),rgba(11,12,13,.7)}
+    .onboarding{position:relative;width:min(100%,720px)}
+    .onboarding-head{max-width:600px;margin-bottom:24px}.onboarding-head p{margin:0 0 8px;color:var(--subtle);font-size:12px;font-weight:800;text-transform:uppercase}.onboarding-head h2{margin:0;font-size:32px;line-height:1.14}.onboarding-head>span{display:block;margin-top:12px;color:var(--muted);font-size:14px;line-height:1.6}
+    .setup-frame{overflow:hidden;border:1px solid var(--line-strong);border-radius:var(--radius);background:rgba(15,16,18,.9);box-shadow:0 28px 90px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.08)}
+    .setup-bar{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 16px;border-bottom:1px solid var(--line);color:var(--subtle);font-size:12px}.setup-bar strong{color:rgba(255,255,255,.82)}
+    .setup-list{display:grid}.setup-step{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:14px;min-height:96px;padding:18px 20px;border-bottom:1px solid var(--line)}.setup-step:last-child{border-bottom:0}
+    .step-icon{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.055);color:var(--blue)}.setup-step:nth-child(2) .step-icon{color:var(--green)}.setup-step:nth-child(3) .step-icon{color:var(--amber)}
+    .step-copy h3{margin:0 0 4px;font-size:15px}.step-copy p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}.step-status{padding:5px 8px;border:1px solid var(--line);border-radius:999px;color:var(--subtle);font-size:11px;font-weight:750;white-space:nowrap}.step-status.ready{border-color:rgba(69,211,155,.24);background:rgba(69,211,155,.08);color:var(--green)}
+    .trust-row{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:18px;color:var(--subtle);font-size:12px}.trust-item{display:inline-flex;align-items:center;gap:7px}
+    @media(max-width:1000px){.layout{grid-template-columns:1fr}.auth-side{border-right:0}.product-side{display:none}}
+    @media(min-width:1001px) and (max-height:820px){
+      .topbar{padding:16px 28px}.brand-lockup{top:16px;left:28px}.auth-side{padding:72px 40px 16px}.auth-wrap{width:min(100%,400px)}
+      .eyebrow{margin-bottom:8px}h1{font-size:32px}.intro{margin-top:8px;font-size:14px}.mode-tabs{margin-top:16px}.mode-tab{min-height:36px}
+      .auth-form{gap:10px;margin-top:13px}.oauth{min-height:41px}.field{gap:5px}.control,.phone-row select{min-height:41px}.primary{min-height:44px}
+      .password-note{font-size:10px}.check-row{font-size:11px}.fine-print{font-size:10px}.product-side{padding:72px 44px 18px}
+      .onboarding-head{margin-bottom:14px}.onboarding-head p{margin-bottom:5px}.onboarding-head h2{font-size:27px}.onboarding-head>span{margin-top:8px;font-size:13px}
+      .setup-bar{min-height:38px}.setup-step{min-height:76px;padding:12px 16px}.step-copy p{font-size:12px}.trust-row{margin-top:12px}
+    }
+    @media(max-width:600px){.topbar{padding:18px 16px}.brand-lockup{top:18px;left:16px}.brand-tagline{display:none}.top-action{font-size:12px}.top-action>span{display:none}.auth-side{align-items:start;padding:100px 16px 32px}h1{font-size:32px}.phone-row{grid-template-columns:100px 1fr}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand-lockup" href="astromar-landing.html"><span class="brand"><span class="brand-mark"></span><span>Astromar</span></span><span class="brand-tagline">Think with you. Act for you.</span></a>
+      <div class="top-action"><span>Already have an account?</span><a href="astromar-sign-in.html">Sign in</a></div>
+    </header>
+    <main class="layout">
+      <section class="auth-side">
+        <div class="auth-wrap">
+          <p class="eyebrow">Get started</p>
+          <h1>Build your AI cofounder.</h1>
+          <p class="intro">Start with one decision. Bring in more context when you are ready.</p>
+          <div class="mode-tabs" role="tablist"><button class="mode-tab active" type="button" data-mode="email">Email / Google</button><button class="mode-tab" type="button" data-mode="phone">Phone / password</button></div>
+          <form class="auth-form" id="emailForm">
+            <button class="oauth" type="button"><span class="google-mark">G</span>Continue with Google</button>
+            <div class="divider">or create with email</div>
+            <div class="field"><label for="email">Work email</label><input class="control" id="email" type="email" placeholder="you@company.com" autocomplete="email" /></div>
+            <div class="field"><label for="password">Create password</label><div class="password-wrap"><input class="control" id="password" type="password" placeholder="8 characters minimum" autocomplete="new-password" /><button class="icon-button" type="button" data-toggle-password="password" aria-label="Show password"><i data-lucide="eye" width="16"></i></button></div><p class="password-note">Use 8+ characters with a number.</p></div>
+            <label class="check-row"><input type="checkbox" checked /> <span>I agree to the <a href="#">Terms</a> and acknowledge the <a href="#">Privacy Policy</a>.</span></label>
+            <button class="primary" type="button">Create account <i data-lucide="arrow-right" width="17"></i></button>
+            <p class="fine-print">No credit card required. Your workspace is private by default.</p>
+          </form>
+          <form class="auth-form hidden" id="phoneForm">
+            <div class="field"><label for="phone">Phone number</label><div class="phone-row"><select><option>US +1</option><option>UK +44</option><option>SG +65</option><option>CN +86</option></select><input class="control" id="phone" type="tel" placeholder="(555) 123-4567" /></div></div>
+            <div class="field"><label for="phonePassword">Create password</label><div class="password-wrap"><input class="control" id="phonePassword" type="password" placeholder="8 characters minimum" /><button class="icon-button" type="button" data-toggle-password="phonePassword" aria-label="Show password"><i data-lucide="eye" width="16"></i></button></div></div>
+            <div class="field"><label for="confirmPassword">Confirm password</label><input class="control" id="confirmPassword" type="password" placeholder="Re-enter your password" /></div>
+            <label class="check-row"><input type="checkbox" checked /> <span>I agree to the <a href="#">Terms</a> and acknowledge the <a href="#">Privacy Policy</a>.</span></label>
+            <button class="primary" type="button">Create account <i data-lucide="arrow-right" width="17"></i></button>
+            <p class="fine-print">Phone verification may be required after account creation.</p>
+          </form>
+        </div>
+      </section>
+      <aside class="product-side">
+        <div class="onboarding">
+          <div class="onboarding-head"><p>Useful from day one</p><h2>Your first decision room is ready in minutes.</h2><span>No setup maze. Start with the question already blocking you, then connect context as it becomes useful.</span></div>
+          <div class="setup-frame">
+            <div class="setup-bar"><strong>Your first session</strong><span>Private workspace</span></div>
+            <div class="setup-list">
+              <div class="setup-step"><div class="step-icon"><i data-lucide="radar" width="18"></i></div><div class="step-copy"><h3>Analyze one competitor</h3><p>See their latest moves and the decision it creates for you.</p></div><span class="step-status ready">Ready now</span></div>
+              <div class="setup-step"><div class="step-icon"><i data-lucide="plug" width="18"></i></div><div class="step-copy"><h3>Connect the context you choose</h3><p>Bring in Gmail, Slack, Notion, Lark, or your current documents.</p></div><span class="step-status">Optional</span></div>
+              <div class="setup-step"><div class="step-icon"><i data-lucide="brain-circuit" width="18"></i></div><div class="step-copy"><h3>Shape how it thinks with you</h3><p>Correct recommendations and make every next conversation sharper.</p></div><span class="step-status">Ongoing</span></div>
+            </div>
+          </div>
+          <div class="trust-row"><span class="trust-item"><i data-lucide="shield-check" width="15"></i>Private by default</span><span class="trust-item"><i data-lucide="key-round" width="15"></i>You control connections</span><span class="trust-item"><i data-lucide="circle-check" width="15"></i>Cancel anytime</span></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    if(window.lucide)window.lucide.createIcons();
+    const tabs=document.querySelectorAll('[data-mode]'),emailForm=document.getElementById('emailForm'),phoneForm=document.getElementById('phoneForm');
+    tabs.forEach(tab=>tab.addEventListener('click',()=>{tabs.forEach(item=>item.classList.toggle('active',item===tab));const email=tab.dataset.mode==='email';emailForm.classList.toggle('hidden',!email);phoneForm.classList.toggle('hidden',email)}));
+    document.querySelectorAll('[data-toggle-password]').forEach(button=>button.addEventListener('click',()=>{const input=document.getElementById(button.dataset.togglePassword);input.type=input.type==='password'?'text':'password'}));
+  </script>
+</body>
+</html>

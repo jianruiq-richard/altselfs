@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Astromar | Your AI cofounder</title>
+  <meta name="description" content="Astromar is your AI cofounder, built to think with you, act for you, and turn fragmented context into sharper startup decisions." />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090909;
+      --panel: rgba(18, 18, 20, 0.78);
+      --panel-strong: rgba(26, 26, 29, 0.92);
+      --line: rgba(255, 255, 255, 0.11);
+      --line-strong: rgba(255, 255, 255, 0.18);
+      --text: #ffffff;
+      --muted: rgba(255, 255, 255, 0.68);
+      --subtle: rgba(255, 255, 255, 0.46);
+      --green: #58d68d;
+      --blue: #7ba7ff;
+      --amber: #ffc857;
+      --coral: #ff735f;
+      --shadow: 0 28px 90px rgba(0, 0, 0, 0.48);
+      --radius: 8px;
+      --max: 1180px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.14), transparent 30rem),
+        radial-gradient(circle at 14% 34%, rgba(123, 167, 255, 0.12), transparent 24rem),
+        radial-gradient(circle at 88% 10%, rgba(255, 200, 87, 0.1), transparent 22rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.68), transparent 72%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+    }
+
+    .container {
+      width: min(var(--max), calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(9, 9, 9, 0.72);
+      backdrop-filter: blur(20px);
+    }
+
+    .nav-inner {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      min-height: 72px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .brand-name {
+      white-space: nowrap;
+    }
+
+    .brand-tagline {
+      position: relative;
+      margin-left: 10px;
+      padding-left: 20px;
+      background: linear-gradient(105deg, #ffffff 0%, #d7dbe1 52%, #ffffff 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      font-style: italic;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .brand-tagline::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 1px;
+      height: 16px;
+      background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.42), transparent);
+      transform: translateY(-50%);
+    }
+
+    .brand-mark {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.03));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    }
+
+    .brand-mark::after {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 22px rgba(255, 255, 255, 0.82);
+    }
+
+    .nav-links {
+      position: absolute;
+      left: 50%;
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+      transform: translateX(-50%);
+    }
+
+    .nav-links a:hover {
+      color: #ffffff;
+    }
+
+    .auth-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.06);
+      color: #ffffff;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-primary {
+      border-color: #ffffff;
+      background: #ffffff;
+      color: #080808;
+      box-shadow: 0 14px 42px rgba(255, 255, 255, 0.13);
+    }
+
+    .btn-primary:hover {
+      background: #f4f1e9;
+      color: #050505;
+      box-shadow: 0 20px 58px rgba(255, 255, 255, 0.16);
+    }
+
+    .btn-lg {
+      min-height: 52px;
+      padding: 0 22px;
+    }
+
+    .hero {
+      padding: 50px 0 48px;
+      text-align: center;
+    }
+
+    .hero-positioning {
+      width: max-content;
+      max-width: 100%;
+      margin: 0 auto 26px;
+      background: linear-gradient(105deg, #ffffff 0%, #d2d6dc 52%, #ffffff 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      font-size: 21px;
+      font-weight: 500;
+      font-style: italic;
+      line-height: 1.35;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .hero-carousel {
+      max-width: 1040px;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+
+    .scenario-track {
+      display: flex;
+      width: 300%;
+      animation: slideScenarios 18s ease-in-out infinite;
+      will-change: transform;
+    }
+
+    .scenario {
+      flex: 0 0 33.333333%;
+      padding: 0 10px;
+    }
+
+    .headline {
+      margin: 0 auto;
+      max-width: 980px;
+      font-size: clamp(44px, 7vw, 86px);
+      line-height: 0.96;
+      letter-spacing: 0;
+      font-weight: 840;
+      text-wrap: balance;
+    }
+
+    .headline span {
+      background: linear-gradient(105deg, #ffffff 0%, #f7f8fa 30%, #b8bec7 47%, #f4f6f8 59%, #c9ced5 70%, #ffffff 88%);
+      background-size: 220% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: shimmer 7s ease-in-out infinite;
+    }
+
+    @keyframes shimmer {
+      0%, 100% {
+        background-position: 0 center;
+      }
+      50% {
+        background-position: 100% center;
+      }
+    }
+
+    @keyframes slideScenarios {
+      0%, 27% {
+        transform: translateX(0);
+      }
+      33%, 60% {
+        transform: translateX(-33.333333%);
+      }
+      66%, 93% {
+        transform: translateX(-66.666666%);
+      }
+      100% {
+        transform: translateX(0);
+      }
+    }
+
+    .hero-copy-carousel {
+      max-width: 790px;
+      margin: 22px auto 0;
+      overflow: hidden;
+    }
+
+    .hero-copy-track {
+      display: flex;
+      width: 300%;
+      animation: slideScenarios 18s ease-in-out infinite;
+      will-change: transform;
+    }
+
+    .hero-copy {
+      flex: 0 0 33.333333%;
+      margin: 0;
+      padding: 0 8px;
+      color: var(--muted);
+      font-size: clamp(17px, 2.1vw, 21px);
+      line-height: 1.58;
+      text-wrap: balance;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 34px;
+    }
+
+    .context-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 18px;
+      color: var(--subtle);
+      font-size: 13px;
+    }
+
+    .context-row span {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    section {
+      padding: 72px 0;
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 28px;
+      margin-bottom: 26px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 780;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 54px);
+      line-height: 1.04;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    .section-copy {
+      max-width: 460px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.62;
+    }
+
+    .demo-frame {
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)), rgba(10, 10, 10, 0.92);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      text-align: left;
+    }
+
+    .window-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 44px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.035);
+    }
+
+    .dots {
+      display: flex;
+      gap: 7px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .dot:nth-child(1) {
+      background: #ff5f57;
+    }
+
+    .dot:nth-child(2) {
+      background: #ffbd2e;
+    }
+
+    .dot:nth-child(3) {
+      background: #28c840;
+    }
+
+    .window-title {
+      color: var(--subtle);
+      font-size: 13px;
+    }
+
+    .demo-body {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(340px, 1.1fr);
+      min-height: 560px;
+    }
+
+    .chat-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      padding: 26px;
+      border-right: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    .message {
+      max-width: 94%;
+      padding: 14px 15px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      color: rgba(255, 255, 255, 0.88);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+
+    .message.agent {
+      align-self: flex-start;
+      background: rgba(123, 167, 255, 0.08);
+    }
+
+    .message strong {
+      display: block;
+      margin-bottom: 8px;
+      color: #ffffff;
+      font-size: 12px;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .source-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .source-chip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.68);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .intel-pane {
+      padding: 26px;
+    }
+
+    .intel-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .intel-header h3 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+
+    .intel-header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border: 1px solid rgba(88, 214, 141, 0.24);
+      border-radius: 999px;
+      background: rgba(88, 214, 141, 0.1);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .live-badge .pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 12px rgba(88, 214, 141, 0.65);
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .metric {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    .metric span {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--subtle);
+      font-size: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 18px;
+    }
+
+    .activity-card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    .activity-card h4 {
+      margin: 0 0 14px;
+      font-size: 15px;
+    }
+
+    .activity-list {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .activity-list li {
+      display: grid;
+      grid-template-columns: 10px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .activity-list i {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .activity-list li:nth-child(2) i {
+      background: var(--blue);
+    }
+
+    .activity-list li:nth-child(3) i {
+      background: var(--coral);
+    }
+
+    .activity-list li:nth-child(4) i {
+      background: var(--amber);
+    }
+
+    .activity-list b {
+      color: #ffffff;
+      font-weight: 760;
+    }
+
+    .activity-list em {
+      color: var(--green);
+      font-style: normal;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .recommendation {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid rgba(255, 200, 87, 0.24);
+      border-radius: var(--radius);
+      background: rgba(255, 200, 87, 0.08);
+      color: rgba(255, 255, 255, 0.84);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .feature-grid,
+    .quote-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .feature,
+    .quote {
+      min-height: 218px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .feature-index {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      margin-bottom: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.06);
+      color: #ffffff;
+      font-weight: 820;
+      font-size: 13px;
+    }
+
+    .feature h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .feature p,
+    .quote p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.62;
+    }
+
+    .conversation-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(380px, 1fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .conversation-copy {
+      padding: clamp(28px, 5vw, 48px);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035)), var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .conversation-copy p {
+      margin: 18px 0 0;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .dialog-stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .turn {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .turn.ai {
+      background: #ffffff;
+      color: #080808;
+    }
+
+    .turn small {
+      display: block;
+      margin-bottom: 8px;
+      color: inherit;
+      opacity: 0.62;
+      font-weight: 820;
+      text-transform: uppercase;
+    }
+
+    .turn p {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .cta-band {
+      display: grid;
+      grid-template-columns: 1fr minmax(300px, 420px);
+      gap: 28px;
+      align-items: center;
+      padding: clamp(28px, 6vw, 56px);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.03)), rgba(16, 16, 18, 0.92);
+      box-shadow: var(--shadow);
+    }
+
+    .cta-band p {
+      max-width: 580px;
+      margin: 16px 0 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .email-form {
+      display: flex;
+      gap: 10px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    .email-form input {
+      min-width: 0;
+      flex: 1;
+      min-height: 42px;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: #ffffff;
+      padding: 0 10px;
+    }
+
+    .email-form input::placeholder {
+      color: var(--subtle);
+    }
+
+    .footer {
+      padding: 34px 0;
+      border-top: 1px solid var(--line);
+      color: var(--subtle);
+      font-size: 13px;
+    }
+
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 940px) {
+      .brand-tagline {
+        display: none;
+      }
+
+      .section-heading,
+      .demo-body,
+      .conversation-grid,
+      .cta-band {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      .chat-pane {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .feature-grid,
+      .quote-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .container {
+        width: min(100% - 28px, var(--max));
+      }
+
+      .nav-inner {
+        min-height: 64px;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .auth-actions {
+        gap: 6px;
+      }
+
+      .auth-actions .btn {
+        min-height: 38px;
+        padding: 0 11px;
+        font-size: 12px;
+      }
+
+      .hero {
+        padding-top: 58px;
+      }
+
+      .hero-positioning {
+        width: auto;
+        margin-bottom: 22px;
+        font-size: 15px;
+        white-space: normal;
+      }
+
+      .headline {
+        font-size: clamp(40px, 12vw, 58px);
+        line-height: 1;
+      }
+
+      .hero-actions .btn {
+        width: 100%;
+      }
+
+      .metric-grid,
+      .source-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .activity-list li {
+        grid-template-columns: 10px 1fr;
+      }
+
+      .activity-list em {
+        grid-column: 2;
+      }
+
+      .email-form {
+        flex-direction: column;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 1ms !important;
+        scroll-behavior: auto !important;
+        transition-duration: 1ms !important;
+      }
+
+      .scenario-track {
+        transform: none !important;
+      }
+
+      .hero-copy-track {
+        transform: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="nav">
+      <div class="container nav-inner">
+        <a class="brand" href="#top" aria-label="Astromar home">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">Astromar</span>
+          <span class="brand-tagline">Think with you. Act for you.</span>
+        </a>
+        <div class="nav-links" aria-label="Primary navigation">
+          <a href="#demo">Demo</a>
+          <a href="#cases">Use cases</a>
+          <a href="#conversation">How it thinks</a>
+        </div>
+        <div class="auth-actions" aria-label="Account actions">
+          <a class="btn" href="/sign-in">Sign in</a>
+          <a class="btn btn-primary" href="/sign-up?method=phone">Sign up</a>
+        </div>
+      </div>
+    </nav>
+
+    <main id="top">
+      <section class="hero container">
+        <p class="hero-positioning">Your AI cofounder, built to think with you, not just work for you.</p>
+
+        <div class="hero-carousel" aria-label="Founder decision scenarios">
+          <div class="scenario-track">
+            <div class="scenario">
+              <h1 class="headline"><span>Know competitor moves.</span><br>Decide your action.</h1>
+            </div>
+            <div class="scenario">
+              <h1 class="headline"><span>Know what's trending.</span><br>Decide what's urgent.</h1>
+            </div>
+            <div class="scenario">
+              <h1 class="headline"><span>Find early adopters.</span><br>Decide your approach.</h1>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-copy-carousel" aria-label="Scenario details">
+          <div class="hero-copy-track">
+            <p class="hero-copy">Track competitor activity across all channels. Astromar shows you their playbook and suggests your counter-strategy.</p>
+            <p class="hero-copy">What's gaining traction across your platforms? Astromar surfaces trending signals and tells you what deserves attention today.</p>
+            <p class="hero-copy">Find the first users who'll truly care. Astromar helps you identify early adopters and craft the outreach that converts.</p>
+          </div>
+        </div>
+
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" href="/sign-up?method=phone">Talk to your AI cofounder -&gt;</a>
+          <a class="btn btn-lg" href="#conversation">See how it thinks</a>
+        </div>
+
+        <div class="context-row" aria-label="Example connected context sources">
+          <span>Gmail</span>
+          <span>Slack</span>
+          <span>Notion</span>
+          <span>YouTube</span>
+          <span>TikTok</span>
+          <span>X</span>
+          <span>Search</span>
+        </div>
+      </section>
+
+      <section id="demo" class="container">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Competitive intelligence as the first move</p>
+            <h2>One command. A full competitor brief. Then a decision.</h2>
+          </div>
+          <p class="section-copy">
+            The first use case is concrete enough to be useful on day one, but the product behavior is broader: Astromar turns any signal into a decision conversation.
+          </p>
+        </div>
+
+        <div class="demo-frame" aria-label="Astromar decision room preview">
+          <div class="window-bar">
+            <div class="dots" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <div class="window-title">astromar://decision-room</div>
+            <div aria-hidden="true">Secure context</div>
+          </div>
+
+          <div class="demo-body">
+            <div class="chat-pane">
+              <div class="message user">
+                <strong>You</strong>
+                What did Opus Clip do yesterday, and should we respond?
+              </div>
+              <div class="message agent">
+                <strong>Astromar</strong>
+                Running cross-channel intelligence across traffic, search, social, and creator activity. I will prioritize deltas that change your growth plan today.
+              </div>
+              <div class="message agent">
+                <strong>Astromar</strong>
+                The real decision is not whether they posted. It is whether you compete on the same creator channel or attack the use case they are ignoring.
+              </div>
+              <div class="source-strip" aria-label="Connected data sources">
+                <span class="source-chip">Similarweb</span>
+                <span class="source-chip">Semrush</span>
+                <span class="source-chip">TikTok</span>
+                <span class="source-chip">YouTube</span>
+                <span class="source-chip">Instagram</span>
+                <span class="source-chip">X</span>
+              </div>
+            </div>
+
+            <div class="intel-pane">
+              <div class="intel-header">
+                <div>
+                  <h3>Opus Clip decision brief</h3>
+                  <p>Signal confidence: high. Estimates are modeled from public traffic, creator reach, paid activity, and landing-page changes.</p>
+                </div>
+                <span class="live-badge"><span class="pill-dot" aria-hidden="true"></span> Live brief</span>
+              </div>
+
+              <div class="metric-grid">
+                <div class="metric"><span>Live since</span><strong>2022</strong></div>
+                <div class="metric"><span>User scale</span><strong>5M+</strong></div>
+                <div class="metric"><span>Revenue est.</span><strong>$18-28M ARR</strong></div>
+              </div>
+
+              <div class="activity-card">
+                <h4>Yesterday's growth activity</h4>
+                <ul class="activity-list">
+                  <li><i></i><span><b>38 YouTube KOC videos</b> detected around creator workflow tutorials.</span><em>1.4M reach</em></li>
+                  <li><i></i><span><b>112 TikTok posts</b> reused the same hook: turn long videos into 10 clips.</span><em>2.1M views</em></li>
+                  <li><i></i><span><b>Paid search expanded</b> on AI video clipping and podcast shorts generator.</span><em>$8.6K spend</em></li>
+                  <li><i></i><span><b>Estimated new users</b> from yesterday's blended channels.</span><em>9.2K-13.5K</em></li>
+                </ul>
+                <div class="recommendation">
+                  <b>Astromar recommendation:</b> do not copy their broad creator push yet. Test a narrower webinar repurposing wedge, then use response data to decide whether the channel is worth scaling.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="cases" class="container">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Start anywhere</p>
+            <h2>Not a vertical dashboard. A native agentic decision surface.</h2>
+          </div>
+          <p class="section-copy">
+            Each entry point starts with a real founder question, then keeps going until the tradeoff is clear.
+          </p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="feature-index">01</div>
+            <h3>Competitive intelligence</h3>
+            <p>"Opus Clip posted 3 KOC videos yesterday. Two are performing. Here is what they are testing, and the choice it creates for you."</p>
+          </article>
+          <article class="feature">
+            <div class="feature-index">02</div>
+            <h3>Daily operating judgment</h3>
+            <p>"Your creator account, inbox, and launch thread changed overnight. These are the 3 moves that matter today."</p>
+          </article>
+          <article class="feature">
+            <div class="feature-index">03</div>
+            <h3>Context-aware communication</h3>
+            <p>"I read the thread, the customer note, and your last decision. Here is the reply that protects the relationship and advances the deal."</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="conversation" class="container">
+        <div class="conversation-grid">
+          <div class="conversation-copy">
+            <p class="eyebrow">How it thinks</p>
+            <h2>It does not stop at the answer.</h2>
+            <p>
+              A report gives facts. Astromar pushes the next question, challenges weak assumptions, and helps you choose the move that matches your stage, constraints, and judgment.
+            </p>
+          </div>
+
+          <div class="dialog-stack">
+            <article class="turn">
+              <small>Founder</small>
+              <p>Give me a quick competitor update.</p>
+            </article>
+            <article class="turn ai">
+              <small>Astromar</small>
+              <p>Here is the update. More importantly, it creates a decision: defend the same segment or attack the overlooked one.</p>
+            </article>
+            <article class="turn">
+              <small>Founder</small>
+              <p>What would you do if we only have one growth sprint this week?</p>
+            </article>
+            <article class="turn ai">
+              <small>Astromar</small>
+              <p>I would run the narrower creator test first. If activation beats your current baseline, then scale. If not, the market signal was noise for your stage.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="access" class="container">
+        <div class="cta-band">
+          <div>
+            <p class="eyebrow">Early access</p>
+            <h2>Bring your startup context into one decision room.</h2>
+            <p>Join the private beta for solo founders and early teams. Start with the competitor you cannot ignore. Stay for the decisions you should not make alone.</p>
+          </div>
+          <form class="email-form">
+            <input type="email" placeholder="founder@company.com" aria-label="Email address" />
+            <button class="btn btn-primary" type="button">Request access</button>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-inner">
+        <span>Astromar</span>
+        <span>AI Chief of Staff for founders</span>
+        <span>Competitive intelligence, decisions, execution.</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

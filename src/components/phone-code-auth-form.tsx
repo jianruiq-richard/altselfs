@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
+import { ArrowRight } from "lucide-react";
+import styles from "./astromar-auth.module.css";
 
 type PhonePasswordAuthFormProps = {
   mode: "sign-in" | "sign-up";
@@ -128,84 +130,82 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: Phon
   }
 
   return (
-    <div className="rounded-xl border border-[#ead8bd] bg-white p-5 shadow-sm">
-      <div className="space-y-4">
-        <div>
-          <label htmlFor="phone-country" className="block text-sm font-medium text-stone-800">
-            Phone number
-          </label>
-          <div className="mt-2 grid grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] gap-2">
-            <select
-              id="phone-country"
-              value={countryCode}
-              onChange={(event) => setCountryCode(event.target.value)}
-              disabled={isSubmitting}
-              className="w-full rounded-lg border border-[#d8c8b5] bg-white px-3 py-3 text-sm text-stone-950 outline-none transition-colors focus:border-[#7a451f]"
-            >
-              {COUNTRY_CODES.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.label}
-                </option>
-              ))}
-            </select>
-            <input
-              id="phone"
-              type="tel"
-              inputMode="tel"
-              value={localPhoneNumber}
-              onChange={(event) => setLocalPhoneNumber(event.target.value)}
-              disabled={isSubmitting}
-              className="w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-              placeholder="(555) 123-4567"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label htmlFor="phone-password" className="block text-sm font-medium text-stone-800">
-            Password
-          </label>
-          <input
-            id="phone-password"
-            type="password"
-            autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
+    <div className={styles.phoneForm}>
+      <div className={styles.phoneField}>
+        <label htmlFor="phone-country">Phone number</label>
+        <div className={styles.phoneRow}>
+          <select
+            id="phone-country"
+            value={countryCode}
+            onChange={(event) => setCountryCode(event.target.value)}
             disabled={isSubmitting}
-            className="mt-2 w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-            placeholder={mode === "sign-in" ? "Enter your password" : "Create a password"}
+            className={styles.phoneSelect}
+          >
+            {COUNTRY_CODES.map((country) => (
+              <option key={country.code} value={country.code}>
+                {country.label}
+              </option>
+            ))}
+          </select>
+          <input
+            id="phone"
+            type="tel"
+            inputMode="tel"
+            value={localPhoneNumber}
+            onChange={(event) => setLocalPhoneNumber(event.target.value)}
+            disabled={isSubmitting}
+            className={styles.phoneInput}
+            placeholder="(555) 123-4567"
           />
         </div>
-
-        {mode === "sign-up" ? (
-          <div>
-            <label htmlFor="phone-confirm-password" className="block text-sm font-medium text-stone-800">
-              Confirm password
-            </label>
-            <input
-              id="phone-confirm-password"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              disabled={isSubmitting}
-              className="mt-2 w-full rounded-lg border border-[#d8c8b5] bg-white px-4 py-3 text-base text-stone-950 outline-none transition-colors placeholder:text-stone-400 focus:border-[#7a451f]"
-              placeholder="Re-enter your password"
-            />
-          </div>
-        ) : null}
-
-        {error ? <p className="text-sm leading-6 text-red-700">{error}</p> : null}
-
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!canSubmit}
-          className="w-full rounded-lg bg-[#7a451f] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#6b3c1b] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSubmitting ? "Working..." : mode === "sign-in" ? "Sign in" : "Sign up"}
-        </button>
       </div>
+
+      <div className={styles.phoneField}>
+        <label htmlFor="phone-password">Password</label>
+        <input
+          id="phone-password"
+          type="password"
+          autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          disabled={isSubmitting}
+          className={styles.phoneInput}
+          placeholder={mode === "sign-in" ? "Enter your password" : "Create a password"}
+        />
+      </div>
+
+      {mode === "sign-up" ? (
+        <div className={styles.phoneField}>
+          <label htmlFor="phone-confirm-password">Confirm password</label>
+          <input
+            id="phone-confirm-password"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            disabled={isSubmitting}
+            className={styles.phoneInput}
+            placeholder="Re-enter your password"
+          />
+        </div>
+      ) : null}
+
+      {error ? <p className={styles.phoneError}>{error}</p> : null}
+
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!canSubmit}
+        className={styles.phoneSubmit}
+      >
+        {isSubmitting ? "Working..." : mode === "sign-in" ? "Sign in" : "Create account"}
+        {!isSubmitting ? <ArrowRight size={17} aria-hidden="true" /> : null}
+      </button>
+      <p className={styles.phoneFinePrint}>
+        {mode === "sign-in"
+          ? "Your workspace remains private and available across sessions."
+          : "Phone verification may be required after account creation."}
+      </p>
     </div>
   );
 }
