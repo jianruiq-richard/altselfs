@@ -139,6 +139,16 @@ button {
   color: #8a8a93;
 }
 
+.agent-activity-text :where(
+  button:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  summary,
+  [role="button"]:not([aria-disabled="true"])
+) {
+  cursor: pointer;
+}
+
 .astromar-scrollbar {
   scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
   scrollbar-width: thin;
