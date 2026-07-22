@@ -69,6 +69,8 @@ export const clerkAuthAppearance = {
     otpCodeFieldInputContainer: {
       width: '100%',
       overflow: 'visible',
+      boxSizing: 'border-box',
+      paddingTop: '8px',
     },
     otpCodeFieldInputs: {
       display: 'flex',
