@@ -94,6 +94,51 @@ button {
     sans-serif;
 }
 
+/* Keep dense workspace metadata readable without changing the public site scale. */
+.agent-activity-text :where([class~="text-[9px]"]) {
+  font-size: 12px;
+}
+
+.agent-activity-text :where([class~="text-[10px]"]) {
+  font-size: 12px;
+}
+
+.agent-activity-text :where([class~="text-[11px]"]) {
+  font-size: 13px;
+}
+
+.agent-activity-text :where([class~="text-[12px]"]) {
+  font-size: 14px;
+}
+
+.agent-activity-text :where([class~="text-[13px]"]) {
+  font-size: 15px;
+}
+
+.agent-activity-text :where([class~="text-[14px]"]) {
+  font-size: 16px;
+}
+
+.agent-activity-text :where([class~="text-[15px]"]) {
+  font-size: 16px;
+}
+
+.agent-activity-text :where(.text-xs) {
+  font-size: 14px;
+}
+
+.agent-activity-text :where(.text-sm) {
+  font-size: 16px;
+}
+
+.agent-activity-text :where(.text-zinc-600) {
+  color: #71717a;
+}
+
+.agent-activity-text :where(.text-zinc-500) {
+  color: #8a8a93;
+}
+
 .astromar-scrollbar {
   scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
   scrollbar-width: thin;
