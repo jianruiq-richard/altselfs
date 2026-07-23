@@ -216,7 +216,7 @@ export class HermesSourceRuntime {
             currentUserMessage,
         ];
         let result;
-        const rolloutBridge = startCodexRolloutEventBridge({
+        const rolloutBridge = await startCodexRolloutEventBridge({
             codexHome,
             startedAtMs,
             emit,
@@ -1121,7 +1121,7 @@ async function extractLatestCodexOutcome(codexHome, startedAtMs) {
         .filter((file) => Boolean(file))
         .sort((a, b) => b.mtimeMs - a.mtimeMs);
     for (const candidate of candidates.slice(0, 5)) {
-        const outcome = await extractCodexOutcomeFromRollout(candidate.file);
+        const outcome = await extractCodexOutcomeFromRollout(candidate.file, startedAtMs);
         if (outcome.taskComplete || outcome.turnAborted || outcome.reply)
             return outcome;
     }
@@ -1133,7 +1133,7 @@ async function extractLatestCodexOutcome(codexHome, startedAtMs) {
         file: '',
     };
 }
-async function extractCodexOutcomeFromRollout(file) {
+export async function extractCodexOutcomeFromRollout(file, startedAtMs) {
     const outcome = {
         reply: '',
         taskComplete: false,
@@ -1148,6 +1148,8 @@ async function extractCodexOutcomeFromRollout(file) {
                 continue;
             const parsed = JSON.parse(line);
             if (!isRecord(parsed) || !isRecord(parsed.payload))
+                continue;
+            if (!isCurrentRolloutEvent(parsed, startedAtMs))
                 continue;
             if (parsed.type === 'event_msg' && parsed.payload.type === 'task_complete') {
                 const message = parsed.payload.last_agent_message;
@@ -1178,7 +1180,7 @@ async function extractCodexOutcomeFromRollout(file) {
         return outcome;
     }
 }
-function startCodexRolloutEventBridge(input) {
+export async function startCodexRolloutEventBridge(input) {
     const sessionsDir = path.join(input.codexHome, 'sessions');
     const offsets = new Map();
     const pendingText = new Map();
@@ -1188,6 +1190,14 @@ function startCodexRolloutEventBridge(input) {
     let stopped = false;
     let scanning = false;
     let timer = null;
+    const existingFiles = await listFiles(sessionsDir);
+    await Promise.all(existingFiles
+        .filter((file) => file.endsWith('.jsonl'))
+        .map(async (file) => {
+        const stat = await fs.stat(file).catch(() => undefined);
+        if (stat)
+            offsets.set(file, stat.size);
+    }));
     const scan = async () => {
         if (stopped || scanning)
             return;
@@ -1215,7 +1225,8 @@ function startCodexRolloutEventBridge(input) {
                 });
             }
             for (const candidate of candidates) {
-                const offset = offsets.get(candidate.file) ?? 0;
+                const previousOffset = offsets.get(candidate.file) ?? 0;
+                const offset = candidate.size < previousOffset ? 0 : previousOffset;
                 if (candidate.size <= offset)
                     continue;
                 const chunk = await readFileRange(candidate.file, offset, candidate.size);
@@ -1227,6 +1238,8 @@ function startCodexRolloutEventBridge(input) {
                 for (const line of lines) {
                     const parsed = parseJsonLine(line);
                     if (!parsed)
+                        continue;
+                    if (!isCurrentRolloutEvent(parsed, input.startedAtMs))
                         continue;
                     if (firstRolloutEventAtMs === null) {
                         firstRolloutEventAtMs = Date.now();
@@ -1269,6 +1282,8 @@ function startCodexRolloutEventBridge(input) {
         for (const [file, line] of pendingText.entries()) {
             const parsed = parseJsonLine(line);
             if (!parsed)
+                continue;
+            if (!isCurrentRolloutEvent(parsed, input.startedAtMs))
                 continue;
             const rolloutFile = path.relative(input.codexHome, file);
             if (firstRolloutEventAtMs === null) {
@@ -1509,6 +1524,15 @@ function parseJsonLine(line) {
     catch {
         return null;
     }
+}
+const ROLLOUT_EVENT_CLOCK_SKEW_MS = 2_000;
+function isCurrentRolloutEvent(parsed, startedAtMs) {
+    if (typeof parsed.timestamp !== 'string')
+        return false;
+    const timestampMs = Date.parse(parsed.timestamp);
+    if (!Number.isFinite(timestampMs))
+        return false;
+    return timestampMs >= startedAtMs - ROLLOUT_EVENT_CLOCK_SKEW_MS;
 }
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));

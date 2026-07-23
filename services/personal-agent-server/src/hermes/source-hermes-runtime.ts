@@ -260,7 +260,7 @@ export class HermesSourceRuntime {
     ];
 
     let result: { stdout: string; stderr: string };
-    const rolloutBridge = startCodexRolloutEventBridge({
+    const rolloutBridge = await startCodexRolloutEventBridge({
       codexHome,
       startedAtMs,
       emit,
@@ -1302,7 +1302,7 @@ async function extractLatestCodexOutcome(codexHome: string, startedAtMs: number)
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   for (const candidate of candidates.slice(0, 5)) {
-    const outcome = await extractCodexOutcomeFromRollout(candidate.file);
+    const outcome = await extractCodexOutcomeFromRollout(candidate.file, startedAtMs);
     if (outcome.taskComplete || outcome.turnAborted || outcome.reply) return outcome;
   }
   return {
@@ -1314,7 +1314,10 @@ async function extractLatestCodexOutcome(codexHome: string, startedAtMs: number)
   };
 }
 
-async function extractCodexOutcomeFromRollout(file: string): Promise<CodexRolloutOutcome> {
+export async function extractCodexOutcomeFromRollout(
+  file: string,
+  startedAtMs: number
+): Promise<CodexRolloutOutcome> {
   const outcome: CodexRolloutOutcome = {
     reply: '',
     taskComplete: false,
@@ -1329,6 +1332,7 @@ async function extractCodexOutcomeFromRollout(file: string): Promise<CodexRollou
       if (!line.trim()) continue;
       const parsed = JSON.parse(line) as unknown;
       if (!isRecord(parsed) || !isRecord(parsed.payload)) continue;
+      if (!isCurrentRolloutEvent(parsed, startedAtMs)) continue;
       if (parsed.type === 'event_msg' && parsed.payload.type === 'task_complete') {
         const message = parsed.payload.last_agent_message;
         if (typeof message === 'string' && message.trim()) outcome.reply = normalizeAssistantReply(message);
@@ -1356,7 +1360,7 @@ async function extractCodexOutcomeFromRollout(file: string): Promise<CodexRollou
   }
 }
 
-function startCodexRolloutEventBridge(input: {
+export async function startCodexRolloutEventBridge(input: {
   codexHome: string;
   startedAtMs: number;
   emit: (type: string, payload: Record<string, unknown>) => Promise<void>;
@@ -1370,6 +1374,16 @@ function startCodexRolloutEventBridge(input: {
   let stopped = false;
   let scanning = false;
   let timer: ReturnType<typeof setInterval> | null = null;
+
+  const existingFiles = await listFiles(sessionsDir);
+  await Promise.all(
+    existingFiles
+      .filter((file) => file.endsWith('.jsonl'))
+      .map(async (file) => {
+        const stat = await fs.stat(file).catch(() => undefined);
+        if (stat) offsets.set(file, stat.size);
+      })
+  );
 
   const scan = async () => {
     if (stopped || scanning) return;
@@ -1402,7 +1416,8 @@ function startCodexRolloutEventBridge(input: {
       }
 
       for (const candidate of candidates) {
-        const offset = offsets.get(candidate.file) ?? 0;
+        const previousOffset = offsets.get(candidate.file) ?? 0;
+        const offset = candidate.size < previousOffset ? 0 : previousOffset;
         if (candidate.size <= offset) continue;
         const chunk = await readFileRange(candidate.file, offset, candidate.size);
         offsets.set(candidate.file, candidate.size);
@@ -1413,6 +1428,7 @@ function startCodexRolloutEventBridge(input: {
         for (const line of lines) {
           const parsed = parseJsonLine(line);
           if (!parsed) continue;
+          if (!isCurrentRolloutEvent(parsed, input.startedAtMs)) continue;
           if (firstRolloutEventAtMs === null) {
             firstRolloutEventAtMs = Date.now();
             const payload = isRecord(parsed.payload) ? parsed.payload : {};
@@ -1453,6 +1469,7 @@ function startCodexRolloutEventBridge(input: {
     for (const [file, line] of pendingText.entries()) {
       const parsed = parseJsonLine(line);
       if (!parsed) continue;
+      if (!isCurrentRolloutEvent(parsed, input.startedAtMs)) continue;
       const rolloutFile = path.relative(input.codexHome, file);
       if (firstRolloutEventAtMs === null) {
         firstRolloutEventAtMs = Date.now();
@@ -1713,6 +1730,15 @@ function parseJsonLine(line: string) {
   } catch {
     return null;
   }
+}
+
+const ROLLOUT_EVENT_CLOCK_SKEW_MS = 2_000;
+
+function isCurrentRolloutEvent(parsed: Record<string, unknown>, startedAtMs: number) {
+  if (typeof parsed.timestamp !== 'string') return false;
+  const timestampMs = Date.parse(parsed.timestamp);
+  if (!Number.isFinite(timestampMs)) return false;
+  return timestampMs >= startedAtMs - ROLLOUT_EVENT_CLOCK_SKEW_MS;
 }
 
 function sleep(ms: number) {
