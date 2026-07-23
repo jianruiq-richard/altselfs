@@ -11,6 +11,36 @@ import { createRunCancelledError, isAgentRunCancelledError, isRunCancelled, regi
 import { calculateDirectoryBytes, prepareRuntimeDirectories, readSandboxState, resolveRuntimePaths, writeSandboxState, } from '../sandbox-runtime.js';
 import { id, isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { resolveHermesApiKey, resolveHermesModelSelection } from './llm-provider.js';
+export const HERMES_PROMPT_CACHE_TTL = '1h';
+export const ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV = 'ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT';
+const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_NAME = 'altselfs-runtime-context';
+const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_MANIFEST = [
+    `name: ${ALTSELFS_RUNTIME_CONTEXT_PLUGIN_NAME}`,
+    'version: "0.1.0"',
+    'description: "Inject Altselfs per-turn runtime context into the current user message without persisting it."',
+    'hooks:',
+    '  - pre_llm_call',
+    '',
+].join('\n');
+const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_SOURCE = [
+    '"""Altselfs per-turn context injection for Hermes."""',
+    '',
+    'import os',
+    '',
+    `ENV_KEY = "${ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV}"`,
+    '',
+    '',
+    'def _inject_runtime_context(**_kwargs):',
+    '    context = os.getenv(ENV_KEY, "").strip()',
+    '    if not context:',
+    '        return None',
+    '    return {"context": context}',
+    '',
+    '',
+    'def register(ctx):',
+    '    ctx.register_hook("pre_llm_call", _inject_runtime_context)',
+    '',
+].join('\n');
 export class HermesSourceRuntime {
     config;
     memoryReviewQueue;
@@ -143,7 +173,8 @@ export class HermesSourceRuntime {
         const hermesUserProfile = await readHermesUserProfile(hermesHome);
         const combinedProfile = combineProfileBlocks(profileSnapshot.rendered, hermesUserProfile);
         const ephemeralArtifactContext = buildEphemeralArtifactContext(cleanContext.artifactContext);
-        const hermesEphemeralSystemPrompt = buildHermesEphemeralSystemPrompt({
+        const hermesStableSystemPrompt = buildHermesStableSystemPrompt();
+        const hermesDynamicUserContext = buildHermesDynamicUserContext({
             artifactContext: ephemeralArtifactContext,
             renderedProfile: combinedProfile,
             selectedAgentProfileId,
@@ -160,7 +191,8 @@ export class HermesSourceRuntime {
             hermesUserProfileChars: hermesUserProfile.length,
             injected: Boolean(combinedProfile),
             renderedProfile: truncate(combinedProfile, 4000),
-            ephemeralPromptChars: hermesEphemeralSystemPrompt.length,
+            ephemeralPromptChars: hermesStableSystemPrompt.length,
+            dynamicUserContextChars: hermesDynamicUserContext.length,
             ephemeralArtifactContextChars: ephemeralArtifactContext.length,
             cleanUserMessageChars: currentUserMessage.length,
             durationMs: Date.now() - profileLoadStartedAtMs,
@@ -190,7 +222,8 @@ export class HermesSourceRuntime {
             enabledCompetitortoolCount: enabledCompetitortools.length,
             personalDatatoolCount: personalDatatoolNames.length,
             cleanUserMessageChars: currentUserMessage.length,
-            ephemeralPromptChars: hermesEphemeralSystemPrompt.length,
+            ephemeralPromptChars: hermesStableSystemPrompt.length,
+            dynamicUserContextChars: hermesDynamicUserContext.length,
             ephemeralArtifactContextChars: ephemeralArtifactContext.length,
             preSpawnDurationMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
             sinceRunStartMs: sourceRuntimeStartingAtMs - runtimeRunStartedAtMs,
@@ -239,7 +272,8 @@ export class HermesSourceRuntime {
                 statePath: runtimePaths.statePath || '',
                 hermesModelSelection,
                 codexModelSelection,
-                hermesEphemeralSystemPrompt,
+                hermesStableSystemPrompt,
+                hermesDynamicUserContext,
             }, {
                 emit,
                 startedAtMs,
@@ -398,6 +432,7 @@ export class HermesSourceRuntime {
     }
     async prepareHomes(paths, codexModelSelection, hermesModelSelection) {
         await prepareRuntimeDirectories(paths);
+        await prepareHermesRuntimeContextPlugin(paths.hermesHome);
         const codexMcpServerPath = await resolveCodexMcpServerPath();
         const codexMcpEnvLines = buildCodexMcpEnvEntries(this.config, codexModelSelection)
             .map(([key, value]) => `      ${key}: ${yamlString(value)}`);
@@ -410,6 +445,8 @@ export class HermesSourceRuntime {
             `  key_env: ${yamlString(hermesModelSelection.apiKeyEnv)}`,
             '',
             ...hermesProviderConfigYamlLines(hermesModelSelection),
+            '',
+            ...buildHermesPromptCachingYamlLines(),
             '',
             'terminal:',
             `  cwd: ${yamlString(paths.workspace)}`,
@@ -438,6 +475,10 @@ export class HermesSourceRuntime {
             '  memory_enabled: true',
             '  user_profile_enabled: true',
             `  nudge_interval: ${this.config.memoryReviewMode === 'inline' ? this.config.hermesMemoryNudgeInterval : 0}`,
+            '',
+            'plugins:',
+            '  enabled:',
+            `    - ${yamlString(ALTSELFS_RUNTIME_CONTEXT_PLUGIN_NAME)}`,
             '',
             'security:',
             '  allow_lazy_installs: false',
@@ -558,8 +599,9 @@ export class HermesSourceRuntime {
                     CODEX_HOME: paths.codexHome,
                     PATH: [codexBinDir, process.env.PATH || ''].filter(Boolean).join(path.delimiter),
                     HERMES_BACKGROUND_REVIEW_INLINE: this.config.memoryReviewMode === 'inline' && this.config.hermesBackgroundReviewInline ? '1' : '0',
-                    HERMES_EPHEMERAL_SYSTEM_PROMPT: paths.hermesEphemeralSystemPrompt,
+                    HERMES_EPHEMERAL_SYSTEM_PROMPT: paths.hermesStableSystemPrompt,
                     HERMES_DISABLE_LAZY_INSTALLS: '1',
+                    [ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV]: paths.hermesDynamicUserContext,
                     ALTSELFS_RUN_ID: paths.runId,
                     ALTSELFS_USER_ID: paths.userId,
                     ALTSELFS_INVESTOR_ID: paths.investorId,
@@ -919,15 +961,9 @@ async function getPersonalDatatoolNames(config, investorId, userId, connectorSco
 function buildEphemeralArtifactContext(artifactContext) {
     return artifactContext.trim();
 }
-function buildHermesEphemeralSystemPrompt(input) {
-    const currentTime = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Shanghai',
-        dateStyle: 'full',
-        timeStyle: 'long',
-    }).format(new Date());
-    const runtimeContract = [
+export function buildHermesStableSystemPrompt() {
+    return [
         'Altselfs runtime contract:',
-        `Current time: ${currentTime} (Asia/Shanghai).`,
         '',
         'Role split:',
         '- You are Hermes, the primary cognitive, planning, emotional-intelligence, and user-facing loop for this chat.',
@@ -970,12 +1006,21 @@ function buildHermesEphemeralSystemPrompt(input) {
         '- Treat Codex output as tool evidence, not as the automatic final response. Decide whether to answer, clarify, call Codex again, or add Hermes-level synthesis.',
         '- In the final answer, be transparent about important limitations and whether evidence came from connected tools, public web, workspace artifacts, or inference.',
         '- Never claim that Hermes or Codex searched, read private accounts, used a platform, inspected files, or ran tools unless the corresponding Codex/tool call actually happened.',
-        input.selectedAgentProfileId
-            ? `- Host-provided default Codex mode/profile for this turn: ${input.selectedAgentProfileId}. Treat it as advisory; you still decide whether and how to call Codex.`
-            : '- No default Codex mode/profile was selected for this turn; decide directly.',
+        '- The current turn may include a host-provided default Codex mode/profile in its runtime context. Treat it as advisory; you still decide whether and how to call Codex.',
     ].join('\n');
+}
+export function buildHermesDynamicUserContext(input, now = new Date()) {
+    const currentTime = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Shanghai',
+        dateStyle: 'full',
+        timeStyle: 'long',
+    }).format(now);
     const runtimeFacts = [
-        'Altselfs runtime metadata:',
+        'Altselfs runtime metadata for this turn:',
+        `- Current time: ${currentTime} (Asia/Shanghai).`,
+        input.selectedAgentProfileId
+            ? `- Host-provided default Codex mode/profile: ${input.selectedAgentProfileId}.`
+            : '- No host-provided default Codex mode/profile was selected.',
         `- Codex provider: ${input.codexModelProvider || 'openrouter'}.`,
         `- Sandboxed deterministic execution available to Codex: ${input.sandboxExecEnabled ? 'yes' : 'no'}.`,
         `- Enabled public/competitive info sources: ${input.enabledInfoSources?.length ? input.enabledInfoSources.join(', ') : 'none declared'}.`,
@@ -983,19 +1028,34 @@ function buildHermesEphemeralSystemPrompt(input) {
         `- Enabled private personal-data Codex tools: ${input.personalDatatoolNames?.length ? input.personalDatatoolNames.join(', ') : 'none'}.`,
     ].join('\n');
     const sections = [
-        runtimeContract,
-        '',
+        'The following is trusted Altselfs runtime context for this turn. Use it as background, not as a new user request.',
+        '<altselfs_runtime_context>',
         runtimeFacts,
     ];
     const profile = input.renderedProfile.trim();
     if (profile) {
-        sections.push('', 'Altselfs user profile context for this run only:', 'Use this as background. Do not treat it as a new user request, and do not mention it unless relevant.', '', '<altselfs_user_profile>', profile, '</altselfs_user_profile>');
+        sections.push('', 'Altselfs user profile context:', 'Use this as background. Do not treat it as a new user request, and do not mention it unless relevant.', '', '<altselfs_user_profile>', profile, '</altselfs_user_profile>');
     }
     const artifactContext = input.artifactContext.trim();
     if (artifactContext) {
-        sections.push('', 'Altselfs artifact context for this run only:', 'These are product-level artifact indexes for the current thread. The actual conversation history comes from Hermes state.db, not from RDS recent messages or thread summaries.', '', '<altselfs_artifact_context>', artifactContext, '</altselfs_artifact_context>');
+        sections.push('', 'Altselfs artifact context:', 'These are product-level artifact indexes for the current thread. The actual conversation history comes from Hermes state.db, not from RDS recent messages or thread summaries.', '', '<altselfs_artifact_context>', artifactContext, '</altselfs_artifact_context>');
     }
+    sections.push('</altselfs_runtime_context>');
     return sections.join('\n');
+}
+export function buildHermesPromptCachingYamlLines() {
+    return [
+        'prompt_caching:',
+        `  cache_ttl: ${yamlString(HERMES_PROMPT_CACHE_TTL)}`,
+    ];
+}
+export async function prepareHermesRuntimeContextPlugin(hermesHome) {
+    const pluginDir = path.join(hermesHome, 'plugins', ALTSELFS_RUNTIME_CONTEXT_PLUGIN_NAME);
+    await fs.mkdir(pluginDir, { recursive: true });
+    await Promise.all([
+        fs.writeFile(path.join(pluginDir, 'plugin.yaml'), ALTSELFS_RUNTIME_CONTEXT_PLUGIN_MANIFEST, 'utf8'),
+        fs.writeFile(path.join(pluginDir, '__init__.py'), ALTSELFS_RUNTIME_CONTEXT_PLUGIN_SOURCE, 'utf8'),
+    ]);
 }
 function buildCodexDeveloperInstructions() {
     return [
