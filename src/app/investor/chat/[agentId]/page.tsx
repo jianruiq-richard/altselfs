@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent as ReactDragEvent } from 'react';
 import Link from 'next/link';
 import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -576,6 +577,10 @@ function attachmentUploadStatusClass(attachment: PendingAttachment) {
   if (attachment.uploadStatus === 'uploaded') return 'text-emerald-600';
   if (attachment.uploadStatus === 'error') return 'text-red-600';
   return 'text-slate-400';
+}
+
+function dragEventHasFiles(event: ReactDragEvent<HTMLElement>) {
+  return Array.from(event.dataTransfer.types || []).includes('Files');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1789,6 +1794,7 @@ export default function InvestorAgentChatPage() {
   const [persistedBriefing, setPersistedBriefing] = useState<PersistedBriefing | null>(null);
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [attachmentDragActive, setAttachmentDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1823,6 +1829,7 @@ export default function InvestorAgentChatPage() {
   const suppressNextAutoScrollRef = useRef(false);
   const codexEventIndexRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentDragDepthRef = useRef(0);
   const connectorSelectionInitializedRef = useRef(false);
   const initialLoadStartedRef = useRef(false);
 
@@ -1848,6 +1855,7 @@ export default function InvestorAgentChatPage() {
     hermesModelOptions[0];
   const attachmentUploadBusy = attachments.some((attachment) => attachment.uploadStatus === 'queued' || attachment.uploadStatus === 'uploading');
   const attachmentUploadFailed = attachments.some((attachment) => attachment.uploadStatus === 'error');
+  const canAttachFiles = isExecutive && !sending && !recoveringRunState && !attachmentUploadBusy;
   const showBlockingConversationLoading = loading && messages.length === 0 && !sending;
 
   useEffect(() => {
@@ -2607,7 +2615,7 @@ export default function InvestorAgentChatPage() {
     }
   }, [handleSessionExpired, threadId]);
 
-  const handleFilesSelected = (files: FileList | null) => {
+  const handleFilesSelected = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
     const selectedFiles = Array.from(files);
     const oversized = selectedFiles.find((file) => file.size > MAX_ATTACHMENT_FILE_BYTES);
@@ -2625,7 +2633,47 @@ export default function InvestorAgentChatPage() {
     setAttachments((prev) => [...prev, ...pending].slice(0, MAX_ATTACHMENT_FILES));
     void uploadPendingAttachments(pending);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  }, [attachments.length, uploadPendingAttachments]);
+
+  const resetAttachmentDrag = useCallback(() => {
+    attachmentDragDepthRef.current = 0;
+    setAttachmentDragActive(false);
+  }, []);
+
+  const handleAttachmentDragEnter = useCallback((event: ReactDragEvent<HTMLFormElement>) => {
+    if (!dragEventHasFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    attachmentDragDepthRef.current += 1;
+    setAttachmentDragActive(true);
+  }, []);
+
+  const handleAttachmentDragOver = useCallback((event: ReactDragEvent<HTMLFormElement>) => {
+    if (!dragEventHasFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = canAttachFiles ? 'copy' : 'none';
+  }, [canAttachFiles]);
+
+  const handleAttachmentDragLeave = useCallback((event: ReactDragEvent<HTMLFormElement>) => {
+    if (!dragEventHasFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    attachmentDragDepthRef.current = Math.max(0, attachmentDragDepthRef.current - 1);
+    if (attachmentDragDepthRef.current === 0) setAttachmentDragActive(false);
+  }, []);
+
+  const handleAttachmentDrop = useCallback((event: ReactDragEvent<HTMLFormElement>) => {
+    if (!dragEventHasFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resetAttachmentDrag();
+    if (!canAttachFiles) {
+      setError(attachmentUploadBusy ? 'Please wait for the current upload to finish.' : 'Please wait for the current response to finish before attaching files.');
+      return;
+    }
+    handleFilesSelected(event.dataTransfer.files);
+  }, [attachmentUploadBusy, canAttachFiles, handleFilesSelected, resetAttachmentDrag]);
 
   const removeAttachment = (id: string) => {
     setAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
@@ -3206,7 +3254,22 @@ export default function InvestorAgentChatPage() {
               {suggestedQuestions.map((question) => <button key={question} type="button" onClick={() => setInput(question)} disabled={sending} className="h-7 shrink-0 rounded-md border border-white/[0.09] px-2.5 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50">{question}</button>)}
             </div>
           ) : null}
-          <form onSubmit={(event) => { event.preventDefault(); void handleSend(); }} className="mx-auto w-full max-w-[820px] rounded-[8px] border border-white/[0.16] bg-[linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025)),#111214] shadow-[0_20px_60px_rgba(0,0,0,.34),inset_0_1px_0_rgba(255,255,255,.06)]">
+          <form
+            onSubmit={(event) => { event.preventDefault(); void handleSend(); }}
+            onDragEnter={handleAttachmentDragEnter}
+            onDragOver={handleAttachmentDragOver}
+            onDragLeave={handleAttachmentDragLeave}
+            onDrop={handleAttachmentDrop}
+            className={`relative mx-auto w-full max-w-[820px] overflow-hidden rounded-[8px] border bg-[linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025)),#111214] shadow-[0_20px_60px_rgba(0,0,0,.34),inset_0_1px_0_rgba(255,255,255,.06)] transition-[border-color,box-shadow,background-color] ${attachmentDragActive ? 'border-[#8eb3ff]/50 shadow-[0_20px_70px_rgba(0,0,0,.38),0_0_0_1px_rgba(142,179,255,.15),inset_0_1px_0_rgba(255,255,255,.08)]' : 'border-white/[0.16]'}`}
+          >
+            {attachmentDragActive ? (
+              <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[8px] border border-[#8eb3ff]/25 bg-[#0b0d10]/85 backdrop-blur-sm">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.06] px-3 py-2 text-xs font-semibold text-zinc-100 shadow-[0_18px_45px_rgba(0,0,0,.35)]">
+                  <Paperclip className="h-4 w-4 text-[#8eb3ff]" />
+                  Drop files to upload
+                </div>
+              </div>
+            ) : null}
             <div className="astromar-scrollbar flex items-center gap-1.5 overflow-x-auto px-2.5 pt-2">
               {connectedConnectors.map((connector) => {
                 const selected = selectedConnectorKeys.includes(connector.key);
@@ -3232,7 +3295,7 @@ export default function InvestorAgentChatPage() {
             <div className="flex items-center justify-between gap-3 px-2.5 pb-2.5">
               <div className="flex items-center gap-1">
                 <input ref={fileInputRef} type="file" multiple accept={attachmentAccept} className="hidden" onChange={(event) => handleFilesSelected(event.target.files)} />
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending || recoveringRunState || attachmentUploadBusy} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-50" title="Attach files"><Paperclip className="h-3.5 w-3.5" />Attach</button>
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!canAttachFiles} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-50" title="Attach files"><Paperclip className="h-3.5 w-3.5" />Attach</button>
                 <span className="hidden items-center gap-1.5 rounded-md border border-white/[0.09] px-2 py-1.5 text-[10px] text-zinc-500 sm:inline-flex"><Check className="h-3.5 w-3.5" />Think</span>
               </div>
               {sending || recoveringRunState ? (
