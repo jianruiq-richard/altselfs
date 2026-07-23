@@ -1,7 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ServerConfig } from './config.js';
+import { settleMemoryReviewCredits } from './credit-settlement.js';
 import { LocalProfileStore, type UserProfileStore } from './profile-store.js';
+import { buildMemoryReviewUsage, type AgentRunUsage } from './usage-meter.js';
 import { id, isRecord, nowIso, truncate } from './util.js';
 import {
   callHermesText,
@@ -12,10 +14,21 @@ import {
 } from './hermes/llm-provider.js';
 
 export type MemoryReviewJobStatus = 'queued' | 'running' | 'success' | 'error';
+export type MemoryReviewBillingStatus =
+  | 'waiting'
+  | 'pending'
+  | 'processing'
+  | 'billed'
+  | 'observed'
+  | 'skipped'
+  | 'error';
 
 export type MemoryReviewJob = {
   id: string;
   status: MemoryReviewJobStatus;
+  runId: string;
+  investorId: string;
+  hermesModel: string;
   userId: string;
   threadId: string;
   userMessage: string;
@@ -23,6 +36,12 @@ export type MemoryReviewJob = {
   hermesHome: string;
   workspace: string;
   attempts: number;
+  usage?: AgentRunUsage;
+  billingStatus: MemoryReviewBillingStatus;
+  billingAttempts: number;
+  billedCredits: number;
+  billingError?: string;
+  billingUpdatedAt?: string;
   error?: string;
   stdout?: string;
   stderr?: string;
@@ -38,14 +57,33 @@ type JobDatabase = {
 
 export type EnqueueMemoryReviewJobInput = Omit<
   MemoryReviewJob,
-  'id' | 'status' | 'attempts' | 'createdAt' | 'updatedAt'
+  | 'id'
+  | 'status'
+  | 'attempts'
+  | 'usage'
+  | 'billingStatus'
+  | 'billingAttempts'
+  | 'billedCredits'
+  | 'billingError'
+  | 'billingUpdatedAt'
+  | 'createdAt'
+  | 'updatedAt'
 >;
 
 export interface MemoryReviewJobStore {
   enqueue(input: EnqueueMemoryReviewJobInput): Promise<MemoryReviewJob>;
   claimNext(): Promise<MemoryReviewJob | null>;
-  complete(jobId: string, output: { stdout: string; stderr: string }): Promise<MemoryReviewJob | null>;
+  complete(
+    jobId: string,
+    output: { stdout: string; stderr: string; usage?: AgentRunUsage },
+  ): Promise<MemoryReviewJob | null>;
   fail(jobId: string, error: unknown, output?: { stdout?: string; stderr?: string }): Promise<MemoryReviewJob | null>;
+  claimNextBilling(): Promise<MemoryReviewJob | null>;
+  completeBilling(
+    jobId: string,
+    output: { status: 'billed' | 'observed'; billedCredits: number },
+  ): Promise<MemoryReviewJob | null>;
+  retryBilling(jobId: string, error: unknown): Promise<MemoryReviewJob | null>;
   listRecent(limit?: number): Promise<MemoryReviewJob[]>;
 }
 
@@ -63,6 +101,9 @@ export class FileMemoryReviewQueue implements MemoryReviewJobStore {
         id: id('memrev'),
         status: 'queued',
         attempts: 0,
+        billingStatus: 'waiting',
+        billingAttempts: 0,
+        billedCredits: 0,
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -87,11 +128,14 @@ export class FileMemoryReviewQueue implements MemoryReviewJobStore {
     });
   }
 
-  async complete(jobId: string, output: { stdout: string; stderr: string }) {
+  async complete(jobId: string, output: { stdout: string; stderr: string; usage?: AgentRunUsage }) {
     return this.update(jobId, (job) => {
       job.status = 'success';
       job.stdout = truncate(output.stdout, 8000);
       job.stderr = truncate(output.stderr, 8000);
+      job.usage = output.usage;
+      job.billingStatus = output.usage ? 'pending' : 'skipped';
+      job.billingUpdatedAt = nowIso();
       job.completedAt = nowIso();
     });
   }
@@ -103,6 +147,49 @@ export class FileMemoryReviewQueue implements MemoryReviewJobStore {
       job.stdout = truncate(output?.stdout || job.stdout || '', 8000);
       job.stderr = truncate(output?.stderr || job.stderr || '', 8000);
       job.completedAt = nowIso();
+    });
+  }
+
+  async claimNextBilling() {
+    return this.withLock(async () => {
+      const database = await this.readDatabase();
+      const job = database.jobs.find((item) => (
+        item.status === 'success' &&
+        item.usage &&
+        (item.billingStatus === 'pending' || item.billingStatus === 'processing') &&
+        (item.billingAttempts || 0) < 20 &&
+        (
+          (item.billingAttempts || 0) === 0 ||
+          Date.now() - Date.parse(item.billingUpdatedAt || item.updatedAt) >= 30_000
+        )
+      ));
+      if (!job) return null;
+      job.billingStatus = 'processing';
+      job.billingAttempts = (job.billingAttempts || 0) + 1;
+      job.billingUpdatedAt = nowIso();
+      job.updatedAt = nowIso();
+      await this.writeDatabase(database);
+      return { ...job };
+    });
+  }
+
+  async completeBilling(
+    jobId: string,
+    output: { status: 'billed' | 'observed'; billedCredits: number },
+  ) {
+    return this.update(jobId, (job) => {
+      job.billingStatus = output.status;
+      job.billedCredits = Math.max(0, Math.round(output.billedCredits));
+      job.billingError = undefined;
+      job.billingUpdatedAt = nowIso();
+    });
+  }
+
+  async retryBilling(jobId: string, error: unknown) {
+    return this.update(jobId, (job) => {
+      job.billingError = error instanceof Error ? error.message : String(error);
+      job.billingStatus = job.billingAttempts >= 20 ? 'error' : 'pending';
+      job.billingUpdatedAt = nowIso();
     });
   }
 
@@ -130,7 +217,17 @@ export class FileMemoryReviewQueue implements MemoryReviewJobStore {
       if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { jobs?: unknown }).jobs)) {
         return { jobs: [] };
       }
-      return parsed as JobDatabase;
+      const database = parsed as JobDatabase;
+      database.jobs = database.jobs.map((job) => ({
+        ...job,
+        runId: job.runId || '',
+        investorId: job.investorId || job.userId,
+        hermesModel: job.hermesModel || '',
+        billingStatus: job.billingStatus || 'skipped',
+        billingAttempts: job.billingAttempts || 0,
+        billedCredits: job.billedCredits || 0,
+      }));
+      return database;
     } catch {
       return { jobs: [] };
     }
@@ -178,16 +275,45 @@ export class MemoryReviewWorker {
     if (this.processing) return;
     this.processing = true;
     try {
-      const job = await this.queue.claimNext();
-      if (!job) return;
-      console.log(`[memory-review-worker] started job=${job.id} user=${job.userId} thread=${job.threadId}`);
-      try {
-        const output = await this.runReview(job);
-        await this.queue.complete(job.id, output);
-        console.log(`[memory-review-worker] completed job=${job.id}`);
-      } catch (error) {
-        await this.queue.fail(job.id, error);
-        console.warn(`[memory-review-worker] failed job=${job.id}: ${error instanceof Error ? error.message : String(error)}`);
+      const reviewJob = await this.queue.claimNext();
+      if (reviewJob) {
+        console.log(`[memory-review-worker] started job=${reviewJob.id} user=${reviewJob.userId} thread=${reviewJob.threadId}`);
+        try {
+          const output = await this.runReview(reviewJob);
+          await this.queue.complete(reviewJob.id, output);
+          console.log(`[memory-review-worker] completed job=${reviewJob.id}`);
+        } catch (error) {
+          await this.queue.fail(reviewJob.id, error);
+          console.warn(`[memory-review-worker] failed job=${reviewJob.id}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      const billingJob = await this.queue.claimNextBilling();
+      if (billingJob?.usage) {
+        try {
+          const settled = await settleMemoryReviewCredits(this.config, {
+            jobId: billingJob.id,
+            sourceRunId: billingJob.runId,
+            usage: billingJob.usage,
+          });
+          if (!settled.settled) {
+            throw new Error(`Memory review settlement deferred: ${settled.reason}`);
+          }
+          await this.queue.completeBilling(billingJob.id, {
+            status: settled.mode === 'ENFORCE' ? 'billed' : 'observed',
+            billedCredits: settled.billedCredits,
+          });
+          console.log(
+            `[memory-review-worker] billed job=${billingJob.id} run=${billingJob.runId} credits=${settled.billedCredits}`,
+          );
+        } catch (error) {
+          await this.queue.retryBilling(billingJob.id, error);
+          console.warn(
+            `[memory-review-worker] billing deferred job=${billingJob.id}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
       }
     } finally {
       this.processing = false;
@@ -195,16 +321,19 @@ export class MemoryReviewWorker {
   }
 
   private async runReview(job: MemoryReviewJob) {
-    const selection = resolveHermesModelSelection(this.config);
+    const selection = resolveHermesModelSelection(this.config, job.hermesModel);
     const apiKey = resolveHermesApiKey(selection);
-    const result = apiKey
+    const reviewed = apiKey
       ? await this.reviewWithHermesModel(job, selection)
       : {
-          memories: [],
-          skipReason: `${selection.apiKeyEnv} is missing; skipped LLM memory review.`,
+          result: {
+            memories: [],
+            skipReason: `${selection.apiKeyEnv} is missing; skipped LLM memory review.`,
+          },
+          usage: undefined,
         };
     let savedCount = 0;
-    for (const memory of result.memories) {
+    for (const memory of reviewed.result.memories) {
       const saved = await this.profileStore.saveReviewedUserProfile(
         job.userId,
         memory.content,
@@ -218,17 +347,18 @@ export class MemoryReviewWorker {
         {
           mode: apiKey ? 'llm' : 'skipped',
           savedCount,
-          skipReason: result.skipReason,
-          memories: result.memories,
+          skipReason: reviewed.result.skipReason,
+          memories: reviewed.result.memories,
         },
         null,
         2
       ),
       stderr: '',
+      usage: reviewed.usage,
     };
   }
 
-  private async reviewWithHermesModel(job: MemoryReviewJob, selection: HermesModelSelection): Promise<MemoryReviewResult> {
+  private async reviewWithHermesModel(job: MemoryReviewJob, selection: HermesModelSelection) {
     const profile = await this.profileStore.getSnapshot(job.userId);
     const messages: HermesTextMessage[] = [
       {
@@ -263,7 +393,18 @@ export class MemoryReviewWorker {
         maxTokens: 1200,
         signal: controller.signal,
       });
-      return normalizeMemoryReviewResult(parseReviewJson(completion.content));
+      return {
+        result: normalizeMemoryReviewResult(parseReviewJson(completion.content)),
+        usage: buildMemoryReviewUsage({
+          config: this.config,
+          sourceRunId: job.runId,
+          memoryReviewJobId: job.id,
+          taskLabel: job.userMessage,
+          hermesModel: selection.model,
+          hermesProvider: selection.provider,
+          rawCompletion: completion.rawCompletion,
+        }),
+      };
     } catch (error) {
       throw new Error(`Hermes memory review failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {

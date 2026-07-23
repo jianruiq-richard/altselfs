@@ -100,6 +100,7 @@ export class HermesSourceRuntime {
       : id('run');
     const runtimePaths = resolveRuntimePaths(this.config, request, runId);
     const { hermesHome, codexHome, workspace } = runtimePaths;
+    const hermesUsageLogPath = path.join(workspace, '.altselfs-runtime', `hermes-usage-${runId}.jsonl`);
     const selectedCodexModel = resolveSelectedCodexModel(this.config, request);
     const codexModelSelection = resolveCodexModelSelection(this.config, selectedCodexModel);
     const hermesModelSelection = resolveHermesModelSelection(this.config, request.metadata?.hermesModel);
@@ -132,6 +133,7 @@ export class HermesSourceRuntime {
 
     const prepareHomesStartedAtMs = Date.now();
     await this.prepareHomes(runtimePaths, codexModelSelection, hermesModelSelection);
+    await fs.mkdir(path.dirname(hermesUsageLogPath), { recursive: true });
     await emit('hermes.runtime.prepare_homes_timing', {
       durationMs: Date.now() - prepareHomesStartedAtMs,
       sinceRunStartMs: Date.now() - runtimeRunStartedAtMs,
@@ -325,6 +327,7 @@ export class HermesSourceRuntime {
         codexModelSelection,
         hermesStableSystemPrompt,
         hermesDynamicUserContext,
+        hermesUsageLogPath,
       }, {
         emit,
         startedAtMs,
@@ -411,7 +414,10 @@ export class HermesSourceRuntime {
     const reply = appendGeneratedArtifactLinks(baseReply, generatedArtifacts.artifacts);
     const usage = await buildAgentRunUsage({
       config: this.config,
+      runId,
+      taskLabel: currentUserMessage,
       hermesHome,
+      hermesUsageLogPath,
       hermesSessionId: sessionId || previousHermesSessionId || null,
       hermesBefore: hermesUsageBefore,
       hermesModel: hermesModelSelection.model,
@@ -462,6 +468,9 @@ export class HermesSourceRuntime {
           ? request.metadata.currentUserMessage.trim()
           : request.message;
       const job = await this.memoryReviewQueue.enqueue({
+        runId,
+        investorId,
+        hermesModel: hermesModelSelection.model,
         userId: request.userId,
         threadId: request.threadId || 'default',
         userMessage: reviewUserMessage,
@@ -713,6 +722,7 @@ export class HermesSourceRuntime {
       codexModelSelection: CodexModelSelection;
       hermesStableSystemPrompt: string;
       hermesDynamicUserContext: string;
+      hermesUsageLogPath: string;
     },
     timing?: {
       emit: (type: string, payload: Record<string, unknown>) => Promise<void>;
@@ -761,6 +771,7 @@ export class HermesSourceRuntime {
           ALTSELFS_CODEX_MODEL: paths.codexModelSelection.model || '',
           ALTSELFS_CODEX_MODEL_PROVIDER: paths.codexModelSelection.provider || '',
           ALTSELFS_HERMES_TIMING: '1',
+          ALTSELFS_HERMES_USAGE_LOG_PATH: paths.hermesUsageLogPath,
           ALTSELFS_CODEX_TIMING: '1',
           ALTSELFS_CODEX_DISABLE_LOCAL_ENVIRONMENT: this.config.disableLocalEnvironmentForGeneral ? '1' : '0',
           ALTSELFS_CODEX_PERSONALITY: 'pragmatic',

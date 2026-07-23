@@ -109,7 +109,8 @@ export type ServerConfig = {
   hermesApiyiInputRate: number;
   hermesApiyiOutputRate: number;
   hermesApiyiCacheReadRate: number;
-  hermesApiyiCacheWriteRate: number;
+  hermesApiyiCacheWrite5mRate: number;
+  hermesApiyiCacheWrite1hRate: number;
   hermesApiyiCostMultiplier: number;
   codexUsageUncachedInputRate: number;
   codexUsageCachedInputRate: number;
@@ -526,7 +527,8 @@ export function loadConfig(): ServerConfig {
     hermesApiyiInputRate: readFloatEnv('HERMES_APIYI_INPUT_RATE', 3),
     hermesApiyiOutputRate: readFloatEnv('HERMES_APIYI_OUTPUT_RATE', 15),
     hermesApiyiCacheReadRate: readFloatEnv('HERMES_APIYI_CACHE_READ_RATE', 0.3),
-    hermesApiyiCacheWriteRate: readFloatEnv('HERMES_APIYI_CACHE_WRITE_RATE', 6),
+    hermesApiyiCacheWrite5mRate: readFloatEnv('HERMES_APIYI_CACHE_WRITE_5M_RATE', 3.75),
+    hermesApiyiCacheWrite1hRate: readFloatEnv('HERMES_APIYI_CACHE_WRITE_1H_RATE', 6),
     hermesApiyiCostMultiplier: readFloatEnv('HERMES_APIYI_COST_MULTIPLIER', 0.95),
     codexUsageUncachedInputRate: readFloatEnv('CODEX_USAGE_UNCACHED_INPUT_RATE', 125),
     codexUsageCachedInputRate: readFloatEnv('CODEX_USAGE_CACHED_INPUT_RATE', 12.5),

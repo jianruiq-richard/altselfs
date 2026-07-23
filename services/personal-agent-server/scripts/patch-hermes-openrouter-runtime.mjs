@@ -9,6 +9,8 @@ const codexRuntimePath = path.join(hermesSourceRoot, "agent", "codex_runtime.py"
 const codexAppServerSessionPath = path.join(hermesSourceRoot, "agent", "transports", "codex_app_server_session.py");
 const runAgentPath = path.join(hermesSourceRoot, "run_agent.py");
 const backgroundReviewPath = path.join(hermesSourceRoot, "agent", "background_review.py");
+const usagePricingPath = path.join(hermesSourceRoot, "agent", "usage_pricing.py");
+const conversationLoopPath = path.join(hermesSourceRoot, "agent", "conversation_loop.py");
 
 const before = `    # {"openai", "openai-codex"}. Default is unchanged.
     "codex_app_server",
@@ -224,6 +226,136 @@ if (backgroundReview.includes(reviewRuntimeAfter)) {
   writeFileSync(backgroundReviewPath, backgroundReview, "utf8");
   console.log("Hermes OpenRouter background review runtime patch applied.");
   console.log(backgroundReviewPath);
+}
+
+let usagePricing = readFileSync(usagePricingPath, "utf8");
+const usageFieldsBefore = `    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    reasoning_tokens: int = 0
+`;
+const usageFieldsAfter = `    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_write_5m_tokens: int = 0
+    cache_write_1h_tokens: int = 0
+    reasoning_tokens: int = 0
+`;
+const anthropicUsageBefore = `    if mode == "anthropic_messages" or provider_name == "anthropic":
+        input_tokens = _to_int(getattr(response_usage, "input_tokens", 0))
+        output_tokens = _to_int(getattr(response_usage, "output_tokens", 0))
+        cache_read_tokens = _to_int(getattr(response_usage, "cache_read_input_tokens", 0))
+        cache_write_tokens = _to_int(getattr(response_usage, "cache_creation_input_tokens", 0))
+`;
+const anthropicUsageAfter = `    cache_write_5m_tokens = 0
+    cache_write_1h_tokens = 0
+
+    if mode == "anthropic_messages" or provider_name == "anthropic":
+        input_tokens = _to_int(getattr(response_usage, "input_tokens", 0))
+        output_tokens = _to_int(getattr(response_usage, "output_tokens", 0))
+        cache_read_tokens = _to_int(getattr(response_usage, "cache_read_input_tokens", 0))
+        cache_write_tokens = _to_int(getattr(response_usage, "cache_creation_input_tokens", 0))
+        cache_creation = getattr(response_usage, "cache_creation", None)
+        if cache_creation:
+            if isinstance(cache_creation, dict):
+                cache_write_5m_raw = cache_creation.get("ephemeral_5m_input_tokens", 0)
+                cache_write_1h_raw = cache_creation.get("ephemeral_1h_input_tokens", 0)
+            else:
+                cache_write_5m_raw = getattr(
+                    cache_creation, "ephemeral_5m_input_tokens", 0
+                )
+                cache_write_1h_raw = getattr(
+                    cache_creation, "ephemeral_1h_input_tokens", 0
+                )
+            cache_write_5m_tokens = _to_int(
+                cache_write_5m_raw
+            )
+            cache_write_1h_tokens = _to_int(
+                cache_write_1h_raw
+            )
+            cache_write_tokens = max(
+                cache_write_tokens,
+                cache_write_5m_tokens + cache_write_1h_tokens,
+            )
+`;
+const usageReturnBefore = `        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+        reasoning_tokens=reasoning_tokens,
+`;
+const usageReturnAfter = `        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+        cache_write_5m_tokens=cache_write_5m_tokens,
+        cache_write_1h_tokens=cache_write_1h_tokens,
+        reasoning_tokens=reasoning_tokens,
+`;
+
+if (usagePricing.includes(usageFieldsAfter)) {
+  console.log("Hermes cache TTL usage fields patch already applied.");
+  console.log(usagePricingPath);
+} else if (
+  !usagePricing.includes(usageFieldsBefore) ||
+  !usagePricing.includes(anthropicUsageBefore) ||
+  !usagePricing.includes(usageReturnBefore)
+) {
+  console.error("Could not find the Hermes usage normalization blocks to patch.");
+  console.error(usagePricingPath);
+  process.exit(1);
+} else {
+  usagePricing = usagePricing
+    .replace(usageFieldsBefore, usageFieldsAfter)
+    .replace(anthropicUsageBefore, anthropicUsageAfter)
+    .replace(usageReturnBefore, usageReturnAfter);
+  writeFileSync(usagePricingPath, usagePricing, "utf8");
+  console.log("Hermes cache TTL usage fields patch applied.");
+  console.log(usagePricingPath);
+}
+
+let conversationLoop = readFileSync(conversationLoopPath, "utf8");
+const usageLogBefore = `                    agent.session_cost_status = cost_result.status
+                    agent.session_cost_source = cost_result.source
+
+                    # Persist token counts to session DB for /insights.
+`;
+const usageLogAfter = `                    agent.session_cost_status = cost_result.status
+                    agent.session_cost_source = cost_result.source
+
+                    # Altselfs keeps per-call cache TTL buckets outside state.db.
+                    # Upstream state.db intentionally stores only aggregate cache
+                    # writes, which is insufficient for 5m/1h billing.
+                    _altselfs_usage_log = os.environ.get("ALTSELFS_HERMES_USAGE_LOG_PATH", "")
+                    if _altselfs_usage_log:
+                        try:
+                            os.makedirs(os.path.dirname(_altselfs_usage_log), exist_ok=True)
+                            with open(_altselfs_usage_log, "a", encoding="utf-8") as usage_file:
+                                usage_file.write(json.dumps({
+                                    "model": agent.model,
+                                    "provider": agent.provider or "",
+                                    "input_tokens": canonical_usage.input_tokens,
+                                    "output_tokens": canonical_usage.output_tokens,
+                                    "cache_read_tokens": canonical_usage.cache_read_tokens,
+                                    "cache_write_tokens": canonical_usage.cache_write_tokens,
+                                    "cache_write_5m_tokens": canonical_usage.cache_write_5m_tokens,
+                                    "cache_write_1h_tokens": canonical_usage.cache_write_1h_tokens,
+                                    "reasoning_tokens": canonical_usage.reasoning_tokens,
+                                    "estimated_cost_usd": float(cost_result.amount_usd)
+                                    if cost_result.amount_usd is not None else 0,
+                                }, ensure_ascii=False) + "\\n")
+                        except Exception:
+                            logger.debug("Altselfs usage log write failed", exc_info=True)
+
+                    # Persist token counts to session DB for /insights.
+`;
+
+if (conversationLoop.includes(usageLogAfter)) {
+  console.log("Hermes per-call cache TTL usage log patch already applied.");
+  console.log(conversationLoopPath);
+} else if (!conversationLoop.includes(usageLogBefore)) {
+  console.error("Could not find the Hermes per-call usage block to patch.");
+  console.error(conversationLoopPath);
+  process.exit(1);
+} else {
+  conversationLoop = conversationLoop.replace(usageLogBefore, usageLogAfter);
+  writeFileSync(conversationLoopPath, conversationLoop, "utf8");
+  console.log("Hermes per-call cache TTL usage log patch applied.");
+  console.log(conversationLoopPath);
 }
 
 let codexAppServerSession = readFileSync(codexAppServerSessionPath, "utf8");

@@ -1,6 +1,6 @@
 import { BillingUnavailableError, getRequiredBillingPool, runSerializableBillingTransaction, } from './billing-database.js';
+import { AGENT_PRICING_VERSION } from './usage-meter.js';
 import { id, isRecord } from './util.js';
-const PRICING_VERSION = '2026-07-v1';
 const PLAN_LIMITS = {
     FREE: { name: 'Free', concurrentTasks: 1, monthlyCredits: 1_000 },
     STARTER: { name: 'Starter', concurrentTasks: 3, monthlyCredits: 20_000 },
@@ -112,7 +112,7 @@ export async function authorizeAgentRun(config, input) {
                 concurrencyHoldCredits: holdCredits,
                 hermesModel: input.hermesModel || null,
                 mode: config.creditsEnforcementMode,
-                pricingVersion: PRICING_VERSION,
+                pricingVersion: AGENT_PRICING_VERSION,
             }),
             input.investorId,
             refreshedAccount.id,
@@ -163,21 +163,27 @@ export async function getBillingSummary(config, investorId) {
     const pool = getRequiredBillingPool(config);
     const [ledger, usage] = await Promise.all([
         pool.query([
-            'select id, type, "amountCredits", "reservedDeltaCredits", "balanceAfterCredits",',
-            '"reservedAfterCredits", description, "runId", "threadId", metadata, "createdAt"',
-            'from credit_ledger_entries where "investorId" = $1',
-            'order by "createdAt" desc, id desc limit 40',
+            'select l.id, l.type, l."amountCredits", l."reservedDeltaCredits", l."balanceAfterCredits",',
+            'l."reservedAfterCredits", l.description, l."runId", l."threadId", l.metadata, l."createdAt",',
+            't.title as "threadTitle"',
+            'from credit_ledger_entries l',
+            'left join agent_threads t on t.id = l."threadId"',
+            'where l."investorId" = $1',
+            'order by l."createdAt" desc, l.id desc limit 40',
         ].join(' '), [investorId]),
         pool.query([
-            'select id, "runId", status, "hermesModel", "codexModel", "hermesCredits",',
-            '"codexCredits", "computedCredits", "billedCredits", "pricingVersion", "createdAt"',
-            'from agent_usage_records where "investorId" = $1',
-            'order by "createdAt" desc, id desc limit 20',
+            'select u.id, u."runId", u.status, u."hermesModel", u."codexModel", u."hermesCredits",',
+            'u."codexCredits", u."computedCredits", u."billedCredits", u."pricingVersion", u.usage,',
+            'u."threadId", u."createdAt", t.title as "threadTitle"',
+            'from agent_usage_records u',
+            'left join agent_threads t on t.id = u."threadId"',
+            'where u."investorId" = $1',
+            'order by u."createdAt" desc, u.id desc limit 40',
         ].join(' '), [investorId]),
     ]);
     return {
         ...capacity,
-        pricingVersion: PRICING_VERSION,
+        pricingVersion: AGENT_PRICING_VERSION,
         recentLedger: ledger.rows.map((row) => ({
             id: String(row.id || ''),
             type: String(row.type || ''),
@@ -188,6 +194,7 @@ export async function getBillingSummary(config, investorId) {
             description: String(row.description || ''),
             runId: typeof row.runId === 'string' ? row.runId : null,
             threadId: typeof row.threadId === 'string' ? row.threadId : null,
+            threadTitle: typeof row.threadTitle === 'string' ? row.threadTitle : null,
             metadata: isRecord(row.metadata) ? row.metadata : row.metadata ?? null,
             createdAt: dateIso(row.createdAt),
         })),
@@ -201,7 +208,21 @@ export async function getBillingSummary(config, investorId) {
             codexCredits: numberValue(row.codexCredits),
             computedCredits: numberValue(row.computedCredits),
             billedCredits: numberValue(row.billedCredits),
-            pricingVersion: String(row.pricingVersion || PRICING_VERSION),
+            pricingVersion: String(row.pricingVersion || AGENT_PRICING_VERSION),
+            component: isRecord(row.usage) && row.usage.component === 'memory_review'
+                ? 'memory_review'
+                : 'agent_task',
+            sourceRunId: isRecord(row.usage) && typeof row.usage.sourceRunId === 'string'
+                ? row.usage.sourceRunId
+                : String(row.runId || ''),
+            memoryReviewJobId: isRecord(row.usage) && typeof row.usage.memoryReviewJobId === 'string'
+                ? row.usage.memoryReviewJobId
+                : null,
+            taskLabel: isRecord(row.usage) && typeof row.usage.taskLabel === 'string'
+                ? row.usage.taskLabel
+                : null,
+            threadId: typeof row.threadId === 'string' ? row.threadId : null,
+            threadTitle: typeof row.threadTitle === 'string' ? row.threadTitle : null,
             createdAt: dateIso(row.createdAt),
         })),
     };
@@ -237,7 +258,7 @@ async function ensureBillingAccount(config, client, investorId) {
         welcomeCredits,
         'Welcome credits',
         `welcome:${investorId}`,
-        JSON.stringify({ pricingVersion: PRICING_VERSION }),
+        JSON.stringify({ pricingVersion: AGENT_PRICING_VERSION }),
         investorId,
         accountId,
     ]);

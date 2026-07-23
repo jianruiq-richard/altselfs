@@ -8,6 +8,7 @@ import test from 'node:test';
 import type { ServerConfig } from '../src/config.js';
 import {
   buildAgentRunUsage,
+  buildMemoryReviewUsage,
   readCodexUsageSince,
   readHermesUsageSnapshot,
 } from '../src/usage-meter.js';
@@ -36,6 +37,10 @@ test('reads native Hermes session usage from state.db', async () => {
     outputTokens: 80,
     cacheReadTokens: 900,
     cacheWriteTokens: 40,
+    cacheWrite5mTokens: 0,
+    cacheWrite1hTokens: 0,
+    cacheWriteUnclassifiedTokens: 40,
+    cacheWriteTierSource: 'apiyi_channel_fallback_5m',
     reasoningTokens: 22,
     estimatedCostUsd: 0.031,
     actualCostUsd: 0.029,
@@ -78,6 +83,7 @@ test('prices APIYI Claude usage locally when Hermes reports no provider cost', a
 
   const usage = await buildAgentRunUsage({
     config: billingConfig(),
+    runId: 'run-priced',
     hermesHome: root,
     hermesSessionId: 'session-1',
     hermesBefore: emptyHermesUsage(),
@@ -89,15 +95,16 @@ test('prices APIYI Claude usage locally when Hermes reports no provider cost', a
   });
 
   assert.equal(usage.hermes.costSource, 'local_pricing');
-  assert.equal(usage.hermes.billedCostUsd, 0.03761145);
-  assert.equal(usage.hermes.credits, 76);
-  assert.equal(usage.totalCredits, 76);
+  assert.ok(Math.abs(usage.hermes.billedCostUsd - 0.02360655) < 1e-12);
+  assert.equal(usage.hermes.credits, 48);
+  assert.equal(usage.totalCredits, 48);
   assert.deepEqual(usage.hermes.pricing, {
     source: 'apiyi-claude-sonnet-4-6',
     inputUsdPerMillion: 3,
     outputUsdPerMillion: 15,
     cacheReadUsdPerMillion: 0.3,
-    cacheWriteUsdPerMillion: 6,
+    cacheWrite5mUsdPerMillion: 3.75,
+    cacheWrite1hUsdPerMillion: 6,
     multiplier: 0.95,
   });
 });
@@ -116,6 +123,7 @@ test('prices aggregate APIYI Claude tokens across multiple calls in one run', as
 
   const usage = await buildAgentRunUsage({
     config: billingConfig(),
+    runId: 'run-aggregate',
     hermesHome: root,
     hermesSessionId: 'session-1',
     hermesBefore: emptyHermesUsage(),
@@ -127,9 +135,53 @@ test('prices aggregate APIYI Claude tokens across multiple calls in one run', as
   });
 
   assert.equal(usage.hermes.apiCallCount, 3);
-  assert.equal(usage.hermes.billedCostUsd, 0.027645);
-  assert.equal(usage.hermes.credits, 56);
-  assert.equal(usage.totalCredits, 56);
+  assert.ok(Math.abs(usage.hermes.billedCostUsd - 0.0212325) < 1e-12);
+  assert.equal(usage.hermes.credits, 43);
+  assert.equal(usage.totalCredits, 43);
+});
+
+test('uses per-call Hermes cache TTL details instead of the aggregate state bucket', async () => {
+  const root = await createHermesStateDb({
+    inputTokens: 3,
+    outputTokens: 17,
+    cacheReadTokens: 3_514,
+    cacheWriteTokens: 3_062,
+    reasoningTokens: 0,
+    estimatedCostUsd: 0,
+    actualCostUsd: 0,
+    apiCallCount: 1,
+  });
+  const usageLogPath = path.join(root, 'hermes-usage.jsonl');
+  await fs.writeFile(usageLogPath, `${JSON.stringify({
+    provider: 'apiyi',
+    input_tokens: 3,
+    output_tokens: 17,
+    cache_read_tokens: 3_514,
+    cache_write_tokens: 3_062,
+    cache_write_5m_tokens: 3_062,
+    cache_write_1h_tokens: 0,
+  })}\n`);
+
+  const usage = await buildAgentRunUsage({
+    config: billingConfig(),
+    runId: 'run-detailed-cache',
+    taskLabel: '你好',
+    hermesHome: root,
+    hermesUsageLogPath: usageLogPath,
+    hermesSessionId: 'session-1',
+    hermesBefore: emptyHermesUsage(),
+    hermesModel: 'claude-sonnet-4-6',
+    hermesProvider: 'apiyi',
+    codexHome: path.join(root, 'codex-home'),
+    codexModel: 'gpt-5.5',
+    startedAtMs: Date.now(),
+  });
+
+  assert.equal(usage.hermes.cacheWriteTierSource, 'provider_detail');
+  assert.equal(usage.hermes.cacheWrite5mTokens, 3_062);
+  assert.equal(usage.hermes.cacheWrite1hTokens, 0);
+  assert.ok(Math.abs(usage.hermes.billedCostUsd - 0.012160665) < 1e-12);
+  assert.equal(usage.totalCredits, 25);
 });
 
 test('uses provider actual cost instead of local APIYI estimate when available', async () => {
@@ -146,6 +198,7 @@ test('uses provider actual cost instead of local APIYI estimate when available',
 
   const usage = await buildAgentRunUsage({
     config: billingConfig(),
+    runId: 'run-provider-actual',
     hermesHome: root,
     hermesSessionId: 'session-1',
     hermesBefore: emptyHermesUsage(),
@@ -159,6 +212,59 @@ test('uses provider actual cost instead of local APIYI estimate when available',
   assert.equal(usage.hermes.costSource, 'provider_actual');
   assert.equal(usage.hermes.billedCostUsd, 0.03);
   assert.equal(usage.hermes.credits, 60);
+});
+
+test('prices APIYI memory review from Anthropic cache TTL response details', () => {
+  const usage = buildMemoryReviewUsage({
+    config: billingConfig(),
+    sourceRunId: 'run-main',
+    memoryReviewJobId: 'memrev-1',
+    taskLabel: '你好',
+    hermesModel: 'claude-sonnet-4-6',
+    hermesProvider: 'apiyi',
+    rawCompletion: {
+      usage: {
+        input_tokens: 3,
+        output_tokens: 17,
+        cache_read_input_tokens: 3_514,
+        cache_creation_input_tokens: 3_062,
+        cache_creation: {
+          ephemeral_5m_input_tokens: 3_062,
+          ephemeral_1h_input_tokens: 0,
+        },
+      },
+    },
+  });
+
+  assert.equal(usage.component, 'memory_review');
+  assert.equal(usage.sourceRunId, 'run-main');
+  assert.equal(usage.hermes.cacheWrite5mTokens, 3_062);
+  assert.equal(usage.hermes.cacheWrite1hTokens, 0);
+  assert.equal(usage.hermes.cacheWriteTierSource, 'provider_detail');
+  assert.equal(usage.hermes.billedCostUsd, 0.012160665);
+  assert.equal(usage.totalCredits, 25);
+});
+
+test('prices uncached APIYI memory review without applying the task minimum charge', () => {
+  const usage = buildMemoryReviewUsage({
+    config: billingConfig(),
+    sourceRunId: 'run-main',
+    memoryReviewJobId: 'memrev-2',
+    taskLabel: '你好',
+    hermesModel: 'claude-sonnet-4-6',
+    hermesProvider: 'apiyi',
+    rawCompletion: {
+      usage: {
+        input_tokens: 2_592,
+        output_tokens: 42,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    },
+  });
+
+  assert.equal(usage.hermes.billedCostUsd, 0.0079857);
+  assert.equal(usage.totalCredits, 16);
 });
 
 async function createHermesStateDb(usage: {
@@ -209,6 +315,10 @@ function emptyHermesUsage() {
     outputTokens: 0,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
+    cacheWrite5mTokens: 0,
+    cacheWrite1hTokens: 0,
+    cacheWriteUnclassifiedTokens: 0,
+    cacheWriteTierSource: 'none' as const,
     reasoningTokens: 0,
     estimatedCostUsd: 0,
     actualCostUsd: 0,
@@ -224,7 +334,8 @@ function billingConfig() {
     hermesApiyiInputRate: 3,
     hermesApiyiOutputRate: 15,
     hermesApiyiCacheReadRate: 0.3,
-    hermesApiyiCacheWriteRate: 6,
+    hermesApiyiCacheWrite5mRate: 3.75,
+    hermesApiyiCacheWrite1hRate: 6,
     hermesApiyiCostMultiplier: 0.95,
     codexUsageUncachedInputRate: 125,
     codexUsageCachedInputRate: 12.5,

@@ -64,6 +64,9 @@ type BillingSummary = {
     amountCredits: number;
     reservedDeltaCredits: number;
     description: string;
+    runId: string | null;
+    threadId: string | null;
+    threadTitle: string | null;
     metadata: unknown;
     createdAt: string;
   }>;
@@ -76,6 +79,12 @@ type BillingSummary = {
     codexCredits: number;
     computedCredits: number;
     billedCredits: number;
+    component: 'agent_task' | 'memory_review';
+    sourceRunId: string;
+    memoryReviewJobId: string | null;
+    taskLabel: string | null;
+    threadId: string | null;
+    threadTitle: string | null;
     createdAt: string;
   }>;
 };
@@ -107,6 +116,22 @@ function getInitials(value: string) {
       .map((part) => part.slice(0, 1).toUpperCase())
       .join('') || 'U'
   );
+}
+
+function usageTaskLabel(usage: BillingSummary['recentUsage'][number]) {
+  return usage.taskLabel || usage.threadTitle || 'New discussion';
+}
+
+function shortRunId(value: string) {
+  return value.length > 18 ? `${value.slice(0, 8)}...${value.slice(-6)}` : value;
+}
+
+function ledgerTaskLabel(entry: BillingSummary['recentLedger'][number]) {
+  if (entry.metadata && typeof entry.metadata === 'object' && !Array.isArray(entry.metadata)) {
+    const taskLabel = (entry.metadata as Record<string, unknown>).taskLabel;
+    if (typeof taskLabel === 'string' && taskLabel.trim()) return taskLabel.trim();
+  }
+  return entry.threadTitle;
 }
 
 export default function ProfilePage() {
@@ -486,7 +511,7 @@ export default function ProfilePage() {
                         <div className="flex items-end justify-between gap-5">
                           <div>
                             <h2 className="text-sm font-semibold text-zinc-100">Consumption details</h2>
-                            <p className="mt-1 text-[11px] text-zinc-600">Measured Hermes and Codex usage for completed tasks.</p>
+                            <p className="mt-1 text-[11px] text-zinc-600">Task execution and post-turn memory review are billed separately.</p>
                           </div>
                           <button
                             type="button"
@@ -503,10 +528,14 @@ export default function ProfilePage() {
                             <article key={usage.id} className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-5 border-b border-white/[0.09] py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_110px_90px]">
                               <span className="grid min-w-0">
                                 <strong className="truncate text-xs text-zinc-200">
-                                  {usage.hermesModel?.includes('claude') ? 'Claude + Codex task' : 'DeepSeek + Codex task'}
+                                  {usage.component === 'memory_review'
+                                    ? `Memory review · ${usageTaskLabel(usage)}`
+                                    : usageTaskLabel(usage)}
                                 </strong>
                                 <span className="mt-1 truncate text-[10px] text-zinc-600">
-                                  Hermes {formatCredits(usage.hermesCredits)} · Codex {formatCredits(usage.codexCredits)}
+                                  {usage.component === 'memory_review'
+                                    ? `${usage.hermesModel?.includes('claude') ? 'Claude' : 'Hermes'} profile review · task ${shortRunId(usage.sourceRunId)}`
+                                    : `Hermes ${formatCredits(usage.hermesCredits)} · Codex ${formatCredits(usage.codexCredits)}`}
                                 </span>
                               </span>
                               <span className="hidden text-[10px] text-zinc-600 sm:block">{formatDateTime(usage.createdAt)}</span>
@@ -534,7 +563,10 @@ export default function ProfilePage() {
                             <article key={entry.id} className="grid min-h-[58px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/[0.09] py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_120px_80px]">
                               <span className="grid min-w-0">
                                 <strong className="truncate text-[11px] text-zinc-300">{entry.description}</strong>
-                                <span className="mt-1 text-[9px] uppercase text-zinc-700">{entry.type.replaceAll('_', ' ')}</span>
+                                <span className="mt-1 truncate text-[9px] text-zinc-700">
+                                  {entry.type.replaceAll('_', ' ')}
+                                  {ledgerTaskLabel(entry) ? ` · ${ledgerTaskLabel(entry)}` : ''}
+                                </span>
                               </span>
                               <span className="hidden text-[10px] text-zinc-600 sm:block">{formatDateTime(entry.createdAt)}</span>
                               <strong className={`text-right text-[11px] ${
