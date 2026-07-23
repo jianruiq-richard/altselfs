@@ -246,6 +246,26 @@ export async function appendThreadMessage(params: {
   return message;
 }
 
+export async function mergeThreadMessageMeta(params: {
+  messageId: string;
+  meta: Record<string, unknown>;
+}) {
+  const existing = await prisma.agentMessage.findUnique({
+    where: { id: params.messageId },
+    select: { meta: true },
+  });
+  const current = isRecord(existing?.meta) ? existing.meta : {};
+  return prisma.agentMessage.update({
+    where: { id: params.messageId },
+    data: {
+      meta: {
+        ...current,
+        ...params.meta,
+      } as object,
+    },
+  });
+}
+
 export async function appendtoolCall(params: {
   threadId: string;
   toolName: string;
@@ -279,6 +299,7 @@ export function toClientMessages(
     .filter((message) => message.role === 'USER' || message.role === 'ASSISTANT')
     .map((message) => {
       const artifacts = extractMessageArtifacts(message.meta);
+      const submission = extractMessageSubmission(message.meta);
       return {
         ...(message.id ? { id: message.id } : {}),
         role: message.role === 'USER' ? ('user' as const) : ('assistant' as const),
@@ -292,8 +313,23 @@ export function toClientMessages(
             }
           : {}),
         ...(artifacts.length > 0 ? { artifacts } : {}),
+        ...(submission ? { submission } : {}),
       };
     });
+}
+
+function extractMessageSubmission(meta: unknown) {
+  const record = isRecord(meta) ? meta : {};
+  const submission = isRecord(record.submission) ? record.submission : null;
+  if (!submission) return null;
+  const status = typeof submission.status === 'string' ? submission.status.toUpperCase() : '';
+  if (!['AUTHORIZING', 'QUEUED', 'REJECTED'].includes(status)) return null;
+  return {
+    status: status as 'AUTHORIZING' | 'QUEUED' | 'REJECTED',
+    runId: typeof submission.runId === 'string' ? submission.runId : null,
+    code: typeof submission.code === 'string' ? submission.code : null,
+    error: typeof submission.error === 'string' ? submission.error : null,
+  };
 }
 
 function extractMessageArtifacts(meta: unknown) {

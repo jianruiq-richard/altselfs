@@ -1,0 +1,204 @@
+import { execFile } from 'node:child_process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { isRecord } from './util.js';
+const execFileAsync = promisify(execFile);
+const PRICING_VERSION = '2026-07-v1';
+const EMPTY_HERMES_USAGE = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    estimatedCostUsd: 0,
+    actualCostUsd: 0,
+    apiCallCount: 0,
+};
+const EMPTY_CODEX_USAGE = {
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+    modelCallCount: 0,
+};
+export async function readHermesUsageSnapshot(hermesHome, sessionId) {
+    if (!sessionId)
+        return { ...EMPTY_HERMES_USAGE };
+    const stateDb = path.join(hermesHome, 'state.db');
+    try {
+        await fs.access(stateDb);
+        const script = [
+            'import json, sqlite3, sys',
+            'db, session_id = sys.argv[1], sys.argv[2]',
+            'conn = sqlite3.connect(db)',
+            'conn.row_factory = sqlite3.Row',
+            'row = conn.execute("""',
+            'SELECT input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,',
+            'reasoning_tokens, estimated_cost_usd, actual_cost_usd, api_call_count',
+            'FROM sessions WHERE id = ?',
+            '""", (session_id,)).fetchone()',
+            'print(json.dumps(dict(row) if row else {}))',
+        ].join('\n');
+        const { stdout } = await execFileAsync('python3', ['-c', script, stateDb, sessionId], {
+            timeout: 10_000,
+            maxBuffer: 64 * 1024,
+        });
+        const row = JSON.parse(stdout.trim() || '{}');
+        return {
+            inputTokens: numberValue(row.input_tokens),
+            outputTokens: numberValue(row.output_tokens),
+            cacheReadTokens: numberValue(row.cache_read_tokens),
+            cacheWriteTokens: numberValue(row.cache_write_tokens),
+            reasoningTokens: numberValue(row.reasoning_tokens),
+            estimatedCostUsd: numberValue(row.estimated_cost_usd),
+            actualCostUsd: numberValue(row.actual_cost_usd),
+            apiCallCount: numberValue(row.api_call_count),
+        };
+    }
+    catch {
+        return { ...EMPTY_HERMES_USAGE };
+    }
+}
+export async function readCodexUsageSince(codexHome, startedAtMs) {
+    const files = await findRecentJsonlFiles(path.join(codexHome, 'sessions'), startedAtMs);
+    const usage = { ...EMPTY_CODEX_USAGE };
+    for (const file of files) {
+        const text = await fs.readFile(file, 'utf8').catch(() => '');
+        let previousTotal = null;
+        for (const line of text.split(/\r?\n/)) {
+            if (!line.trim())
+                continue;
+            let event;
+            try {
+                event = JSON.parse(line);
+            }
+            catch {
+                continue;
+            }
+            if (!isRecord(event) || eventTimestampMs(event) < startedAtMs - 10_000)
+                continue;
+            const payload = isRecord(event.payload) ? event.payload : null;
+            if (!payload || payload.type !== 'token_count' || !isRecord(payload.info))
+                continue;
+            const last = normalizeCodexUsage(payload.info.last_token_usage);
+            if (last && hasUsage(last)) {
+                addCodexUsage(usage, last);
+                usage.modelCallCount += 1;
+                continue;
+            }
+            const total = normalizeCodexUsage(payload.info.total_token_usage);
+            if (!total)
+                continue;
+            if (previousTotal) {
+                addCodexUsage(usage, subtractCodexUsage(total, previousTotal));
+                usage.modelCallCount += 1;
+            }
+            previousTotal = total;
+        }
+    }
+    return usage;
+}
+export async function buildAgentRunUsage(input) {
+    const [hermesAfter, codex] = await Promise.all([
+        readHermesUsageSnapshot(input.hermesHome, input.hermesSessionId),
+        readCodexUsageSince(input.codexHome, input.startedAtMs),
+    ]);
+    const hermes = subtractHermesUsage(hermesAfter, input.hermesBefore);
+    const billedCostUsd = Math.max(hermes.actualCostUsd, hermes.estimatedCostUsd);
+    const hermesCredits = Math.ceil(billedCostUsd * input.config.creditsPerUsd * input.config.creditsCostMarkup);
+    const uncachedInputTokens = Math.max(0, codex.inputTokens - codex.cachedInputTokens);
+    const openAiUsageCredits = ((uncachedInputTokens / 1_000_000) * input.config.codexUsageUncachedInputRate +
+        (codex.cachedInputTokens / 1_000_000) * input.config.codexUsageCachedInputRate +
+        (codex.outputTokens / 1_000_000) * input.config.codexUsageOutputRate);
+    const codexCredits = Math.ceil(openAiUsageCredits * input.config.codexUsageCreditMultiplier);
+    const totalCredits = Math.max(input.config.creditsMinimumRunCharge, hermesCredits + codexCredits);
+    return {
+        version: 'v1',
+        pricingVersion: PRICING_VERSION,
+        hermes: {
+            ...hermes,
+            model: input.hermesModel,
+            provider: input.hermesProvider,
+            billedCostUsd,
+            credits: hermesCredits,
+        },
+        codex: {
+            ...codex,
+            model: input.codexModel,
+            openAiUsageCredits,
+            credits: codexCredits,
+        },
+        totalCredits,
+    };
+}
+function subtractHermesUsage(after, before) {
+    return {
+        inputTokens: positiveDelta(after.inputTokens, before.inputTokens),
+        outputTokens: positiveDelta(after.outputTokens, before.outputTokens),
+        cacheReadTokens: positiveDelta(after.cacheReadTokens, before.cacheReadTokens),
+        cacheWriteTokens: positiveDelta(after.cacheWriteTokens, before.cacheWriteTokens),
+        reasoningTokens: positiveDelta(after.reasoningTokens, before.reasoningTokens),
+        estimatedCostUsd: positiveDelta(after.estimatedCostUsd, before.estimatedCostUsd),
+        actualCostUsd: positiveDelta(after.actualCostUsd, before.actualCostUsd),
+        apiCallCount: positiveDelta(after.apiCallCount, before.apiCallCount),
+    };
+}
+async function findRecentJsonlFiles(root, startedAtMs) {
+    const files = [];
+    async function visit(directory) {
+        const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
+        await Promise.all(entries.map(async (entry) => {
+            const target = path.join(directory, entry.name);
+            if (entry.isDirectory())
+                return visit(target);
+            if (!entry.isFile() || !entry.name.endsWith('.jsonl'))
+                return;
+            const stat = await fs.stat(target).catch(() => null);
+            if (stat && stat.mtimeMs >= startedAtMs - 10_000)
+                files.push(target);
+        }));
+    }
+    await visit(root);
+    return files;
+}
+function normalizeCodexUsage(value) {
+    if (!isRecord(value))
+        return null;
+    return {
+        inputTokens: numberValue(value.input_tokens),
+        cachedInputTokens: numberValue(value.cached_input_tokens),
+        outputTokens: numberValue(value.output_tokens),
+        reasoningOutputTokens: numberValue(value.reasoning_output_tokens),
+        modelCallCount: 0,
+    };
+}
+function subtractCodexUsage(after, before) {
+    return {
+        inputTokens: positiveDelta(after.inputTokens, before.inputTokens),
+        cachedInputTokens: positiveDelta(after.cachedInputTokens, before.cachedInputTokens),
+        outputTokens: positiveDelta(after.outputTokens, before.outputTokens),
+        reasoningOutputTokens: positiveDelta(after.reasoningOutputTokens, before.reasoningOutputTokens),
+        modelCallCount: 0,
+    };
+}
+function addCodexUsage(target, value) {
+    target.inputTokens += value.inputTokens;
+    target.cachedInputTokens += value.cachedInputTokens;
+    target.outputTokens += value.outputTokens;
+    target.reasoningOutputTokens += value.reasoningOutputTokens;
+}
+function hasUsage(value) {
+    return value.inputTokens > 0 || value.outputTokens > 0 || value.cachedInputTokens > 0;
+}
+function eventTimestampMs(event) {
+    const value = typeof event.timestamp === 'string' ? Date.parse(event.timestamp) : Number.NaN;
+    return Number.isFinite(value) ? value : 0;
+}
+function numberValue(value) {
+    const number = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(number) && number > 0 ? number : 0;
+}
+function positiveDelta(after, before) {
+    return Math.max(0, after - before);
+}

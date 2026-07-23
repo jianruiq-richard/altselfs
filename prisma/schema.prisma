@@ -54,22 +54,157 @@ model User {
   // Executive Assistantcomment
   executiveAssistantRuns ExecutiveAssistantRun[]
 
+  creditAccount      CreditAccount?
+  creditSubscription CreditSubscription?
+  creditReservations CreditReservation[]
+  creditLedger       CreditLedgerEntry[]
+  agentUsageRecords  AgentUsageRecord[]
+
   @@index([email], map: "users_email_idx")
   @@map("users")
 }
 
+model CreditAccount {
+  id                      String   @id @default(cuid())
+  balanceCredits          Int      @default(0)
+  reservedCredits         Int      @default(0)
+  lifetimeGrantedCredits  Int      @default(0)
+  lifetimeSpentCredits    Int      @default(0)
+  lifetimeRefundedCredits Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  investorId String @unique
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  reservations CreditReservation[]
+  ledger       CreditLedgerEntry[]
+  usageRecords AgentUsageRecord[]
+
+  @@map("credit_accounts")
+}
+
+model CreditSubscription {
+  id                     String    @id @default(cuid())
+  planKey                String    @default("FREE")
+  status                 String    @default("ACTIVE")
+  monthlyCredits         Int       @default(0)
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  provider               String?
+  providerCustomerId     String?
+  providerSubscriptionId String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  investorId String @unique
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  @@index([status, currentPeriodEnd])
+  @@map("credit_subscriptions")
+}
+
+model CreditReservation {
+  id               String    @id @default(cuid())
+  runId            String    @unique
+  status           String    @default("ACTIVE")
+  mode             String    @default("OBSERVE")
+  hermesModel      String?
+  estimatedCredits Int
+  reservedCredits  Int       @default(0)
+  capturedCredits  Int       @default(0)
+  shortfallCredits Int       @default(0)
+  expiresAt        DateTime
+  settledAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  threadId String?
+  ledger   CreditLedgerEntry[]
+
+  @@index([accountId, status, expiresAt])
+  @@index([investorId, createdAt])
+  @@index([threadId, createdAt])
+  @@map("credit_reservations")
+}
+
+model CreditLedgerEntry {
+  id                   String   @id @default(cuid())
+  type                 String
+  amountCredits        Int      @default(0)
+  reservedDeltaCredits Int      @default(0)
+  balanceAfterCredits  Int
+  reservedAfterCredits Int
+  description          String
+  idempotencyKey       String   @unique
+  runId                String?
+  threadId             String?
+  metadata             Json?
+  createdAt            DateTime @default(now())
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  reservationId String?
+  reservation   CreditReservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, createdAt])
+  @@index([investorId, createdAt])
+  @@index([runId])
+  @@map("credit_ledger_entries")
+}
+
+model AgentUsageRecord {
+  id              String   @id @default(cuid())
+  runId           String   @unique
+  status          String   @default("RECORDED")
+  hermesModel     String?
+  codexModel      String?
+  hermesCostUsd   Decimal  @default(0) @db.Decimal(16, 8)
+  hermesCredits   Int      @default(0)
+  codexCredits    Int      @default(0)
+  computedCredits Int      @default(0)
+  billedCredits   Int      @default(0)
+  usage           Json
+  pricingVersion  String   @default("2026-07-v1")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  threadId String?
+
+  @@index([accountId, createdAt])
+  @@index([investorId, createdAt])
+  @@index([threadId, createdAt])
+  @@map("agent_usage_records")
+}
+
 model ExecutiveAssistantRun {
-  id            String    @id @default(cuid())
-  status        String    @default("QUEUED")
-  request       Json
-  result        Json?
-  error         String?
-  planner       Json?
-  plannerTrace  Json?
-  startedAt     DateTime?
-  completedAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  status       String    @default("QUEUED")
+  request      Json
+  result       Json?
+  error        String?
+  planner      Json?
+  plannerTrace Json?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   investorId String
   investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
@@ -188,21 +323,21 @@ model InvestorWechatSource {
 }
 
 model InvestorIntegration {
-  id           String   @id @default(cuid())
-  provider     String
-  status       String   @default("CONNECTED")
-  accountEmail String?
-  accountName  String?
+  id                    String    @id @default(cuid())
+  provider              String
+  status                String    @default("CONNECTED")
+  accountEmail          String?
+  accountName           String?
   assistantCustomPrompt String?
-  accessToken  String?
-  refreshToken String?
-  expiresAt    DateTime?
-  scope        String?
-  connectedAt  DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  accessToken           String?
+  refreshToken          String?
+  expiresAt             DateTime?
+  scope                 String?
+  connectedAt           DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   investorId String
-  investor   User @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
 
   snapshots IntegrationSnapshot[]
 
@@ -228,11 +363,11 @@ model InvestorTeamHire {
 }
 
 model IntegrationSnapshot {
-  id           String   @id @default(cuid())
-  provider     String
-  summary      String
-  raw          Json?
-  createdAt    DateTime @default(now())
+  id        String   @id @default(cuid())
+  provider  String
+  summary   String
+  raw       Json?
+  createdAt DateTime @default(now())
 
   integrationId String
   integration   InvestorIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
@@ -242,15 +377,15 @@ model IntegrationSnapshot {
 }
 
 model Avatar {
-  id          String       @id @default(cuid())
-  name        String
-  description String?
-  avatar      String?      // commentURL
-  systemPrompt String     // AI comment
-  status      String @default("ACTIVE")
-  isPublic    Boolean @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  avatar       String? // commentURL
+  systemPrompt String // AI comment
+  status       String   @default("ACTIVE")
+  isPublic     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // comment
   investorId String
@@ -263,17 +398,17 @@ model Avatar {
 }
 
 model Chat {
-  id        String     @id @default(cuid())
-  title     String?
-  status    String @default("ACTIVE")
-  summary   String?    // AI comment
-  qualificationStatus String @default("PENDING") // PENDING | NEEDS_INFO | QUALIFIED | REJECTED
-  qualificationScore Int @default(0) // 0-100
+  id                  String    @id @default(cuid())
+  title               String?
+  status              String    @default("ACTIVE")
+  summary             String? // AI comment
+  qualificationStatus String    @default("PENDING") // PENDING | NEEDS_INFO | QUALIFIED | REJECTED
+  qualificationScore  Int       @default(0) // 0-100
   qualificationReason String?
-  needsInvestorReview Boolean @default(false)
-  lastEvaluatedAt DateTime?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  needsInvestorReview Boolean   @default(false)
+  lastEvaluatedAt     DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   // comment
   candidateId String
@@ -294,7 +429,7 @@ model Chat {
 model Message {
   id        String   @id @default(cuid())
   content   String
-  role      String   // "user" comment "assistant"
+  role      String // "user" comment "assistant"
   createdAt DateTime @default(now())
 
   // comment

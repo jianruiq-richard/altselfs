@@ -30,6 +30,12 @@ if (config.processRole === 'api' || config.processRole === 'all') {
         console.log(`[personal-agent-server] runtimeStateSync=${config.runtimeStateSyncEnabled ? 'enabled' : 'disabled'} mode=${config.runtimeStateMode} sandboxRoot=${config.sandboxStorageRoot} cacheTtlMs=${config.runtimeStateCacheTtlMs}`);
     });
 }
+if (config.processRole === 'worker') {
+    const bridgeServer = createHttpServer(agent, config, stores.memoryReviewJobStore);
+    bridgeServer.listen(config.port, '127.0.0.1', () => {
+        console.log(`[personal-agent-worker] internal runtime bridge listening on 127.0.0.1:${config.port}`);
+    });
+}
 if (config.processRole === 'worker' || config.processRole === 'all') {
     const turnQueueWorker = new AgentTurnQueueWorker(agent, config);
     turnQueueWorker.start();

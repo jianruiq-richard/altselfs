@@ -9,6 +9,7 @@ import { createPersonalDataDynamictools } from '../tools/personal-data.js';
 import { LocalProfileStore } from '../profile-store.js';
 import { createRunCancelledError, isAgentRunCancelledError, isRunCancelled, registerActiveRun, unregisterActiveRun, } from '../run-control.js';
 import { calculateDirectoryBytes, prepareRuntimeDirectories, readSandboxState, resolveRuntimePaths, writeSandboxState, } from '../sandbox-runtime.js';
+import { buildAgentRunUsage, readHermesUsageSnapshot } from '../usage-meter.js';
 import { id, isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { resolveHermesApiKey, resolveHermesModelSelection } from './llm-provider.js';
 export const HERMES_PROMPT_CACHE_TTL = '1h';
@@ -104,6 +105,7 @@ export class HermesSourceRuntime {
             hermesProvider: hermesModelSelection.provider,
             hermesModel: hermesModelSelection.model,
         });
+        const hermesUsageBefore = await readHermesUsageSnapshot(hermesHome, resumeSessionId || previousHermesSessionId || null);
         await writeSandboxState(runtimePaths, {
             status: 'ACTIVE',
             activeRunId: runId,
@@ -353,6 +355,23 @@ export class HermesSourceRuntime {
             });
         }
         const reply = appendGeneratedArtifactLinks(baseReply, generatedArtifacts.artifacts);
+        const usage = await buildAgentRunUsage({
+            config: this.config,
+            hermesHome,
+            hermesSessionId: sessionId || previousHermesSessionId || null,
+            hermesBefore: hermesUsageBefore,
+            hermesModel: hermesModelSelection.model,
+            hermesProvider: hermesModelSelection.provider,
+            codexHome,
+            codexModel: codexModelSelection.model || this.config.codexModel || 'gpt-5.5',
+            startedAtMs,
+        });
+        await emit('billing.usage_measured', {
+            pricingVersion: usage.pricingVersion,
+            totalCredits: usage.totalCredits,
+            hermesCredits: usage.hermes.credits,
+            codexCredits: usage.codex.credits,
+        });
         await emit('hermes.source_runtime.completed', {
             sessionId: sessionId || null,
             codexReply: codexReply || null,
@@ -427,6 +446,7 @@ export class HermesSourceRuntime {
                 workspace,
                 profileStorePath: this.config.profileStorePath,
                 generatedArtifacts: generatedArtifacts.artifacts.map(publicGeneratedArtifact),
+                usage,
             },
         };
     }

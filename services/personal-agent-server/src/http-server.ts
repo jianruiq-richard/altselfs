@@ -36,7 +36,9 @@ import {
   persistAgentTurnError,
   persistAgentTurnCancelled,
   persistAgentTurnInput,
+  persistAgentTurnRejected,
   persistAgentTurnSuccess,
+  requestAgentRunCancellation,
   touchAgentRunHeartbeat,
   type AgentContextArtifactRecord,
   type PersistedAgentTurnInput,
@@ -46,7 +48,16 @@ import {
   createSignedObjectUrl,
   isArtifactObjectStorageConfigured,
 } from './artifact-storage.js';
-import { cancelActiveRun, getActiveRuntoolScope, isAgentRunCancelledError, listActiveRuns } from './run-control.js';
+import {
+  authorizeAgentRun,
+  BillingUnavailableError,
+  CreditAdmissionError,
+  getBillingCapacity,
+  getBillingSummary,
+  type CreditAuthorization,
+} from './credit-admission.js';
+import { releaseRunCredits } from './credit-settlement.js';
+import { getActiveRuntoolScope, isAgentRunCancelledError } from './run-control.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
 import type { AgentEvent, TurnStartRequest } from './types.js';
 
@@ -66,6 +77,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         return json(res, 200, {
           ok: true,
           runtimeStateMode: config?.runtimeStateMode,
+          directTurnExecutionEnabled: config?.directTurnExecutionEnabled,
           sandboxStorageRoot: config?.sandboxStorageRoot,
           sandboxExecEnabled: config?.sandboxExecEnabled,
           sandboxExecImage: config?.sandboxExecImage,
@@ -92,6 +104,22 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
         const jobs = memoryReviewQueue ? await memoryReviewQueue.listRecent(100) : [];
         return json(res, 200, await buildOpsSnapshot(config, jobs));
+      }
+
+      if (req.method === 'GET' && url.pathname === '/internal/billing/capacity') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const investorId = url.searchParams.get('investorId')?.trim() || '';
+        if (!investorId) return json(res, 400, { error: 'investorId is required' });
+        return json(res, 200, await getBillingCapacity(config, investorId));
+      }
+
+      if (req.method === 'GET' && url.pathname === '/internal/billing/summary') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const investorId = url.searchParams.get('investorId')?.trim() || '';
+        if (!investorId) return json(res, 400, { error: 'investorId is required' });
+        return json(res, 200, await getBillingSummary(config, investorId));
       }
 
       if (req.method === 'GET' && url.pathname === '/internal/personal-data/accounts') {
@@ -396,6 +424,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
 
       if (req.method === 'GET' && url.pathname === '/v1/threads/status') {
         if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isAgentServiceAuthorized(req, config)) return json(res, 403, { error: 'Forbidden' });
         const threadId = url.searchParams.get('threadId')?.trim() || '';
         if (!threadId) return json(res, 400, { error: 'threadId is required' });
         const status = await getAgentThreadRuntimeStatus(config, {
@@ -405,30 +434,29 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           runId: url.searchParams.get('runId')?.trim() || undefined,
           recentEventLimit: Number(url.searchParams.get('recentEventLimit') || 20),
         });
-        return json(res, 200, {
-          ...status,
-          activeRuns: listActiveRuns().filter((run) => run.threadId === threadId),
-        });
+        return json(res, 200, status);
       }
 
       if (req.method === 'POST' && url.pathname === '/v1/runs/stop') {
         if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isAgentServiceAuthorized(req, config)) return json(res, 403, { error: 'Forbidden' });
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
         const runId = typeof body.runId === 'string' ? body.runId.trim() : '';
         if (!runId) return json(res, 400, { error: 'runId is required' });
         const threadId = typeof body.threadId === 'string' ? body.threadId.trim() : undefined;
-        const cancelled = cancelActiveRun(runId);
-        await persistAgentTurnCancelled(config, {
+        const cancellation = await requestAgentRunCancellation(config, {
           runId,
-          threadId: threadId || (typeof cancelled.threadId === 'string' ? cancelled.threadId : undefined),
+          threadId,
           investorId: typeof body.investorId === 'string' ? body.investorId : undefined,
-          userId: typeof body.userId === 'string' ? body.userId : undefined,
           reason: 'cancelled by user',
-        }).catch(() => null);
+        });
+        if (!cancellation.found) {
+          return json(res, 404, { error: 'Run not found.' });
+        }
         return json(res, 200, {
           ok: true,
-          ...cancelled,
+          ...cancellation,
         });
       }
 
@@ -523,6 +551,14 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
       }
 
       if (req.method === 'POST' && url.pathname === '/v1/turns/start') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isAgentServiceAuthorized(req, config)) return json(res, 403, { error: 'Forbidden' });
+        if (!config.directTurnExecutionEnabled) {
+          return json(res, 409, {
+            error: 'Direct turn execution is disabled. Submit the task through /v1/turns/start-async.',
+            code: 'ASYNC_EXECUTION_REQUIRED',
+          });
+        }
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
         const turnRequest = parseTurnStartRequest(body);
@@ -532,8 +568,11 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
 
         let persisted: PersistedAgentTurnInput | null = null;
         try {
-          if (!config) throw new Error('config missing');
-          persisted = await persistAgentTurnInput(config, turnRequest);
+          const prepared = await authorizeAndPersistTurn(config, turnRequest, 'RUNNING');
+          persisted = prepared.persisted;
+          if (prepared.existing) {
+            return json(res, 409, existingTurnPayload(persisted, turnRequest.threadId));
+          }
           let eventIndex = 0;
           const result = await agent.startTurn({
             ...turnRequest,
@@ -585,6 +624,13 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
               runId: persisted?.runId,
             });
           }
+          if (error instanceof CreditAdmissionError || error instanceof BillingUnavailableError) {
+            return json(res, error.httpStatus, admissionErrorPayload(
+              error,
+              persisted?.runId || metadataStringValue(turnRequest.metadata, 'runId'),
+              turnRequest.threadId,
+            ));
+          }
           throw error;
         }
       }
@@ -593,12 +639,30 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
         if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isAgentServiceAuthorized(req, config)) return json(res, 403, { error: 'Forbidden' });
         const turnRequest = parseTurnStartRequest(body);
-        const persisted = await persistAgentTurnInput(config, turnRequest, {
-          status: 'QUEUED',
-          storeExecutionRequest: true,
-        });
-        if (persisted.status && persisted.status !== 'QUEUED') {
+        let prepared: Awaited<ReturnType<typeof authorizeAndPersistTurn>>;
+        try {
+          prepared = await authorizeAndPersistTurn(config, turnRequest, 'QUEUED');
+        } catch (error) {
+          if (error instanceof CreditAdmissionError || error instanceof BillingUnavailableError) {
+            return json(res, error.httpStatus, admissionErrorPayload(
+              error,
+              metadataStringValue(turnRequest.metadata, 'runId'),
+              turnRequest.threadId,
+            ));
+          }
+          throw error;
+        }
+        const { persisted, authorization } = prepared;
+        if (prepared.existing) {
+          if (isRejectedTurnStatus(persisted.status)) {
+            return json(
+              res,
+              rejectionHttpStatus(persisted.result?.code),
+              existingTurnPayload(persisted, turnRequest.threadId),
+            );
+          }
           return json(res, 202, {
             runId: persisted.runId,
             threadId: turnRequest.threadId || null,
@@ -628,6 +692,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           threadId: turnRequest.threadId || null,
           status: persisted.status || 'QUEUED',
           pollIntervalMs: ASYNC_TURN_POLL_INTERVAL_MS,
+          billing: authorization,
         });
       }
 
@@ -655,6 +720,132 @@ function parseTurnStartRequest(body: Record<string, unknown>): TurnStartRequest 
     allowedAgents: Array.isArray(body.allowedAgents) ? body.allowedAgents.map(String) : undefined,
     metadata: isRecord(body.metadata) ? body.metadata : undefined,
   };
+}
+
+async function authorizeAndPersistTurn(
+  config: ServerConfig,
+  request: TurnStartRequest,
+  status: 'QUEUED' | 'RUNNING',
+): Promise<{
+  persisted: PersistedAgentTurnInput;
+  authorization: CreditAuthorization | null;
+  existing: boolean;
+}> {
+  const pending = await persistAgentTurnInput(config, request, {
+    status: 'PENDING_AUTH',
+    storeExecutionRequest: true,
+    persistMessage: false,
+  });
+  if (pending.status !== 'PENDING_AUTH') {
+    return { persisted: pending, authorization: null, existing: true };
+  }
+
+  try {
+    const authorization = await authorizeAgentRun(config, {
+      investorId: pending.investorId,
+      threadId: request.threadId || '',
+      runId: pending.runId,
+      hermesModel: metadataStringValue(request.metadata, 'hermesModel') || undefined,
+    });
+    const transitioned = await persistAgentTurnInput(config, request, {
+      status,
+      storeExecutionRequest: true,
+      persistMessage: false,
+      ...(status === 'RUNNING' ? { timeoutMs: config.turnQueueRunTimeoutMs } : {}),
+    });
+    if (transitioned.status !== status) {
+      if (transitioned.status === 'CANCELLED') {
+        await releaseRunCredits(config, {
+          runId: pending.runId,
+          reason: 'cancelled_during_authorization',
+        }).catch((error) => {
+          console.warn(`[billing] failed to release authorization race for ${pending.runId}: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }
+      return { persisted: transitioned, authorization, existing: true };
+    }
+    const persisted = await persistAgentTurnInput(config, request, {
+      status,
+      storeExecutionRequest: true,
+      persistMessage: true,
+      ...(status === 'RUNNING' ? { timeoutMs: config.turnQueueRunTimeoutMs } : {}),
+    });
+    if (persisted.status !== status) {
+      if (persisted.status === 'CANCELLED') {
+        await releaseRunCredits(config, {
+          runId: pending.runId,
+          reason: 'cancelled_during_context_persistence',
+        }).catch((error) => {
+          console.warn(`[billing] failed to release persistence race for ${pending.runId}: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }
+      return { persisted, authorization, existing: true };
+    }
+    return { persisted, authorization, existing: false };
+  } catch (error) {
+    if (error instanceof CreditAdmissionError || error instanceof BillingUnavailableError) {
+      await persistAgentTurnRejected(config, {
+        runId: pending.runId,
+        status: rejectionRunStatus(error),
+        code: error.code,
+        error: error.message,
+        details: error instanceof CreditAdmissionError ? error.details : undefined,
+      }).catch(() => null);
+    }
+    throw error;
+  }
+}
+
+function rejectionRunStatus(error: CreditAdmissionError | BillingUnavailableError) {
+  if (error.code === 'INSUFFICIENT_CREDITS' || error.code === 'SUBSCRIPTION_INACTIVE') {
+    return 'REJECTED_CREDITS' as const;
+  }
+  if (error.code === 'THREAD_BUSY') return 'REJECTED_THREAD_BUSY' as const;
+  if (error.code === 'CONCURRENT_TASK_LIMIT') return 'REJECTED_CONCURRENCY' as const;
+  return 'REJECTED_BILLING' as const;
+}
+
+function isRejectedTurnStatus(status: string | undefined) {
+  return Boolean(status?.startsWith('REJECTED_'));
+}
+
+function rejectionHttpStatus(code: unknown) {
+  if (code === 'INSUFFICIENT_CREDITS' || code === 'SUBSCRIPTION_INACTIVE') return 402;
+  if (code === 'THREAD_BUSY') return 409;
+  if (code === 'CONCURRENT_TASK_LIMIT') return 429;
+  return 503;
+}
+
+function existingTurnPayload(persisted: PersistedAgentTurnInput, threadId?: string) {
+  return {
+    runId: persisted.runId,
+    threadId: threadId || null,
+    status: persisted.status || 'UNKNOWN',
+    pollIntervalMs: ASYNC_TURN_POLL_INTERVAL_MS,
+    existing: true,
+    ...(persisted.error ? { error: persisted.error } : {}),
+    ...(persisted.result || {}),
+  };
+}
+
+function admissionErrorPayload(
+  error: CreditAdmissionError | BillingUnavailableError,
+  runId?: string,
+  threadId?: string,
+) {
+  return {
+    error: error.message,
+    code: error.code,
+    runId: runId || null,
+    threadId: threadId || null,
+    status: rejectionRunStatus(error),
+    ...(error instanceof CreditAdmissionError ? error.details : {}),
+  };
+}
+
+function metadataStringValue(metadata: Record<string, unknown> | undefined, key: string) {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
 function streamTurnStart(
@@ -697,7 +888,18 @@ function streamTurnStart(
     try {
       write({ type: 'turn_started', timestamp: new Date().toISOString() });
       if (!config) throw new Error('config missing');
-      persisted = await persistAgentTurnInput(config, request);
+      const prepared = await authorizeAndPersistTurn(config, request, 'RUNNING');
+      persisted = prepared.persisted;
+      if (prepared.existing) {
+        write({
+          type: 'final',
+          status: isRejectedTurnStatus(persisted.status)
+            ? rejectionHttpStatus(persisted.result?.code)
+            : 409,
+          result: existingTurnPayload(persisted, request.threadId),
+        });
+        return;
+      }
       write({
         type: 'event',
         event: {
@@ -765,11 +967,26 @@ function streamTurnStart(
       }
       write({
         type: 'final',
-        status: isAgentRunCancelledError(error) ? 499 : 500,
+        status: isAgentRunCancelledError(error)
+          ? 499
+          : error instanceof CreditAdmissionError || error instanceof BillingUnavailableError
+            ? error.httpStatus
+            : 500,
         result: {
-          runId: persisted?.runId,
           cancelled: isAgentRunCancelledError(error),
-          error: isAgentRunCancelledError(error) ? 'Run stopped by user.' : error instanceof Error ? error.message : String(error),
+          ...(error instanceof CreditAdmissionError || error instanceof BillingUnavailableError
+            ? admissionErrorPayload(
+                error,
+                persisted?.runId || metadataStringValue(request.metadata, 'runId'),
+                request.threadId,
+              )
+            : {
+                error: isAgentRunCancelledError(error)
+                  ? 'Run stopped by user.'
+                  : error instanceof Error
+                    ? error.message
+                    : String(error),
+              }),
         },
       });
     } finally {
@@ -1254,6 +1471,11 @@ function isOpsAuthorized(req: http.IncomingMessage) {
   const bearer = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length).trim() : '';
   const headerToken = Array.isArray(req.headers['x-ops-token']) ? req.headers['x-ops-token'][0] : req.headers['x-ops-token'];
   return bearer === token || headerToken === token;
+}
+
+function isAgentServiceAuthorized(req: http.IncomingMessage, config: ServerConfig) {
+  if (process.env.OPS_AGENT_TOKEN?.trim()) return isOpsAuthorized(req);
+  return config.env !== 'production' && isLoopbackRequest(req);
 }
 
 function readRequiredBodyString(body: Record<string, unknown>, key: string) {

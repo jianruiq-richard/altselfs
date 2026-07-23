@@ -20,6 +20,13 @@ function readIntEnv(key, fallback) {
     const value = Number(raw);
     return Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
 }
+function readFloatEnv(key, fallback) {
+    const raw = process.env[key];
+    if (!raw)
+        return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+}
 function readOptionalIntEnv(key) {
     const raw = process.env[key];
     if (!raw)
@@ -278,13 +285,16 @@ export function loadConfig() {
     const hasOpenRouterKey = Boolean(process.env[openRouterApiKeyEnv]?.trim());
     const codexModel = process.env.CODEX_MODEL?.trim() || 'gpt-5.5';
     const codexModelProvider = process.env.CODEX_MODEL_PROVIDER?.trim() || (codexModel === 'gpt-5.5' ? 'openai' : hasOpenRouterKey ? 'openrouter' : undefined);
+    const env = readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development');
     return {
         port: readIntEnv('PORT', 8787),
-        env: readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development'),
+        env,
         processRole: readProcessRoleEnv('AGENT_PROCESS_ROLE', 'all'),
+        directTurnExecutionEnabled: readBoolEnv('AGENT_DIRECT_TURN_EXECUTION_ENABLED', env !== 'production'),
         storageBackend,
         databaseUrl: process.env.DATABASE_URL?.trim() || undefined,
         contextDatabaseUrl: process.env.AGENT_CONTEXT_DATABASE_URL?.trim() || undefined,
+        billingDatabaseUrl: process.env.BILLING_DATABASE_URL?.trim() || undefined,
         hermesRouterEnabled: readBoolEnv('HERMES_ROUTER_ENABLED', true),
         hermesModel,
         hermesProvider,
@@ -338,8 +348,9 @@ export function loadConfig() {
         memoryReviewPollMs: readIntEnv('MEMORY_REVIEW_POLL_MS', 1000),
         memoryReviewMaxTurns: readIntEnv('MEMORY_REVIEW_MAX_TURNS', 6),
         turnQueuePollMs: readIntEnv('AGENT_TURN_QUEUE_POLL_MS', 1000),
+        turnQueueCancelPollMs: readIntEnv('AGENT_TURN_CANCEL_POLL_MS', 1500),
         turnQueueMaxConcurrency: readIntEnv('AGENT_TURN_MAX_CONCURRENCY', 3),
-        turnQueueMaxPerUser: readIntEnv('AGENT_TURN_MAX_PER_USER', 1),
+        turnQueueMaxPerUser: readIntEnv('AGENT_TURN_MAX_PER_USER', 20),
         turnQueueMaxPerThread: readIntEnv('AGENT_TURN_MAX_PER_THREAD', 1),
         turnQueueMaxOpenAi: readIntEnv('AGENT_TURN_MAX_OPENAI', 1),
         turnQueueMaxOpenRouter: readIntEnv('AGENT_TURN_MAX_OPENROUTER', 2),
@@ -373,5 +384,18 @@ export function loadConfig() {
         artifactObjectStorageUploadMaxBytes: readIntEnv('ARTIFACT_OBJECT_STORAGE_UPLOAD_MAX_BYTES', 50 * 1024 * 1024),
         artifactObjectStorageUploadTtlSeconds: readIntEnv('ARTIFACT_OBJECT_STORAGE_UPLOAD_TTL_SECONDS', 15 * 60),
         artifactObjectStorageDownloadTtlSeconds: readIntEnv('ARTIFACT_OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS', 10 * 60),
+        creditsPerUsd: readFloatEnv('CREDITS_PER_USD', 1_000),
+        creditsCostMarkup: readFloatEnv('CREDITS_COST_MARKUP', 2),
+        creditsMinimumRunCharge: readIntEnv('CREDITS_MINIMUM_RUN_CHARGE', 5),
+        creditsEnforcementMode: process.env.CREDITS_ENFORCEMENT_MODE?.trim().toLowerCase() === 'enforce'
+            ? 'enforce'
+            : 'observe',
+        creditsWelcomeGrant: readIntEnv('CREDITS_WELCOME_GRANT', 1_000),
+        creditsConcurrencyHold: readIntEnv('CREDITS_CONCURRENCY_HOLD', 50),
+        creditsReservationTtlMinutes: readIntEnv('CREDITS_RESERVATION_TTL_MINUTES', 120),
+        codexUsageUncachedInputRate: readFloatEnv('CODEX_USAGE_UNCACHED_INPUT_RATE', 125),
+        codexUsageCachedInputRate: readFloatEnv('CODEX_USAGE_CACHED_INPUT_RATE', 12.5),
+        codexUsageOutputRate: readFloatEnv('CODEX_USAGE_OUTPUT_RATE', 750),
+        codexUsageCreditMultiplier: readFloatEnv('CODEX_USAGE_CREDIT_MULTIPLIER', 7.5),
     };
 }

@@ -3,16 +3,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Archive,
+  ArrowRight,
   Check,
+  CircleGauge,
   CreditCard,
   LoaderCircle,
   RefreshCw,
   RotateCcw,
   Search,
+  Sparkles,
   Trash2,
   UserRound,
 } from 'lucide-react';
+import Link from 'next/link';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
+import { formatCredits } from '@/lib/billing-plans';
 import { displayEmail } from '@/lib/user-identifier';
 
 type Profile = {
@@ -34,6 +39,46 @@ type ArchivedConversation = {
 };
 
 type SettingsView = 'account' | 'plan' | 'archive';
+
+type BillingSummary = {
+  mode: 'observe' | 'enforce';
+  account: {
+    balanceCredits: number;
+    reservedCredits: number;
+    availableCredits: number;
+    lifetimeGrantedCredits: number;
+    lifetimeSpentCredits: number;
+    lifetimeRefundedCredits: number;
+  };
+  subscription: {
+    planKey: string;
+    planName: string;
+    status: string;
+    monthlyCredits: number;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+  };
+  recentLedger: Array<{
+    id: string;
+    type: string;
+    amountCredits: number;
+    reservedDeltaCredits: number;
+    description: string;
+    metadata: unknown;
+    createdAt: string;
+  }>;
+  recentUsage: Array<{
+    id: string;
+    runId: string;
+    hermesModel: string | null;
+    codexModel: string | null;
+    hermesCredits: number;
+    codexCredits: number;
+    computedCredits: number;
+    billedCredits: number;
+    createdAt: string;
+  }>;
+};
 
 const settingsTabs = [
   { key: 'account' as const, label: 'Account', icon: UserRound },
@@ -80,6 +125,9 @@ export default function ProfilePage() {
   const [archivedError, setArchivedError] = useState<string | null>(null);
   const [archiveActionId, setArchiveActionId] = useState<string | null>(null);
   const [archiveQuery, setArchiveQuery] = useState('');
+  const [billing, setBilling] = useState<BillingSummary | null>(null);
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
   const loadProfile = useCallback(async () => {
     setProfileLoading(true);
@@ -123,10 +171,29 @@ export default function ProfilePage() {
     }
   }, []);
 
+  const loadBilling = useCallback(async () => {
+    setBillingLoading(true);
+    setBillingError(null);
+    try {
+      const response = await fetch('/api/billing/summary', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      const data = (await response.json().catch(() => ({}))) as BillingSummary & { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Failed to load plan and usage');
+      setBilling(data);
+    } catch (loadError) {
+      setBillingError(loadError instanceof Error ? loadError.message : 'Failed to load plan and usage');
+    } finally {
+      setBillingLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadProfile();
     void loadArchivedSessions();
-  }, [loadArchivedSessions, loadProfile]);
+    void loadBilling();
+  }, [loadArchivedSessions, loadBilling, loadProfile]);
 
   const filteredArchivedSessions = useMemo(() => {
     const query = archiveQuery.trim().toLowerCase();
@@ -228,7 +295,11 @@ export default function ProfilePage() {
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0" />
                     <span>{tab.label}</span>
-                    {tab.key === 'plan' ? <small className="ml-auto hidden text-[9px] text-zinc-600 md:block">Free</small> : null}
+                    {tab.key === 'plan' ? (
+                      <small className="ml-auto hidden text-[9px] text-zinc-600 md:block">
+                        {billing?.subscription.planName || 'Free'}
+                      </small>
+                    ) : null}
                     {tab.key === 'archive' ? (
                       <small className="ml-auto hidden text-[9px] text-zinc-600 md:block">{archivedSessions.length}</small>
                     ) : null}
@@ -358,36 +429,130 @@ export default function ProfilePage() {
                 <section>
                   <div className="mb-7">
                     <h1 className="text-[28px] font-bold leading-tight text-zinc-50">Plan & usage</h1>
-                    <p className="mt-2 text-[13px] text-zinc-400">Subscription and current workspace access.</p>
+                    <p className="mt-2 text-[13px] text-zinc-400">Credits, task usage, and subscription details.</p>
                   </div>
 
-                  <section className="mb-7 border-b border-white/[0.09] pb-8">
-                    <div className="grid grid-cols-1 items-center gap-5 rounded-[8px] border border-white/[0.09] bg-[linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.018))] p-[18px] sm:grid-cols-[minmax(0,1fr)_auto]">
-                      <span className="grid">
-                        <span className="text-[10px] text-zinc-600">Current plan</span>
-                        <strong className="mt-1 text-[17px] text-zinc-100">Free</strong>
-                        <span className="mt-2 text-[11px] text-zinc-400">Core discussions and connector access.</span>
-                      </span>
-                      <span className="inline-flex min-h-[30px] w-fit items-center rounded-full border border-[#46d19a]/20 bg-[#46d19a]/[0.06] px-3 text-[10px] font-extrabold text-[#46d19a]">Active</span>
+                  {billingLoading ? (
+                    <div className="flex min-h-56 items-center justify-center border-y border-white/[0.09] text-xs text-zinc-500">
+                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                      Loading plan and usage
                     </div>
-                  </section>
+                  ) : billing ? (
+                    <>
+                      <section className="grid gap-3 border-b border-white/[0.09] pb-7 sm:grid-cols-3">
+                        <UsageMetric
+                          label="Available"
+                          value={formatCredits(billing.account.availableCredits)}
+                          detail={
+                            billing.account.balanceCredits < 0
+                              ? `${formatCredits(Math.abs(billing.account.balanceCredits))} credits outstanding`
+                              : 'credits ready to use'
+                          }
+                          icon={Sparkles}
+                        />
+                        <UsageMetric
+                          label="Reserved"
+                          value={formatCredits(billing.account.reservedCredits)}
+                          detail="held by active tasks"
+                          icon={CircleGauge}
+                        />
+                        <UsageMetric
+                          label="Lifetime usage"
+                          value={formatCredits(billing.account.lifetimeSpentCredits)}
+                          detail="credits billed"
+                          icon={CreditCard}
+                        />
+                      </section>
 
-                  <section>
-                    <div className="flex items-start justify-between gap-6">
-                      <div>
-                        <h2 className="text-sm font-semibold text-zinc-100">Credits</h2>
-                        <p className="mt-1 text-[11px] text-zinc-600">Additional agent work beyond plan limits.</p>
-                      </div>
-                      <strong className="text-lg text-zinc-100">0</strong>
+                      <section className="grid min-h-[82px] grid-cols-[minmax(0,1fr)_auto] items-center gap-5 border-b border-white/[0.09] py-5">
+                        <span className="grid">
+                          <span className="text-[10px] text-zinc-600">Current plan</span>
+                          <strong className="mt-1 text-[15px] text-zinc-100">{billing.subscription.planName}</strong>
+                          <span className="mt-1 text-[10px] text-zinc-600">
+                            {formatCredits(billing.subscription.monthlyCredits)} included credits
+                            {billing.mode === 'observe' ? ' · usage preview' : ''}
+                          </span>
+                        </span>
+                        <Link
+                          href="/pricing"
+                          className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-300 hover:border-white/15 hover:bg-white/[0.055] hover:text-white"
+                        >
+                          View plans
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </section>
+
+                      <section className="pt-7">
+                        <div className="flex items-end justify-between gap-5">
+                          <div>
+                            <h2 className="text-sm font-semibold text-zinc-100">Consumption details</h2>
+                            <p className="mt-1 text-[11px] text-zinc-600">Measured Hermes and Codex usage for completed tasks.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void loadBilling()}
+                            className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/[0.05] hover:text-white"
+                            title="Refresh usage"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="mt-4 border-y border-white/[0.09]">
+                          {billing.recentUsage.length > 0 ? billing.recentUsage.map((usage) => (
+                            <article key={usage.id} className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-5 border-b border-white/[0.09] py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_110px_90px]">
+                              <span className="grid min-w-0">
+                                <strong className="truncate text-xs text-zinc-200">
+                                  {usage.hermesModel?.includes('claude') ? 'Claude + Codex task' : 'DeepSeek + Codex task'}
+                                </strong>
+                                <span className="mt-1 truncate text-[10px] text-zinc-600">
+                                  Hermes {formatCredits(usage.hermesCredits)} · Codex {formatCredits(usage.codexCredits)}
+                                </span>
+                              </span>
+                              <span className="hidden text-[10px] text-zinc-600 sm:block">{formatDateTime(usage.createdAt)}</span>
+                              <span className="text-right">
+                                <strong className="block text-xs text-zinc-200">
+                                  {formatCredits(billing.mode === 'enforce' ? usage.billedCredits : usage.computedCredits)}
+                                </strong>
+                                <span className="text-[9px] uppercase text-zinc-700">
+                                  {billing.mode === 'enforce' ? 'billed' : 'projected'}
+                                </span>
+                              </span>
+                            </article>
+                          )) : (
+                            <div className="flex min-h-28 items-center justify-center px-4 text-center text-xs text-zinc-600">
+                              Completed task usage will appear here.
+                            </div>
+                          )}
+                        </div>
+                      </section>
+
+                      <section className="pt-7">
+                        <h2 className="text-sm font-semibold text-zinc-100">Credit activity</h2>
+                        <div className="mt-4 border-y border-white/[0.09]">
+                          {billing.recentLedger.slice(0, 12).map((entry) => (
+                            <article key={entry.id} className="grid min-h-[58px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/[0.09] py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_120px_80px]">
+                              <span className="grid min-w-0">
+                                <strong className="truncate text-[11px] text-zinc-300">{entry.description}</strong>
+                                <span className="mt-1 text-[9px] uppercase text-zinc-700">{entry.type.replaceAll('_', ' ')}</span>
+                              </span>
+                              <span className="hidden text-[10px] text-zinc-600 sm:block">{formatDateTime(entry.createdAt)}</span>
+                              <strong className={`text-right text-[11px] ${
+                                entry.amountCredits > 0 ? 'text-[#46d19a]' : entry.amountCredits < 0 ? 'text-zinc-200' : 'text-zinc-600'
+                              }`}>
+                                {entry.amountCredits > 0 ? '+' : ''}{formatSignedCredits(entry.amountCredits)}
+                              </strong>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    </>
+                  ) : (
+                    <div className="rounded-[8px] border border-red-400/20 bg-red-400/[0.06] p-4 text-xs text-red-200">
+                      <p>{billingError || 'Plan and usage details are unavailable.'}</p>
+                      <button type="button" onClick={() => void loadBilling()} className="mt-3 font-bold text-white hover:underline">Retry</button>
                     </div>
-                    <div className="mt-4 grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-6 border-y border-white/[0.09]">
-                      <span className="grid">
-                        <strong className="text-xs text-zinc-100">Credit balance</strong>
-                        <span className="mt-1 text-[10px] text-zinc-600">Commercial plans and credit purchases are not enabled yet.</span>
-                      </span>
-                      <span className="text-[10px] font-bold text-zinc-600">Not available</span>
-                    </div>
-                  </section>
+                  )}
                 </section>
               ) : null}
 
@@ -481,4 +646,34 @@ export default function ProfilePage() {
       </div>
     </AstromarWorkspaceShell>
   );
+}
+
+function UsageMetric({
+  label,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: typeof CreditCard;
+}) {
+  return (
+    <div className="grid min-h-[112px] content-between rounded-[8px] border border-white/[0.09] bg-white/[0.025] p-4">
+      <span className="flex items-center justify-between gap-4 text-[10px] text-zinc-600">
+        {label}
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <span className="grid">
+        <strong className="text-[20px] text-zinc-100">{value}</strong>
+        <span className="mt-1 text-[9px] text-zinc-700">{detail}</span>
+      </span>
+    </div>
+  );
+}
+
+function formatSignedCredits(value: number) {
+  if (value === 0) return '0';
+  return `${value < 0 ? '-' : ''}${formatCredits(Math.abs(value))}`;
 }

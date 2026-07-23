@@ -54,6 +54,10 @@ export function unregisterActiveRun(runId: string) {
   activeRuns.delete(runId);
 }
 
+export function clearRunCancellation(runId: string) {
+  cancelledRuns.delete(runId);
+}
+
 export function cancelActiveRun(runId: string) {
   const now = nowIso();
   cancelledRuns.set(runId, now);

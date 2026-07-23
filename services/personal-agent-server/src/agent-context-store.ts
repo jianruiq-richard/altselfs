@@ -1,11 +1,21 @@
 import type { ServerConfig } from './config.js';
 import type { RuntimePaths } from './sandbox-runtime.js';
 import type { AgentEvent, AgentRoute, TurnStartRequest } from './types.js';
+import { releaseRunCredits, settleRunCredits } from './credit-settlement.js';
 import { id, isRecord, truncate } from './util.js';
 import { resolveHermesModelSelection } from './hermes/llm-provider.js';
 
 type PgPool = {
   query: (text: string, values?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
+};
+
+type BillingOutboxAction = 'SETTLE' | 'RELEASE';
+
+type BillingOutboxRecord = {
+  runId: string;
+  action: BillingOutboxAction;
+  payload: Record<string, unknown>;
+  attemptCount: number;
 };
 
 let sharedContextPool: PgPool | null = null;
@@ -28,6 +38,8 @@ export type PersistedAgentTurnInput = {
   currentUserMessage: string;
   warnings: string[];
   status?: string;
+  error?: string | null;
+  result?: Record<string, unknown> | null;
 };
 
 export type AgentTurnQueueLimits = {
@@ -147,7 +159,12 @@ export async function loadCleanTurnContext(config: ServerConfig, request: TurnSt
 export async function persistAgentTurnInput(
   config: ServerConfig,
   request: TurnStartRequest,
-  options: { status?: 'QUEUED' | 'RUNNING'; storeExecutionRequest?: boolean; timeoutMs?: number } = {}
+  options: {
+    status?: 'PENDING_AUTH' | 'QUEUED' | 'RUNNING';
+    storeExecutionRequest?: boolean;
+    persistMessage?: boolean;
+    timeoutMs?: number;
+  } = {}
 ): Promise<PersistedAgentTurnInput> {
   const pool = await getRequiredContextPool(config);
   const investorId = metadataString(request, 'investorId') || request.userId;
@@ -162,6 +179,7 @@ export async function persistAgentTurnInput(
     : {};
   const warnings: string[] = [];
   const status = options.status || 'RUNNING';
+  const persistMessage = options.persistMessage !== false;
   const modelSelection = resolveRunModelSelection(config, request);
   const timeoutAt = status === 'RUNNING' && options.timeoutMs
     ? new Date(Date.now() + options.timeoutMs).toISOString()
@@ -177,20 +195,20 @@ export async function persistAgentTurnInput(
       'values ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7::jsonb, $8::jsonb, $9, $10, $11::timestamptz)',
       'on conflict (id) do update set',
       'request = excluded.request,',
-      "execution_request = case when agent_context_runs.status in ('QUEUED', 'ERROR', 'CANCELLED', 'TIMEOUT') then excluded.execution_request else agent_context_runs.execution_request end,",
-      "status = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then excluded.status else agent_context_runs.status end,",
-      "queued_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then excluded.queued_at else agent_context_runs.queued_at end,",
-      "started_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then excluded.started_at else agent_context_runs.started_at end,",
-      "completed_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.completed_at end,",
-      "result = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.result end,",
-      "error = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.error end,",
-      "worker_id = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.worker_id end,",
-      "worker_heartbeat_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.worker_heartbeat_at end,",
-      "attempt_count = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then 0 else agent_context_runs.attempt_count end,",
-      "next_attempt_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.next_attempt_at end,",
-      "timeout_at = case when agent_context_runs.status in ('ERROR', 'CANCELLED', 'TIMEOUT') then null else agent_context_runs.timeout_at end,",
+      "execution_request = case when agent_context_runs.status = 'PENDING_AUTH' then excluded.execution_request else agent_context_runs.execution_request end,",
+      "status = case when agent_context_runs.status = 'PENDING_AUTH' then excluded.status else agent_context_runs.status end,",
+      "queued_at = case when agent_context_runs.status = 'PENDING_AUTH' then excluded.queued_at else agent_context_runs.queued_at end,",
+      "started_at = case when agent_context_runs.status = 'PENDING_AUTH' then excluded.started_at else agent_context_runs.started_at end,",
+      "completed_at = case when agent_context_runs.status = 'PENDING_AUTH' then null else agent_context_runs.completed_at end,",
+      "result = case when agent_context_runs.status = 'PENDING_AUTH' then null else agent_context_runs.result end,",
+      "error = case when agent_context_runs.status = 'PENDING_AUTH' then null else agent_context_runs.error end,",
+      "worker_id = case when agent_context_runs.status = 'PENDING_AUTH' then null else agent_context_runs.worker_id end,",
+      "worker_heartbeat_at = case when agent_context_runs.status = 'PENDING_AUTH' then null else agent_context_runs.worker_heartbeat_at end,",
+      "attempt_count = case when agent_context_runs.status = 'PENDING_AUTH' then 0 else agent_context_runs.attempt_count end,",
+      "next_attempt_at = case when agent_context_runs.status = 'PENDING_AUTH' then null else agent_context_runs.next_attempt_at end,",
+      "timeout_at = case when agent_context_runs.status = 'PENDING_AUTH' then excluded.timeout_at else agent_context_runs.timeout_at end,",
       'model_provider = excluded.model_provider, model = excluded.model, updated_at = now()',
-      'returning status',
+      'returning status, error, result',
     ].join(' '),
     [
       runId,
@@ -212,21 +230,26 @@ export async function persistAgentTurnInput(
       timeoutAt,
     ]
   );
+  const effectiveStatus = typeof runResult.rows[0]?.status === 'string'
+    ? String(runResult.rows[0].status)
+    : status;
 
-  await pool.query(
-    [
-      'insert into agent_context_messages',
-      '(id, investor_id, thread_id, role, content, metadata)',
-      'values ($1, $2, $3, $4, $5, $6::jsonb)',
-      'on conflict (id) do update set',
-      'content = excluded.content, metadata = excluded.metadata',
-    ].join(' '),
-    [userMessageId, investorId, threadId, 'USER', displayMessage, stringifyJson(messageMetadata)]
-  );
+  if (persistMessage && effectiveStatus === status) {
+    await pool.query(
+      [
+        'insert into agent_context_messages',
+        '(id, investor_id, thread_id, role, content, metadata)',
+        'values ($1, $2, $3, $4, $5, $6::jsonb)',
+        'on conflict (id) do update set',
+        'content = excluded.content, metadata = excluded.metadata',
+      ].join(' '),
+      [userMessageId, investorId, threadId, 'USER', displayMessage, stringifyJson(messageMetadata)]
+    );
+  }
 
   const parsedAttachment = isRecord(request.metadata?.parsedAttachment) ? request.metadata.parsedAttachment : null;
   const parsedAttachmentText = typeof parsedAttachment?.contentText === 'string' ? parsedAttachment.contentText.trim() : '';
-  if (parsedAttachment && parsedAttachmentText) {
+  if (persistMessage && effectiveStatus === status && parsedAttachment && parsedAttachmentText) {
     await pool.query(
       [
         'insert into agent_context_artifacts',
@@ -256,8 +279,135 @@ export async function persistAgentTurnInput(
     investorId,
     currentUserMessage: message,
     warnings,
-    status: typeof runResult.rows[0]?.status === 'string' ? String(runResult.rows[0].status) : status,
+    status: effectiveStatus,
+    error: typeof runResult.rows[0]?.error === 'string' ? String(runResult.rows[0].error) : null,
+    result: isRecord(runResult.rows[0]?.result) ? runResult.rows[0].result : null,
   };
+}
+
+export async function persistAgentTurnRejected(
+  config: ServerConfig,
+  input: {
+    runId: string;
+    status: 'REJECTED_CREDITS' | 'REJECTED_CONCURRENCY' | 'REJECTED_THREAD_BUSY' | 'REJECTED_BILLING';
+    code: string;
+    error: string;
+    details?: Record<string, unknown>;
+  }
+) {
+  const pool = await getRequiredContextPool(config);
+  await pool.query(
+    [
+      'update agent_context_runs',
+      'set status = $2, error = $3, result = $4::jsonb, execution_request = null,',
+      'completed_at = now(), updated_at = now()',
+      "where id = $1 and status = 'PENDING_AUTH'",
+    ].join(' '),
+    [
+      input.runId,
+      input.status,
+      input.error,
+      stringifyJson({
+        code: input.code,
+        error: input.error,
+        ...(input.details || {}),
+      }),
+    ]
+  );
+}
+
+export async function requestAgentRunCancellation(
+  config: ServerConfig,
+  input: { runId: string; threadId?: string; investorId?: string; reason?: string }
+) {
+  const pool = await getRequiredContextPool(config);
+  const reason = input.reason || 'cancelled by user';
+  const result = await pool.query(
+    [
+      'update agent_context_runs',
+      'set cancel_requested = true,',
+      "status = case when status in ('PENDING_AUTH', 'QUEUED') then 'CANCELLED' else status end,",
+      "error = case when status in ('PENDING_AUTH', 'QUEUED') then $4 else error end,",
+      "execution_request = case when status in ('PENDING_AUTH', 'QUEUED') then null else execution_request end,",
+      "completed_at = case when status in ('PENDING_AUTH', 'QUEUED') then now() else completed_at end,",
+      'updated_at = now()',
+      "where id = $1 and status in ('PENDING_AUTH', 'QUEUED', 'RUNNING')",
+      'and ($2::text is null or thread_id = $2)',
+      'and ($3::text is null or investor_id = $3)',
+      'returning id, status, thread_id as "threadId", investor_id as "investorId"',
+    ].join(' '),
+    [input.runId, input.threadId || null, input.investorId || null, reason]
+  );
+  const row = result.rows[0];
+  if (!row) {
+    const existing = await pool.query(
+      [
+        'select status, thread_id as "threadId", investor_id as "investorId"',
+        'from agent_context_runs',
+        'where id = $1',
+        'and ($2::text is null or thread_id = $2)',
+        'and ($3::text is null or investor_id = $3)',
+        'limit 1',
+      ].join(' '),
+      [input.runId, input.threadId || null, input.investorId || null]
+    );
+    return {
+      found: Boolean(existing.rows[0]),
+      accepted: false,
+      alreadyFinished: true,
+      runId: input.runId,
+      status: existing.rows[0] ? String(existing.rows[0].status || '') : null,
+      threadId: existing.rows[0] && typeof existing.rows[0].threadId === 'string'
+        ? existing.rows[0].threadId
+        : input.threadId || null,
+    };
+  }
+
+  const status = String(row.status || '');
+  if (status === 'CANCELLED') {
+    await enqueueAgentBillingEvent(pool, {
+      runId: input.runId,
+      action: 'RELEASE',
+      payload: { reason: 'cancelled_before_execution' },
+    });
+    await processAgentBillingOutbox(config, {
+      workerId: `cancel-request-${process.pid}`,
+      limit: 1,
+      runId: input.runId,
+    }).catch((error) => {
+      console.warn(`[billing] queued cancellation release failed for ${input.runId}: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
+
+  return {
+    found: true,
+    accepted: true,
+    alreadyFinished: false,
+    runId: input.runId,
+    status,
+    threadId: typeof row.threadId === 'string' ? row.threadId : input.threadId || null,
+    workerTerminationPending: status === 'RUNNING',
+  };
+}
+
+export async function listRequestedAgentRunCancellations(
+  config: ServerConfig,
+  runIds: string[]
+) {
+  const uniqueRunIds = Array.from(new Set(runIds.filter(Boolean)));
+  if (uniqueRunIds.length === 0) return [];
+  const pool = await getRequiredContextPool(config);
+  const result = await pool.query(
+    [
+      'select id',
+      'from agent_context_runs',
+      'where id = any($1::text[])',
+      "and status = 'RUNNING'",
+      'and cancel_requested = true',
+    ].join(' '),
+    [uniqueRunIds]
+  );
+  return result.rows.map((row) => String(row.id || '')).filter(Boolean);
 }
 
 export async function claimNextQueuedAgentTurn(
@@ -275,6 +425,7 @@ export async function claimNextQueuedAgentTurn(
       'select r.*',
       'from agent_context_runs r',
       "where r.status = 'QUEUED'",
+      'and r.cancel_requested = false',
       "and pg_try_advisory_xact_lock(hashtext('altselfs_agent_turn_queue_claim'))",
       'and (r.next_attempt_at is null or r.next_attempt_at <= now())',
       'and (select count(*) from agent_context_runs g where g.status = $2) < $3',
@@ -335,14 +486,26 @@ export async function claimNextQueuedAgentTurn(
   try {
     return rowToQueuedAgentTurn(row);
   } catch (error) {
+    const runId = String(row.id || '');
+    const reason = error instanceof Error ? error.message : String(error);
     await pool.query(
       [
         'update agent_context_runs',
         "set status = 'ERROR', error = $2, execution_request = null, completed_at = now(), updated_at = now()",
         'where id = $1',
       ].join(' '),
-      [String(row.id || ''), error instanceof Error ? error.message : String(error)]
+      [runId, reason]
     ).catch(() => null);
+    await enqueueAgentBillingEvent(pool, {
+      runId,
+      action: 'RELEASE',
+      payload: { reason: `invalid_queued_request: ${reason}` },
+    }).catch(() => null);
+    await processAgentBillingOutbox(config, {
+      workerId: `claim-error-${process.pid}`,
+      limit: 1,
+      runId,
+    }).catch(() => null);
     return null;
   }
 }
@@ -367,6 +530,21 @@ export async function expireStaleAgentTurns(
     ].join(' '),
     [Math.max(1_000, input.staleHeartbeatMs)]
   );
+  await Promise.all(result.rows.map((row) =>
+    enqueueAgentBillingEvent(pool, {
+      runId: String(row.id || ''),
+      action: 'RELEASE',
+      payload: { reason: 'worker_timeout' },
+    })
+  ));
+  if (result.rows.length > 0) {
+    await processAgentBillingOutbox(config, {
+      workerId: `stale-expiry-${process.pid}`,
+      limit: result.rows.length,
+    }).catch((error) => {
+      console.warn(`[billing] failed to process stale run releases: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
   return result.rows.length;
 }
 
@@ -814,14 +992,17 @@ export async function persistAgentTurnCancelled(
   input: { runId: string; threadId?: string; investorId?: string; userId?: string; reason?: string }
 ) {
   const pool = await getRequiredContextPool(config);
-  await pool.query(
+  const transitioned = await pool.query(
     [
       'update agent_context_runs',
-      'set status = $2, error = $3, execution_request = null, completed_at = now(), updated_at = now()',
-      'where id = $1',
+      'set status = $2, error = $3, cancel_requested = true,',
+      'execution_request = null, completed_at = now(), updated_at = now()',
+      "where id = $1 and status in ('PENDING_AUTH', 'QUEUED', 'RUNNING')",
+      'returning id',
     ].join(' '),
     [input.runId, 'CANCELLED', input.reason || 'cancelled by user']
   );
+  if (!transitioned.rows[0]) return;
   if (input.threadId) {
     await pool.query(
       [
@@ -858,6 +1039,18 @@ export async function persistAgentTurnCancelled(
       ]
     );
   }
+  await enqueueAgentBillingEvent(pool, {
+    runId: input.runId,
+    action: 'RELEASE',
+    payload: { reason: input.reason || 'cancelled_by_user' },
+  });
+  await processAgentBillingOutbox(config, {
+    workerId: `cancel-${process.pid}`,
+    limit: 1,
+    runId: input.runId,
+  }).catch((error) => {
+    console.warn(`[billing] failed to release cancelled run ${input.runId}: ${error instanceof Error ? error.message : String(error)}`);
+  });
 }
 
 export async function persistAgentTurnTimeout(
@@ -865,14 +1058,16 @@ export async function persistAgentTurnTimeout(
   input: { runId: string; threadId?: string; reason?: string }
 ) {
   const pool = await getRequiredContextPool(config);
-  await pool.query(
+  const transitioned = await pool.query(
     [
       'update agent_context_runs',
       'set status = $2, error = $3, execution_request = null, completed_at = now(), updated_at = now()',
-      'where id = $1',
+      "where id = $1 and status = 'RUNNING'",
+      'returning id',
     ].join(' '),
     [input.runId, 'TIMEOUT', input.reason || 'agent run timed out']
   );
+  if (!transitioned.rows[0]) return;
   if (input.threadId) {
     await pool.query(
       [
@@ -893,6 +1088,18 @@ export async function persistAgentTurnTimeout(
       ]
     );
   }
+  await enqueueAgentBillingEvent(pool, {
+    runId: input.runId,
+    action: 'RELEASE',
+    payload: { reason: input.reason || 'agent_run_timeout' },
+  });
+  await processAgentBillingOutbox(config, {
+    workerId: `timeout-${process.pid}`,
+    limit: 1,
+    runId: input.runId,
+  }).catch((error) => {
+    console.warn(`[billing] failed to release timed-out run ${input.runId}: ${error instanceof Error ? error.message : String(error)}`);
+  });
 }
 
 export async function persistAgentRunEvent(
@@ -959,11 +1166,12 @@ export async function persistAgentTurnSuccess(
 
   await persistAgentRunEvents(pool, input.runId, params.events, { startIndex: 0 });
   await upsertThreadSummary(pool, params.threadId, input.currentUserMessage, params.reply);
-  await pool.query(
+  const transitioned = await pool.query(
     [
       'update agent_context_runs',
       'set status = $2, route = $3, result = $4::jsonb, execution_request = null, completed_at = now(), updated_at = now()',
-      'where id = $1',
+      "where id = $1 and status = 'RUNNING'",
+      'returning id',
     ].join(' '),
     [
       input.runId,
@@ -977,6 +1185,19 @@ export async function persistAgentTurnSuccess(
       }),
     ]
   );
+  if (!transitioned.rows[0]) return;
+  await enqueueAgentBillingEvent(pool, {
+    runId: input.runId,
+    action: 'SETTLE',
+    payload: { raw: billingUsageEnvelope(params.raw) },
+  });
+  await processAgentBillingOutbox(config, {
+    workerId: `success-${process.pid}`,
+    limit: 1,
+    runId: input.runId,
+  }).catch((error) => {
+    console.warn(`[billing] failed to settle successful run ${input.runId}: ${error instanceof Error ? error.message : String(error)}`);
+  });
 }
 
 export async function persistAgentTurnError(
@@ -990,14 +1211,75 @@ export async function persistAgentTurnError(
 ) {
   if (!input) return;
   const pool = await getRequiredContextPool(config);
-  await pool.query(
+  const transitioned = await pool.query(
     [
       'update agent_context_runs',
       'set status = $2, error = $3, result = $4::jsonb, execution_request = null, completed_at = now(), updated_at = now()',
-      'where id = $1',
+      "where id = $1 and status in ('QUEUED', 'RUNNING')",
+      'returning id',
     ].join(' '),
     [input.runId, 'ERROR', params.error, stringifyJson(params.result ?? null)]
   );
+  if (!transitioned.rows[0]) return;
+  await enqueueAgentBillingEvent(pool, {
+    runId: input.runId,
+    action: 'RELEASE',
+    payload: { reason: params.error || 'agent_run_error' },
+  });
+  await processAgentBillingOutbox(config, {
+    workerId: `error-${process.pid}`,
+    limit: 1,
+    runId: input.runId,
+  }).catch((error) => {
+    console.warn(`[billing] failed to release failed run ${input.runId}: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
+export async function processAgentBillingOutbox(
+  config: ServerConfig,
+  input: { workerId: string; limit?: number; runId?: string }
+) {
+  const pool = await getRequiredContextPool(config);
+  await backfillAgentBillingOutbox(pool);
+  const claimed = await claimAgentBillingEvents(pool, {
+    workerId: input.workerId,
+    limit: input.limit,
+    runId: input.runId,
+  });
+  let completed = 0;
+  let failed = 0;
+
+  for (const event of claimed) {
+    try {
+      await executeAgentBillingEvent(config, event);
+      await pool.query(
+        [
+          'update agent_billing_outbox',
+          "set status = 'DONE', locked_by = null, locked_at = null, last_error = null,",
+          'completed_at = now(), updated_at = now()',
+          'where run_id = $1 and locked_by = $2',
+        ].join(' '),
+        [event.runId, input.workerId]
+      );
+      completed += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const terminal = event.attemptCount >= 20;
+      const retryDelayMs = Math.min(5 * 60_000, 5_000 * (2 ** Math.min(6, event.attemptCount - 1)));
+      await pool.query(
+        [
+          'update agent_billing_outbox',
+          'set status = $3, locked_by = null, locked_at = null, last_error = $4,',
+          'available_at = now() + ($5::bigint * interval \'1 millisecond\'), updated_at = now()',
+          'where run_id = $1 and locked_by = $2',
+        ].join(' '),
+        [event.runId, input.workerId, terminal ? 'FAILED' : 'PENDING', truncate(message, 4000), retryDelayMs]
+      );
+      failed += 1;
+    }
+  }
+
+  return { claimed: claimed.length, completed, failed };
 }
 
 function rowToQueuedAgentTurn(row: Record<string, unknown>): QueuedAgentTurn {
@@ -1061,6 +1343,128 @@ function rowToAgentContextArtifactRecord(row: Record<string, unknown>): AgentCon
     createdAt: rowDateIso(row.createdAt ?? row.created_at),
     updatedAt: rowDateIso(row.updatedAt ?? row.updated_at),
   };
+}
+
+async function enqueueAgentBillingEvent(
+  pool: PgPool,
+  input: { runId: string; action: BillingOutboxAction; payload: Record<string, unknown> }
+) {
+  if (!input.runId) return;
+  await pool.query(
+    [
+      'insert into agent_billing_outbox',
+      '(run_id, action, payload, status, available_at)',
+      "values ($1, $2, $3::jsonb, 'PENDING', now())",
+      'on conflict (run_id) do update set',
+      "action = case when agent_billing_outbox.status = 'DONE' then agent_billing_outbox.action else excluded.action end,",
+      "payload = case when agent_billing_outbox.status = 'DONE' then agent_billing_outbox.payload else excluded.payload end,",
+      "status = case when agent_billing_outbox.status = 'DONE' then agent_billing_outbox.status else 'PENDING' end,",
+      'available_at = case when agent_billing_outbox.status = \'DONE\' then agent_billing_outbox.available_at else now() end,',
+      'locked_by = case when agent_billing_outbox.status = \'DONE\' then agent_billing_outbox.locked_by else null end,',
+      'locked_at = case when agent_billing_outbox.status = \'DONE\' then agent_billing_outbox.locked_at else null end,',
+      'updated_at = now()',
+    ].join(' '),
+    [input.runId, input.action, stringifyJson(input.payload)]
+  );
+}
+
+async function backfillAgentBillingOutbox(pool: PgPool) {
+  await pool.query(
+    [
+      'insert into agent_billing_outbox',
+      '(run_id, action, payload, status, available_at)',
+      'select r.id,',
+      "case when r.status = 'SUCCESS' then 'SETTLE' else 'RELEASE' end,",
+      'case',
+      "  when r.status = 'SUCCESS' then jsonb_build_object(",
+      "    'raw', jsonb_build_object('usage', r.result #> '{raw,usage}')",
+      '  )',
+      "  else jsonb_build_object('reason', coalesce(r.error, lower(r.status)))",
+      'end,',
+      "'PENDING', now()",
+      'from agent_context_runs r',
+      "where r.status in ('SUCCESS', 'ERROR', 'CANCELLED', 'TIMEOUT')",
+      "and r.completed_at >= now() - interval '24 hours'",
+      'and not exists (select 1 from agent_billing_outbox o where o.run_id = r.id)',
+      'order by r.completed_at asc',
+      'limit 200',
+      'on conflict (run_id) do nothing',
+    ].join(' ')
+  );
+}
+
+async function claimAgentBillingEvents(
+  pool: PgPool,
+  input: { workerId: string; limit?: number; runId?: string }
+): Promise<BillingOutboxRecord[]> {
+  const result = await pool.query(
+    [
+      'with candidates as (',
+      'select run_id',
+      'from agent_billing_outbox',
+      'where (',
+      "  status = 'PENDING'",
+      "  or (status = 'PROCESSING' and locked_at < now() - interval '5 minutes')",
+      ')',
+      'and available_at <= now()',
+      'and attempt_count < 20',
+      'and ($3::text is null or run_id = $3)',
+      'order by available_at asc, created_at asc',
+      'for update skip locked',
+      'limit $2',
+      ')',
+      'update agent_billing_outbox o',
+      "set status = 'PROCESSING', locked_by = $1, locked_at = now(),",
+      'attempt_count = o.attempt_count + 1, updated_at = now()',
+      'from candidates c',
+      'where o.run_id = c.run_id',
+      'returning o.run_id as "runId", o.action, o.payload, o.attempt_count as "attemptCount"',
+    ].join(' '),
+    [
+      input.workerId,
+      Math.max(1, Math.min(100, input.limit || 20)),
+      input.runId || null,
+    ]
+  );
+  return result.rows.map((row) => ({
+    runId: String(row.runId || ''),
+    action: row.action === 'SETTLE' ? 'SETTLE' : 'RELEASE',
+    payload: isRecord(row.payload) ? row.payload : {},
+    attemptCount: Math.max(1, readRowNumber(row.attemptCount)),
+  }));
+}
+
+async function executeAgentBillingEvent(config: ServerConfig, event: BillingOutboxRecord) {
+  if (event.action === 'RELEASE') {
+    const released = await releaseRunCredits(config, {
+      runId: event.runId,
+      reason: typeof event.payload.reason === 'string' ? event.payload.reason : 'agent_run_terminal',
+    });
+    if (released.released || released.reason === 'reservation_not_active') return;
+    throw new Error(`Credit release deferred: ${released.reason}`);
+  }
+
+  const settled = await settleRunCredits(config, {
+    runId: event.runId,
+    raw: event.payload.raw,
+  });
+  if (settled.settled || settled.reason === 'reservation_not_active') return;
+  if (settled.reason !== 'usage_unavailable') {
+    throw new Error(`Credit settlement deferred: ${settled.reason}`);
+  }
+
+  const released = await releaseRunCredits(config, {
+    runId: event.runId,
+    reason: 'usage_unavailable',
+  });
+  if (released.released || released.reason === 'reservation_not_active') return;
+  throw new Error(`Credit release deferred after missing usage: ${released.reason}`);
+}
+
+function billingUsageEnvelope(raw: unknown) {
+  return isRecord(raw) && isRecord(raw.usage)
+    ? { usage: raw.usage }
+    : null;
 }
 
 async function getContextPostgresPool(connectionString: string): Promise<PgPool> {
@@ -1187,6 +1591,24 @@ async function createAgentContextSchema(pool: PgPool) {
   await pool.query('create index if not exists agent_context_runs_queue_idx on agent_context_runs(status, next_attempt_at, created_at, id)');
   await pool.query('create index if not exists agent_context_runs_worker_heartbeat_idx on agent_context_runs(status, worker_heartbeat_at, timeout_at)');
   await pool.query('create index if not exists agent_context_runs_provider_status_idx on agent_context_runs(model_provider, status, updated_at)');
+  await pool.query(`
+    create table if not exists agent_billing_outbox (
+      run_id text primary key,
+      action text not null,
+      payload jsonb not null default '{}'::jsonb,
+      status text not null default 'PENDING',
+      attempt_count integer not null default 0,
+      available_at timestamptz not null default now(),
+      locked_by text,
+      locked_at timestamptz,
+      last_error text,
+      completed_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query('create index if not exists agent_billing_outbox_pending_idx on agent_billing_outbox(status, available_at, created_at)');
+  await pool.query('create index if not exists agent_billing_outbox_locked_idx on agent_billing_outbox(status, locked_at)');
   await pool.query(`
     create table if not exists agent_context_run_events (
       id text primary key,

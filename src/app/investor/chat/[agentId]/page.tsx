@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import Link from 'next/link';
-import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
+import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
@@ -19,6 +19,12 @@ type ChatMessage = {
   content: string;
   createdAt?: string;
   artifacts?: ChatArtifact[];
+  submission?: {
+    status: 'AUTHORIZING' | 'QUEUED' | 'REJECTED';
+    runId?: string | null;
+    code?: string | null;
+    error?: string | null;
+  };
 };
 
 type ChatArtifact = {
@@ -148,6 +154,35 @@ type PersonalAgentFinalData = {
   error?: string;
   runId?: string;
   cancelled?: boolean;
+  code?: string;
+};
+
+type BillingCapacityData = {
+  mode: 'observe' | 'enforce';
+  account: {
+    balanceCredits: number;
+    reservedCredits: number;
+    availableCredits: number;
+  };
+  subscription: {
+    planKey: string;
+    planName: string;
+    concurrentTaskLimit: number;
+  };
+  capacity: {
+    activeTaskCount: number;
+    availableTaskSlots: number;
+    concurrencyHoldCredits: number;
+    hasCreditAuthorization: boolean;
+    canStartTask: boolean;
+  };
+  activeTasks: Array<{
+    runId: string;
+    threadId: string | null;
+    reservedCredits: number;
+    createdAt: string;
+    expiresAt: string;
+  }>;
 };
 
 type CodexStreamItemStatus = 'running' | 'completed' | 'error';
@@ -1797,7 +1832,10 @@ export default function InvestorAgentChatPage() {
   const [attachmentDragActive, setAttachmentDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [startingRun, setStartingRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [billingCapacity, setBillingCapacity] = useState<BillingCapacityData | null>(null);
+  const [billingCapacityLoading, setBillingCapacityLoading] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');
   const [promptSaved, setPromptSaved] = useState('');
@@ -1823,6 +1861,8 @@ export default function InvestorAgentChatPage() {
   const activeRunIdRef = useRef<string | null>(null);
   const liveStreamRunIdRef = useRef<string | null>(null);
   const requestedStopRunIdRef = useRef<string | null>(null);
+  const selectedThreadIdRef = useRef<string | null>(null);
+  const submissionInFlightRef = useRef(false);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const messagesAutoFollowRef = useRef(true);
   const loadingOlderMessagesRef = useRef(false);
@@ -1833,10 +1873,38 @@ export default function InvestorAgentChatPage() {
   const connectorSelectionInitializedRef = useRef(false);
   const initialLoadStartedRef = useRef(false);
 
+  const selectThreadId = useCallback((nextThreadId: string | null) => {
+    selectedThreadIdRef.current = nextThreadId;
+    setThreadId(nextThreadId);
+  }, []);
+
   const handleSessionExpired = useCallback(() => {
     setError(AUTH_EXPIRED_MESSAGE);
     router.replace(buildSignInRedirectUrl());
   }, [router]);
+
+  const loadBillingCapacity = useCallback(async (
+    options: { showLoading?: boolean } = {},
+  ): Promise<BillingCapacityData | null> => {
+    if (options.showLoading) setBillingCapacityLoading(true);
+    try {
+      const response = await fetch('/api/billing/capacity', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      const data = (await response.json().catch(() => ({}))) as BillingCapacityData & { error?: string };
+      if (!response.ok) {
+        if (response.status === 401) handleSessionExpired();
+        return null;
+      }
+      setBillingCapacity(data);
+      return data;
+    } catch {
+      return null;
+    } finally {
+      if (options.showLoading) setBillingCapacityLoading(false);
+    }
+  }, [handleSessionExpired]);
 
   const title = useMemo(() => (isExecutive ? 'Hermes Agent' : 'AI Assistant'), [isExecutive]);
   const showExecutiveControls = false;
@@ -1941,7 +2009,7 @@ export default function InvestorAgentChatPage() {
         return;
       }
 
-      setThreadId(typeof data.threadId === 'string' ? data.threadId : null);
+      selectThreadId(typeof data.threadId === 'string' ? data.threadId : null);
       const reply = typeof data.reply === 'string' ? data.reply : '';
       if (Array.isArray(data.messages)) {
         setMessages(appendAssistantReplyIfMissing(data.messages as ChatMessage[], reply));
@@ -1957,7 +2025,7 @@ export default function InvestorAgentChatPage() {
       applyAgentConfig(data.agentConfig as AgentConfig | null | undefined);
       if (options.closePlannerOnSuccess) setPlannerPanelOpen(false);
     },
-    [applyAgentConfig]
+    [applyAgentConfig, selectThreadId]
   );
 
   const resumeExecutiveRun = useCallback(
@@ -2073,10 +2141,11 @@ export default function InvestorAgentChatPage() {
     targetThreadId?: string | null
   ): Promise<PersonalAgentStatusRecoveryResult> => {
     try {
+      const requestedThreadId = targetThreadId || selectedThreadIdRef.current || threadId;
       const query = new URLSearchParams({
         status: '1',
       });
-      if (targetThreadId) query.set('threadId', targetThreadId);
+      if (requestedThreadId) query.set('threadId', requestedThreadId);
       const statusRunId = activeRunIdRef.current || activeRunId || '';
       if (statusRunId) query.set('runId', statusRunId);
       const res = await fetch(`/api/investor/personal-agent?${query.toString()}`, {
@@ -2088,8 +2157,14 @@ export default function InvestorAgentChatPage() {
         if (res.status === 401) handleSessionExpired();
         return 'unavailable';
       }
+      if (
+        requestedThreadId &&
+        selectedThreadIdRef.current !== requestedThreadId
+      ) {
+        return 'idle';
+      }
       const recoveredThreadId = typeof data.threadId === 'string' ? data.threadId : '';
-      if (recoveredThreadId) setThreadId(recoveredThreadId);
+      if (recoveredThreadId) selectThreadId(recoveredThreadId);
       if (Array.isArray(data.sessions)) {
         setSessions(data.sessions as AgentSessionSummary[]);
       }
@@ -2224,7 +2299,7 @@ export default function InvestorAgentChatPage() {
       // Status recovery is best-effort; the normal send flow still reports errors.
       return 'unavailable';
     }
-  }, [activeRunId, handleSessionExpired]);
+  }, [activeRunId, handleSessionExpired, selectThreadId, threadId]);
 
   const resetPersonalAgentRunState = useCallback(() => {
     activeRunIdRef.current = null;
@@ -2244,6 +2319,8 @@ export default function InvestorAgentChatPage() {
     options?: { showBlockingLoading?: boolean }
   ) => {
     if (!isExecutive) return;
+    const requestedThreadId = targetThreadId || null;
+    if (requestedThreadId) selectedThreadIdRef.current = requestedThreadId;
     const showBlockingLoading = options?.showBlockingLoading ?? true;
     if (showBlockingLoading) setLoading(true);
     setRecoveringRunState(true);
@@ -2264,8 +2341,16 @@ export default function InvestorAgentChatPage() {
         setError(data.error || 'Failed to load discussion');
         return;
       }
+      if (
+        requestedThreadId &&
+        selectedThreadIdRef.current &&
+        selectedThreadIdRef.current !== requestedThreadId
+      ) {
+        return;
+      }
       resetPersonalAgentRunState();
-      setThreadId(data.threadId || null);
+      const loadedThreadId = typeof data.threadId === 'string' ? data.threadId : null;
+      selectThreadId(loadedThreadId);
       setSessions(Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : []);
       const loadedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
       messagesAutoFollowRef.current = true;
@@ -2274,8 +2359,8 @@ export default function InvestorAgentChatPage() {
       setBriefing(null);
       setPersistedBriefing(null);
       setPlannerSteps([]);
-      if (data.threadId) {
-        await refreshPersonalAgentStatus(String(data.threadId));
+      if (loadedThreadId) {
+        await refreshPersonalAgentStatus(loadedThreadId);
       }
       if (showExecutiveControls && getStoredActiveRunId()) {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
@@ -2286,7 +2371,7 @@ export default function InvestorAgentChatPage() {
       if (showBlockingLoading) setLoading(false);
       setRecoveringRunState(false);
     }
-  }, [handleSessionExpired, isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, showExecutiveControls]);
+  }, [handleSessionExpired, isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, selectThreadId, showExecutiveControls]);
 
   useEffect(() => {
     if (!threadId || !activeRunId) return;
@@ -2302,8 +2387,21 @@ export default function InvestorAgentChatPage() {
     void loadData(null, { showBlockingLoading: true });
   }, [loadData]);
 
+  useEffect(() => {
+    void loadBillingCapacity({ showLoading: true });
+  }, [loadBillingCapacity]);
+
+  useEffect(() => {
+    if (!billingCapacity || billingCapacity.capacity.activeTaskCount <= 0) return;
+    const timer = window.setInterval(() => {
+      void loadBillingCapacity();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [billingCapacity, loadBillingCapacity]);
+
   const createNewSession = useCallback(async () => {
-    if (creatingSession || sending || recoveringRunState) return;
+    if (creatingSession || startingRun || recoveringRunState) return;
+    selectedThreadIdRef.current = null;
     setCreatingSession(true);
     setError(null);
     try {
@@ -2323,7 +2421,7 @@ export default function InvestorAgentChatPage() {
         return;
       }
       resetPersonalAgentRunState();
-      setThreadId(typeof data.threadId === 'string' ? data.threadId : null);
+      selectThreadId(typeof data.threadId === 'string' ? data.threadId : null);
       messagesAutoFollowRef.current = true;
       setMessages([]);
       setHasMoreMessages(false);
@@ -2339,21 +2437,27 @@ export default function InvestorAgentChatPage() {
       setCreatingSession(false);
       setRecoveringRunState(false);
     }
-  }, [creatingSession, handleSessionExpired, recoveringRunState, resetPersonalAgentRunState, sending]);
+  }, [creatingSession, handleSessionExpired, recoveringRunState, resetPersonalAgentRunState, selectThreadId, startingRun]);
 
   const switchSession = useCallback(async (targetThreadId: string) => {
-    if (!targetThreadId || targetThreadId === threadId || sending || recoveringRunState) return;
+    if (!targetThreadId || targetThreadId === threadId || startingRun || recoveringRunState) return;
+    selectedThreadIdRef.current = targetThreadId;
     setInput('');
     setAttachments([]);
     setOpenSessionMenuId(null);
     await loadData(targetThreadId, { showBlockingLoading: true });
-  }, [loadData, recoveringRunState, sending, threadId]);
+  }, [loadData, recoveringRunState, startingRun, threadId]);
 
   const handleSessionAction = useCallback(async (
     session: AgentSessionSummary,
     action: 'rename' | 'archive' | 'delete'
   ) => {
-    if (sending || recoveringRunState || sessionActionBusyId) return;
+    if (startingRun || recoveringRunState || sessionActionBusyId) return;
+    const sessionHasActiveTask = billingCapacity?.activeTasks.some((task) => task.threadId === session.id) ?? false;
+    if (sessionHasActiveTask && action !== 'rename') {
+      setError('Stop the active task before archiving or deleting this discussion.');
+      return;
+    }
     setOpenSessionMenuId(null);
 
     let title: string | undefined;
@@ -2409,7 +2513,7 @@ export default function InvestorAgentChatPage() {
     } finally {
       setSessionActionBusyId(null);
     }
-  }, [handleSessionExpired, loadData, recoveringRunState, sending, sessionActionBusyId, threadId]);
+  }, [billingCapacity, handleSessionExpired, loadData, recoveringRunState, sessionActionBusyId, startingRun, threadId]);
 
   useEffect(() => {
     if (!openSessionMenuId) return;
@@ -2539,7 +2643,7 @@ export default function InvestorAgentChatPage() {
         throw new Error(policyData.error || 'Failed to prepare attachment upload');
       }
       uploadThreadId = typeof policyData.threadId === 'string' ? policyData.threadId : uploadThreadId;
-      if (uploadThreadId) setThreadId(uploadThreadId);
+      if (uploadThreadId) selectThreadId(uploadThreadId);
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Failed to prepare attachment upload';
       setError(detail);
@@ -2613,7 +2717,7 @@ export default function InvestorAgentChatPage() {
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to finalize attachment upload');
     }
-  }, [handleSessionExpired, threadId]);
+  }, [handleSessionExpired, selectThreadId, threadId]);
 
   const handleFilesSelected = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -2694,7 +2798,7 @@ export default function InvestorAgentChatPage() {
       return [];
     }
     const syncedThreadId = typeof data.threadId === 'string' ? data.threadId : '';
-    if (syncedThreadId) setThreadId(syncedThreadId);
+    if (syncedThreadId) selectThreadId(syncedThreadId);
     if (Array.isArray(data.sessions)) {
       setSessions(data.sessions as AgentSessionSummary[]);
     }
@@ -2704,7 +2808,7 @@ export default function InvestorAgentChatPage() {
     const syncedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
     if (syncedMessages.length > 0) setMessages(syncedMessages);
     return syncedMessages;
-  }, [handleSessionExpired]);
+  }, [handleSessionExpired, selectThreadId]);
 
   const hasSyncedCurrentUserTurn = useCallback(async (
     expectedUserContent: string,
@@ -2812,7 +2916,14 @@ export default function InvestorAgentChatPage() {
     const content = (textFromSuggestion || input).trim();
     const requestAttachments = attachments;
     const hasAttachments = requestAttachments.length > 0;
-    if ((!content && !hasAttachments) || sending || recoveringRunState || !isExecutive) return;
+    if (
+      (!content && !hasAttachments) ||
+      sending ||
+      startingRun ||
+      recoveringRunState ||
+      submissionInFlightRef.current ||
+      !isExecutive
+    ) return;
     const unfinishedAttachment = requestAttachments.find((attachment) => attachment.uploadStatus !== 'uploaded');
     if (unfinishedAttachment) {
       setError(
@@ -2822,6 +2933,8 @@ export default function InvestorAgentChatPage() {
       );
       return;
     }
+    submissionInFlightRef.current = true;
+    setStartingRun(true);
     const uploadedArtifacts = requestAttachments.map((attachment) => ({
       id: attachment.artifactId || '',
       name: attachment.name,
@@ -2840,7 +2953,19 @@ export default function InvestorAgentChatPage() {
     ]
       .filter(Boolean)
       .join('\n\n');
-    const nextMessages = [...messages, { role: 'user' as const, content: displayContent }];
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      {
+        role: 'user',
+        content: displayContent,
+        submission: {
+          status: 'AUTHORIZING',
+          runId: null,
+          code: null,
+          error: null,
+        },
+      },
+    ];
     messagesAutoFollowRef.current = true;
     setMessages(nextMessages);
     setInput('');
@@ -2908,6 +3033,7 @@ export default function InvestorAgentChatPage() {
         hasMore?: boolean;
       };
       if (!res.ok) {
+        void loadBillingCapacity();
         if (res.status === 401) {
           setMessages(nextMessages);
           setInput(content);
@@ -2915,7 +3041,31 @@ export default function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(typeof data.error === 'string' ? data.error : 'Failed to send message');
+        const failure = typeof data.error === 'string' ? data.error : 'Failed to authorize task';
+        setError(failure);
+        if ([402, 409, 429, 503].includes(res.status)) {
+          setMessages(
+            Array.isArray(data.messages)
+              ? data.messages
+              : nextMessages.map((message, index) => (
+                  index === nextMessages.length - 1
+                    ? {
+                        ...message,
+                        submission: {
+                          status: 'REJECTED' as const,
+                          runId: data.runId || null,
+                          code: data.code || 'TASK_REJECTED',
+                          error: failure,
+                        },
+                      }
+                    : message
+                ))
+          );
+          setCodexStreamItems([]);
+          setCompletedCodexActivity(null);
+          setAssistantDraft('');
+          return;
+        }
         setMessages(nextMessages);
         setInput(content);
         setAttachments(requestAttachments);
@@ -2932,7 +3082,7 @@ export default function InvestorAgentChatPage() {
         return;
       }
 
-      if (asyncThreadId) setThreadId(asyncThreadId);
+      if (asyncThreadId) selectThreadId(asyncThreadId);
       if (Array.isArray(data.sessions)) setSessions(data.sessions);
       if (typeof data.hasMore === 'boolean') setHasMoreMessages(data.hasMore);
       if (Array.isArray(data.messages) && data.messages.length >= nextMessages.length) {
@@ -2951,6 +3101,7 @@ export default function InvestorAgentChatPage() {
         },
       ]);
       preserveRunStateAfterSend = true;
+      void loadBillingCapacity();
       void refreshPersonalAgentStatus(asyncThreadId);
     } catch (err) {
       const recoveryResult = await recoverPersonalAgentStreamState(threadId, displayContent);
@@ -2972,6 +3123,8 @@ export default function InvestorAgentChatPage() {
       setCompletedCodexActivity(null);
       setAssistantDraft('');
     } finally {
+      submissionInFlightRef.current = false;
+      setStartingRun(false);
       if (!preserveRunStateAfterSend) {
         activeRunIdRef.current = null;
         liveStreamRunIdRef.current = null;
@@ -3051,6 +3204,15 @@ export default function InvestorAgentChatPage() {
   const activeSession = sessions.find((session) => session.id === threadId);
   const connectedConnectors = connectors.filter((connector) => connector.connected && connector.conversationAvailable !== false);
   const latestWorkItem = codexStreamItems[codexStreamItems.length - 1];
+  const activeTaskThreadIds = new Set(
+    (billingCapacity?.activeTasks || [])
+      .map((task) => task.threadId)
+      .filter((value): value is string => Boolean(value)),
+  );
+  const capacityBlocked = billingCapacity ? !billingCapacity.capacity.canStartTask : false;
+  const capacityStatusText = billingCapacity
+    ? `${billingCapacity.capacity.activeTaskCount}/${billingCapacity.subscription.concurrentTaskLimit} active · ${billingCapacity.account.availableCredits.toLocaleString('en-US')} credits available`
+    : 'Task capacity unavailable';
 
   const sessionSidebar = (
     <div className="min-w-0 max-w-full px-2.5 pb-5">
@@ -3062,6 +3224,7 @@ export default function InvestorAgentChatPage() {
         {sessions.map((session) => {
           const active = session.id === threadId;
           const actionBusy = sessionActionBusyId === session.id;
+          const taskActive = activeTaskThreadIds.has(session.id);
           return (
             <div
               key={session.id}
@@ -3071,13 +3234,16 @@ export default function InvestorAgentChatPage() {
               <button
                 type="button"
                 onClick={() => void switchSession(session.id)}
-                disabled={active || sending || recoveringRunState || actionBusy}
+                disabled={active || startingRun || recoveringRunState || actionBusy}
                 title={session.title}
                 className="block min-h-[54px] min-w-0 max-w-full overflow-hidden rounded-l-[7px] py-2 pl-2.5 pr-1 text-left disabled:cursor-default"
               >
-                <span className={`block min-w-0 max-w-full truncate text-[13px] font-semibold ${active ? 'text-white' : 'text-zinc-400'}`}>{session.title || 'New discussion'}</span>
+                <span className={`flex min-w-0 max-w-full items-center gap-2 text-[13px] font-semibold ${active ? 'text-white' : 'text-zinc-400'}`}>
+                  {taskActive ? <i className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#8eb3ff]" /> : null}
+                  <span className="min-w-0 truncate">{session.title || 'New discussion'}</span>
+                </span>
                 <span className="mt-1 block min-w-0 max-w-full truncate text-[10px] text-zinc-600">
-                  {formatSessionTime(session.updatedAt) || 'Recent'} · {session.messageCount} messages
+                  {taskActive ? 'Working' : formatSessionTime(session.updatedAt) || 'Recent'} · {session.messageCount} messages
                 </span>
               </button>
               <button
@@ -3086,7 +3252,7 @@ export default function InvestorAgentChatPage() {
                 aria-label={`More options for ${session.title || 'discussion'}`}
                 aria-haspopup="menu"
                 aria-expanded={openSessionMenuId === session.id}
-                disabled={sending || recoveringRunState || actionBusy}
+                disabled={startingRun || recoveringRunState || actionBusy}
                 onClick={(event) => {
                   event.stopPropagation();
                   setOpenSessionMenuId((current) => current === session.id ? null : session.id);
@@ -3102,8 +3268,8 @@ export default function InvestorAgentChatPage() {
               {openSessionMenuId === session.id ? (
                 <div role="menu" className="absolute right-1.5 top-10 z-40 w-[142px] overflow-hidden rounded-[7px] border border-white/15 bg-[#18191b] p-1 text-xs shadow-[0_18px_48px_rgba(0,0,0,.55)]">
                   <button type="button" role="menuitem" onClick={() => void handleSessionAction(session, 'rename')} className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-zinc-300 hover:bg-white/[0.07] hover:text-white"><Pencil className="h-3.5 w-3.5" />Rename</button>
-                  <button type="button" role="menuitem" onClick={() => void handleSessionAction(session, 'archive')} className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-zinc-300 hover:bg-white/[0.07] hover:text-white"><Archive className="h-3.5 w-3.5" />Archive</button>
-                  <button type="button" role="menuitem" onClick={() => void handleSessionAction(session, 'delete')} className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-red-300 hover:bg-red-400/[0.09]"><Trash2 className="h-3.5 w-3.5" />Delete</button>
+                  <button type="button" role="menuitem" disabled={taskActive} onClick={() => void handleSessionAction(session, 'archive')} className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-zinc-300 hover:bg-white/[0.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"><Archive className="h-3.5 w-3.5" />Archive</button>
+                  <button type="button" role="menuitem" disabled={taskActive} onClick={() => void handleSessionAction(session, 'delete')} className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-red-300 hover:bg-red-400/[0.09] disabled:cursor-not-allowed disabled:opacity-35"><Trash2 className="h-3.5 w-3.5" />Delete</button>
                 </div>
               ) : null}
             </div>
@@ -3178,7 +3344,7 @@ export default function InvestorAgentChatPage() {
       rightRail={rightRail}
       onNewDiscussion={() => void createNewSession()}
       newDiscussionBusy={creatingSession}
-      newDiscussionDisabled={sending || recoveringRunState || loading}
+      newDiscussionDisabled={startingRun || recoveringRunState || loading}
     >
       <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] md:grid-rows-[64px_minmax(0,1fr)_auto]">
         <header className="hidden items-center justify-between gap-4 border-b border-white/[0.09] px-6 md:flex">
@@ -3213,9 +3379,18 @@ export default function InvestorAgentChatPage() {
                   if (message.role === 'user') {
                     return (
                       <div key={message.id || `user-${index}`} className="flex justify-end">
-                        <div className="max-w-[82%] rounded-[8px_8px_2px_8px] border border-white/[0.09] bg-white/[0.075] px-4 py-3 text-[13px] leading-6 text-zinc-100">
+                        <div className={`max-w-[82%] rounded-[8px_8px_2px_8px] border px-4 py-3 text-[13px] leading-6 text-zinc-100 ${message.submission?.status === 'REJECTED' ? 'border-red-400/25 bg-red-400/[0.06]' : 'border-white/[0.09] bg-white/[0.075]'}`}>
                           <MarkdownMessage content={visibleContent} inverted renderMediaPreview={({ href, label, kind, key }) => <InlineMediaPreview key={key} href={href} label={label} kind={kind} inverted />} />
                           <GeneratedArtifactPreviews artifacts={artifacts} inverted />
+                          {message.submission ? (
+                            <div className={`mt-2 flex flex-wrap items-center gap-2 border-t pt-2 text-[10px] leading-4 ${message.submission.status === 'REJECTED' ? 'border-red-300/15 text-red-200' : 'border-white/[0.08] text-zinc-500'}`}>
+                              {message.submission.status === 'AUTHORIZING' ? <LoaderCircle className="h-3 w-3 animate-spin" /> : message.submission.status === 'QUEUED' ? <Clock3 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                              <span>{message.submission.status === 'AUTHORIZING' ? 'Authorizing task' : message.submission.status === 'QUEUED' ? 'Queued' : message.submission.error || 'Task rejected'}</span>
+                              {message.submission.status === 'REJECTED' ? (
+                                <button type="button" onClick={() => setInput(message.content)} className="ml-auto rounded-md border border-red-200/15 px-2 py-0.5 text-red-100 hover:bg-red-200/10">Edit and retry</button>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     );
@@ -3301,10 +3476,14 @@ export default function InvestorAgentChatPage() {
               {sending || recoveringRunState ? (
                 <button type="button" onClick={() => void stopPersonalAgentRun()} disabled={recoveringRunState || stoppingRun || !activeRunId} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-red-500/85 px-3 text-[11px] font-semibold text-white hover:bg-red-500 disabled:opacity-50"><Square className="h-3 w-3 fill-current" />{recoveringRunState ? 'Recovering' : stoppingRun ? 'Stopping' : 'Stop'}</button>
               ) : (
-                <button type="submit" disabled={(!input.trim() && attachments.length === 0) || attachmentUploadBusy || attachmentUploadFailed} className="grid h-8 w-8 place-items-center rounded-md border border-white bg-zinc-100 text-[#090909] hover:bg-white disabled:opacity-35" title="Send"><ArrowUp className="h-4 w-4" /></button>
+                <button type="submit" disabled={(!input.trim() && attachments.length === 0) || attachmentUploadBusy || attachmentUploadFailed || startingRun} className="grid h-8 w-8 place-items-center rounded-md border border-white bg-zinc-100 text-[#090909] hover:bg-white disabled:opacity-35" title="Send"><ArrowUp className="h-4 w-4" /></button>
               )}
             </div>
           </form>
+          <div className={`mx-auto mt-2 flex max-w-[820px] items-center gap-1.5 text-[10px] ${capacityBlocked ? 'text-amber-300' : 'text-zinc-600'}`}>
+            {billingCapacityLoading ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <CircleGauge className="h-3 w-3" />}
+            <span>{capacityStatusText}</span>
+          </div>
           {connectorsError ? <p className="mx-auto mt-2 max-w-[820px] text-[10px] text-amber-300">{connectorsError}</p> : null}
           {error ? <p className="mx-auto mt-2 max-w-[820px] text-[11px] text-red-300">{error}</p> : null}
         </div>

@@ -35,6 +35,9 @@ export function getActiveRuntoolScope(runId) {
 export function unregisterActiveRun(runId) {
     activeRuns.delete(runId);
 }
+export function clearRunCancellation(runId) {
+    cancelledRuns.delete(runId);
+}
 export function cancelActiveRun(runId) {
     const now = nowIso();
     cancelledRuns.set(runId, now);

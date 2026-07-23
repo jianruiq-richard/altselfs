@@ -10,6 +10,7 @@ import {
   getLatestThreadWithMessages,
   getThreadMessagesPage,
   listAgentThreads,
+  mergeThreadMessageMeta,
   renameAgentThread,
   toClientMessages,
   updateAgentThreadStatus,
@@ -48,6 +49,7 @@ type PersonalAgentResponse = {
   raw?: unknown;
   runId?: string;
   error?: string;
+  code?: string;
 };
 
 type CompetitorDatatoolAudit = {
@@ -195,9 +197,20 @@ function getPersonalAgentServerUrl() {
   return (process.env.PERSONAL_AGENT_SERVER_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 }
 
+function personalAgentServiceHeaders(input?: HeadersInit) {
+  const headers = new Headers(input);
+  const token = process.env.OPS_AGENT_TOKEN?.trim();
+  if (token) headers.set('authorization', `Bearer ${token}`);
+  return headers;
+}
+
 function stableRunIdFromMessageId(messageId: string | null | undefined) {
   if (!messageId) return undefined;
   return `run_${messageId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+}
+
+function isAuthoritativeStartStatus(status: number) {
+  return status === 402 || status === 409 || status === 429 || status === 503;
 }
 
 function describeFetchError(error: unknown) {
@@ -233,6 +246,7 @@ async function fetchPersonalAgentServerJson<T>(
     try {
       const response = await fetch(url, {
         ...init,
+        headers: personalAgentServiceHeaders(init.headers),
         signal: controller.signal,
         cache: 'no-store',
       });
@@ -616,6 +630,31 @@ async function syncTerminalPersonalAgentRun(params: {
     const meta = isRecord(message.meta) ? message.meta : {};
     return meta.runId === terminalRun.id || message.content.trim() === reply;
   });
+  const submittedMessage = await prisma.agentMessage.findFirst({
+    where: {
+      threadId: params.threadId,
+      role: 'USER',
+      meta: {
+        path: ['submission', 'runId'],
+        equals: terminalRun.id,
+      },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  });
+  if (submittedMessage) {
+    const currentMeta = isRecord(submittedMessage.meta) ? submittedMessage.meta : {};
+    const currentSubmission = isRecord(currentMeta.submission) ? currentMeta.submission : {};
+    await mergeThreadMessageMeta({
+      messageId: submittedMessage.id,
+      meta: {
+        submission: {
+          ...currentSubmission,
+          status: 'COMPLETED',
+          error: terminalRun.status === 'SUCCESS' ? null : terminalRun.error || null,
+        },
+      },
+    }).catch(() => null);
+  }
   if (alreadySynced) return false;
 
   await appendThreadMessage({
@@ -731,6 +770,7 @@ export async function GET(req: NextRequest) {
       if (runId) query.set('runId', runId);
       const response = await fetch(`${getPersonalAgentServerUrl()}/v1/threads/status?${query.toString()}`, {
         cache: 'no-store',
+        headers: personalAgentServiceHeaders(),
       });
       const statusPayload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok) {
@@ -919,6 +959,12 @@ export async function POST(req: NextRequest) {
   const persistedUserContent = displayUserMessage || userMessage;
   const userMessageMeta = {
     ...(parsedBody.clientRequestId ? { clientRequestId: parsedBody.clientRequestId } : {}),
+    submission: {
+      status: 'AUTHORIZING',
+      runId: null,
+      code: null,
+      error: null,
+    },
     connectorScope,
     ...(uploadedArtifacts.length > 0
       ? {
@@ -956,6 +1002,7 @@ export async function POST(req: NextRequest) {
     meta: Object.keys(userMessageMeta).length > 0 ? userMessageMeta : undefined,
   });
   const enabledInfoSources = applyConnectorScopeToInfoSources(await getEnabledInfoSources(investor.id), connectorScope);
+  const runId = stableRunIdFromMessageId(userThreadMessage.id) || `run_${userThreadMessage.id}`;
 
   const payload = {
     userId: investor.email || investor.id,
@@ -975,7 +1022,7 @@ export async function POST(req: NextRequest) {
       enabledInfoSources,
       connectorScope,
       hermesModel,
-      runId: stableRunIdFromMessageId(userThreadMessage.id),
+      runId,
     },
   };
 
@@ -993,9 +1040,40 @@ export async function POST(req: NextRequest) {
       );
       result = data;
       if (!response.ok) {
+        const code = typeof result.code === 'string' ? result.code : 'TASK_REJECTED';
+        const error = result.error || `personal-agent-server HTTP ${response.status}`;
+        await mergeThreadMessageMeta({
+          messageId: userThreadMessage.id,
+          meta: {
+            submission: {
+              status: 'REJECTED',
+              runId,
+              code,
+              error,
+            },
+          },
+        }).catch(() => null);
+        const [page, sessions] = await Promise.all([
+          getThreadMessagesPage({
+            investorId: investor.id,
+            agentType: PERSONAL_AGENT_TYPE,
+            threadId: thread.id,
+            limit: 60,
+          }),
+          listAgentThreads(investor.id, PERSONAL_AGENT_TYPE),
+        ]);
         return NextResponse.json(
-          { error: result.error || `personal-agent-server HTTP ${response.status}` },
-          { status: 502 }
+          {
+            ...result,
+            error,
+            code,
+            threadId: thread.id,
+            runId,
+            messages: page ? toClientMessages(page.messages) : displayMessages([...messages]),
+            hasMore: page ? page.hasMore : false,
+            sessions,
+          },
+          { status: isAuthoritativeStartStatus(response.status) ? response.status : 502 }
         );
       }
     } catch (error) {
@@ -1003,6 +1081,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Personal Agent request failed: ${detail}` }, { status: 502 });
     }
 
+    await mergeThreadMessageMeta({
+      messageId: userThreadMessage.id,
+      meta: {
+        submission: {
+          status: 'QUEUED',
+          runId: result.runId || runId,
+          code: null,
+          error: null,
+        },
+      },
+    }).catch(() => null);
     const [page, sessions] = await Promise.all([
       getThreadMessagesPage({
         investorId: investor.id,
@@ -1031,6 +1120,7 @@ export async function POST(req: NextRequest) {
     return streamPersonalAgentTurn({
       threadId: thread.id,
       investorId: investor.id,
+      runId,
       userMessageId: userThreadMessage.id,
       userMessage,
       payload,
@@ -1040,17 +1130,30 @@ export async function POST(req: NextRequest) {
 
   let result: PersonalAgentResponse;
   try {
-    const response = await fetch(`${getPersonalAgentServerUrl()}/v1/turns/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(`${getPersonalAgentServerUrl()}/v1/turns/start`, {
+        method: 'POST',
+        headers: personalAgentServiceHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ ...payload, includeEvents: true }),
       cache: 'no-store',
     });
     result = (await response.json().catch(() => ({}))) as PersonalAgentResponse;
     if (!response.ok) {
+      const code = typeof result.code === 'string' ? result.code : 'TASK_REJECTED';
+      const error = result.error || `personal-agent-server HTTP ${response.status}`;
+      await mergeThreadMessageMeta({
+        messageId: userThreadMessage.id,
+        meta: {
+          submission: {
+            status: 'REJECTED',
+            runId,
+            code,
+            error,
+          },
+        },
+      }).catch(() => null);
       return NextResponse.json(
-        { error: result.error || `personal-agent-server HTTP ${response.status}` },
-        { status: 502 }
+        { error, code, threadId: thread.id, runId },
+        { status: isAuthoritativeStartStatus(response.status) ? response.status : 502 }
       );
     }
   } catch (error) {
@@ -1072,6 +1175,17 @@ export async function POST(req: NextRequest) {
       raw: result.raw,
     },
   });
+  await mergeThreadMessageMeta({
+    messageId: userThreadMessage.id,
+    meta: {
+      submission: {
+        status: 'COMPLETED',
+        runId: result.runId || runId,
+        code: null,
+        error: null,
+      },
+    },
+  }).catch(() => null);
   await persistCompetitorDatatoolAudits({
     threadId: thread.id,
     messageId: userThreadMessage.id,
@@ -1110,7 +1224,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const response = await fetch(`${getPersonalAgentServerUrl()}/v1/runs/stop`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: personalAgentServiceHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         runId,
         threadId: threadId || undefined,
@@ -1138,7 +1252,8 @@ export async function DELETE(req: NextRequest) {
 function streamPersonalAgentTurn(params: {
   threadId: string;
   investorId: string;
-  userMessageId: string | null;
+  runId: string;
+  userMessageId: string;
   userMessage: string;
   payload: {
     userId: string;
@@ -1179,21 +1294,49 @@ function streamPersonalAgentTurn(params: {
           write({ type: 'turn_started', timestamp: new Date().toISOString() });
           const response = await fetch(`${getPersonalAgentServerUrl()}/v1/turns/start?stream=1`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: personalAgentServiceHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(params.payload),
             cache: 'no-store',
           });
 
           if (!response.ok || !response.body) {
             const errorPayload = (await response.json().catch(() => ({}))) as PersonalAgentResponse;
+            const code = typeof errorPayload.code === 'string' ? errorPayload.code : 'TASK_REJECTED';
+            const error = errorPayload.error || `personal-agent-server HTTP ${response.status}`;
+            await mergeThreadMessageMeta({
+              messageId: params.userMessageId,
+              meta: {
+                submission: {
+                  status: 'REJECTED',
+                  runId: params.runId,
+                  code,
+                  error,
+                },
+              },
+            }).catch(() => null);
+            const [page, sessions] = await Promise.all([
+              getThreadMessagesPage({
+                investorId: params.investorId,
+                agentType: PERSONAL_AGENT_TYPE,
+                threadId: params.threadId,
+                limit: 60,
+              }).catch(() => null),
+              listAgentThreads(params.investorId, PERSONAL_AGENT_TYPE).catch(() => []),
+            ]);
             write({
               type: 'final',
               status: response.ok ? 500 : response.status,
-              data: { error: errorPayload.error || `personal-agent-server HTTP ${response.status}` },
+              data: {
+                error,
+                code,
+                threadId: params.threadId,
+                runId: params.runId,
+                messages: page ? toClientMessages(page.messages) : params.messages,
+                sessions,
+              },
             });
             return;
           }
-
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
@@ -1238,6 +1381,17 @@ function streamPersonalAgentTurn(params: {
           if (finalResult?.cancelled || finalResult?.error) {
             const finalErrorMessage = finalResult.error || (finalResult.cancelled ? 'Run stopped.' : 'Send failed');
             const persistedErrorReply = finalResult.cancelled ? finalErrorMessage : `Execution failed: ${finalErrorMessage}`;
+            await mergeThreadMessageMeta({
+              messageId: params.userMessageId,
+              meta: {
+                submission: {
+                  status: 'COMPLETED',
+                  runId: finalResult.runId || params.runId,
+                  code: null,
+                  error: null,
+                },
+              },
+            }).catch(() => null);
             await appendThreadMessage({
               threadId: params.threadId,
               role: 'ASSISTANT',
@@ -1282,6 +1436,17 @@ function streamPersonalAgentTurn(params: {
               raw: finalResult?.raw,
             },
           });
+          await mergeThreadMessageMeta({
+            messageId: params.userMessageId,
+            meta: {
+              submission: {
+                status: 'COMPLETED',
+                runId: finalResult?.runId || params.runId,
+                code: null,
+                error: null,
+              },
+            },
+          }).catch(() => null);
           await persistCompetitorDatatoolAudits({
             threadId: params.threadId,
             messageId: params.userMessageId,

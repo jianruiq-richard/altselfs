@@ -1,5 +1,5 @@
-import { claimNextQueuedAgentTurn, expireStaleAgentTurns, persistAgentRunEvent, persistAgentTurnTimeout, } from './agent-context-store.js';
-import { cancelActiveRun } from './run-control.js';
+import { claimNextQueuedAgentTurn, expireStaleAgentTurns, listRequestedAgentRunCancellations, processAgentBillingOutbox, persistAgentRunEvent, persistAgentTurnTimeout, } from './agent-context-store.js';
+import { cancelActiveRun, clearRunCancellation } from './run-control.js';
 import { executePersistedTurn } from './turn-executor.js';
 import { id, nowIso } from './util.js';
 export class AgentTurnQueueWorker {
@@ -7,8 +7,11 @@ export class AgentTurnQueueWorker {
     config;
     workerId = `${process.env.HOSTNAME || 'worker'}-${process.pid}-${id('tw')}`;
     timer = null;
+    cancelTimer = null;
     running = new Map();
     draining = false;
+    ticking = false;
+    pollingCancellations = false;
     constructor(agent, config) {
         this.agent = agent;
         this.config = config;
@@ -23,10 +26,14 @@ export class AgentTurnQueueWorker {
         this.timer = setInterval(() => {
             void this.tick();
         }, this.config.turnQueuePollMs);
+        this.cancelTimer = setInterval(() => {
+            void this.pollCancellationRequests();
+        }, this.config.turnQueueCancelPollMs);
         void this.tick();
         console.log([
             `[agent-turn-worker] started workerId=${this.workerId}`,
             `pollMs=${this.config.turnQueuePollMs}`,
+            `cancelPollMs=${this.config.turnQueueCancelPollMs}`,
             `max=${this.config.turnQueueMaxConcurrency}`,
             `perUser=${this.config.turnQueueMaxPerUser}`,
             `perThread=${this.config.turnQueueMaxPerThread}`,
@@ -37,43 +44,79 @@ export class AgentTurnQueueWorker {
     stop() {
         if (this.timer)
             clearInterval(this.timer);
+        if (this.cancelTimer)
+            clearInterval(this.cancelTimer);
         this.timer = null;
+        this.cancelTimer = null;
         this.draining = true;
     }
     async tick() {
-        if (this.draining)
+        if (this.draining || this.ticking)
             return;
-        await expireStaleAgentTurns(this.config, {
-            staleHeartbeatMs: this.config.turnQueueStaleHeartbeatMs,
-        }).catch((error) => {
-            console.warn(`[agent-turn-worker] stale run expiry failed: ${error instanceof Error ? error.message : String(error)}`);
-            return 0;
-        });
-        while (!this.draining && this.running.size < this.config.turnQueueMaxConcurrency) {
-            const claimed = await claimNextQueuedAgentTurn(this.config, {
+        this.ticking = true;
+        try {
+            await expireStaleAgentTurns(this.config, {
+                staleHeartbeatMs: this.config.turnQueueStaleHeartbeatMs,
+            }).catch((error) => {
+                console.warn(`[agent-turn-worker] stale run expiry failed: ${error instanceof Error ? error.message : String(error)}`);
+                return 0;
+            });
+            await processAgentBillingOutbox(this.config, {
                 workerId: this.workerId,
-                timeoutMs: this.config.turnQueueRunTimeoutMs,
-                limits: {
-                    maxConcurrency: this.config.turnQueueMaxConcurrency,
-                    maxPerUser: this.config.turnQueueMaxPerUser,
-                    maxPerThread: this.config.turnQueueMaxPerThread,
-                    maxOpenAi: this.config.turnQueueMaxOpenAi,
-                    maxOpenRouter: this.config.turnQueueMaxOpenRouter,
-                },
-            }).catch(async (error) => {
-                console.warn(`[agent-turn-worker] claim failed: ${error instanceof Error ? error.message : String(error)}`);
-                return null;
+                limit: 20,
+            }).catch((error) => {
+                console.warn(`[agent-turn-worker] billing reconciliation failed: ${error instanceof Error ? error.message : String(error)}`);
             });
-            if (!claimed)
-                return;
-            this.running.set(claimed.persisted.runId, {
-                runId: claimed.persisted.runId,
-                threadId: claimed.request.threadId || '',
-                startedAt: nowIso(),
-            });
-            void this.executeClaimedTurn(claimed).finally(() => {
-                this.running.delete(claimed.persisted.runId);
-            });
+            while (!this.draining && this.running.size < this.config.turnQueueMaxConcurrency) {
+                const claimed = await claimNextQueuedAgentTurn(this.config, {
+                    workerId: this.workerId,
+                    timeoutMs: this.config.turnQueueRunTimeoutMs,
+                    limits: {
+                        maxConcurrency: this.config.turnQueueMaxConcurrency,
+                        maxPerUser: this.config.turnQueueMaxPerUser,
+                        maxPerThread: this.config.turnQueueMaxPerThread,
+                        maxOpenAi: this.config.turnQueueMaxOpenAi,
+                        maxOpenRouter: this.config.turnQueueMaxOpenRouter,
+                    },
+                }).catch(async (error) => {
+                    console.warn(`[agent-turn-worker] claim failed: ${error instanceof Error ? error.message : String(error)}`);
+                    return null;
+                });
+                if (!claimed)
+                    return;
+                this.running.set(claimed.persisted.runId, {
+                    runId: claimed.persisted.runId,
+                    threadId: claimed.request.threadId || '',
+                    startedAt: nowIso(),
+                });
+                void this.executeClaimedTurn(claimed).finally(() => {
+                    this.running.delete(claimed.persisted.runId);
+                    clearRunCancellation(claimed.persisted.runId);
+                });
+            }
+        }
+        finally {
+            this.ticking = false;
+        }
+    }
+    async pollCancellationRequests() {
+        if (this.draining || this.pollingCancellations || this.running.size === 0)
+            return;
+        this.pollingCancellations = true;
+        try {
+            const requestedRunIds = await listRequestedAgentRunCancellations(this.config, Array.from(this.running.keys()));
+            for (const runId of requestedRunIds) {
+                const result = cancelActiveRun(runId);
+                if (result.cancelled) {
+                    console.log(`[agent-turn-worker] cancellation delivered run=${runId} workerId=${this.workerId}`);
+                }
+            }
+        }
+        catch (error) {
+            console.warn(`[agent-turn-worker] cancellation poll failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        finally {
+            this.pollingCancellations = false;
         }
     }
     async executeClaimedTurn(claimed) {
