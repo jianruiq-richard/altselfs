@@ -5,16 +5,17 @@ export type AgentMessageRole = 'USER' | 'ASSISTANT' | 'TOOL';
 export type AgentThreadStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED';
 
 const ACTIVE_THREAD_STATUS: AgentThreadStatus = 'ACTIVE';
+const PLACEHOLDER_THREAD_TITLES = ['instruction', 'New chat', 'New conversation', 'New discussion'];
 
 function summarizeThreadTitle(content: string) {
   const normalized = content.replace(/\s+/g, ' ').trim();
-  if (!normalized) return 'New chat';
+  if (!normalized) return 'New discussion';
   return normalized.length > 28 ? `${normalized.slice(0, 28)}...` : normalized;
 }
 
 function isPlaceholderThreadTitle(title?: string | null) {
   const normalized = title?.trim();
-  return !normalized || normalized === 'instruction' || normalized === 'New chat' || normalized === 'New conversation';
+  return !normalized || PLACEHOLDER_THREAD_TITLES.includes(normalized);
 }
 
 export async function getLatestThreadWithMessages(investorId: string, agentType: AgentType) {
@@ -83,7 +84,7 @@ export async function createThread(params: {
     data: {
       investorId: params.investorId,
       agentType: params.agentType,
-      title: params.title?.trim() || 'New chat',
+      title: params.title?.trim() || 'New discussion',
       status: ACTIVE_THREAD_STATUS,
     },
   });
@@ -237,7 +238,7 @@ export async function appendThreadMessage(params: {
     await prisma.agentThread.updateMany({
       where: {
         id: params.threadId,
-        OR: [{ title: null }, { title: { in: ['instruction', 'New chat', 'New conversation'] } }],
+        OR: [{ title: null }, { title: { in: PLACEHOLDER_THREAD_TITLES } }],
       },
       data: { title: summarizeThreadTitle(params.content) },
     });

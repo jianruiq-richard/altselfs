@@ -387,12 +387,17 @@ export function loadConfig() {
         creditsPerUsd: readFloatEnv('CREDITS_PER_USD', 1_000),
         creditsCostMarkup: readFloatEnv('CREDITS_COST_MARKUP', 2),
         creditsMinimumRunCharge: readIntEnv('CREDITS_MINIMUM_RUN_CHARGE', 5),
-        creditsEnforcementMode: process.env.CREDITS_ENFORCEMENT_MODE?.trim().toLowerCase() === 'enforce'
-            ? 'enforce'
-            : 'observe',
+        creditsEnforcementMode: process.env.CREDITS_ENFORCEMENT_MODE?.trim().toLowerCase() === 'observe'
+            ? 'observe'
+            : 'enforce',
         creditsWelcomeGrant: readIntEnv('CREDITS_WELCOME_GRANT', 1_000),
         creditsConcurrencyHold: readIntEnv('CREDITS_CONCURRENCY_HOLD', 50),
         creditsReservationTtlMinutes: readIntEnv('CREDITS_RESERVATION_TTL_MINUTES', 120),
+        hermesApiyiInputRate: readFloatEnv('HERMES_APIYI_INPUT_RATE', 3),
+        hermesApiyiOutputRate: readFloatEnv('HERMES_APIYI_OUTPUT_RATE', 15),
+        hermesApiyiCacheReadRate: readFloatEnv('HERMES_APIYI_CACHE_READ_RATE', 0.3),
+        hermesApiyiCacheWriteRate: readFloatEnv('HERMES_APIYI_CACHE_WRITE_RATE', 6),
+        hermesApiyiCostMultiplier: readFloatEnv('HERMES_APIYI_COST_MULTIPLIER', 0.95),
         codexUsageUncachedInputRate: readFloatEnv('CODEX_USAGE_UNCACHED_INPUT_RATE', 125),
         codexUsageCachedInputRate: readFloatEnv('CODEX_USAGE_CACHED_INPUT_RATE', 12.5),
         codexUsageOutputRate: readFloatEnv('CODEX_USAGE_OUTPUT_RATE', 750),

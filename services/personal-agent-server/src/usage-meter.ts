@@ -6,7 +6,18 @@ import type { ServerConfig } from './config.js';
 import { isRecord } from './util.js';
 
 const execFileAsync = promisify(execFile);
-const PRICING_VERSION = '2026-07-v1';
+const PRICING_VERSION = '2026-07-v2';
+
+type HermesCostSource = 'provider_actual' | 'provider_estimated' | 'local_pricing' | 'unavailable';
+
+type HermesPricingSnapshot = {
+  source: 'apiyi-claude-sonnet-4-6';
+  inputUsdPerMillion: number;
+  outputUsdPerMillion: number;
+  cacheReadUsdPerMillion: number;
+  cacheWriteUsdPerMillion: number;
+  multiplier: number;
+};
 
 export type HermesUsageSnapshot = {
   inputTokens: number;
@@ -34,6 +45,9 @@ export type AgentRunUsage = {
     model: string;
     provider: string;
     billedCostUsd: number;
+    locallyEstimatedCostUsd: number;
+    costSource: HermesCostSource;
+    pricing: HermesPricingSnapshot | null;
     credits: number;
   };
   codex: CodexUsageSnapshot & {
@@ -157,7 +171,17 @@ export async function buildAgentRunUsage(input: {
     readCodexUsageSince(input.codexHome, input.startedAtMs),
   ]);
   const hermes = subtractHermesUsage(hermesAfter, input.hermesBefore);
-  const billedCostUsd = Math.max(hermes.actualCostUsd, hermes.estimatedCostUsd);
+  const pricing = resolveHermesPricing(input.config, input.hermesProvider, input.hermesModel);
+  const locallyEstimatedCostUsd = pricing
+    ? calculateHermesCostUsd(hermes, pricing)
+    : 0;
+  const providerReportedCostUsd = hermes.actualCostUsd > 0
+    ? hermes.actualCostUsd
+    : hermes.estimatedCostUsd;
+  const billedCostUsd = providerReportedCostUsd > 0
+    ? providerReportedCostUsd
+    : locallyEstimatedCostUsd;
+  const costSource = resolveHermesCostSource(hermes, locallyEstimatedCostUsd);
   const hermesCredits = Math.ceil(
     billedCostUsd * input.config.creditsPerUsd * input.config.creditsCostMarkup,
   );
@@ -181,6 +205,9 @@ export async function buildAgentRunUsage(input: {
       model: input.hermesModel,
       provider: input.hermesProvider,
       billedCostUsd,
+      locallyEstimatedCostUsd,
+      costSource,
+      pricing,
       credits: hermesCredits,
     },
     codex: {
@@ -191,6 +218,52 @@ export async function buildAgentRunUsage(input: {
     },
     totalCredits,
   };
+}
+
+function resolveHermesPricing(
+  config: ServerConfig,
+  provider: string,
+  model: string,
+): HermesPricingSnapshot | null {
+  const normalizedProvider = provider.trim().toLowerCase();
+  const normalizedModel = model.trim().toLowerCase().replace(/[._]/g, '-');
+  if (
+    normalizedProvider !== 'apiyi' ||
+    !['claude-sonnet-4-6', 'sonnet-4-6'].includes(normalizedModel)
+  ) {
+    return null;
+  }
+  return {
+    source: 'apiyi-claude-sonnet-4-6',
+    inputUsdPerMillion: nonNegativeNumber(config.hermesApiyiInputRate),
+    outputUsdPerMillion: nonNegativeNumber(config.hermesApiyiOutputRate),
+    cacheReadUsdPerMillion: nonNegativeNumber(config.hermesApiyiCacheReadRate),
+    cacheWriteUsdPerMillion: nonNegativeNumber(config.hermesApiyiCacheWriteRate),
+    multiplier: nonNegativeNumber(config.hermesApiyiCostMultiplier),
+  };
+}
+
+function calculateHermesCostUsd(
+  usage: HermesUsageSnapshot,
+  pricing: HermesPricingSnapshot,
+) {
+  const cost = (
+    usage.inputTokens * pricing.inputUsdPerMillion +
+    usage.outputTokens * pricing.outputUsdPerMillion +
+    usage.cacheReadTokens * pricing.cacheReadUsdPerMillion +
+    usage.cacheWriteTokens * pricing.cacheWriteUsdPerMillion
+  ) / 1_000_000;
+  return cost * pricing.multiplier;
+}
+
+function resolveHermesCostSource(
+  usage: HermesUsageSnapshot,
+  locallyEstimatedCostUsd: number,
+): HermesCostSource {
+  if (usage.actualCostUsd > 0) return 'provider_actual';
+  if (usage.estimatedCostUsd > 0) return 'provider_estimated';
+  if (locallyEstimatedCostUsd > 0) return 'local_pricing';
+  return 'unavailable';
 }
 
 function subtractHermesUsage(after: HermesUsageSnapshot, before: HermesUsageSnapshot): HermesUsageSnapshot {
@@ -262,6 +335,11 @@ function eventTimestampMs(event: Record<string, unknown>) {
 function numberValue(value: unknown) {
   const number = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function nonNegativeNumber(value: unknown) {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : 0;
 }
 
 function positiveDelta(after: number, before: number) {
