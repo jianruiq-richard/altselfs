@@ -214,6 +214,58 @@ test('uses provider actual cost instead of local APIYI estimate when available',
   assert.equal(usage.hermes.credits, 60);
 });
 
+test('uses OpenRouter per-call actual costs instead of the Hermes state estimate', async () => {
+  const root = await createHermesStateDb({
+    inputTokens: 13_147,
+    outputTokens: 1_841,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    estimatedCostUsd: 0.00582346,
+    actualCostUsd: 0,
+    apiCallCount: 2,
+  });
+  const usageLogPath = path.join(root, 'hermes-usage.jsonl');
+  await fs.writeFile(usageLogPath, [
+    JSON.stringify({
+      provider: 'openrouter',
+      input_tokens: 2_661,
+      output_tokens: 673,
+      estimated_cost_usd: 0.0028,
+      actual_cost_usd: 0.00245,
+    }),
+    JSON.stringify({
+      provider: 'openrouter',
+      input_tokens: 10_486,
+      output_tokens: 1_168,
+      estimated_cost_usd: 0.00302346,
+      actual_cost_usd: 0.00263,
+    }),
+  ].join('\n'));
+
+  const usage = await buildAgentRunUsage({
+    config: billingConfig(),
+    runId: 'run-openrouter-actual',
+    hermesHome: root,
+    hermesUsageLogPath: usageLogPath,
+    hermesSessionId: 'session-1',
+    hermesBefore: emptyHermesUsage(),
+    hermesModel: 'deepseek/deepseek-v3.2',
+    hermesProvider: 'openrouter',
+    codexHome: path.join(root, 'codex-home'),
+    codexModel: 'gpt-5.5',
+    startedAtMs: Date.now(),
+  });
+
+  assert.equal(usage.pricingVersion, '2026-07-v4');
+  assert.equal(usage.hermes.costSource, 'provider_actual');
+  assert.ok(Math.abs(usage.hermes.actualCostUsd - 0.00508) < 1e-12);
+  assert.ok(Math.abs(usage.hermes.billedCostUsd - 0.00508) < 1e-12);
+  assert.equal(usage.hermes.estimatedCostUsd, 0.00582346);
+  assert.equal(usage.hermes.credits, 11);
+  assert.equal(usage.totalCredits, 11);
+});
+
 test('prices APIYI memory review from Anthropic cache TTL response details', () => {
   const usage = buildMemoryReviewUsage({
     config: billingConfig(),

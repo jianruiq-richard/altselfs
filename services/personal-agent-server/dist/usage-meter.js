@@ -4,7 +4,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { isRecord } from './util.js';
 const execFileAsync = promisify(execFile);
-export const AGENT_PRICING_VERSION = '2026-07-v3';
+export const AGENT_PRICING_VERSION = '2026-07-v4';
 const EMPTY_HERMES_USAGE = {
     inputTokens: 0,
     outputTokens: 0,
@@ -118,7 +118,9 @@ export async function buildAgentRunUsage(input) {
         ? {
             ...detailedHermes,
             estimatedCostUsd: stateDelta.estimatedCostUsd,
-            actualCostUsd: stateDelta.actualCostUsd,
+            actualCostUsd: detailedHermes.actualCostUsd > 0
+                ? detailedHermes.actualCostUsd
+                : stateDelta.actualCostUsd,
         }
         : classifyUnspecifiedApiyiCacheWrites(stateDelta, input.hermesProvider);
     const pricedHermes = priceHermesUsage(input.config, hermes, input.hermesModel, input.hermesProvider);
