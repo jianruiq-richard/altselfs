@@ -20,7 +20,7 @@ type ChatMessage = {
   createdAt?: string;
   artifacts?: ChatArtifact[];
   submission?: {
-    status: 'AUTHORIZING' | 'QUEUED' | 'REJECTED';
+    status: 'AUTHORIZING' | 'QUEUED' | 'RUNNING' | 'REJECTED';
     runId?: string | null;
     code?: string | null;
     error?: string | null;
@@ -2220,6 +2220,21 @@ export default function InvestorAgentChatPage() {
         activeRunIdRef.current = nextRunId;
         setActiveRunId(nextRunId);
         setSending(true);
+        const submissionStatus = activeRunStatus === 'RUNNING' || status === 'ACTIVE'
+          ? 'RUNNING'
+          : 'QUEUED';
+        setMessages((currentMessages) => currentMessages.map((message) => (
+          message.submission?.runId === nextRunId &&
+          message.submission.status !== submissionStatus
+            ? {
+                ...message,
+                submission: {
+                  ...message.submission,
+                  status: submissionStatus,
+                },
+              }
+            : message
+        )));
         if (liveStreamRunIdRef.current === nextRunId) return 'active';
         if (projected.length > 0) setCodexStreamItems(compactCodexStreamItems(projected));
         return 'active';
@@ -3384,8 +3399,20 @@ export default function InvestorAgentChatPage() {
                           <GeneratedArtifactPreviews artifacts={artifacts} inverted />
                           {message.submission ? (
                             <div className={`mt-2 flex flex-wrap items-center gap-2 border-t pt-2 text-[10px] leading-4 ${message.submission.status === 'REJECTED' ? 'border-red-300/15 text-red-200' : 'border-white/[0.08] text-zinc-500'}`}>
-                              {message.submission.status === 'AUTHORIZING' ? <LoaderCircle className="h-3 w-3 animate-spin" /> : message.submission.status === 'QUEUED' ? <Clock3 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                              <span>{message.submission.status === 'AUTHORIZING' ? 'Authorizing task' : message.submission.status === 'QUEUED' ? 'Queued' : message.submission.error || 'Task rejected'}</span>
+                              {message.submission.status === 'AUTHORIZING' || message.submission.status === 'RUNNING'
+                                ? <LoaderCircle className="h-3 w-3 animate-spin" />
+                                : message.submission.status === 'QUEUED'
+                                  ? <Clock3 className="h-3 w-3" />
+                                  : <AlertCircle className="h-3 w-3" />}
+                              <span>
+                                {message.submission.status === 'AUTHORIZING'
+                                  ? 'Authorizing task'
+                                  : message.submission.status === 'QUEUED'
+                                    ? 'Queued'
+                                    : message.submission.status === 'RUNNING'
+                                      ? 'Running'
+                                      : message.submission.error || 'Task rejected'}
+                              </span>
                               {message.submission.status === 'REJECTED' ? (
                                 <button type="button" onClick={() => setInput(message.content)} className="ml-auto rounded-md border border-red-200/15 px-2 py-0.5 text-red-100 hover:bg-red-200/10">Edit and retry</button>
                               ) : null}

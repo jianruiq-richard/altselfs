@@ -641,21 +641,27 @@ async function syncTerminalPersonalAgentRun(params: {
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
+  let submissionUpdated = false;
   if (submittedMessage) {
     const currentMeta = isRecord(submittedMessage.meta) ? submittedMessage.meta : {};
     const currentSubmission = isRecord(currentMeta.submission) ? currentMeta.submission : {};
-    await mergeThreadMessageMeta({
-      messageId: submittedMessage.id,
-      meta: {
-        submission: {
-          ...currentSubmission,
-          status: 'COMPLETED',
-          error: terminalRun.status === 'SUCCESS' ? null : terminalRun.error || null,
+    const nextError = terminalRun.status === 'SUCCESS' ? null : terminalRun.error || null;
+    if (currentSubmission.status !== 'COMPLETED' || currentSubmission.error !== nextError) {
+      await mergeThreadMessageMeta({
+        messageId: submittedMessage.id,
+        meta: {
+          submission: {
+            ...currentSubmission,
+            status: 'COMPLETED',
+            error: nextError,
+          },
         },
-      },
-    }).catch(() => null);
+      }).then(() => {
+        submissionUpdated = true;
+      }).catch(() => null);
+    }
   }
-  if (alreadySynced) return false;
+  if (alreadySynced) return submissionUpdated;
 
   await appendThreadMessage({
     threadId: params.threadId,
@@ -1081,11 +1087,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Personal Agent request failed: ${detail}` }, { status: 502 });
     }
 
+    const acceptedStatus = typeof result.status === 'string' && result.status.toUpperCase() === 'RUNNING'
+      ? 'RUNNING'
+      : 'QUEUED';
     await mergeThreadMessageMeta({
       messageId: userThreadMessage.id,
       meta: {
         submission: {
-          status: 'QUEUED',
+          status: acceptedStatus,
           runId: result.runId || runId,
           code: null,
           error: null,

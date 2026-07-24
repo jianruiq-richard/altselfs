@@ -324,9 +324,9 @@ function extractMessageSubmission(meta: unknown) {
   const submission = isRecord(record.submission) ? record.submission : null;
   if (!submission) return null;
   const status = typeof submission.status === 'string' ? submission.status.toUpperCase() : '';
-  if (!['AUTHORIZING', 'QUEUED', 'REJECTED'].includes(status)) return null;
+  if (!['AUTHORIZING', 'QUEUED', 'RUNNING', 'REJECTED'].includes(status)) return null;
   return {
-    status: status as 'AUTHORIZING' | 'QUEUED' | 'REJECTED',
+    status: status as 'AUTHORIZING' | 'QUEUED' | 'RUNNING' | 'REJECTED',
     runId: typeof submission.runId === 'string' ? submission.runId : null,
     code: typeof submission.code === 'string' ? submission.code : null,
     error: typeof submission.error === 'string' ? submission.error : null,
