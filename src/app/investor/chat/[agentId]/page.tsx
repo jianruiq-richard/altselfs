@@ -213,6 +213,22 @@ type CodexStreamItem = {
   plan?: HermesPlan;
 };
 
+type ActiveWorkRunStatus = 'AUTHORIZING' | 'QUEUED' | 'RUNNING';
+
+type ActiveWorkTiming = {
+  runId: string | null;
+  status: ActiveWorkRunStatus;
+  queuedAtMs: number;
+  startedAtMs: number | null;
+};
+
+type ActiveWorkPresentation = {
+  runKey: string;
+  phase: string;
+  title: string;
+  detail: string;
+};
+
 type CompletedCodexActivity = {
   id: string;
   durationMs: number;
@@ -1315,6 +1331,207 @@ function formatDuration(ms: number) {
   return `${seconds}s`;
 }
 
+function runTimestampMs(run: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = run[key];
+    if (typeof value !== 'string') continue;
+    const parsed = timestampMs(value);
+    if (parsed > 0) return parsed;
+  }
+  return 0;
+}
+
+function activeWorkToolPresentation(item: CodexStreamItem) {
+  const value = `${item.detail} ${item.content || ''}`.toLowerCase();
+  if (value.includes('web.run') || value.includes('web_search') || value.includes('search_query')) {
+    return {
+      phase: 'searching',
+      title: 'Searching current sources',
+      detail: 'Codex is reviewing relevant public information.',
+    };
+  }
+  if (value.includes('similarweb')) {
+    return {
+      phase: 'connector-similarweb',
+      title: 'Querying Similarweb',
+      detail: 'Codex is collecting available traffic and market estimates.',
+    };
+  }
+  if (value.includes('semrush')) {
+    return {
+      phase: 'connector-semrush',
+      title: 'Querying Semrush',
+      detail: 'Codex is collecting available search and market data.',
+    };
+  }
+  if (value.includes('domain_metrics')) {
+    return {
+      phase: 'connector-domain-metrics',
+      title: 'Checking domain metrics',
+      detail: 'Codex is collecting available domain performance data.',
+    };
+  }
+  if (value.includes('lark') || value.includes('feishu')) {
+    return {
+      phase: 'connector-lark',
+      title: 'Reviewing Lark context',
+      detail: 'Codex is reading the connected workspace information selected for this discussion.',
+    };
+  }
+  if (value.includes('gmail') || value.includes('mail')) {
+    return {
+      phase: 'connector-email',
+      title: 'Reviewing connected email',
+      detail: 'Codex is reading the relevant connected messages selected for this discussion.',
+    };
+  }
+  if (value.includes('sandbox') || value.includes('exec')) {
+    return {
+      phase: 'processing-data',
+      title: 'Processing data',
+      detail: 'Codex is running a scoped computation for this task.',
+    };
+  }
+  return {
+    phase: 'using-tool',
+    title: item.status === 'completed' ? 'Reviewing tool results' : 'Using an execution tool',
+    detail: item.status === 'completed'
+      ? 'The agent is evaluating the latest result.'
+      : 'Codex is carrying out the current action.',
+  };
+}
+
+function getActiveWorkPresentation(
+  item: CodexStreamItem | undefined,
+  status: ActiveWorkRunStatus,
+  stopping: boolean,
+): Omit<ActiveWorkPresentation, 'runKey'> {
+  if (stopping) {
+    return {
+      phase: 'stopping',
+      title: 'Stopping',
+      detail: 'The current task is being stopped safely.',
+    };
+  }
+  if (status === 'AUTHORIZING') {
+    return {
+      phase: 'authorizing',
+      title: 'Submitting task',
+      detail: 'Checking task capacity and starting the discussion run.',
+    };
+  }
+  if (status === 'QUEUED') {
+    return {
+      phase: 'queued',
+      title: 'Queued',
+      detail: 'Waiting for an available execution slot.',
+    };
+  }
+  if (!item) {
+    return {
+      phase: 'preparing',
+      title: 'Preparing',
+      detail: 'Preparing discussion context for the agent.',
+    };
+  }
+
+  const method = (item.method || '').toLowerCase();
+  const title = item.title.toLowerCase();
+  if (item.status === 'error') {
+    return {
+      phase: 'adjusting',
+      title: 'Adjusting approach',
+      detail: 'The agent is handling an execution issue and checking the next action.',
+    };
+  }
+  if (title.includes('recover') || title.includes('retry') || title.includes('connection interrupted')) {
+    return {
+      phase: 'recovering',
+      title: 'Reconnecting',
+      detail: 'Restoring the live task state without restarting the work.',
+    };
+  }
+  if (method.includes('workspace_artifacts.ingested')) {
+    return {
+      phase: 'attachments',
+      title: 'Processing attachments',
+      detail: 'Preparing the uploaded files for the agent.',
+    };
+  }
+  if (method.includes('workspace_artifacts.generated')) {
+    return {
+      phase: 'publishing',
+      title: 'Publishing files',
+      detail: 'Preparing generated files for preview and download.',
+    };
+  }
+  if (
+    method.includes('codex.agent_message.delta') ||
+    method.includes('agentmessage/delta')
+  ) {
+    return {
+      phase: 'writing',
+      title: 'Writing response',
+      detail: 'Codex is composing the delegated result.',
+    };
+  }
+  if (
+    method.includes('codex.agent_message.final') ||
+    method.includes('codex.task_complete') ||
+    method.includes('hermes.source_runtime.completed')
+  ) {
+    return {
+      phase: 'synthesizing',
+      title: 'Reviewing results',
+      detail: 'Hermes is preparing the final response.',
+    };
+  }
+  if (method.includes('tool') || title.includes('tool')) {
+    return activeWorkToolPresentation(item);
+  }
+  if (
+    method.includes('codex.session') ||
+    method.includes('codex.thread') ||
+    method.includes('codex.turn')
+  ) {
+    return {
+      phase: 'delegating',
+      title: 'Starting Codex',
+      detail: 'Hermes is delegating the execution work.',
+    };
+  }
+  if (
+    method.includes('agent_context') ||
+    method.includes('runtime_state') ||
+    method.includes('profile')
+  ) {
+    return {
+      phase: 'context',
+      title: 'Reading discussion context',
+      detail: 'Preparing the relevant conversation, memory, and file context.',
+    };
+  }
+  if (method.includes('plan') || item.plan) {
+    return {
+      phase: 'thinking',
+      title: 'Thinking',
+      detail: 'The agent is organizing the current work.',
+    };
+  }
+  if (method.includes('hermes.source_runtime')) {
+    return {
+      phase: 'thinking',
+      title: 'Thinking',
+      detail: 'Hermes is evaluating the request and deciding the next action.',
+    };
+  }
+  return {
+    phase: 'working',
+    title: 'Working',
+    detail: 'The agent is carrying out the current task.',
+  };
+}
+
 function timestampMs(value: string) {
   const ms = new Date(value).getTime();
   return Number.isFinite(ms) ? ms : 0;
@@ -1993,6 +2210,9 @@ export default function InvestorAgentChatPage() {
   const [completedCodexActivity, setCompletedCodexActivity] = useState<CompletedCodexActivity | null>(null);
   const [assistantDraft, setAssistantDraft] = useState('');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [activeWorkTiming, setActiveWorkTiming] = useState<ActiveWorkTiming | null>(null);
+  const [activeWorkNowMs, setActiveWorkNowMs] = useState(() => Date.now());
+  const [activeWorkDisplay, setActiveWorkDisplay] = useState<ActiveWorkPresentation | null>(null);
   const [stoppingRun, setStoppingRun] = useState(false);
   const [recoveringRunState, setRecoveringRunState] = useState(false);
   const [hermesModel, setHermesModel] = useState<HermesModelOption['value']>(DEFAULT_HERMES_MODEL);
@@ -2015,6 +2235,7 @@ export default function InvestorAgentChatPage() {
   const attachmentDragDepthRef = useRef(0);
   const connectorSelectionsByThreadRef = useRef<Map<string, string[]>>(new Map());
   const initialLoadStartedRef = useRef(false);
+  const activeWorkDisplayRef = useRef<ActiveWorkPresentation | null>(null);
 
   const selectThreadId = useCallback((nextThreadId: string | null) => {
     selectedThreadIdRef.current = nextThreadId;
@@ -2068,6 +2289,45 @@ export default function InvestorAgentChatPage() {
   const attachmentUploadFailed = attachments.some((attachment) => attachment.uploadStatus === 'error');
   const canAttachFiles = isExecutive && !sending && !recoveringRunState && !attachmentUploadBusy;
   const showBlockingConversationLoading = loading && messages.length === 0 && !sending;
+
+  useEffect(() => {
+    if (!sending) return;
+    setActiveWorkNowMs(Date.now());
+    const timer = window.setInterval(() => {
+      setActiveWorkNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [sending]);
+
+  useEffect(() => {
+    if (!sending) {
+      activeWorkDisplayRef.current = null;
+      setActiveWorkDisplay(null);
+      setActiveWorkTiming(null);
+      return;
+    }
+
+    const status = activeWorkTiming?.status || (startingRun ? 'AUTHORIZING' : 'RUNNING');
+    const runKey = activeRunId || activeWorkTiming?.runId || 'pending-run';
+    const latestItem = codexStreamItems[codexStreamItems.length - 1];
+    const candidate = {
+      runKey,
+      ...getActiveWorkPresentation(latestItem, status, stoppingRun),
+    };
+    const current = activeWorkDisplayRef.current;
+    const applyCandidate = () => {
+      activeWorkDisplayRef.current = candidate;
+      setActiveWorkDisplay(candidate);
+    };
+
+    if (!current || current.runKey !== runKey || current.phase === candidate.phase) {
+      applyCandidate();
+      return;
+    }
+
+    const timer = window.setTimeout(applyCandidate, 700);
+    return () => window.clearTimeout(timer);
+  }, [activeRunId, activeWorkTiming, codexStreamItems, sending, startingRun, stoppingRun]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(HERMES_MODEL_STORAGE_KEY);
@@ -2377,9 +2637,26 @@ export default function InvestorAgentChatPage() {
         activeRunIdRef.current = nextRunId;
         setActiveRunId(nextRunId);
         setSending(true);
-        const submissionStatus = activeRunStatus === 'RUNNING' || status === 'ACTIVE'
+        const submissionStatus = activeRunStatus === 'RUNNING'
           ? 'RUNNING'
-          : 'QUEUED';
+          : activeRunStatus === 'QUEUED'
+            ? 'QUEUED'
+            : status === 'ACTIVE'
+              ? 'RUNNING'
+              : 'QUEUED';
+        const queuedAtMs = runTimestampMs(activeRun, 'queued_at', 'created_at');
+        const startedAtMs = runTimestampMs(activeRun, 'started_at');
+        setActiveWorkTiming((current) => {
+          const sameRun = current?.runId === nextRunId || (!current?.runId && Boolean(current));
+          return {
+            runId: nextRunId,
+            status: submissionStatus,
+            queuedAtMs: queuedAtMs || (sameRun ? current?.queuedAtMs || Date.now() : Date.now()),
+            startedAtMs: submissionStatus === 'RUNNING'
+              ? startedAtMs || (sameRun ? current?.startedAtMs || Date.now() : Date.now())
+              : null,
+          };
+        });
         setMessages((currentMessages) => currentMessages.map((message) => (
           message.submission?.runId === nextRunId &&
           message.submission.status !== submissionStatus
@@ -2479,6 +2756,9 @@ export default function InvestorAgentChatPage() {
     requestedStopRunIdRef.current = null;
     setActiveRunId(null);
     setSending(false);
+    setActiveWorkTiming(null);
+    activeWorkDisplayRef.current = null;
+    setActiveWorkDisplay(null);
     setStoppingRun(false);
     setPlannerTrace([]);
     setCodexStreamItems([]);
@@ -3144,6 +3424,13 @@ export default function InvestorAgentChatPage() {
     setInput('');
     setAttachments([]);
     setSending(true);
+    const submittedAtMs = Date.now();
+    setActiveWorkTiming({
+      runId: null,
+      status: 'AUTHORIZING',
+      queuedAtMs: submittedAtMs,
+      startedAtMs: null,
+    });
     setError(null);
     setPlannerTrace([]);
     setCodexStreamItems([]);
@@ -3264,6 +3551,18 @@ export default function InvestorAgentChatPage() {
       activeRunIdRef.current = runId;
       liveStreamRunIdRef.current = null;
       setActiveRunId(runId);
+      const acceptedStatus: ActiveWorkRunStatus =
+        typeof data.status === 'string' && data.status.toUpperCase() === 'RUNNING'
+          ? 'RUNNING'
+          : 'QUEUED';
+      setActiveWorkTiming((current) => ({
+        runId,
+        status: acceptedStatus,
+        queuedAtMs: current?.queuedAtMs || Date.now(),
+        startedAtMs: acceptedStatus === 'RUNNING'
+          ? current?.startedAtMs || Date.now()
+          : null,
+      }));
       setCodexStreamItems([
         {
           id: `async-run-${runId}`,
@@ -3376,7 +3675,25 @@ export default function InvestorAgentChatPage() {
 
   const activeSession = sessions.find((session) => session.id === threadId);
   const connectedConnectors = connectors.filter((connector) => connector.connected && connector.conversationAvailable !== false);
-  const latestWorkItem = codexStreamItems[codexStreamItems.length - 1];
+  const activeWorkStatus = activeWorkTiming?.status || (startingRun ? 'AUTHORIZING' : 'RUNNING');
+  const activeWorkFallback = getActiveWorkPresentation(
+    codexStreamItems[codexStreamItems.length - 1],
+    activeWorkStatus,
+    stoppingRun,
+  );
+  const currentActiveWork = activeWorkDisplay || {
+    runKey: activeRunId || activeWorkTiming?.runId || 'pending-run',
+    ...activeWorkFallback,
+  };
+  const activeWorkStartedAtMs = activeWorkStatus === 'RUNNING'
+    ? activeWorkTiming?.startedAtMs || activeWorkTiming?.queuedAtMs || activeWorkNowMs
+    : activeWorkTiming?.queuedAtMs || activeWorkNowMs;
+  const activeWorkDurationText = formatDuration(Math.max(0, activeWorkNowMs - activeWorkStartedAtMs));
+  const activeWorkDurationLabel = activeWorkStatus === 'RUNNING'
+    ? `Running for ${activeWorkDurationText}`
+    : activeWorkStatus === 'QUEUED'
+      ? `Queued for ${activeWorkDurationText}`
+      : `Submitting for ${activeWorkDurationText}`;
   const activeTaskThreadIds = new Set(
     (billingCapacity?.activeTasks || [])
       .map((task) => task.threadId)
@@ -3462,14 +3779,20 @@ export default function InvestorAgentChatPage() {
       <div className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-5">
         <section className="mb-8">
           <div className="mb-3 flex items-center justify-between"><h2 className="text-[13px] font-semibold text-zinc-200">Active work</h2><Clock3 className="h-3.5 w-3.5 text-zinc-600" /></div>
-          {sending || latestWorkItem ? (
+          {sending ? (
             <div className="rounded-[7px] border border-white/[0.09] bg-white/[0.027] p-3.5">
               <div className="flex items-start justify-between gap-2">
-                <h3 className="text-[12px] font-semibold leading-5 text-zinc-100">{latestWorkItem?.title || activeSession?.title || 'Agent task'}</h3>
-                <span className={`inline-flex shrink-0 items-center gap-1.5 text-[9px] font-extrabold uppercase ${sending ? 'text-[#8eb3ff]' : 'text-[#46d19a]'}`}><i className={`h-1.5 w-1.5 rounded-full ${sending ? 'bg-[#8eb3ff]' : 'bg-[#46d19a]'}`} />{sending ? 'Running' : 'Ready'}</span>
+                <h3 className="text-[12px] font-semibold leading-5 text-zinc-100">{currentActiveWork.title}</h3>
+                <span className="inline-flex shrink-0 items-center gap-1.5 text-[9px] font-extrabold uppercase text-[#8eb3ff]">
+                  <i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#8eb3ff]" />
+                  {activeWorkStatus === 'AUTHORIZING' ? 'Starting' : activeWorkStatus === 'QUEUED' ? 'Queued' : 'Running'}
+                </span>
               </div>
-              <p className="mt-2 text-[10px] leading-4 text-zinc-500">{latestWorkItem?.detail || (sending ? 'Astromar is working through the current request.' : 'The latest result is ready in this discussion.')}</p>
-              <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/[0.08]"><i className={`block h-full ${sending ? 'w-2/3 bg-[#8eb3ff]' : 'w-full bg-[#46d19a]'}`} /></div>
+              <p className="mt-2 text-[10px] leading-4 text-zinc-500">{currentActiveWork.detail}</p>
+              <p className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-medium tabular-nums text-zinc-400">
+                <Clock3 className="h-3 w-3 text-zinc-600" />
+                {activeWorkDurationLabel}
+              </p>
             </div>
           ) : (
             <div className="rounded-[7px] border border-dashed border-white/[0.09] px-3 py-5 text-center text-[11px] text-zinc-600">No active work in this discussion.</div>
