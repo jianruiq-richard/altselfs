@@ -188,6 +188,20 @@ type BillingCapacityData = {
 
 type CodexStreamItemStatus = 'running' | 'completed' | 'error';
 
+type HermesPlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'blocked';
+
+type HermesPlanStep = {
+  id: string;
+  title: string;
+  status: HermesPlanStepStatus;
+  detail?: string;
+};
+
+type HermesPlan = {
+  summary?: string;
+  steps: HermesPlanStep[];
+};
+
 type CodexStreamItem = {
   id: string;
   title: string;
@@ -196,6 +210,7 @@ type CodexStreamItem = {
   timestamp: string;
   method?: string;
   content?: string;
+  plan?: HermesPlan;
 };
 
 type CompletedCodexActivity = {
@@ -697,6 +712,40 @@ function getEventPayload(event: unknown) {
   return isRecord(event.payload) ? event.payload : {};
 }
 
+function parseHermesPlan(payload: Record<string, unknown>): HermesPlan | null {
+  if (!Array.isArray(payload.steps)) return null;
+
+  const steps = payload.steps
+    .map((value): HermesPlanStep | null => {
+      if (!isRecord(value)) return null;
+      const id = typeof value.id === 'string' ? value.id.trim() : '';
+      const title = typeof value.title === 'string' ? value.title.trim() : '';
+      const status = value.status;
+      if (
+        !id ||
+        !title ||
+        (status !== 'pending' && status !== 'in_progress' && status !== 'completed' && status !== 'blocked')
+      ) {
+        return null;
+      }
+      const detail = typeof value.detail === 'string' ? value.detail.trim() : '';
+      return {
+        id,
+        title,
+        status,
+        ...(detail ? { detail } : {}),
+      };
+    })
+    .filter((step): step is HermesPlanStep => Boolean(step));
+
+  if (steps.length !== payload.steps.length) return null;
+  const summary = typeof payload.summary === 'string' ? payload.summary.trim() : '';
+  return {
+    ...(summary ? { summary } : {}),
+    steps,
+  };
+}
+
 function parseJsonRecord(value: unknown) {
   if (isRecord(value)) return value;
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -819,6 +868,22 @@ function projectCodexStreamItem(envelope: Record<string, unknown>, index: number
   const payload = getEventPayload(event);
 
   if (isInternalAgentEventType(type)) return null;
+
+  if (type === 'hermes.plan.updated') {
+    const plan = parseHermesPlan(payload);
+    if (!plan) return null;
+    const hasBlocked = plan.steps.some((step) => step.status === 'blocked');
+    const hasOpenStep = plan.steps.some((step) => step.status === 'pending' || step.status === 'in_progress');
+    return {
+      id: 'hermes-plan-live',
+      title: 'Execution plan',
+      detail: plan.summary || `${plan.steps.length} planned steps`,
+      status: hasOpenStep ? 'running' : hasBlocked ? 'error' : 'completed',
+      timestamp,
+      method: type,
+      plan,
+    };
+  }
 
   if (type === 'codex.server_request.item/tool/call') {
     const request = isRecord(payload.request) ? payload.request : {};
@@ -1374,7 +1439,7 @@ function shouldShowActivityContentInline(item: CodexStreamItem) {
   );
 }
 
-function compactCodexStreamItems(items: CodexStreamItem[], limit = 18) {
+function compactCodexStreamItems(items: CodexStreamItem[]) {
   const compacted: CodexStreamItem[] = [];
   for (const item of items) {
     if (!item) continue;
@@ -1384,6 +1449,7 @@ function compactCodexStreamItems(items: CodexStreamItem[], limit = 18) {
         ...compacted[existingIndex],
         ...item,
         content: item.content || compacted[existingIndex].content,
+        plan: item.plan || compacted[existingIndex].plan,
       };
     } else {
       compacted.push(item);
@@ -1405,10 +1471,11 @@ function compactCodexStreamItems(items: CodexStreamItem[], limit = 18) {
         item.method !== 'codex.agent_message.final'
       ))
     : nativeVisible;
-  return visible.slice(-limit);
+  return visible;
 }
 
 function ActivityContent({ item, content }: { item: CodexStreamItem; content: string }) {
+  if (item.plan) return <HermesPlanView plan={item.plan} />;
   if (!content) return null;
   if (shouldShowActivityContentInline(item)) {
     return (
@@ -1432,6 +1499,66 @@ function ActivityContent({ item, content }: { item: CodexStreamItem; content: st
         {content}
       </pre>
     </details>
+  );
+}
+
+function HermesPlanView({ plan }: { plan: HermesPlan }) {
+  const completedCount = plan.steps.filter((step) => step.status === 'completed').length;
+
+  return (
+    <div className="mt-2">
+      <div className="mb-3 text-right text-xs text-zinc-500">
+        {completedCount} / {plan.steps.length} complete
+      </div>
+      <ol className="space-y-3">
+        {plan.steps.map((step) => {
+          const completed = step.status === 'completed';
+          const active = step.status === 'in_progress';
+          const blocked = step.status === 'blocked';
+          return (
+            <li key={step.id} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-3">
+              <span
+                className={[
+                  'mt-0.5 grid h-6 w-6 place-items-center rounded-lg border',
+                  completed
+                    ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+                    : blocked
+                      ? 'border-red-400/25 bg-red-400/10 text-red-300'
+                      : active
+                        ? 'border-blue-400/30 bg-blue-400/10 text-blue-300'
+                        : 'border-white/10 bg-white/[0.035] text-zinc-600',
+                ].join(' ')}
+              >
+                {completed ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : blocked ? (
+                  <AlertCircle className="h-3.5 w-3.5" />
+                ) : active ? (
+                  <span className="h-2.5 w-2.5 rounded-full bg-blue-300 agent-activity-pulse" />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                )}
+              </span>
+              <div className="min-w-0">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className={completed ? 'text-sm font-medium text-zinc-400' : 'text-sm font-medium text-zinc-100'}>
+                    {step.title}
+                  </span>
+                  <span className="text-[0.7rem] font-semibold uppercase text-zinc-600">
+                    {step.status.replace('_', ' ')}
+                  </span>
+                </div>
+                {step.detail ? (
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-400">
+                    {step.detail}
+                  </p>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -1474,7 +1601,7 @@ function ActivityStepShell({
   const links = extractLinks(item.detail, content);
   const status = active && item.status !== 'error' ? 'running' : item.status === 'error' ? 'error' : 'completed';
   const displayItem: CodexStreamItem = { ...item, status };
-  const showExpanded = active || status === 'error' || Boolean(content) || links.length > 0;
+  const showExpanded = active || status === 'error' || Boolean(content) || Boolean(item.plan) || links.length > 0;
 
   return (
     <article
@@ -1504,7 +1631,7 @@ function ActivityStepShell({
               <span className="break-words text-[0.98rem] font-semibold text-zinc-50">
                 {active ? codexActionLabel(item) : codexCompletedActionLabel(item)}
               </span>
-              {item.method ? (
+              {item.method && item.method !== 'hermes.plan.updated' ? (
                 <span className="max-w-full truncate rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-xs font-semibold text-zinc-400">
                   {item.method.replace(/^codex\./, '')}
                 </span>
@@ -1544,7 +1671,7 @@ function ActivityStepShell({
 }
 
 function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexActivity }) {
-  const items = compactCodexStreamItems(activity.items, 18);
+  const items = compactCodexStreamItems(activity.items);
   const completedAtMs =
     timestampMs(activity.completedAt) ||
     timestampMs(items[items.length - 1]?.timestamp || '') ||
@@ -1750,7 +1877,7 @@ function CodexStreamOutput({ items, active }: { items: CodexStreamItem[]; active
   if (items.length === 0 && !active) return null;
   const hasRealItems = items.length > 0;
   const visibleItems = items.length > 0
-    ? compactCodexStreamItems(items, 8)
+    ? compactCodexStreamItems(items)
     : [
         {
           id: 'agent-stream-preparing',

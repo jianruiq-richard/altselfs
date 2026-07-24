@@ -492,6 +492,7 @@ export class HermesSourceRuntime {
             '    tools:',
             '      include:',
             '        - codex_agent',
+            '        - update_plan',
             '      resources: false',
             '      prompts: false',
             '    env:',
@@ -1002,6 +1003,14 @@ export function buildHermesStableSystemPrompt() {
         '- Codex is the execution agent under Hermes. Treat Codex as hands, not the brain. It should execute bounded tasks, gather evidence, use tools, inspect available workspace context, and return results to Hermes.',
         '- The user is talking to Hermes. Do not present Codex as a separate chatbot unless it matters for transparency.',
         '',
+        'User-visible execution plans:',
+        '- For complex, multi-step, delegated, or long-running work, call `mcp_altselfs_codex_update_plan` before execution and again whenever the plan or a step status materially changes.',
+        '- Send the complete current plan on every update. Keep step IDs stable, use concise user-visible titles, and include all useful steps. Do not impose an artificial step count or tool-call count.',
+        '- Mark steps as `pending`, `in_progress`, `completed`, or `blocked`. Keep status honest and normally have only the step currently being worked on marked `in_progress`.',
+        '- Put useful findings, completed outcomes, blockers, or next actions in the optional step detail. Never put hidden chain-of-thought, credentials, internal paths, infrastructure details, or raw diagnostic logs in a plan.',
+        '- Do not publish a plan for casual conversation or a simple answer with no meaningful execution sequence.',
+        '- Plan reporting is progress communication, not a substitute for doing the work. Update the plan before the final answer so its last state reflects the actual outcome.',
+        '',
         'What Codex can do when you call `mcp_altselfs_codex_codex_agent`:',
         '- Codex runs through the native Codex app-server loop, using the Codex session bound to this Altselfs thread. It keeps its own Codex JSONL/session continuity and native compaction behavior across delegated execution turns.',
         '- Codex can use current/public web research through its available web capability: native `web.run` on OpenAI-backed Codex, or the registered `altselfs_web_search` dynamic tool on non-OpenAI-backed Codex.',
@@ -1024,7 +1033,7 @@ export function buildHermesStableSystemPrompt() {
         '',
         'When to delegate to Codex:',
         '- Call Codex when the turn needs current external facts, public web research, private connected-account data, workspace/artifact inspection, competitive-intelligence tooling, deterministic computation, API/tool execution, or multi-step operational work.',
-        '- You may call Codex multiple times in one Hermes turn if that is genuinely useful, for example gather evidence first, then ask Codex to verify a narrow follow-up. Keep the loop bounded and avoid unnecessary calls.',
+        '- Call Codex as many times as the task genuinely requires, for example gather evidence first, then ask Codex to verify a narrow follow-up. Do not impose a fixed call count, but avoid unnecessary calls.',
         '- Choose one of the two supported Codex modes in the tool arguments: `general` for normal execution, research, private-data, artifact, calculation, or coding tasks; `competitive_intelligence` for competitor, market, traffic, SEO, keyword, backlink, acquisition, user, revenue, or growth analysis.',
         '',
         'How to delegate:',
@@ -1457,7 +1466,7 @@ function flushRuntimeTimingFromStderrBuffer(buffer, emitTiming) {
     }
     return '';
 }
-function emitRuntimeTimingFromStderrLine(line, emitTiming) {
+export function emitRuntimeTimingFromStderrLine(line, emitTiming) {
     for (const timingPrefix of STDERR_TIMING_PREFIXES) {
         const prefixIndex = line.indexOf(timingPrefix.prefix);
         if (prefixIndex < 0)
@@ -1467,7 +1476,9 @@ function emitRuntimeTimingFromStderrLine(line, emitTiming) {
         if (!isRecord(parsed))
             return;
         const passthroughType = typeof parsed.type === 'string' ? parsed.type : '';
-        if (passthroughType === 'codex.agent_message.delta' || passthroughType === 'codex.agent_message.final') {
+        if (passthroughType === 'codex.agent_message.delta' ||
+            passthroughType === 'codex.agent_message.final' ||
+            passthroughType === 'hermes.plan.updated') {
             const payload = isRecord(parsed.payload) ? parsed.payload : {};
             emitTiming(passthroughType, {
                 source: timingPrefix.source,

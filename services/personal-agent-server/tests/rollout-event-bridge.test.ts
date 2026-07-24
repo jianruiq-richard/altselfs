@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  emitRuntimeTimingFromStderrLine,
   extractCodexOutcomeFromRollout,
   startCodexRolloutEventBridge,
 } from '../src/hermes/source-hermes-runtime.js';
@@ -91,4 +92,31 @@ test('rollout outcome ignores task completion from an earlier turn', async () =>
   assert.equal(outcome.turnAborted, false);
 
   await fs.rm(root, { recursive: true, force: true });
+});
+
+test('Hermes plan timing messages pass through as live plan events without truncating steps', () => {
+  const emitted: Array<{ type: string; payload: Record<string, unknown> }> = [];
+  const steps = Array.from({ length: 16 }, (_, index) => ({
+    id: `step-${index + 1}`,
+    title: `Step ${index + 1}`,
+    status: index === 0 ? 'in_progress' : 'pending',
+  }));
+  const timing = {
+    type: 'hermes.plan.updated',
+    timestamp: '2026-07-24T10:00:00.000Z',
+    payload: {
+      runId: 'run-plan-test',
+      summary: 'Run every planned step',
+      steps,
+    },
+  };
+
+  emitRuntimeTimingFromStderrLine(
+    `[altselfs-codex-mcp] ALTSELFS_CODEX_TIMING ${JSON.stringify(timing)}`,
+    (type, payload) => emitted.push({ type, payload })
+  );
+
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0]?.type, 'hermes.plan.updated');
+  assert.equal((emitted[0]?.payload.steps as unknown[])?.length, 16);
 });

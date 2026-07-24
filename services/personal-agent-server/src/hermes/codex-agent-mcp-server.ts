@@ -27,6 +27,11 @@ import {
 } from '../tools/personal-data.js';
 import { buildConnectorToolScopeInstruction } from '../connector-tool-scope.js';
 import { isRecord, nowIso, truncate } from '../util.js';
+import {
+  HERMES_UPDATE_PLAN_TOOL_DEFINITION,
+  HERMES_UPDATE_PLAN_TOOL_NAME,
+  parseHermesPlanUpdate,
+} from './hermes-progress.js';
 
 type CodexModelProvider = 'openai' | 'openrouter';
 
@@ -192,6 +197,7 @@ class McpStdioServer {
               additionalProperties: false,
             },
           },
+          HERMES_UPDATE_PLAN_TOOL_DEFINITION,
         ],
       });
       return;
@@ -201,6 +207,27 @@ class McpStdioServer {
       const params = isRecord(message.params) ? message.params : {};
       const name = typeof params.name === 'string' ? params.name : '';
       const args = params.arguments;
+      if (name === HERMES_UPDATE_PLAN_TOOL_NAME) {
+        try {
+          const plan = parseHermesPlanUpdate(args);
+          emitTiming('hermes.plan.updated', {
+            runId: process.env.ALTSELFS_RUN_ID || '',
+            threadId: process.env.ALTSELFS_THREAD_ID || '',
+            ...plan,
+          });
+          this.sendResult(message.id, {
+            content: [{ type: 'text', text: 'Execution plan updated.' }],
+            isError: false,
+          });
+        } catch (error) {
+          const messageText = error instanceof Error ? error.message : String(error);
+          this.sendResult(message.id, {
+            content: [{ type: 'text', text: messageText }],
+            isError: true,
+          });
+        }
+        return;
+      }
       if (name !== TOOL_NAME) {
         this.sendResult(message.id, {
           content: [{ type: 'text', text: `Unsupported tool: ${name || '<missing>'}` }],
