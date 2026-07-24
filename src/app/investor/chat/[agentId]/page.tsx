@@ -1341,6 +1341,19 @@ function runTimestampMs(run: Record<string, unknown>, ...keys: string[]) {
   return 0;
 }
 
+function activeWorkTextSummary(value: string | undefined, maxLength = 180) {
+  if (!value) return '';
+  const summary = value
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*]\([^)]+\)/g, ' ')
+    .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
+    .replace(/[`*_#>~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (summary.length <= maxLength) return summary;
+  return `${summary.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
 function activeWorkToolPresentation(item: CodexStreamItem) {
   const value = `${item.detail} ${item.content || ''}`.toLowerCase();
   if (value.includes('web.run') || value.includes('web_search') || value.includes('search_query')) {
@@ -1466,13 +1479,16 @@ function getActiveWorkPresentation(
     };
   }
   if (
+    method === 'codex.agent_message' ||
     method.includes('codex.agent_message.delta') ||
-    method.includes('agentmessage/delta')
+    method.includes('agentmessage/delta') ||
+    method === 'agent_message'
   ) {
+    const update = activeWorkTextSummary(item.content);
     return {
-      phase: 'writing',
-      title: 'Writing response',
-      detail: 'Codex is composing the delegated result.',
+      phase: 'codex-update',
+      title: 'Codex update',
+      detail: update || 'Codex is working through the delegated task.',
     };
   }
   if (
@@ -1488,6 +1504,13 @@ function getActiveWorkPresentation(
   }
   if (method.includes('tool') || title.includes('tool')) {
     return activeWorkToolPresentation(item);
+  }
+  if (title.includes('run command') || title.includes('process item')) {
+    return {
+      phase: 'processing-data',
+      title: 'Processing information',
+      detail: 'Codex is checking and organizing the information collected so far.',
+    };
   }
   if (
     method.includes('codex.session') ||
@@ -3694,6 +3717,14 @@ export default function InvestorAgentChatPage() {
     : activeWorkStatus === 'QUEUED'
       ? `Queued for ${activeWorkDurationText}`
       : `Submitting for ${activeWorkDurationText}`;
+  const latestUserTaskTitle = activeWorkTextSummary(
+    [...messages].reverse().find((message) => message.role === 'user')?.content,
+    72,
+  );
+  const storedDiscussionTitle = activeSession?.title?.trim() || '';
+  const activeWorkDiscussionTitle = storedDiscussionTitle && storedDiscussionTitle.toLowerCase() !== 'new discussion'
+    ? storedDiscussionTitle
+    : latestUserTaskTitle || storedDiscussionTitle || 'Current discussion';
   const activeTaskThreadIds = new Set(
     (billingCapacity?.activeTasks || [])
       .map((task) => task.threadId)
@@ -3782,13 +3813,21 @@ export default function InvestorAgentChatPage() {
           {sending ? (
             <div className="rounded-[7px] border border-white/[0.09] bg-white/[0.027] p-3.5">
               <div className="flex items-start justify-between gap-2">
-                <h3 className="text-[12px] font-semibold leading-5 text-zinc-100">{currentActiveWork.title}</h3>
+                <h3
+                  className="min-w-0 truncate text-[12px] font-semibold leading-5 text-zinc-100"
+                  title={activeWorkDiscussionTitle}
+                >
+                  {activeWorkDiscussionTitle}
+                </h3>
                 <span className="inline-flex shrink-0 items-center gap-1.5 text-[9px] font-extrabold uppercase text-[#8eb3ff]">
                   <i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#8eb3ff]" />
                   {activeWorkStatus === 'AUTHORIZING' ? 'Starting' : activeWorkStatus === 'QUEUED' ? 'Queued' : 'Running'}
                 </span>
               </div>
-              <p className="mt-2 text-[10px] leading-4 text-zinc-500">{currentActiveWork.detail}</p>
+              <div className="mt-3 border-t border-white/[0.07] pt-3">
+                <p className="text-[10px] font-semibold text-zinc-300">{currentActiveWork.title}</p>
+                <p className="mt-1 text-[10px] leading-4 text-zinc-500">{currentActiveWork.detail}</p>
+              </div>
               <p className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-medium tabular-nums text-zinc-400">
                 <Clock3 className="h-3 w-3 text-zinc-600" />
                 {activeWorkDurationLabel}
