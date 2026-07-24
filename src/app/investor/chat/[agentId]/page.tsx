@@ -19,6 +19,7 @@ type ChatMessage = {
   content: string;
   createdAt?: string;
   artifacts?: ChatArtifact[];
+  connectorScope?: ConnectorScopePayload;
   submission?: {
     status: 'AUTHORIZING' | 'QUEUED' | 'RUNNING' | 'REJECTED';
     runId?: string | null;
@@ -268,6 +269,21 @@ const hermesModelOptions: HermesModelOption[] = [
 
 function normalizeHermesModelOption(value: unknown): HermesModelOption['value'] {
   return hermesModelOptions.find((option) => option.value === value)?.value || DEFAULT_HERMES_MODEL;
+}
+
+function connectorKeysFromMessages(messages: ChatMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== 'user' || !message.connectorScope) continue;
+    return message.connectorScope.enabledConnectorKeys;
+  }
+  return null;
+}
+
+function sameStringSelection(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const rightValues = new Set(right);
+  return left.every((value) => rightValues.has(value));
 }
 
 const suggestedQuestions = [
@@ -1870,7 +1886,7 @@ export default function InvestorAgentChatPage() {
   const codexEventIndexRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentDragDepthRef = useRef(0);
-  const connectorSelectionInitializedRef = useRef(false);
+  const connectorSelectionsByThreadRef = useRef<Map<string, string[]>>(new Map());
   const initialLoadStartedRef = useRef(false);
 
   const selectThreadId = useCallback((nextThreadId: string | null) => {
@@ -1952,10 +1968,6 @@ export default function InvestorAgentChatPage() {
       .then((items) => {
         if (cancelled) return;
         setConnectors(items);
-        if (!connectorSelectionInitializedRef.current) {
-          setSelectedConnectorKeys(items.filter((item) => item.connected && item.enabledByDefault).map((item) => item.key));
-          connectorSelectionInitializedRef.current = true;
-        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -1978,13 +1990,31 @@ export default function InvestorAgentChatPage() {
     enabledConnectionIds: activeConnectors.flatMap((connector) => connector.connectionIds || []),
   }), [activeConnectors]);
 
+  useEffect(() => {
+    if (!threadId || connectorsLoading || connectors.length === 0) return;
+    const availableConnectors = connectors.filter(
+      (connector) => connector.connected && connector.conversationAvailable !== false
+    );
+    const availableKeys = new Set(availableConnectors.map((connector) => connector.key));
+    const rememberedKeys = connectorSelectionsByThreadRef.current.get(threadId);
+    const messageKeys = connectorKeysFromMessages(messages);
+    const defaultKeys = availableConnectors
+      .filter((connector) => connector.enabledByDefault)
+      .map((connector) => connector.key);
+    const nextKeys = (rememberedKeys || messageKeys || defaultKeys).filter((key) => availableKeys.has(key));
+    connectorSelectionsByThreadRef.current.set(threadId, nextKeys);
+    setSelectedConnectorKeys((current) => sameStringSelection(current, nextKeys) ? current : nextKeys);
+  }, [connectors, connectorsLoading, messages, threadId]);
+
   const toggleConnector = useCallback((key: string) => {
-    setSelectedConnectorKeys((current) => (
-      current.includes(key)
+    setSelectedConnectorKeys((current) => {
+      const next = current.includes(key)
         ? current.filter((item) => item !== key)
-        : [...current, key]
-    ));
-  }, []);
+        : [...current, key];
+      if (threadId) connectorSelectionsByThreadRef.current.set(threadId, next);
+      return next;
+    });
+  }, [threadId]);
   const applyAgentConfig = useCallback((agentConfig: AgentConfig | null | undefined) => {
     if (!agentConfig) return;
     const systemPrompt = String(agentConfig.systemPrompt || '');
@@ -2973,6 +3003,7 @@ export default function InvestorAgentChatPage() {
       {
         role: 'user',
         content: displayContent,
+        connectorScope,
         submission: {
           status: 'AUTHORIZING',
           runId: null,

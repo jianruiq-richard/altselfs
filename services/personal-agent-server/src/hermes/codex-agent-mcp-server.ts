@@ -10,6 +10,7 @@ import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-searc
 import {
   RAPIDAPI_COMPETITOR_TOOL_PROVIDER_NAMES,
   createRapidApiCompetitorDynamictools,
+  getRapidApiCompetitortoolNamesForProviders,
   isRapidApiCompetitortool,
   runRapidApiCompetitortool,
 } from '../tools/rapidapi-competitor.js';
@@ -24,6 +25,7 @@ import {
   isPersonalDatatool,
   runPersonalDatatool,
 } from '../tools/personal-data.js';
+import { buildConnectorToolScopeInstruction } from '../connector-tool-scope.js';
 import { isRecord, nowIso, truncate } from '../util.js';
 
 type CodexModelProvider = 'openai' | 'openrouter';
@@ -295,7 +297,15 @@ async function runCodexAgentTool(argumentsValue: unknown) {
     };
 
     activeClient.on('serverRequest', (request: Record<string, unknown>) => {
-      handleCodexServerRequest(activeClient, request, config, sandboxExecContext, personalToolContext).catch((error) => {
+      handleCodexServerRequest(
+        activeClient,
+        request,
+        config,
+        sandboxExecContext,
+        personalToolContext,
+        dynamicTools.competitorNames,
+        dynamicTools.personalNames
+      ).catch((error) => {
         const requestId = request.id;
         const message = error instanceof Error ? error.message : String(error);
         activeClient.respondError(requestId, -32000, message);
@@ -400,7 +410,14 @@ async function runCodexAgentTool(argumentsValue: unknown) {
       'turn/start',
       {
         threadId: codexThreadId,
-        input: [{ type: 'text', text: buildCodexTaskPrompt(toolArgs, runtime) }],
+        input: [{
+          type: 'text',
+          text: buildCodexTaskPrompt(
+            toolArgs,
+            runtime,
+            [...dynamicTools.competitorNames, ...dynamicTools.personalNames]
+          ),
+        }],
         cwd: runtime.workspace,
         runtimeWorkspaceRoots: [runtime.workspace],
         ...(localEnvironmentDisabled ? { environments: [] } : {}),
@@ -442,6 +459,7 @@ async function buildDynamicTools(config: ServerConfig, runtime: RuntimeEnv, sele
   }
 
   const enabledSources = filterByConnectorScope(runtime.enabledInfoSources, runtime.connectorScope.enabledConnectorKeys);
+  const competitorNames = getRapidApiCompetitortoolNamesForProviders(enabledSources);
   if (enabledSources.length > 0) {
     tools.push(...createRapidApiCompetitorDynamictools(enabledSources));
   }
@@ -453,10 +471,13 @@ async function buildDynamicTools(config: ServerConfig, runtime: RuntimeEnv, sele
     enabledConnectionIds: runtime.connectorScope.enabledConnectionIds,
   });
   tools.push(...personalTools);
+  const personalNames = personalTools.map(readDynamicToolName).filter(Boolean);
 
   return {
     tools,
     names: tools.map(readDynamicToolName).filter(Boolean),
+    competitorNames,
+    personalNames,
   };
 }
 
@@ -465,7 +486,9 @@ async function handleCodexServerRequest(
   request: Record<string, unknown>,
   config: ServerConfig,
   sandboxExecContext: SandboxExecContext,
-  personalToolContext: { userId: string; investorId: string; threadId?: string; runId?: string }
+  personalToolContext: { userId: string; investorId: string; threadId?: string; runId?: string },
+  enabledCompetitorToolNames: string[],
+  enabledPersonalToolNames: string[]
 ) {
   const method = String(request.method || '');
   const requestId = request.id;
@@ -479,11 +502,41 @@ async function handleCodexServerRequest(
       return;
     }
     if (!namespace && isRapidApiCompetitortool(tool)) {
+      if (!enabledCompetitorToolNames.includes(tool)) {
+        client.respond(requestId, {
+          contentItems: [{
+            type: 'inputText',
+            text: JSON.stringify({
+              source: 'rapidapi-competitor',
+              error: `Competitor data tool ${tool} is not enabled for this turn by connector selection.`,
+              toolName: tool,
+              enabledTools: enabledCompetitorToolNames,
+            }, null, 2),
+          }],
+          success: false,
+        });
+        return;
+      }
       const resultText = await runRapidApiCompetitortool(tool, params.arguments, config);
       client.respond(requestId, { contentItems: [{ type: 'inputText', text: resultText }], success: true });
       return;
     }
     if (!namespace && isPersonalDatatool(tool)) {
+      if (!enabledPersonalToolNames.includes(tool)) {
+        client.respond(requestId, {
+          contentItems: [{
+            type: 'inputText',
+            text: JSON.stringify({
+              source: 'personal-data-tools',
+              error: `Personal data tool ${tool} is not enabled for this turn by connector selection.`,
+              toolName: tool,
+              enabledTools: enabledPersonalToolNames,
+            }, null, 2),
+          }],
+          success: false,
+        });
+        return;
+      }
       const resultText = await runPersonalDatatool(tool, params.arguments, config, personalToolContext);
       client.respond(requestId, {
         contentItems: [{ type: 'inputText', text: resultText }],
@@ -571,7 +624,11 @@ function readRuntimeEnv(): RuntimeEnv {
   };
 }
 
-function buildCodexTaskPrompt(args: CodexToolArgs, runtime: RuntimeEnv) {
+function buildCodexTaskPrompt(
+  args: CodexToolArgs,
+  runtime: RuntimeEnv,
+  enabledConnectorToolNames: string[]
+) {
   const mode = args.mode || normalizeCodexDelegationMode(runtime.selectedAgentProfileId) || 'general';
   return [
     'Hermes delegated the following step to Codex.',
@@ -582,6 +639,7 @@ function buildCodexTaskPrompt(args: CodexToolArgs, runtime: RuntimeEnv) {
     '',
     `Altselfs thread: ${runtime.threadId}`,
     `Delegation mode: ${mode}`,
+    buildConnectorToolScopeInstruction(enabledConnectorToolNames),
     args.expectedReturn ? `Expected return: ${args.expectedReturn}` : '',
     args.hermesContext ? `<hermes_context>\n${args.hermesContext}\n</hermes_context>` : '',
     '',

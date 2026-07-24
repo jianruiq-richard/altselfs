@@ -1019,6 +1019,10 @@ def _call_altselfs_competitor_tool_bridge(tool: str, arguments: Any) -> dict[str
     payload = {
         "toolName": tool,
         "arguments": arguments if isinstance(arguments, dict) else {},
+        "_context": {
+            "runId": os.environ.get("ALTSELFS_RUN_ID", ""),
+            "enabledToolNames": sorted(_altselfs_enabled_competitor_tool_names()),
+        },
     }
     request = urllib.request.Request(
         bridge_url,

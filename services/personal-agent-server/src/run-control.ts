@@ -15,6 +15,7 @@ type ActiveRun = {
   child: ChildProcess;
   startedAt: string;
   cancelledAt?: string;
+  competitorToolNames?: string[];
   personalDatatoolNames?: string[];
 };
 
@@ -26,10 +27,12 @@ export function registerActiveRun(input: {
   userId: string;
   threadId: string;
   child: ChildProcess;
+  competitorToolNames?: string[];
   personalDatatoolNames?: string[];
 }) {
   activeRuns.set(input.runId, {
     ...input,
+    competitorToolNames: input.competitorToolNames ? [...input.competitorToolNames] : undefined,
     personalDatatoolNames: input.personalDatatoolNames ? [...input.personalDatatoolNames] : undefined,
     startedAt: nowIso(),
   });
@@ -46,6 +49,7 @@ export function getActiveRuntoolScope(runId: string) {
   const active = activeRuns.get(runId);
   if (!active) return null;
   return {
+    competitorToolNames: active.competitorToolNames ? [...active.competitorToolNames] : undefined,
     personalDatatoolNames: active.personalDatatoolNames ? [...active.personalDatatoolNames] : undefined,
   };
 }

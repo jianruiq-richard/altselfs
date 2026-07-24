@@ -18,7 +18,54 @@ type MarkdownBlock =
   | { type: 'quote'; text: string }
   | { type: 'code'; language: string; text: string }
   | { type: 'list'; ordered: boolean; items: string[] }
+  | {
+      type: 'table';
+      headers: string[];
+      alignments: Array<'left' | 'center' | 'right'>;
+      rows: string[][];
+    }
   | { type: 'hr' };
+
+function splitTableRow(line: string) {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  const cells: string[] = [];
+  let cell = '';
+
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const character = trimmed[index];
+    if (character === '\\' && trimmed[index + 1] === '|') {
+      cell += '|';
+      index += 1;
+      continue;
+    }
+    if (character === '|') {
+      cells.push(cell.trim());
+      cell = '';
+      continue;
+    }
+    cell += character;
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function parseTableDelimiter(line: string) {
+  if (!line.includes('|')) return null;
+  const cells = splitTableRow(line);
+  if (cells.length < 2 || cells.some((cell) => !/^:?-{3,}:?$/.test(cell))) return null;
+  return cells.map((cell): 'left' | 'center' | 'right' => {
+    if (cell.startsWith(':') && cell.endsWith(':')) return 'center';
+    if (cell.endsWith(':')) return 'right';
+    return 'left';
+  });
+}
+
+function isTableStart(lines: string[], index: number) {
+  if (index + 1 >= lines.length || !lines[index].includes('|')) return false;
+  const headers = splitTableRow(lines[index]);
+  const alignments = parseTableDelimiter(lines[index + 1]);
+  return headers.length >= 2 && alignments?.length === headers.length;
+}
 
 function isSpecialLine(line: string) {
   const trimmed = line.trim();
@@ -82,6 +129,21 @@ function parseBlocks(content: string): MarkdownBlock[] {
       continue;
     }
 
+    if (isTableStart(lines, index)) {
+      const headers = splitTableRow(lines[index]);
+      const alignments = parseTableDelimiter(lines[index + 1]) || headers.map(() => 'left' as const);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && lines[index].trim() && lines[index].includes('|')) {
+        const cells = splitTableRow(lines[index]).slice(0, headers.length);
+        while (cells.length < headers.length) cells.push('');
+        rows.push(cells);
+        index += 1;
+      }
+      blocks.push({ type: 'table', headers, alignments, rows });
+      continue;
+    }
+
     const unordered = trimmed.match(/^[-*+]\s+(.+)$/);
     const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/);
     if (unordered || ordered) {
@@ -100,7 +162,12 @@ function parseBlocks(content: string): MarkdownBlock[] {
 
     const paragraphLines = [line];
     index += 1;
-    while (index < lines.length && lines[index].trim() && !isSpecialLine(lines[index])) {
+    while (
+      index < lines.length &&
+      lines[index].trim() &&
+      !isSpecialLine(lines[index]) &&
+      !isTableStart(lines, index)
+    ) {
       paragraphLines.push(lines[index]);
       index += 1;
     }
@@ -360,6 +427,53 @@ export function MarkdownMessage({ content, inverted = false, compact = false, re
                 <li key={itemIndex}>{parseInline(item, `list-${index}-${itemIndex}`, inlineOptions)}</li>
               ))}
             </Tag>
+          );
+        }
+
+        if (block.type === 'table') {
+          return (
+            <div key={index} className="max-w-full overflow-x-auto rounded-md border border-current/15">
+              <table className="w-full min-w-max border-collapse text-left text-[0.92em]">
+                <thead className="bg-current/[0.045]">
+                  <tr>
+                    {block.headers.map((header, cellIndex) => (
+                      <th
+                        key={cellIndex}
+                        className={`border-b border-current/15 px-3 py-2 font-semibold ${
+                          block.alignments[cellIndex] === 'center'
+                            ? 'text-center'
+                            : block.alignments[cellIndex] === 'right'
+                              ? 'text-right'
+                              : 'text-left'
+                        }`}
+                      >
+                        {parseInline(header, `table-${index}-header-${cellIndex}`, inlineOptions)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex} className="border-t border-current/10 first:border-t-0">
+                      {row.map((cell, cellIndex) => (
+                        <td
+                          key={cellIndex}
+                          className={`px-3 py-2 align-top ${
+                            block.alignments[cellIndex] === 'center'
+                              ? 'text-center'
+                              : block.alignments[cellIndex] === 'right'
+                                ? 'text-right'
+                                : 'text-left'
+                          }`}
+                        >
+                          {parseInline(cell, `table-${index}-${rowIndex}-${cellIndex}`, inlineOptions)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           );
         }
 

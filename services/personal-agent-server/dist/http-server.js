@@ -14,6 +14,7 @@ import { createDirectUploadPolicy, createSignedObjectUrl, isArtifactObjectStorag
 import { authorizeAgentRun, BillingUnavailableError, CreditAdmissionError, getBillingCapacity, getBillingSummary, } from './credit-admission.js';
 import { releaseRunCredits } from './credit-settlement.js';
 import { getActiveRuntoolScope, isAgentRunCancelledError } from './run-control.js';
+import { normalizeToolNameList } from './connector-tool-scope.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
 const ASYNC_TURN_POLL_INTERVAL_MS = 3000;
 export function createHttpServer(agent, config, memoryReviewQueue) {
@@ -470,6 +471,27 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 const toolName = typeof body.toolName === 'string' ? body.toolName.trim() : '';
                 if (!isRapidApiCompetitortool(toolName))
                     return json(res, 400, { error: `Unsupported competitor data tool: ${toolName}` });
+                const context = isRecord(body._context) ? body._context : {};
+                const runId = typeof context.runId === 'string' && context.runId.trim() ? context.runId.trim() : undefined;
+                const requestedToolNames = normalizeToolNameList(context.enabledToolNames);
+                const runToolScope = runId ? getActiveRuntoolScope(runId) : null;
+                const enabledToolNames = runToolScope?.competitorToolNames ?? requestedToolNames;
+                if (!enabledToolNames.includes(toolName)) {
+                    return json(res, 200, {
+                        contentItems: [
+                            {
+                                type: 'inputText',
+                                text: JSON.stringify({
+                                    source: 'rapidapi-competitor',
+                                    error: `Competitor data tool ${toolName} is not enabled for this turn by connector selection.`,
+                                    toolName,
+                                    enabledTools: enabledToolNames,
+                                }, null, 2),
+                            },
+                        ],
+                        success: false,
+                    });
+                }
                 const resultText = await runRapidApiCompetitortool(toolName, body.arguments, config);
                 return json(res, 200, {
                     contentItems: [{ type: 'inputText', text: resultText }],

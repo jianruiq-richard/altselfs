@@ -301,6 +301,7 @@ export function toClientMessages(
     .map((message) => {
       const artifacts = extractMessageArtifacts(message.meta);
       const submission = extractMessageSubmission(message.meta);
+      const connectorScope = extractMessageConnectorScope(message.meta);
       return {
         ...(message.id ? { id: message.id } : {}),
         role: message.role === 'USER' ? ('user' as const) : ('assistant' as const),
@@ -315,8 +316,32 @@ export function toClientMessages(
           : {}),
         ...(artifacts.length > 0 ? { artifacts } : {}),
         ...(submission ? { submission } : {}),
+        ...(connectorScope ? { connectorScope } : {}),
       };
     });
+}
+
+function extractMessageConnectorScope(meta: unknown) {
+  const record = isRecord(meta) ? meta : {};
+  const scope = isRecord(record.connectorScope) ? record.connectorScope : null;
+  if (!scope) return null;
+  return {
+    enabledConnectorKeys: normalizeStringArray(scope.enabledConnectorKeys, true),
+    enabledConnectionIds: normalizeStringArray(scope.enabledConnectionIds, false),
+  };
+}
+
+function normalizeStringArray(value: unknown, lowercase: boolean) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .map((item) => {
+        if (typeof item !== 'string') return '';
+        const trimmed = item.trim();
+        return lowercase ? trimmed.toLowerCase() : trimmed;
+      })
+      .filter(Boolean)
+  ));
 }
 
 function extractMessageSubmission(meta: unknown) {

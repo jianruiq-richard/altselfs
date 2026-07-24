@@ -12,6 +12,7 @@ const cancelledRuns = new Map();
 export function registerActiveRun(input) {
     activeRuns.set(input.runId, {
         ...input,
+        competitorToolNames: input.competitorToolNames ? [...input.competitorToolNames] : undefined,
         personalDatatoolNames: input.personalDatatoolNames ? [...input.personalDatatoolNames] : undefined,
         startedAt: nowIso(),
     });
@@ -29,6 +30,7 @@ export function getActiveRuntoolScope(runId) {
     if (!active)
         return null;
     return {
+        competitorToolNames: active.competitorToolNames ? [...active.competitorToolNames] : undefined,
         personalDatatoolNames: active.personalDatatoolNames ? [...active.personalDatatoolNames] : undefined,
     };
 }

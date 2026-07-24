@@ -675,6 +675,7 @@ export class HermesSourceRuntime {
                 userId: paths.userId,
                 threadId: paths.threadId,
                 child,
+                competitorToolNames: paths.enabledCompetitortools,
                 personalDatatoolNames: paths.personalDatatoolNames,
             });
             let stdout = '';
