@@ -33,28 +33,11 @@ export type ResourceSnapshot = {
   metadata?: Record<string, string | number | boolean | null>;
 };
 
-export type UserUsageRow = {
-  userId: string;
-  email: string;
-  role: string;
-  messages: number;
-  agentMessages: number;
-  chats: number;
-  agentThreads: number;
-  estimatedTokens: number;
-  supabaseDbBytes: number | null;
-  supabaseStorageBytes: number | null;
-  agentRdsBytes: number | null;
-  ecsDiskBytes: number | null;
-  lastActiveAt: string;
-};
-
 export type OpsDashboardData = {
   collectedAt: string;
   summary: OpsMetric[];
   apiAccounts: ApiAccountSnapshot[];
   resources: ResourceSnapshot[];
-  users: UserUsageRow[];
   alerts: Array<{ severity: OpsStatus; title: string; detail: string }>;
   notes: string[];
 };
@@ -69,22 +52,10 @@ type SupabaseSnapshot = {
   resources: ResourceSnapshot[];
 };
 
-type AgentUserResource = {
-  userId: string;
-  investorId: string;
-  ecsDiskBytes: number;
-  agentRdsBytes: number;
-  agentMessages: number;
-  agentArtifacts: number;
-  agentRuns: number;
-  agentThreads: number;
-};
-
 type AgentSnapshot = {
   connected: boolean;
   note: string;
   resources: ResourceSnapshot[];
-  userResources: AgentUserResource[];
   apiAccounts: ApiAccountSnapshot[];
 };
 
@@ -131,19 +102,17 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
     },
   ];
 
-  const users = mergeUserResources(appStats.users, agentSnapshot.userResources, supabaseSnapshot);
-  const alerts = buildAlerts(apiAccounts, resources, users);
+  const alerts = buildAlerts(apiAccounts, resources);
 
   return {
     collectedAt,
     summary,
     apiAccounts,
     resources,
-    users,
     alerts,
     notes: [
-      'Clerk user counts, database usage, OpenRouter credits, and Agent server usage are combined in this view.',
-      'Token counts are estimates. For precise LLM and tool cost tracking, add rows to ops_usage_events.',
+      'Clerk user counts, database usage, OpenRouter credits, and Agent server resource checks are combined in this view.',
+      'Per-user usage, conversations, failures, and resource footprint are loaded on demand in User Admin.',
       'Supabase, Vercel, and Aliyun API data depends on available API tokens and configured limit environment variables.',
     ],
   };
@@ -152,70 +121,19 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
 async function getAppStats() {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const databaseDescriptor = describeDatabaseUrl();
-  const [userCount, investorCount, candidateCount, recentMessageCount, users, databaseSize, appUserDbBytes] = await Promise.all([
+  const [userCount, investorCount, candidateCount, recentMessageCount, databaseSize] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { role: 'INVESTOR' } }),
     prisma.user.count({ where: { role: 'CANDIDATE' } }),
     prisma.message.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
-    prisma.user.findMany({
-      take: 20,
-      orderBy: { updatedAt: 'desc' },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            chatsAsCandidate: true,
-            agentThreads: true,
-          },
-        },
-        chatsAsCandidate: {
-          select: {
-            _count: { select: { messages: true } },
-          },
-        },
-        agentThreads: {
-          select: {
-            _count: { select: { messages: true } },
-          },
-        },
-      },
-    }),
     readDatabaseSize(),
-    readAppUserDbBytes(),
   ]);
-
-  const rows = users
-    .map((user) => {
-      const messages = user.chatsAsCandidate.reduce((sum, chat) => sum + chat._count.messages, 0);
-      const agentMessages = user.agentThreads.reduce((sum, thread) => sum + thread._count.messages, 0);
-      const estimatedTokens = Math.round((messages + agentMessages) * 220);
-      return {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        messages,
-        agentMessages,
-        chats: user._count.chatsAsCandidate,
-        agentThreads: user._count.agentThreads,
-        estimatedTokens,
-        supabaseDbBytes: appUserDbBytes.get(user.id) || 0,
-        supabaseStorageBytes: null,
-        agentRdsBytes: null,
-        ecsDiskBytes: null,
-        lastActiveAt: user.updatedAt.toISOString(),
-      };
-    })
-    .sort((a, b) => b.estimatedTokens - a.estimatedTokens);
 
   return {
     userCount,
     investorCount,
     candidateCount,
     recentMessageCount,
-    users: rows,
     databaseResource: {
       provider: databaseDescriptor.provider,
       resource: databaseDescriptor.resource,
@@ -241,66 +159,6 @@ async function readDatabaseSize() {
   } catch {
     return null;
   }
-}
-
-async function readAppUserDbBytes() {
-  const rows = await prisma.$queryRaw<Array<{ user_id: string; bytes: bigint | number | null }>>`
-    with usage_rows as (
-      select
-        u.id as user_id,
-        octet_length(coalesce(u.email, ''))
-          + octet_length(coalesce(u.name, ''))
-          + octet_length(coalesce(u.nickname, '')) as bytes
-      from users u
-
-      union all
-
-      select
-        c."candidateId" as user_id,
-        octet_length(m.content) as bytes
-      from messages m
-      join chats c on c.id = m."chatId"
-
-      union all
-
-      select
-        a."investorId" as user_id,
-        octet_length(coalesce(a.name, ''))
-          + octet_length(coalesce(a.description, ''))
-          + octet_length(coalesce(a."systemPrompt", '')) as bytes
-      from avatars a
-
-      union all
-
-      select
-        t."investorId" as user_id,
-        octet_length(am.content) + coalesce(octet_length(am.meta::text), 0) as bytes
-      from agent_messages am
-      join agent_threads t on t.id = am."threadId"
-
-      union all
-
-      select
-        t."investorId" as user_id,
-        coalesce(octet_length(tc."toolArgs"::text), 0)
-          + coalesce(octet_length(tc."toolResult"::text), 0) as bytes
-      from agent_tool_calls tc
-      join agent_threads t on t.id = tc."threadId"
-
-      union all
-
-      select
-        i."investorId" as user_id,
-        coalesce(octet_length(i."accountEmail"), 0)
-          + coalesce(octet_length(i."accountName"), 0)
-          + coalesce(octet_length(i."assistantCustomPrompt"), 0) as bytes
-      from investor_integrations i
-    )
-    select user_id, coalesce(sum(bytes), 0) as bytes
-    from usage_rows
-    group by user_id
-  `;
-  return new Map(rows.map((row) => [row.user_id, typeof row.bytes === 'bigint' ? Number(row.bytes) : typeof row.bytes === 'number' ? row.bytes : 0]));
 }
 
 async function getOpenRouterAccount(): Promise<ApiAccountSnapshot> {
@@ -358,17 +216,17 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
   const baseUrl = process.env.OPS_AGENT_BASE_URL?.trim();
   const token = process.env.OPS_AGENT_TOKEN?.trim();
   if (!baseUrl || !token) {
-    return { connected: false, note: 'Configure OPS_AGENT_BASE_URL and OPS_AGENT_TOKEN to read ECS/workspace usage.', resources: [], userResources: [], apiAccounts: [] };
+    return { connected: false, note: 'Configure OPS_AGENT_BASE_URL and OPS_AGENT_TOKEN to read ECS/workspace usage.', resources: [], apiAccounts: [] };
   }
 
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/internal/ops/snapshot`, {
+    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/internal/ops/snapshot?includeUserResources=false`, {
       headers: { authorization: `Bearer ${token}` },
       cache: 'no-store',
     });
     const data = await response.json().catch(() => null) as unknown;
     if (!response.ok || !isRecord(data)) {
-      return { connected: false, note: `Agent ops endpoint returned HTTP ${response.status}`, resources: [], userResources: [], apiAccounts: [] };
+      return { connected: false, note: `Agent ops endpoint returned HTTP ${response.status}`, resources: [], apiAccounts: [] };
     }
     const resources = Array.isArray(data.resources)
       ? data.resources
@@ -389,18 +247,6 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
             },
           }))
       : [];
-    const userResources = Array.isArray(data.userResources)
-      ? data.userResources.filter(isRecord).map((item): AgentUserResource => ({
-          userId: typeof item.userId === 'string' ? item.userId : '',
-          investorId: typeof item.investorId === 'string' ? item.investorId : '',
-          ecsDiskBytes: readNumber(item.ecsDiskBytes) || 0,
-          agentRdsBytes: readNumber(item.agentRdsBytes) || 0,
-          agentMessages: readNumber(item.agentMessages) || 0,
-          agentArtifacts: readNumber(item.agentArtifacts) || 0,
-          agentRuns: readNumber(item.agentRuns) || 0,
-          agentThreads: readNumber(item.agentThreads) || 0,
-        }))
-      : [];
     const apiAccounts = Array.isArray(data.apiAccounts)
       ? data.apiAccounts.filter(isRecord).map((item): ApiAccountSnapshot => ({
           provider: typeof item.provider === 'string' ? item.provider : 'Agent API',
@@ -413,9 +259,9 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
           note: typeof item.note === 'string' ? item.note : undefined,
         }))
       : [];
-    return { connected: true, note: 'Read from personal-agent-server /internal/ops/snapshot', resources, userResources, apiAccounts };
+    return { connected: true, note: 'Read from personal-agent-server /internal/ops/snapshot', resources, apiAccounts };
   } catch (error) {
-    return { connected: false, note: error instanceof Error ? error.message : String(error), resources: [], userResources: [], apiAccounts: [] };
+    return { connected: false, note: error instanceof Error ? error.message : String(error), resources: [], apiAccounts: [] };
   }
 }
 
@@ -569,24 +415,6 @@ function mergeAppDatabaseResource(resource: ResourceSnapshot, supabase: Supabase
       supabase.databaseLimitSource ? `Limit source ${supabase.databaseLimitSource}` : null,
     ].filter(Boolean).join(' · '),
   };
-}
-
-function mergeUserResources(users: UserUsageRow[], agentResources: AgentUserResource[], supabase: SupabaseSnapshot) {
-  const agentByKey = new Map<string, AgentUserResource>();
-  for (const item of agentResources) {
-    if (item.investorId) agentByKey.set(item.investorId, item);
-    if (item.userId) agentByKey.set(item.userId, item);
-  }
-
-  return users.map((user) => {
-    const agent = agentByKey.get(user.userId) || agentByKey.get(user.email);
-    return {
-      ...user,
-      supabaseStorageBytes: supabase.storageBytes === 0 ? 0 : null,
-      agentRdsBytes: agent ? agent.agentRdsBytes : null,
-      ecsDiskBytes: agent ? agent.ecsDiskBytes : null,
-    };
-  });
 }
 
 function rapidApiAccountsFromAgent(agentSnapshot: AgentSnapshot) {
@@ -992,7 +820,7 @@ function missingAccount(provider: string, envKey: string): ApiAccountSnapshot {
   };
 }
 
-function buildAlerts(apiAccounts: ApiAccountSnapshot[], resources: ResourceSnapshot[], users: UserUsageRow[]) {
+function buildAlerts(apiAccounts: ApiAccountSnapshot[], resources: ResourceSnapshot[]) {
   const alerts: Array<{ severity: OpsStatus; title: string; detail: string }> = [];
   for (const account of apiAccounts) {
     if (account.status === 'critical' || account.status === 'warning') {
@@ -1003,14 +831,6 @@ function buildAlerts(apiAccounts: ApiAccountSnapshot[], resources: ResourceSnaps
     if (resource.status === 'critical' || resource.status === 'warning') {
       alerts.push({ severity: resource.status, title: `${resource.provider} ${resource.resource} needs attention`, detail: `${resource.used} / ${resource.total}` });
     }
-  }
-  const topUser = users[0];
-  if (topUser && topUser.estimatedTokens > 100_000) {
-    alerts.push({
-      severity: 'warning',
-      title: 'High estimated token usage',
-      detail: `${topUser.email} used about ${topUser.estimatedTokens.toLocaleString()} tokens`,
-    });
   }
   return alerts;
 }

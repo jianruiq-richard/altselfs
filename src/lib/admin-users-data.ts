@@ -14,6 +14,17 @@ type AdminBillingAgentDetail = {
   reservations: Array<Record<string, unknown>>;
 };
 
+type AdminAgentResourceDetail = {
+  userId: string;
+  investorId: string;
+  ecsDiskBytes: number;
+  agentRdsBytes: number;
+  agentMessages: number;
+  agentArtifacts: number;
+  agentRuns: number;
+  agentThreads: number;
+};
+
 export async function listAdminUsers(input: { query?: string | null; limit?: number }) {
   const query = input.query?.trim() || '';
   const limit = Math.min(Math.max(Number(input.limit) || 25, 1), 100);
@@ -124,7 +135,7 @@ export async function getAdminUserDetail(userId: string) {
   });
   if (!user) return null;
 
-  const [threads, ledger, usageRecords, reservations, executiveRuns, contextRuns] = await Promise.all([
+  const [threads, ledger, usageRecords, reservations, executiveRuns, contextRuns, appDbBytes, agentResources] = await Promise.all([
     prisma.agentThread.findMany({
       where: { investorId: userId, status: { not: 'DELETED' } },
       orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
@@ -170,6 +181,8 @@ export async function getAdminUserDetail(userId: string) {
       },
     }),
     readAgentContextRunsByUser(userId),
+    readSingleAppUserDbBytes(userId),
+    readAdminAgentResourceDetailFromAgent(userId, user.email || undefined),
   ]);
 
   const threadTitleById = await getThreadTitleMap([
@@ -305,6 +318,16 @@ export async function getAdminUserDetail(userId: string) {
       updatedAt: run.updatedAt.toISOString(),
     })),
     contextRuns,
+    resourceUsage: {
+      appDbBytes,
+      agentRdsBytes: agentResources.detail?.agentRdsBytes ?? null,
+      ecsDiskBytes: agentResources.detail?.ecsDiskBytes ?? null,
+      agentMessages: agentResources.detail?.agentMessages ?? 0,
+      agentArtifacts: agentResources.detail?.agentArtifacts ?? 0,
+      agentRuns: agentResources.detail?.agentRuns ?? 0,
+      agentThreads: agentResources.detail?.agentThreads ?? 0,
+      warning: agentResources.warning,
+    },
   };
 }
 
@@ -405,6 +428,88 @@ async function readAdminBillingDetailFromAgent(userId: string): Promise<{
     const warning = error instanceof Error ? error.message : String(error);
     console.warn('[admin-users] billing detail fallback', { userId, warning });
     return { detail: null, warning };
+  }
+}
+
+async function readAdminAgentResourceDetailFromAgent(
+  investorId: string,
+  userId?: string
+): Promise<{ detail: AdminAgentResourceDetail | null; warning: string | null }> {
+  try {
+    const query = new URLSearchParams({ investorId });
+    if (userId) query.set('userId', userId);
+    const detail = await personalAgentInternalFetch<AdminAgentResourceDetail>(
+      `/internal/admin/resources/user?${query.toString()}`,
+      {},
+      { attempts: 1, timeoutMs: 15_000 },
+    );
+    return { detail, warning: null };
+  } catch (error) {
+    const warning = error instanceof Error ? error.message : String(error);
+    console.warn('[admin-users] agent resource detail fallback', { investorId, warning });
+    return { detail: null, warning };
+  }
+}
+
+async function readSingleAppUserDbBytes(userId: string) {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ bytes: bigint | number | null }>>`
+      with usage_rows as (
+        select
+          octet_length(coalesce(u.email, ''))
+            + octet_length(coalesce(u.name, ''))
+            + octet_length(coalesce(u.nickname, '')) as bytes
+        from users u
+        where u.id = ${userId}
+
+        union all
+
+        select octet_length(coalesce(m.content, '')) as bytes
+        from messages m
+        join chats c on c.id = m."chatId"
+        where c."candidateId" = ${userId}
+
+        union all
+
+        select
+          octet_length(coalesce(a.name, ''))
+            + octet_length(coalesce(a.description, ''))
+            + octet_length(coalesce(a."systemPrompt", '')) as bytes
+        from avatars a
+        where a."investorId" = ${userId}
+
+        union all
+
+        select octet_length(coalesce(am.content, '')) + coalesce(octet_length(am.meta::text), 0) as bytes
+        from agent_messages am
+        join agent_threads t on t.id = am."threadId"
+        where t."investorId" = ${userId}
+
+        union all
+
+        select
+          coalesce(octet_length(tc."toolArgs"::text), 0)
+            + coalesce(octet_length(tc."toolResult"::text), 0) as bytes
+        from agent_tool_calls tc
+        join agent_threads t on t.id = tc."threadId"
+        where t."investorId" = ${userId}
+
+        union all
+
+        select
+          coalesce(octet_length(i."accountEmail"), 0)
+            + coalesce(octet_length(i."accountName"), 0)
+            + coalesce(octet_length(i."assistantCustomPrompt"), 0) as bytes
+        from investor_integrations i
+        where i."investorId" = ${userId}
+      )
+      select coalesce(sum(bytes), 0) as bytes
+      from usage_rows
+    `;
+    const value = rows[0]?.bytes;
+    return typeof value === 'bigint' ? Number(value) : typeof value === 'number' ? value : 0;
+  } catch {
+    return null;
   }
 }
 

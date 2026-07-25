@@ -82,6 +82,16 @@ type AdminUserDetail = {
   reservations: ReservationRecord[];
   executiveRuns: ExecutiveRunRecord[];
   contextRuns: ContextRunRecord[];
+  resourceUsage: {
+    appDbBytes: number | null;
+    agentRdsBytes: number | null;
+    ecsDiskBytes: number | null;
+    agentMessages: number;
+    agentArtifacts: number;
+    agentRuns: number;
+    agentThreads: number;
+    warning: string | null;
+  };
 };
 
 type ThreadSummary = {
@@ -505,6 +515,8 @@ export function AdminUsersClient({ adminName }: { adminName: string }) {
                   <MetricCard icon={Clock3} label="Recent runs" value={String(detail.contextRuns.length)} />
                 </section>
 
+                <ResourceUsagePanel usage={detail.resourceUsage} />
+
                 <section className="grid gap-4 xl:grid-cols-2">
                   <CreditAdjustmentForm
                     form={creditForm}
@@ -566,6 +578,38 @@ function UserHeader({ detail }: { detail: AdminUserDetail }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function ResourceUsagePanel({ usage }: { usage: AdminUserDetail['resourceUsage'] }) {
+  return (
+    <Panel title="Resource footprint" subtitle="Loaded on demand for the selected user only.">
+      {usage.warning ? (
+        <div className="mb-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          Agent resource detail unavailable: {usage.warning}
+        </div>
+      ) : null}
+      <div className="grid gap-3 md:grid-cols-3">
+        <FootprintItem label="Product DB estimate" value={formatBytes(usage.appDbBytes)} />
+        <FootprintItem label="Agent RDS estimate" value={formatBytes(usage.agentRdsBytes)} />
+        <FootprintItem label="ECS workspace disk" value={formatBytes(usage.ecsDiskBytes)} />
+      </div>
+      <div className="mt-3 grid gap-3 text-sm text-slate-400 sm:grid-cols-4">
+        <FootprintItem label="Agent messages" value={usage.agentMessages.toLocaleString()} compact />
+        <FootprintItem label="Artifacts" value={usage.agentArtifacts.toLocaleString()} compact />
+        <FootprintItem label="Runs" value={usage.agentRuns.toLocaleString()} compact />
+        <FootprintItem label="Threads" value={usage.agentThreads.toLocaleString()} compact />
+      </div>
+    </Panel>
+  );
+}
+
+function FootprintItem({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
+  return (
+    <div className={`rounded-lg border border-white/10 bg-black/20 ${compact ? 'px-3 py-2' : 'p-3'}`}>
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className={compact ? 'mt-1 text-sm font-medium text-slate-200' : 'mt-2 text-lg font-semibold text-slate-100'}>{value}</p>
+    </div>
   );
 }
 
@@ -1162,7 +1206,7 @@ function formatDateTime(value: string | null | undefined) {
 }
 
 function formatBytes(bytes: number | null | undefined) {
-  if (!bytes || bytes < 0) return 'Unknown size';
+  if (bytes === null || bytes === undefined || bytes < 0) return 'Unknown size';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let index = 0;

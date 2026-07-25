@@ -29,6 +29,7 @@ import {
 import {
   getAgentThreadRuntimeStatus,
   getAgentContextOpsUserUsage,
+  getAgentContextOpsSingleUserUsage,
   getAgentContextArtifactsByIds,
   patchAgentContextArtifactMetadata,
   persistAgentArtifacts,
@@ -110,7 +111,17 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         if (!config) return json(res, 500, { error: 'config missing' });
         if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
         const jobs = memoryReviewQueue ? await memoryReviewQueue.listRecent(100) : [];
-        return json(res, 200, await buildOpsSnapshot(config, jobs));
+        const includeUserResources = url.searchParams.get('includeUserResources') !== 'false';
+        return json(res, 200, await buildOpsSnapshot(config, jobs, { includeUserResources }));
+      }
+
+      if (req.method === 'GET' && url.pathname === '/internal/admin/resources/user') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const investorId = url.searchParams.get('investorId')?.trim() || '';
+        if (!investorId) return json(res, 400, { error: 'investorId is required' });
+        const userId = url.searchParams.get('userId')?.trim() || undefined;
+        return json(res, 200, await buildOpsSingleUserResource(config, { investorId, userId }));
       }
 
       if (req.method === 'GET' && url.pathname === '/internal/billing/capacity') {
@@ -1727,7 +1738,12 @@ function publicMetaConnectionMetadata(metadata: Record<string, unknown>) {
   };
 }
 
-async function buildOpsSnapshot(config: ServerConfig, jobs: Array<{ status: string }>) {
+async function buildOpsSnapshot(
+  config: ServerConfig,
+  jobs: Array<{ status: string }>,
+  options: { includeUserResources?: boolean } = {}
+) {
+  const includeUserResources = options.includeUserResources !== false;
   const [resources, userResources, apiAccounts] = await Promise.all([
     Promise.all([
     diskResource('/', 'system disk'),
@@ -1736,7 +1752,7 @@ async function buildOpsSnapshot(config: ServerConfig, jobs: Array<{ status: stri
     diskResource(config.codexHomeRoot, 'codex home root'),
     diskResource(config.hermesHomeRoot, 'hermes home root'),
     ]),
-    buildOpsUserResources(config),
+    includeUserResources ? buildOpsUserResources(config) : Promise.resolve([]),
     getRapidApiQuotaSnapshots().catch(() => []),
   ]);
   const jobCounts = jobs.reduce<Record<string, number>>((acc, job) => {
@@ -1815,6 +1831,27 @@ async function buildOpsUserResources(config: ServerConfig) {
   return Array.from(byKey.values()).sort((a, b) => (b.ecsDiskBytes + b.agentRdsBytes) - (a.ecsDiskBytes + a.agentRdsBytes)).slice(0, 200);
 }
 
+async function buildOpsSingleUserResource(
+  config: ServerConfig,
+  input: { investorId: string; userId?: string }
+) {
+  const [diskBytes, rdsRow] = await Promise.all([
+    getOpsSingleUserDiskUsage(config, [input.userId, input.investorId].filter((item): item is string => Boolean(item))).catch(() => 0),
+    getAgentContextOpsSingleUserUsage(config, input.investorId).catch(() => null),
+  ]);
+
+  return {
+    userId: rdsRow?.userId || input.userId || '',
+    investorId: rdsRow?.investorId || input.investorId,
+    ecsDiskBytes: Math.max(diskBytes, rdsRow?.diskBytes || 0),
+    agentRdsBytes: rdsRow?.rdsBytes || 0,
+    agentMessages: rdsRow?.messages || 0,
+    agentArtifacts: rdsRow?.artifacts || 0,
+    agentRuns: rdsRow?.runs || 0,
+    agentThreads: rdsRow?.threads || 0,
+  };
+}
+
 function findUserResourceByDiskSegment(
   resources: Map<string, {
     userId: string;
@@ -1852,6 +1889,23 @@ async function getOpsUserDiskUsage(config: ServerConfig) {
     }
   }
   return rows;
+}
+
+async function getOpsSingleUserDiskUsage(config: ServerConfig, identifiers: string[]) {
+  const roots = config.runtimeStateMode === 'sandbox'
+    ? [path.join(config.sandboxStorageRoot, 'users')]
+    : [config.workspaceRoot, config.hermesWorkspaceRoot, config.codexHomeRoot, config.hermesHomeRoot];
+  const segments = Array.from(new Set(identifiers.map((identifier) => sanitizePathSegment(identifier)).filter(Boolean)));
+  let largestBytes = 0;
+
+  for (const root of roots) {
+    for (const segment of segments) {
+      const bytes = await calculateDirectoryBytes(path.join(root, segment)).catch(() => 0);
+      largestBytes = Math.max(largestBytes, bytes);
+    }
+  }
+
+  return largestBytes;
 }
 
 async function diskResource(pathname: string, label: string) {

@@ -130,47 +130,6 @@ export default async function OpsPage() {
           </div>
         </section>
 
-        <section className="mt-6 rounded-lg border border-slate-200 bg-white">
-          <SectionTitle title="User Usage" subtitle="Token estimates, database storage, and Agent workspace footprint by user." />
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 font-medium">User</th>
-                  <th className="px-4 py-3 font-medium">Role</th>
-                  <th className="px-4 py-3 font-medium">Messages</th>
-                  <th className="px-4 py-3 font-medium">Agent Messages</th>
-                  <th className="px-4 py-3 font-medium">Estimated tokens</th>
-                  <th className="px-4 py-3 font-medium">Supabase DB</th>
-                  <th className="px-4 py-3 font-medium">Storage</th>
-                  <th className="px-4 py-3 font-medium">Agent RDS</th>
-                  <th className="px-4 py-3 font-medium">ECS Disk</th>
-                  <th className="px-4 py-3 font-medium">Last active</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.users.map((user) => (
-                  <tr key={user.userId}>
-                    <td className="px-4 py-3">
-                      <p className="font-medium">{user.email}</p>
-                      <p className="mt-1 font-mono text-xs text-slate-500">{user.userId}</p>
-                    </td>
-                    <td className="px-4 py-3">{user.role}</td>
-                    <td className="px-4 py-3">{user.messages.toLocaleString()} / {user.chats} chats</td>
-                    <td className="px-4 py-3">{user.agentMessages.toLocaleString()} / {user.agentThreads} threads</td>
-                    <td className="px-4 py-3">{user.estimatedTokens.toLocaleString()}</td>
-                    <td className="px-4 py-3">{formatBytes(user.supabaseDbBytes)}</td>
-                    <td className="px-4 py-3">{formatBytes(user.supabaseStorageBytes)}</td>
-                    <td className="px-4 py-3">{formatBytes(user.agentRdsBytes)}</td>
-                    <td className="px-4 py-3">{formatBytes(user.ecsDiskBytes)}</td>
-                    <td className="px-4 py-3">{formatDateTime(user.lastActiveAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
         <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="text-base font-semibold">Notes</h2>
           <ul className="mt-3 space-y-2 text-sm text-slate-600">
@@ -214,17 +173,4 @@ function formatDateTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
-}
-
-function formatBytes(bytes: number | null) {
-  if (bytes === null) return 'Unknown';
-  if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let index = 0;
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024;
-    index += 1;
-  }
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
