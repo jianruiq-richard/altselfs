@@ -154,6 +154,13 @@ export default function ProfilePage() {
   const [billingLoading, setBillingLoading] = useState(true);
   const [billingError, setBillingError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const requestedView = new URLSearchParams(window.location.search).get('view');
+    if (requestedView === 'account' || requestedView === 'plan' || requestedView === 'archive') {
+      setActiveView(requestedView);
+    }
+  }, []);
+
   const loadProfile = useCallback(async () => {
     setProfileLoading(true);
     setProfileError(null);

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import Link from 'next/link';
-import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
+import { AlertCircle, Archive, ArrowRight, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Sparkles, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
@@ -12,6 +12,7 @@ import {
   ExecutiveDailyBriefingBrowser,
 } from '@/components/executive-daily-briefing-browser';
 import { MarkdownMessage } from '@/components/markdown-message';
+import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 
 type ChatMessage = {
   id?: string;
@@ -3734,6 +3735,12 @@ export default function InvestorAgentChatPage() {
   const capacityStatusText = billingCapacity
     ? `${billingCapacity.capacity.activeTaskCount}/${billingCapacity.subscription.concurrentTaskLimit} active · ${billingCapacity.account.availableCredits.toLocaleString('en-US')} credits available`
     : 'Task capacity unavailable';
+  const currentBillingPlan = getBillingPlan(billingCapacity?.subscription.planKey);
+  const availableCredits = billingCapacity?.account.availableCredits || 0;
+  const reservedCredits = billingCapacity?.account.reservedCredits || 0;
+  const activeTaskCount = billingCapacity?.capacity.activeTaskCount || 0;
+  const concurrentTaskLimit = billingCapacity?.subscription.concurrentTaskLimit || currentBillingPlan.concurrentTasks;
+  const availableTaskSlots = billingCapacity?.capacity.availableTaskSlots || 0;
 
   const sessionSidebar = (
     <div className="min-w-0 max-w-full px-2.5 pb-5">
@@ -3803,9 +3810,106 @@ export default function InvestorAgentChatPage() {
 
   const rightRail = (
     <div className="grid h-full min-h-0 grid-rows-[64px_minmax(0,1fr)]">
-      <div className="flex items-center justify-between border-b border-white/[0.09] px-4">
-        <strong className="text-sm text-zinc-100">Discussion context</strong>
-        <span className="inline-flex items-center gap-2 text-[11px] text-zinc-400"><i className="h-1.5 w-1.5 rounded-full bg-[#46d19a] shadow-[0_0_9px_rgba(70,209,154,.5)]" />Ready</span>
+      <div className="group/billing relative z-40 border-b border-white/[0.09]">
+        <button
+          type="button"
+          className="grid h-16 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 text-left outline-none transition-colors hover:bg-white/[0.025] focus-visible:bg-white/[0.035]"
+          aria-label="View credits and task capacity"
+        >
+          <span className="flex min-w-0 items-center gap-2.5">
+            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-[7px] border ${
+              capacityBlocked
+                ? 'border-amber-300/20 bg-amber-300/[0.06] text-amber-200'
+                : 'border-[#8eb3ff]/20 bg-[#8eb3ff]/[0.065] text-[#9dbbff]'
+            }`}>
+              {billingCapacityLoading
+                ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                : <Sparkles className="h-3.5 w-3.5" />}
+            </span>
+            <span className="grid min-w-0">
+              <strong className="truncate text-[13px] tabular-nums text-zinc-100">
+                {billingCapacity ? formatCredits(availableCredits) : '—'}
+              </strong>
+              <span className="truncate text-[9px] text-zinc-600">credits available</span>
+            </span>
+          </span>
+          <span className="grid justify-items-end">
+            <strong className="text-[11px] tabular-nums text-zinc-300">
+              {billingCapacity ? `${activeTaskCount}/${concurrentTaskLimit}` : '—'}
+            </strong>
+            <span className="text-[9px] text-zinc-600">tasks active</span>
+          </span>
+        </button>
+
+        <div className="pointer-events-none absolute right-3 top-[54px] z-50 w-[calc(100%-24px)] translate-y-1 opacity-0 transition duration-150 group-hover/billing:pointer-events-auto group-hover/billing:translate-y-0 group-hover/billing:opacity-100 group-focus-within/billing:pointer-events-auto group-focus-within/billing:translate-y-0 group-focus-within/billing:opacity-100">
+          <div className="overflow-hidden rounded-[8px] border border-white/[0.13] bg-[#17181a] shadow-[0_24px_70px_rgba(0,0,0,.58)]">
+            <div className="flex items-center justify-between gap-4 border-b border-white/[0.09] px-4 py-3.5">
+              <span className="grid min-w-0">
+                <span className="text-[9px] font-bold uppercase text-zinc-600">Current plan</span>
+                <strong className="mt-0.5 truncate text-[15px] text-zinc-100">
+                  {billingCapacity?.subscription.planName || currentBillingPlan.name}
+                </strong>
+              </span>
+              <Link
+                href="/pricing"
+                className="inline-flex min-h-8 shrink-0 items-center rounded-[7px] bg-zinc-100 px-3 text-[10px] font-bold text-[#101113] hover:bg-white"
+              >
+                Upgrade
+              </Link>
+            </div>
+
+            <div className="grid gap-0 px-4">
+              <div className="grid min-h-[66px] grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-white/[0.08]">
+                <Sparkles className="h-4 w-4 text-[#9dbbff]" />
+                <span className="grid min-w-0">
+                  <strong className="text-[11px] text-zinc-200">Credits</strong>
+                  <span className="mt-0.5 truncate text-[9px] text-zinc-600">
+                    {formatCredits(Math.max(0, billingCapacity?.account.balanceCredits || 0))} balance
+                    {reservedCredits > 0 ? ` · ${formatCredits(reservedCredits)} reserved` : ''}
+                  </span>
+                </span>
+                <strong className="text-[12px] tabular-nums text-zinc-100">
+                  {billingCapacity ? formatCredits(availableCredits) : '—'}
+                </strong>
+              </div>
+
+              <div className="grid min-h-[66px] grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-white/[0.08]">
+                <CircleGauge className="h-4 w-4 text-[#46d19a]" />
+                <span className="grid min-w-0">
+                  <strong className="text-[11px] text-zinc-200">Concurrent tasks</strong>
+                  <span className="mt-0.5 truncate text-[9px] text-zinc-600">
+                    {availableTaskSlots} slot{availableTaskSlots === 1 ? '' : 's'} available
+                  </span>
+                </span>
+                <strong className="text-[12px] tabular-nums text-zinc-100">
+                  {billingCapacity ? `${activeTaskCount} / ${concurrentTaskLimit}` : '—'}
+                </strong>
+              </div>
+
+              <div className="grid min-h-[58px] grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2.5">
+                <Clock3 className="h-4 w-4 text-zinc-500" />
+                <span className="grid min-w-0">
+                  <strong className="text-[11px] text-zinc-200">Task authorization</strong>
+                  <span className="mt-0.5 truncate text-[9px] text-zinc-600">Released when a run settles</span>
+                </span>
+                <strong className="text-[11px] tabular-nums text-zinc-400">
+                  {billingCapacity ? `${formatCredits(billingCapacity.capacity.concurrencyHoldCredits)} hold` : '—'}
+                </strong>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 border-t border-white/[0.09]">
+              <Link href="/profile?view=plan" className="inline-flex min-h-10 items-center justify-center gap-1.5 border-r border-white/[0.09] text-[10px] font-semibold text-zinc-400 hover:bg-white/[0.04] hover:text-white">
+                View usage
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+              <Link href="/pricing" className="inline-flex min-h-10 items-center justify-center gap-1.5 text-[10px] font-semibold text-zinc-400 hover:bg-white/[0.04] hover:text-white">
+                Compare plans
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
       <div className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-5">
         <section className="mb-8">
@@ -4027,10 +4131,12 @@ export default function InvestorAgentChatPage() {
               )}
             </div>
           </form>
-          <div className={`mx-auto mt-2 flex max-w-[820px] items-center gap-1.5 text-[10px] ${capacityBlocked ? 'text-amber-300' : 'text-zinc-600'}`}>
-            {billingCapacityLoading ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <CircleGauge className="h-3 w-3" />}
-            <span>{capacityStatusText}</span>
-          </div>
+          {billingCapacityLoading || capacityBlocked ? (
+            <div className={`mx-auto mt-2 flex max-w-[820px] items-center gap-1.5 text-[10px] ${capacityBlocked ? 'text-amber-300' : 'text-zinc-600'}`}>
+              {billingCapacityLoading ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <CircleGauge className="h-3 w-3" />}
+              <span>{capacityStatusText}</span>
+            </div>
+          ) : null}
           {connectorsError ? <p className="mx-auto mt-2 max-w-[820px] text-[10px] text-amber-300">{connectorsError}</p> : null}
           {error ? <p className="mx-auto mt-2 max-w-[820px] text-[11px] text-red-300">{error}</p> : null}
         </div>
