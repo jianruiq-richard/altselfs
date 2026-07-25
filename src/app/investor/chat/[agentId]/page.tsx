@@ -2904,7 +2904,7 @@ export default function InvestorAgentChatPage() {
     action: 'rename' | 'archive' | 'delete'
   ) => {
     if (startingRun || recoveringRunState || sessionActionBusyId) return;
-    const sessionHasActiveTask = billingCapacity?.activeTasks.some((task) => task.threadId === session.id) ?? false;
+    const sessionHasActiveTask = sending && session.id === threadId;
     if (sessionHasActiveTask && action !== 'rename') {
       setError('Stop the active task before archiving or deleting this discussion.');
       return;
@@ -2964,7 +2964,7 @@ export default function InvestorAgentChatPage() {
     } finally {
       setSessionActionBusyId(null);
     }
-  }, [billingCapacity, handleSessionExpired, loadData, recoveringRunState, sessionActionBusyId, startingRun, threadId]);
+  }, [handleSessionExpired, loadData, recoveringRunState, sending, sessionActionBusyId, startingRun, threadId]);
 
   useEffect(() => {
     if (!openSessionMenuId) return;
@@ -3675,18 +3675,7 @@ export default function InvestorAgentChatPage() {
   const activeSession = sessions.find((session) => session.id === threadId);
   const connectedConnectors = connectors.filter((connector) => connector.connected && connector.conversationAvailable !== false);
   const activeRunKey = activeRunId || activeWorkTiming?.runId || '';
-  const activeBillingTask = (billingCapacity?.activeTasks || []).find((task) => (
-    (activeRunKey && task.runId === activeRunKey) ||
-    (!activeRunKey && threadId && task.threadId === threadId)
-  ));
-  const activeBillingStatus = (() => {
-    const status = (activeBillingTask?.status || '').toUpperCase();
-    if (status === 'PENDING_AUTH') return 'AUTHORIZING' as const;
-    if (status === 'QUEUED') return 'QUEUED' as const;
-    if (status === 'RUNNING' || status === 'ACTIVE') return 'RUNNING' as const;
-    return null;
-  })();
-  const activeWorkStatus = activeBillingStatus || activeWorkTiming?.status || (startingRun ? 'AUTHORIZING' : 'RUNNING');
+  const activeWorkStatus = activeWorkTiming?.status || (startingRun ? 'AUTHORIZING' : 'RUNNING');
   const activeWorkFallback = getActiveWorkPresentation(
     codexStreamItems[codexStreamItems.length - 1],
     activeWorkStatus,
@@ -3696,11 +3685,9 @@ export default function InvestorAgentChatPage() {
     runKey: activeRunKey || 'pending-run',
     ...activeWorkFallback,
   };
-  const activeBillingQueuedAtMs = timestampMs(activeBillingTask?.queuedAt || activeBillingTask?.createdAt || '');
-  const activeBillingStartedAtMs = timestampMs(activeBillingTask?.startedAt || '');
   const activeWorkStartedAtMs = activeWorkStatus === 'RUNNING'
-    ? activeBillingStartedAtMs || activeWorkTiming?.startedAtMs || activeBillingQueuedAtMs || activeWorkTiming?.queuedAtMs || activeWorkNowMs
-    : activeBillingQueuedAtMs || activeWorkTiming?.queuedAtMs || activeWorkNowMs;
+    ? activeWorkTiming?.startedAtMs || activeWorkTiming?.queuedAtMs || activeWorkNowMs
+    : activeWorkTiming?.queuedAtMs || activeWorkNowMs;
   const activeWorkDurationText = formatDuration(Math.max(0, activeWorkNowMs - activeWorkStartedAtMs));
   const activeWorkDurationLabel = activeWorkStatus === 'RUNNING'
     ? `Running for ${activeWorkDurationText}`
@@ -3714,12 +3701,7 @@ export default function InvestorAgentChatPage() {
   const storedDiscussionTitle = activeSession?.title?.trim() || '';
   const activeWorkDiscussionTitle = storedDiscussionTitle && storedDiscussionTitle.toLowerCase() !== 'new discussion'
     ? storedDiscussionTitle
-    : activeBillingTask?.title?.trim() || latestUserTaskTitle || storedDiscussionTitle || 'Current discussion';
-  const activeTaskThreadIds = new Set(
-    (billingCapacity?.activeTasks || [])
-      .map((task) => task.threadId)
-      .filter((value): value is string => Boolean(value)),
-  );
+    : latestUserTaskTitle || storedDiscussionTitle || 'Current discussion';
   const capacityBlocked = billingCapacity ? !billingCapacity.capacity.canStartTask : false;
   const capacityStatusText = billingCapacity
     ? `${billingCapacity.capacity.activeTaskCount}/${billingCapacity.subscription.concurrentTaskLimit} active · ${billingCapacity.account.availableCredits.toLocaleString('en-US')} credits available`
@@ -3734,7 +3716,7 @@ export default function InvestorAgentChatPage() {
         {sessions.map((session) => {
           const active = session.id === threadId;
           const actionBusy = sessionActionBusyId === session.id;
-          const taskActive = activeTaskThreadIds.has(session.id);
+          const taskActive = active && sending;
           return (
             <div
               key={session.id}

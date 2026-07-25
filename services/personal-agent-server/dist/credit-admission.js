@@ -149,13 +149,12 @@ export async function getBillingCapacity(config, investorId) {
         const account = await ensureBillingAccount(config, client, investorId);
         const refreshedAccount = await releaseExpiredReservations(client, account, now);
         const subscription = await getSubscription(client, investorId);
-        const activeTasks = await client.query([
-            'select "runId", "threadId", "reservedCredits", "createdAt", "expiresAt"',
+        const activeTaskCount = await client.query([
+            'select count(*)::int as count',
             'from credit_reservations',
             'where "investorId" = $1 and status = $2 and "expiresAt" > $3',
-            'order by "createdAt" asc, id asc',
         ].join(' '), [investorId, 'ACTIVE', now]);
-        return buildCapacity(config, refreshedAccount, subscription, activeTasks.rows);
+        return buildCapacity(config, refreshedAccount, subscription, numberValue(activeTaskCount.rows[0]?.count));
     });
 }
 export async function getBillingSummary(config, investorId) {
@@ -368,12 +367,12 @@ async function authorizationFromExisting(config, row, runId, client, now) {
         },
     };
 }
-function buildCapacity(config, account, subscription, activeTasks) {
+function buildCapacity(config, account, subscription, activeTaskCount) {
     const plan = planFor(subscription.planKey);
     const availableCredits = Math.max(0, account.balanceCredits - account.reservedCredits);
     const hasCreditAuthorization = config.creditsEnforcementMode !== 'enforce'
         || availableCredits >= Math.max(1, config.creditsConcurrencyHold);
-    const availableTaskSlots = Math.max(0, plan.concurrentTasks - activeTasks.length);
+    const availableTaskSlots = Math.max(0, plan.concurrentTasks - activeTaskCount);
     return {
         mode: config.creditsEnforcementMode,
         account: {
@@ -394,19 +393,12 @@ function buildCapacity(config, account, subscription, activeTasks) {
             currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() || null,
         },
         capacity: {
-            activeTaskCount: activeTasks.length,
+            activeTaskCount,
             availableTaskSlots,
             concurrencyHoldCredits: Math.max(1, config.creditsConcurrencyHold),
             hasCreditAuthorization,
             canStartTask: availableTaskSlots > 0 && hasCreditAuthorization,
         },
-        activeTasks: activeTasks.map((row) => ({
-            runId: String(row.runId || ''),
-            threadId: typeof row.threadId === 'string' ? row.threadId : null,
-            reservedCredits: numberValue(row.reservedCredits),
-            createdAt: dateIso(row.createdAt),
-            expiresAt: dateIso(row.expiresAt),
-        })),
     };
 }
 function planFor(planKey) {
@@ -431,5 +423,11 @@ function dateIso(value) {
         return value.toISOString();
     const parsed = new Date(String(value || ''));
     return Number.isNaN(parsed.getTime()) ? new Date(0).toISOString() : parsed.toISOString();
+}
+function dateIsoOrNull(value) {
+    if (!value)
+        return null;
+    const iso = dateIso(value);
+    return iso === new Date(0).toISOString() ? null : iso;
 }
 export { BillingUnavailableError };

@@ -145,24 +145,15 @@ export function AstromarDashboardClient({
     router.push(`/investor/chat/100${query}`);
   };
 
-  const activeCapacityTasks = billingCapacity?.activeTasks || [];
-  const activeWorkCards = activeCapacityTasks.length > 0
-    ? activeCapacityTasks.map((task) => ({
-        id: task.runId,
-        title: task.title?.trim() || 'Active discussion',
-        status: task.status || 'RUNNING',
-        startedAt: task.startedAt || task.queuedAt || task.createdAt,
-        updatedAt: task.updatedAt || task.createdAt,
-      }))
-    : activeWork
-        .filter((work) => ['RUNNING', 'QUEUED', 'PENDING_AUTH'].includes(work.status.toUpperCase()))
-        .map((work) => ({
-          id: work.id,
-          title: work.title,
-          status: work.status,
-          startedAt: work.updatedAt,
-          updatedAt: work.updatedAt,
-        }));
+  const activeWorkCards = activeWork
+    .filter((work) => ['RUNNING', 'QUEUED', 'PENDING_AUTH'].includes(work.status.toUpperCase()))
+    .map((work) => ({
+      id: work.id,
+      title: work.title,
+      status: work.status,
+      startedAt: work.updatedAt,
+      updatedAt: work.updatedAt,
+    }));
 
   const rightRail = (
     <div className="grid h-full min-h-0 grid-rows-[64px_minmax(0,1fr)]">

@@ -24,18 +24,6 @@ export type BillingCapacityData = {
     hasCreditAuthorization: boolean;
     canStartTask: boolean;
   };
-  activeTasks: Array<{
-    runId: string;
-    threadId: string | null;
-    title?: string | null;
-    status?: string | null;
-    reservedCredits: number;
-    createdAt: string;
-    queuedAt?: string | null;
-    startedAt?: string | null;
-    updatedAt?: string | null;
-    expiresAt: string;
-  }>;
 };
 
 type BillingCapacityPopoverProps = {
