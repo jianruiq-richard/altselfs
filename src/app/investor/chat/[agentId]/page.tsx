@@ -3674,19 +3674,33 @@ export default function InvestorAgentChatPage() {
 
   const activeSession = sessions.find((session) => session.id === threadId);
   const connectedConnectors = connectors.filter((connector) => connector.connected && connector.conversationAvailable !== false);
-  const activeWorkStatus = activeWorkTiming?.status || (startingRun ? 'AUTHORIZING' : 'RUNNING');
+  const activeRunKey = activeRunId || activeWorkTiming?.runId || '';
+  const activeBillingTask = (billingCapacity?.activeTasks || []).find((task) => (
+    (activeRunKey && task.runId === activeRunKey) ||
+    (!activeRunKey && threadId && task.threadId === threadId)
+  ));
+  const activeBillingStatus = (() => {
+    const status = (activeBillingTask?.status || '').toUpperCase();
+    if (status === 'PENDING_AUTH') return 'AUTHORIZING' as const;
+    if (status === 'QUEUED') return 'QUEUED' as const;
+    if (status === 'RUNNING' || status === 'ACTIVE') return 'RUNNING' as const;
+    return null;
+  })();
+  const activeWorkStatus = activeBillingStatus || activeWorkTiming?.status || (startingRun ? 'AUTHORIZING' : 'RUNNING');
   const activeWorkFallback = getActiveWorkPresentation(
     codexStreamItems[codexStreamItems.length - 1],
     activeWorkStatus,
     stoppingRun,
   );
   const currentActiveWork = activeWorkDisplay || {
-    runKey: activeRunId || activeWorkTiming?.runId || 'pending-run',
+    runKey: activeRunKey || 'pending-run',
     ...activeWorkFallback,
   };
+  const activeBillingQueuedAtMs = timestampMs(activeBillingTask?.queuedAt || activeBillingTask?.createdAt || '');
+  const activeBillingStartedAtMs = timestampMs(activeBillingTask?.startedAt || '');
   const activeWorkStartedAtMs = activeWorkStatus === 'RUNNING'
-    ? activeWorkTiming?.startedAtMs || activeWorkTiming?.queuedAtMs || activeWorkNowMs
-    : activeWorkTiming?.queuedAtMs || activeWorkNowMs;
+    ? activeBillingStartedAtMs || activeWorkTiming?.startedAtMs || activeBillingQueuedAtMs || activeWorkTiming?.queuedAtMs || activeWorkNowMs
+    : activeBillingQueuedAtMs || activeWorkTiming?.queuedAtMs || activeWorkNowMs;
   const activeWorkDurationText = formatDuration(Math.max(0, activeWorkNowMs - activeWorkStartedAtMs));
   const activeWorkDurationLabel = activeWorkStatus === 'RUNNING'
     ? `Running for ${activeWorkDurationText}`
@@ -3700,7 +3714,7 @@ export default function InvestorAgentChatPage() {
   const storedDiscussionTitle = activeSession?.title?.trim() || '';
   const activeWorkDiscussionTitle = storedDiscussionTitle && storedDiscussionTitle.toLowerCase() !== 'new discussion'
     ? storedDiscussionTitle
-    : latestUserTaskTitle || storedDiscussionTitle || 'Current discussion';
+    : activeBillingTask?.title?.trim() || latestUserTaskTitle || storedDiscussionTitle || 'Current discussion';
   const activeTaskThreadIds = new Set(
     (billingCapacity?.activeTasks || [])
       .map((task) => task.threadId)

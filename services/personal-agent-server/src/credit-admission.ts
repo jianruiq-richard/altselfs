@@ -249,10 +249,15 @@ export async function getBillingCapacity(config: ServerConfig, investorId: strin
     const subscription = await getSubscription(client, investorId);
     const activeTasks = await client.query(
       [
-        'select "runId", "threadId", "reservedCredits", "createdAt", "expiresAt"',
-        'from credit_reservations',
-        'where "investorId" = $1 and status = $2 and "expiresAt" > $3',
-        'order by "createdAt" asc, id asc',
+        'select r."runId", r."threadId", r."reservedCredits", r."createdAt", r."expiresAt",',
+        't.title as "threadTitle",',
+        'acr.status as "runStatus", acr.request as "runRequest", acr.execution_request as "executionRequest",',
+        'acr.queued_at as "queuedAt", acr.started_at as "startedAt", acr.updated_at as "runUpdatedAt"',
+        'from credit_reservations r',
+        'left join agent_threads t on t.id = r."threadId"',
+        'left join agent_context_runs acr on acr.id = r."runId"',
+        'where r."investorId" = $1 and r.status = $2 and r."expiresAt" > $3',
+        'order by r."createdAt" asc, r.id asc',
       ].join(' '),
       [investorId, 'ACTIVE', now],
     );
@@ -565,11 +570,47 @@ function buildCapacity(
     activeTasks: activeTasks.map((row) => ({
       runId: String(row.runId || ''),
       threadId: typeof row.threadId === 'string' ? row.threadId : null,
+      title: activeTaskTitle(row),
+      status: typeof row.runStatus === 'string' ? row.runStatus : null,
       reservedCredits: numberValue(row.reservedCredits),
       createdAt: dateIso(row.createdAt),
+      queuedAt: dateIsoOrNull(row.queuedAt),
+      startedAt: dateIsoOrNull(row.startedAt),
+      updatedAt: dateIsoOrNull(row.runUpdatedAt) || dateIso(row.createdAt),
       expiresAt: dateIso(row.expiresAt),
     })),
   };
+}
+
+function activeTaskTitle(row: Record<string, unknown>) {
+  const threadTitle = typeof row.threadTitle === 'string' ? row.threadTitle.trim() : '';
+  if (threadTitle && !['new discussion', 'new conversation', 'new chat', 'instruction'].includes(threadTitle.toLowerCase())) {
+    return truncateOneLine(threadTitle, 90);
+  }
+
+  const request = isRecord(row.runRequest) ? row.runRequest : {};
+  const executionRequest = isRecord(row.executionRequest) ? row.executionRequest : {};
+  const metadata = isRecord(request.metadata) ? request.metadata : {};
+  const executionMetadata = isRecord(executionRequest.metadata) ? executionRequest.metadata : {};
+  const messages = Array.isArray(request.messages) ? request.messages : Array.isArray(executionRequest.messages) ? executionRequest.messages : [];
+  const latestUserMessage = [...messages].reverse().find((message) => (
+    isRecord(message) && message.role === 'user' && typeof message.content === 'string' && message.content.trim()
+  ));
+  const candidates = [
+    metadata.displayUserMessage,
+    executionMetadata.displayUserMessage,
+    request.message,
+    executionRequest.message,
+    isRecord(latestUserMessage) ? latestUserMessage.content : null,
+  ];
+  const value = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim()) as string | undefined;
+  return value ? truncateOneLine(value, 90) : 'Active discussion';
+}
+
+function truncateOneLine(value: string, maxLength: number) {
+  const compact = value.replace(/\s+/g, ' ').trim();
+  if (compact.length <= maxLength) return compact;
+  return `${compact.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
 function planFor(planKey: string) {
@@ -596,6 +637,12 @@ function dateIso(value: unknown) {
   if (value instanceof Date) return value.toISOString();
   const parsed = new Date(String(value || ''));
   return Number.isNaN(parsed.getTime()) ? new Date(0).toISOString() : parsed.toISOString();
+}
+
+function dateIsoOrNull(value: unknown) {
+  if (!value) return null;
+  const iso = dateIso(value);
+  return iso === new Date(0).toISOString() ? null : iso;
 }
 
 export { BillingUnavailableError };

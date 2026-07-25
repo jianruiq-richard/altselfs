@@ -1,24 +1,24 @@
 'use client';
 
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
-import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
+import {
+  BillingCapacityPopover,
+  type BillingCapacityData,
+} from '@/components/billing-capacity-popover';
 import {
   Activity,
   ArrowUp,
-  Check,
   CircleDot,
   Clock3,
   Compass,
-  ExternalLink,
   LoaderCircle,
   MessageSquare,
-  Plug,
   RefreshCw,
   Search,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 type DashboardMetric = {
   label: string;
@@ -46,14 +46,6 @@ type DashboardWork = {
   title: string;
   status: string;
   updatedAt: string;
-};
-
-type ConnectorItem = {
-  key: string;
-  label: string;
-  connected: boolean;
-  accounts: Array<{ displayName: string; accountEmail: string }>;
-  platformConfigured?: boolean;
 };
 
 type AstromarDashboardClientProps = {
@@ -90,9 +82,18 @@ function metricIcon(label: string) {
   return LoaderCircle;
 }
 
-function connectorAccount(connector: ConnectorItem) {
-  const account = connector.accounts[0];
-  return account?.displayName || account?.accountEmail || (connector.connected ? 'Connected' : 'Not connected');
+function taskStatusLabel(value: string | null | undefined) {
+  const status = (value || '').toUpperCase();
+  if (status === 'PENDING_AUTH') return 'Starting';
+  if (status === 'QUEUED') return 'Queued';
+  if (status === 'RUNNING') return 'Running';
+  if (status === 'ACTIVE') return 'Running';
+  return status ? status.toLowerCase() : 'Running';
+}
+
+function taskStatusTone(value: string | null | undefined) {
+  const status = (value || '').toUpperCase();
+  return status === 'RUNNING' || status === 'ACTIVE' ? 'text-[#8eb3ff]' : 'text-[#e9b85a]';
 }
 
 export function AstromarDashboardClient({
@@ -106,31 +107,37 @@ export function AstromarDashboardClient({
 }: AstromarDashboardClientProps) {
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
-  const [connectors, setConnectors] = useState<ConnectorItem[]>([]);
-  const [connectorsLoading, setConnectorsLoading] = useState(true);
-  const connectedConnectors = useMemo(() => connectors.filter((connector) => connector.connected), [connectors]);
+  const [billingCapacity, setBillingCapacity] = useState<BillingCapacityData | null>(null);
+  const [billingCapacityLoading, setBillingCapacityLoading] = useState(false);
+
+  const loadBillingCapacity = useCallback(async (showLoading = false) => {
+    if (showLoading) setBillingCapacityLoading(true);
+    try {
+      const response = await fetch('/api/billing/capacity', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      const data = (await response.json().catch(() => ({}))) as BillingCapacityData & { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Failed to load account capacity');
+      setBillingCapacity(data);
+    } catch {
+      setBillingCapacity(null);
+    } finally {
+      if (showLoading) setBillingCapacityLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch('/api/investor/connectors', { cache: 'no-store', credentials: 'same-origin' })
-      .then(async (response) => {
-        const data = (await response.json().catch(() => ({}))) as { connectors?: ConnectorItem[] };
-        if (!response.ok) throw new Error('Failed to load connectors');
-        return Array.isArray(data.connectors) ? data.connectors : [];
-      })
-      .then((items) => {
-        if (!cancelled) setConnectors(items);
-      })
-      .catch(() => {
-        if (!cancelled) setConnectors([]);
-      })
-      .finally(() => {
-        if (!cancelled) setConnectorsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void loadBillingCapacity(true);
+  }, [loadBillingCapacity]);
+
+  useEffect(() => {
+    if (!billingCapacity || billingCapacity.capacity.activeTaskCount <= 0) return;
+    const interval = window.setInterval(() => {
+      void loadBillingCapacity();
+    }, 10_000);
+    return () => window.clearInterval(interval);
+  }, [billingCapacity, loadBillingCapacity]);
 
   const openDiscussion = (nextPrompt?: string) => {
     const value = (nextPrompt ?? prompt).trim();
@@ -138,14 +145,33 @@ export function AstromarDashboardClient({
     router.push(`/investor/chat/100${query}`);
   };
 
+  const activeCapacityTasks = billingCapacity?.activeTasks || [];
+  const activeWorkCards = activeCapacityTasks.length > 0
+    ? activeCapacityTasks.map((task) => ({
+        id: task.runId,
+        title: task.title?.trim() || 'Active discussion',
+        status: task.status || 'RUNNING',
+        startedAt: task.startedAt || task.queuedAt || task.createdAt,
+        updatedAt: task.updatedAt || task.createdAt,
+      }))
+    : activeWork
+        .filter((work) => ['RUNNING', 'QUEUED', 'PENDING_AUTH'].includes(work.status.toUpperCase()))
+        .map((work) => ({
+          id: work.id,
+          title: work.title,
+          status: work.status,
+          startedAt: work.updatedAt,
+          updatedAt: work.updatedAt,
+        }));
+
   const rightRail = (
     <div className="grid h-full min-h-0 grid-rows-[64px_minmax(0,1fr)]">
-      <div className="flex items-center justify-between border-b border-white/[0.09] px-4">
-        <strong className="text-sm text-zinc-100">Workspace context</strong>
-        <span className="inline-flex items-center gap-2 text-[11px] text-zinc-400">
-          <i className="h-1.5 w-1.5 rounded-full bg-[#46d19a] shadow-[0_0_9px_rgba(70,209,154,.5)]" />
-          Ready
-        </span>
+      <div className="border-b border-white/[0.09]">
+        <BillingCapacityPopover
+          data={billingCapacity}
+          loading={billingCapacityLoading}
+          variant="rail"
+        />
       </div>
       <div className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-5">
         <section className="mb-8">
@@ -154,9 +180,10 @@ export function AstromarDashboardClient({
             <Clock3 className="h-3.5 w-3.5 text-zinc-600" />
           </div>
           <div className="grid gap-2.5">
-            {activeWork.length > 0 ? (
-              activeWork.slice(0, 3).map((work) => {
-                const running = ['RUNNING', 'QUEUED'].includes(work.status.toUpperCase());
+            {activeWorkCards.length > 0 ? (
+              activeWorkCards.slice(0, 4).map((work) => {
+                const statusText = taskStatusLabel(work.status);
+                const running = ['RUNNING', 'ACTIVE'].includes(work.status.toUpperCase());
                 return (
                   <Link
                     key={work.id}
@@ -165,14 +192,16 @@ export function AstromarDashboardClient({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-[12px] font-semibold leading-5 text-zinc-100">{work.title}</h3>
-                      <span className={`inline-flex shrink-0 items-center gap-1.5 text-[9px] font-extrabold uppercase ${running ? 'text-[#8eb3ff]' : 'text-[#46d19a]'}`}>
-                        <i className={`h-1.5 w-1.5 rounded-full ${running ? 'bg-[#8eb3ff]' : 'bg-[#46d19a]'}`} />
-                        {running ? 'Running' : 'Ready'}
+                      <span className={`inline-flex shrink-0 items-center gap-1.5 text-[9px] font-extrabold uppercase ${taskStatusTone(work.status)}`}>
+                        <i className={`h-1.5 w-1.5 rounded-full ${running ? 'animate-pulse bg-[#8eb3ff]' : 'bg-[#e9b85a]'}`} />
+                        {statusText}
                       </span>
                     </div>
-                    <p className="mt-2 text-[10px] text-zinc-500">Updated {relativeTime(work.updatedAt)} ago</p>
+                    <p className="mt-2 text-[10px] text-zinc-500">
+                      {running ? 'Running' : statusText} for {relativeTime(work.startedAt)}
+                    </p>
                     <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/[0.08]">
-                      <i className={`block h-full ${running ? 'w-2/3 bg-[#8eb3ff]' : 'w-full bg-[#46d19a]'}`} />
+                      <i className={`block h-full ${running ? 'w-2/3 bg-[#8eb3ff]' : 'w-1/3 bg-[#e9b85a]'}`} />
                     </div>
                   </Link>
                 );
@@ -183,39 +212,6 @@ export function AstromarDashboardClient({
               </div>
             )}
           </div>
-        </section>
-
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[13px] font-semibold text-zinc-200">Connected context</h2>
-            <Link href="/connectors" className="grid h-7 w-7 place-items-center rounded-md text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors">
-              <Plug className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-          <div className="grid gap-1">
-            {connectorsLoading ? (
-              <p className="px-2 py-4 text-[11px] text-zinc-500">Loading connectors...</p>
-            ) : connectedConnectors.length > 0 ? (
-              connectedConnectors.map((connector) => (
-                <Link key={connector.key} href="/connectors" className="grid min-h-14 grid-cols-[34px_minmax(0,1fr)_20px] items-center gap-2.5 rounded-[7px] px-2 hover:bg-white/[0.025]">
-                  <span className="grid h-8 w-8 place-items-center rounded-md border border-white/[0.09] text-zinc-400"><Plug className="h-3.5 w-3.5" /></span>
-                  <span className="grid min-w-0">
-                    <strong className="truncate text-xs text-zinc-100">{connector.label}</strong>
-                    <span className="truncate text-[10px] text-zinc-500">{connectorAccount(connector)}</span>
-                  </span>
-                  <Check className="h-3.5 w-3.5 text-[#46d19a]" />
-                </Link>
-              ))
-            ) : (
-              <Link href="/connectors" className="flex items-center justify-between rounded-[7px] border border-dashed border-white/[0.09] px-3 py-4 text-[11px] text-zinc-500 hover:text-zinc-300">
-                Connect your first source
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Link>
-            )}
-          </div>
-          <p className="mt-4 border-t border-white/[0.09] px-2 pt-3 text-[10px] leading-4 text-zinc-600">
-            Source access is selected inside each discussion.
-          </p>
         </section>
       </div>
     </div>
@@ -230,7 +226,6 @@ export function AstromarDashboardClient({
             <span className="mt-0.5 block text-[10px] text-zinc-600">Founder operating view</span>
           </div>
           <div className="flex items-center gap-2">
-            <BillingCapacityPopover />
             <button
               type="button"
               onClick={() => router.refresh()}
