@@ -1,6 +1,7 @@
 'use client';
 
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
+import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import {
   BarChart3,
   Check,
@@ -118,9 +119,12 @@ export function AstromarConnectorsPage() {
             <strong className="block text-[13px] text-zinc-100">Connectors</strong>
             <span className="mt-0.5 block text-[10px] text-zinc-600">Workspace connections</span>
           </div>
-          <button type="button" onClick={() => void loadConnectors()} className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/5 hover:text-white" title="Refresh connections">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            <BillingCapacityPopover />
+            <button type="button" onClick={() => void loadConnectors()} className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/5 hover:text-white" title="Refresh connections">
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </header>
 
         <main className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

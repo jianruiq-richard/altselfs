@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
+import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import { formatCredits } from '@/lib/billing-plans';
 import { displayEmail } from '@/lib/user-identifier';
 
@@ -305,6 +306,7 @@ export default function ProfilePage() {
             <strong className="block text-[13px] text-zinc-100">Settings</strong>
             <span className="mt-0.5 block text-[10px] text-zinc-600">Account and workspace</span>
           </div>
+          <BillingCapacityPopover />
         </header>
 
         <main className="astromar-scrollbar min-h-0 min-w-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

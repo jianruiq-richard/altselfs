@@ -1,6 +1,7 @@
 'use client';
 
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
+import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import {
   Activity,
   ArrowUp,
@@ -228,14 +229,17 @@ export function AstromarDashboardClient({
             <strong className="block text-[13px] text-zinc-100">Home</strong>
             <span className="mt-0.5 block text-[10px] text-zinc-600">Founder operating view</span>
           </div>
-          <button
-            type="button"
-            onClick={() => router.refresh()}
-            className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/5 hover:text-white"
-            title="Refresh dashboard"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <BillingCapacityPopover />
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/5 hover:text-white"
+              title="Refresh dashboard"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </header>
 
         <main className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">

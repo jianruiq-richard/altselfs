@@ -8,7 +8,6 @@ import {
   Menu,
   MessagesSquare,
   PanelLeftClose,
-  BadgeDollarSign,
   Plug,
   Settings,
   SquarePen,
@@ -18,7 +17,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
-type WorkspaceNavKey = 'home' | 'discussion' | 'connectors' | 'pricing' | 'settings';
+type WorkspaceNavKey = 'home' | 'discussion' | 'connectors' | 'settings';
 
 type AstromarWorkspaceShellProps = {
   children: React.ReactNode;
@@ -35,7 +34,6 @@ const navItems = [
   { key: 'home' as const, name: 'Home', href: '/dashboard', icon: Home },
   { key: 'discussion' as const, name: 'Discussion', href: '/investor/chat/100', icon: MessagesSquare },
   { key: 'connectors' as const, name: 'Connectors', href: '/connectors', icon: Plug },
-  { key: 'pricing' as const, name: 'Pricing', href: '/pricing', icon: BadgeDollarSign },
   { key: 'settings' as const, name: 'Settings', href: '/profile', icon: Settings },
 ];
 
@@ -45,10 +43,10 @@ function buildSignInRedirectUrl() {
   return `/sign-in?${new URLSearchParams({ redirect_url: currentPath || '/dashboard' }).toString()}`;
 }
 
-function activeNavKey(pathname: string): WorkspaceNavKey {
+function activeNavKey(pathname: string): WorkspaceNavKey | null {
   if (pathname.startsWith('/investor/chat')) return 'discussion';
   if (pathname.startsWith('/connectors')) return 'connectors';
-  if (pathname.startsWith('/pricing')) return 'pricing';
+  if (pathname.startsWith('/pricing')) return null;
   if (pathname.startsWith('/profile')) return 'settings';
   return 'home';
 }
