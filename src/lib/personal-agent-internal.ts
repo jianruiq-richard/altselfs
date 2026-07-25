@@ -16,7 +16,16 @@ type PersonalAgentInternalFetchOptions = {
   timeoutMs?: number;
 };
 
-class PersonalAgentHttpError extends Error {}
+class PersonalAgentHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly data: unknown,
+  ) {
+    super(message);
+    this.name = 'PersonalAgentHttpError';
+  }
+}
 
 function readPositiveIntEnv(key: string, fallback: number) {
   const parsed = Number(process.env[key] || '');
@@ -71,7 +80,7 @@ export async function personalAgentInternalFetch<T = Record<string, unknown>>(
         const detail = typeof (data as { error?: unknown }).error === 'string'
           ? (data as { error: string }).error
           : `personal-agent-server HTTP ${response.status}`;
-        throw new PersonalAgentHttpError(detail);
+        throw new PersonalAgentHttpError(detail, response.status, data);
       }
       return data;
     } catch (error) {

@@ -56,6 +56,12 @@ import {
   getBillingSummary,
   type CreditAuthorization,
 } from './credit-admission.js';
+import {
+  AdminBillingError,
+  adjustAdminBillingCredits,
+  getAdminBillingDetail,
+  updateAdminBillingSubscription,
+} from './admin-billing.js';
 import { releaseRunCredits } from './credit-settlement.js';
 import { getActiveRuntoolScope, isAgentRunCancelledError } from './run-control.js';
 import { normalizeToolNameList } from './connector-tool-scope.js';
@@ -121,6 +127,60 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const investorId = url.searchParams.get('investorId')?.trim() || '';
         if (!investorId) return json(res, 400, { error: 'investorId is required' });
         return json(res, 200, await getBillingSummary(config, investorId));
+      }
+
+      if (req.method === 'GET' && url.pathname === '/internal/admin/billing/user') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const investorId = url.searchParams.get('investorId')?.trim() || '';
+        if (!investorId) return json(res, 400, { error: 'investorId is required' });
+        try {
+          return json(res, 200, await getAdminBillingDetail(config, investorId));
+        } catch (error) {
+          return adminBillingErrorJson(res, error);
+        }
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/admin/billing/credits') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        try {
+          return json(res, 200, await adjustAdminBillingCredits(config, {
+            investorId: body.investorId,
+            action: body.action,
+            amountCredits: body.amountCredits,
+            reason: body.reason,
+            admin: body.admin,
+          }));
+        } catch (error) {
+          return adminBillingErrorJson(res, error);
+        }
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/admin/billing/subscription') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        try {
+          return json(res, 200, await updateAdminBillingSubscription(config, {
+            investorId: body.investorId,
+            planKey: body.planKey,
+            status: body.status,
+            monthlyCredits: body.monthlyCredits,
+            currentPeriodStart: body.currentPeriodStart,
+            currentPeriodEnd: body.currentPeriodEnd,
+            provider: body.provider,
+            providerCustomerId: body.providerCustomerId,
+            providerSubscriptionId: body.providerSubscriptionId,
+            reason: body.reason,
+            admin: body.admin,
+          }));
+        } catch (error) {
+          return adminBillingErrorJson(res, error);
+        }
       }
 
       if (req.method === 'GET' && url.pathname === '/internal/personal-data/accounts') {
@@ -1479,6 +1539,25 @@ function html(res: http.ServerResponse, status: number, body: string) {
     'cache-control': 'no-store',
   });
   res.end(body);
+}
+
+function adminBillingErrorJson(res: http.ServerResponse, error: unknown) {
+  if (error instanceof AdminBillingError) {
+    return json(res, error.httpStatus, {
+      error: error.message,
+      code: error.code,
+      details: error.details,
+    });
+  }
+  if (error instanceof BillingUnavailableError) {
+    return json(res, error.httpStatus, {
+      error: error.message,
+      code: error.code,
+    });
+  }
+  return json(res, 500, {
+    error: error instanceof Error ? error.message : String(error),
+  });
 }
 
 function isLoopbackRequest(req: http.IncomingMessage) {

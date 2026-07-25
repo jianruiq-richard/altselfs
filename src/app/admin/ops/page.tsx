@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requireOpsAdmin } from '@/lib/ops-auth';
 import { getOpsDashboardData, type OpsStatus } from '@/lib/ops-data';
@@ -19,8 +20,16 @@ export default async function OpsPage() {
             <h1 className="mt-1 text-3xl font-semibold tracking-normal">Ops Dashboard</h1>
             <p className="mt-2 text-sm text-slate-500">Signed in as {admin.name} · Collected {formatDateTime(data.collectedAt)}</p>
           </div>
-          <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-            Access is controlled by <code>OPS_ADMIN_EMAILS</code> / <code>OPS_ADMIN_CLERK_IDS</code>.
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Link
+              href="/admin/users"
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              User Admin
+            </Link>
+            <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+              Access is controlled by <code>OPS_ADMIN_EMAILS</code> / <code>OPS_ADMIN_CLERK_IDS</code>.
+            </div>
           </div>
         </header>
 
