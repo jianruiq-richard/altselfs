@@ -29,10 +29,16 @@ type BillingSummary = {
   };
 };
 
+const WORKLOAD_BENCHMARKS = {
+  quickDiscussionCredits: 35,
+  standardResearchCredits: 150,
+  deepResearchCredits: 370,
+};
+
 const workloadExamples = [
-  { label: 'Short conversation', range: '5–15 credits', detail: 'Direct Hermes response' },
-  { label: 'Standard research', range: '100–200 credits', detail: 'Hermes with Codex execution' },
-  { label: 'Deep analysis', range: '330–800 credits', detail: 'Claude with extended execution' },
+  { label: 'Quick discussions', capacity: 'about 28 per 1,000 credits', detail: 'Typical Hermes-only conversation turns' },
+  { label: 'Standard research tasks', capacity: 'about 6 per 1,000 credits', detail: 'Hermes with Codex research or tool execution' },
+  { label: 'Deep research runs', capacity: 'about 2 per 1,000 credits', detail: 'Longer multi-step execution, files, or artifact work' },
 ];
 
 export default function PricingPage() {
@@ -127,10 +133,11 @@ export default function PricingPage() {
             <section className="grid gap-3 py-8 sm:grid-cols-2 xl:grid-cols-4" aria-label="Available plans">
               {BILLING_PLANS.map((plan) => {
                 const current = summary?.subscription.planKey === plan.key;
+                const estimate = estimatePlanWorkload(plan.monthlyCredits);
                 return (
                   <article
                     key={plan.key}
-                    className={`grid min-h-[390px] grid-rows-[auto_auto_minmax(0,1fr)_auto] rounded-[8px] border p-5 ${
+                    className={`grid min-h-[470px] grid-rows-[auto_auto_minmax(0,1fr)_auto] rounded-[8px] border p-5 ${
                       plan.highlighted
                         ? 'border-[#8eb3ff]/40 bg-[#8eb3ff]/[0.055]'
                         : 'border-white/[0.09] bg-white/[0.02]'
@@ -152,6 +159,18 @@ export default function PricingPage() {
                       <PlanFeature icon={CircleGauge} text={`${plan.concurrentTasks} concurrent task${plan.concurrentTasks === 1 ? '' : 's'}`} />
                       <PlanFeature icon={Clock3} text={plan.scheduledTasks > 0 ? `${plan.scheduledTasks} scheduled tasks` : 'Manual tasks'} />
                       <PlanFeature icon={Check} text="Hermes and Codex execution" />
+                      <div className="mt-2 rounded-[7px] border border-white/[0.08] bg-black/20 p-3">
+                        <span className="text-[9px] font-extrabold uppercase text-zinc-600">Estimated monthly work</span>
+                        <p className="mt-2 text-[11px] leading-5 text-zinc-300">
+                          Used on one workload type, this plan typically covers about{' '}
+                          <strong className="font-bold text-zinc-100">{estimate.discussions}</strong> quick discussions,{' '}
+                          <strong className="font-bold text-zinc-100">{estimate.researchTasks}</strong> standard research tasks, or{' '}
+                          <strong className="font-bold text-zinc-100">{estimate.deepTasks}</strong> deep research runs each month.
+                        </p>
+                        <p className="mt-2 text-[10px] leading-4 text-zinc-600">
+                          Based on recent Altselfs production usage. Actual cost varies with tools, models, files, and task length.
+                        </p>
+                      </div>
                     </div>
                     {current ? (
                       <button type="button" disabled className="mt-6 min-h-10 rounded-[7px] border border-[#46d19a]/20 bg-[#46d19a]/[0.06] px-3 text-[11px] font-bold text-[#46d19a]">
@@ -180,7 +199,7 @@ export default function PricingPage() {
                         <strong className="text-xs text-zinc-200">{example.label}</strong>
                         <span className="mt-1 text-[10px] text-zinc-600">{example.detail}</span>
                       </span>
-                      <strong className="text-[11px] text-zinc-400">{example.range}</strong>
+                      <strong className="text-right text-[11px] text-zinc-400">{example.capacity}</strong>
                     </div>
                   ))}
                 </div>
@@ -190,7 +209,7 @@ export default function PricingPage() {
                 <h2 className="text-[18px] font-bold text-zinc-100">Settlement policy</h2>
                 <div className="mt-5 grid gap-4">
                   <PolicyRow number="01" title="Hold" text="A small 50-credit concurrency hold protects parallel task capacity without predicting the full task cost." />
-                  <PolicyRow number="02" title="Measure" text="Hermes and Codex report token and model usage for the current run." />
+                  <PolicyRow number="02" title="Measure" text="The backend agent reports token and model usage for the current run." />
                   <PolicyRow
                     number="03"
                     title="Settle"
@@ -204,6 +223,24 @@ export default function PricingPage() {
       </div>
     </AstromarWorkspaceShell>
   );
+}
+
+function estimatePlanWorkload(monthlyCredits: number) {
+  return {
+    discussions: formatApproxCount(monthlyCredits / WORKLOAD_BENCHMARKS.quickDiscussionCredits),
+    researchTasks: formatApproxCount(monthlyCredits / WORKLOAD_BENCHMARKS.standardResearchCredits),
+    deepTasks: formatApproxCount(monthlyCredits / WORKLOAD_BENCHMARKS.deepResearchCredits),
+  };
+}
+
+function formatApproxCount(value: number) {
+  const safeValue = Math.max(1, Math.floor(value));
+  const rounded = safeValue >= 1_000
+    ? Math.round(safeValue / 100) * 100
+    : safeValue >= 100
+      ? Math.round(safeValue / 10) * 10
+      : safeValue;
+  return new Intl.NumberFormat('en-US').format(rounded);
 }
 
 function PlanFeature({
