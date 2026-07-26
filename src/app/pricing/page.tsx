@@ -7,8 +7,11 @@ import {
   CircleGauge,
   Clock3,
   LoaderCircle,
+  MessageCircle,
   RefreshCw,
+  Search,
   Sparkles,
+  Telescope,
   WalletCards,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -159,15 +162,9 @@ export default function PricingPage() {
                       <PlanFeature icon={CircleGauge} text={`${plan.concurrentTasks} concurrent task${plan.concurrentTasks === 1 ? '' : 's'}`} />
                       <PlanFeature icon={Clock3} text={plan.scheduledTasks > 0 ? `${plan.scheduledTasks} scheduled tasks` : 'Manual tasks'} />
                       <PlanFeature icon={Check} text="Hermes and Codex execution" />
-                      <div className="mt-2 rounded-[7px] border border-white/[0.08] bg-black/20 p-3">
-                        <span className="text-[9px] font-extrabold uppercase text-zinc-600">Estimated monthly work</span>
-                        <div className="mt-2 grid gap-1.5">
-                          <WorkloadEstimateRow label="Quick discussions" value={estimate.discussions} />
-                          <WorkloadEstimateRow label="Standard research" value={estimate.researchTasks} />
-                          <WorkloadEstimateRow label="Deep research" value={estimate.deepTasks} />
-                        </div>
-                        <p className="mt-2 text-[10px] leading-4 text-zinc-600">Based on recent usage. Actual runs vary.</p>
-                      </div>
+                      <PlanFeature icon={MessageCircle} text={`${estimate.discussions} discussions approximately`} />
+                      <PlanFeature icon={Search} text={`${estimate.researchTasks} research tasks approximately`} />
+                      <PlanFeature icon={Telescope} text={`${estimate.deepTasks} deep tasks approximately`} />
                     </div>
                     {current ? (
                       <button type="button" disabled className="mt-6 min-h-10 rounded-[7px] border border-[#46d19a]/20 bg-[#46d19a]/[0.06] px-3 text-[11px] font-bold text-[#46d19a]">
@@ -238,15 +235,6 @@ function formatApproxCount(value: number) {
       ? Math.round(safeValue / 10) * 10
       : safeValue;
   return new Intl.NumberFormat('en-US').format(rounded);
-}
-
-function WorkloadEstimateRow({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="flex flex-wrap items-baseline gap-1 text-[11px] text-zinc-500">
-      <span>{label} approximately</span>
-      <strong className="font-bold text-zinc-100">~{value}</strong>
-    </span>
-  );
 }
 
 function PlanFeature({
