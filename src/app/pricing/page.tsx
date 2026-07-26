@@ -161,15 +161,12 @@ export default function PricingPage() {
                       <PlanFeature icon={Check} text="Hermes and Codex execution" />
                       <div className="mt-2 rounded-[7px] border border-white/[0.08] bg-black/20 p-3">
                         <span className="text-[9px] font-extrabold uppercase text-zinc-600">Estimated monthly work</span>
-                        <p className="mt-2 text-[11px] leading-5 text-zinc-300">
-                          Used on one workload type, this plan typically covers about{' '}
-                          <strong className="font-bold text-zinc-100">{estimate.discussions}</strong> quick discussions,{' '}
-                          <strong className="font-bold text-zinc-100">{estimate.researchTasks}</strong> standard research tasks, or{' '}
-                          <strong className="font-bold text-zinc-100">{estimate.deepTasks}</strong> deep research runs each month.
-                        </p>
-                        <p className="mt-2 text-[10px] leading-4 text-zinc-600">
-                          Based on recent Altselfs production usage. Actual cost varies with tools, models, files, and task length.
-                        </p>
+                        <div className="mt-2 grid gap-1.5">
+                          <WorkloadEstimateRow label="Quick discussions" value={estimate.discussions} />
+                          <WorkloadEstimateRow label="Standard research" value={estimate.researchTasks} />
+                          <WorkloadEstimateRow label="Deep research" value={estimate.deepTasks} />
+                        </div>
+                        <p className="mt-2 text-[10px] leading-4 text-zinc-600">Based on recent usage. Actual runs vary.</p>
                       </div>
                     </div>
                     {current ? (
@@ -241,6 +238,15 @@ function formatApproxCount(value: number) {
       ? Math.round(safeValue / 10) * 10
       : safeValue;
   return new Intl.NumberFormat('en-US').format(rounded);
+}
+
+function WorkloadEstimateRow({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="flex flex-wrap items-baseline gap-1 text-[11px] text-zinc-500">
+      <span>{label} approximately</span>
+      <strong className="font-bold text-zinc-100">~{value}</strong>
+    </span>
+  );
 }
 
 function PlanFeature({
