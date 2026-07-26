@@ -100,13 +100,13 @@ class McpStdioServer {
                 tools: [
                     {
                         name: TOOL_NAME,
-                        description: 'Delegate an execution, research, private-data, competitive-intelligence, or tool-use step to the thread-bound Codex agent. Codex uses its native app-server session and returns text to Hermes; Hermes decides the final user reply.',
+                        description: 'Delegate an objective-level execution, research, private-data, competitive-intelligence, artifact, or tool-use step to the thread-bound Codex agent. Codex uses its native app-server session and chooses the execution path. Hermes should provide the objective, constraints, relevant context, and acceptance criteria; Codex returns results to Hermes, and Hermes decides the final user reply.',
                         inputSchema: {
                             type: 'object',
                             properties: {
                                 task: {
                                     type: 'string',
-                                    description: 'The concrete task Codex should execute for Hermes.',
+                                    description: 'Outcome-oriented task Codex should complete for Hermes. Include the desired result, target entities/files, constraints, and acceptance criteria. Avoid low-level implementation steps, guessed URLs, invented sources, hardcoded assets, or unverifiable facts unless they came from the user or a verified previous tool result.',
                                 },
                                 mode: {
                                     type: 'string',
@@ -119,7 +119,7 @@ class McpStdioServer {
                                 },
                                 hermesContext: {
                                     type: 'string',
-                                    description: 'Optional Hermes-only background that Codex needs for this task. Keep it focused and omit irrelevant conversational context.',
+                                    description: 'Optional Hermes-only background Codex needs for this task. Keep it focused. Include only relevant facts, prior verified tool results, user constraints, or artifact references.',
                                 },
                             },
                             required: ['task'],

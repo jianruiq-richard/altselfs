@@ -8,6 +8,8 @@ import {
   CircleGauge,
   CreditCard,
   LoaderCircle,
+  Mail,
+  ReceiptText,
   RefreshCw,
   RotateCcw,
   Search,
@@ -58,6 +60,9 @@ type BillingSummary = {
     monthlyCredits: number;
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    scheduledPlanKey: string | null;
+    graceEndsAt: string | null;
   };
   recentLedger: Array<{
     id: string;
@@ -88,6 +93,31 @@ type BillingSummary = {
     threadTitle: string | null;
     createdAt: string;
   }>;
+  recentPayments: Array<{
+    id: string;
+    kind: 'SUBSCRIPTION' | 'CREDIT_PACK' | string;
+    status: string;
+    planKey: string | null;
+    packKey: string | null;
+    creditsGranted: number;
+    creditsReversed: number;
+    amountSubtotalCents: number;
+    amountTotalCents: number;
+    refundedAmountCents: number;
+    currency: string;
+    providerInvoiceId: string | null;
+    usedSinceGrant: number;
+    lotRemainingCredits: number;
+    standardRefundEligible: boolean;
+    paidAt: string | null;
+    refundedAt: string | null;
+    createdAt: string;
+  }>;
+  refundPolicy: {
+    contactEmail: string;
+    usageLimitCredits: number;
+    selfService: false;
+  };
 };
 
 const settingsTabs = [
@@ -106,6 +136,13 @@ function formatDateTime(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function formatMoney(amountCents: number, currency: string) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: (currency || 'usd').toUpperCase(),
+  }).format(Math.max(0, amountCents) / 100);
 }
 
 function getInitials(value: string) {
@@ -154,6 +191,7 @@ export default function ProfilePage() {
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [billingLoading, setBillingLoading] = useState(true);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingAction, setBillingAction] = useState(false);
 
   useEffect(() => {
     const requestedView = new URLSearchParams(window.location.search).get('view');
@@ -227,6 +265,25 @@ export default function ProfilePage() {
     void loadArchivedSessions();
     void loadBilling();
   }, [loadArchivedSessions, loadBilling, loadProfile]);
+
+  const openBillingPortal = async () => {
+    if (billingAction) return;
+    setBillingAction(true);
+    setBillingError(null);
+    try {
+      const response = await fetch('/api/billing/portal', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!response.ok || !data.url) throw new Error(data.error || 'Billing portal could not be opened.');
+      window.location.assign(data.url);
+    } catch (actionError) {
+      setBillingError(actionError instanceof Error ? actionError.message : 'Billing portal could not be opened.');
+    } finally {
+      setBillingAction(false);
+    }
+  };
 
   const filteredArchivedSessions = useMemo(() => {
     const query = archiveQuery.trim().toLowerCase();
@@ -473,6 +530,18 @@ export default function ProfilePage() {
                     </div>
                   ) : billing ? (
                     <>
+                      {billingError ? (
+                        <div className="mb-5 flex items-center justify-between gap-4 rounded-[7px] border border-red-400/20 bg-red-400/[0.06] px-4 py-3 text-[11px] text-red-200">
+                          <span>{billingError}</span>
+                          <button
+                            type="button"
+                            onClick={() => setBillingError(null)}
+                            className="shrink-0 font-bold text-white hover:underline"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      ) : null}
                       <section className="grid gap-3 border-b border-white/[0.09] pb-7 sm:grid-cols-3">
                         <UsageMetric
                           label="Available"
@@ -503,17 +572,96 @@ export default function ProfilePage() {
                           <span className="text-[10px] text-zinc-600">Current plan</span>
                           <strong className="mt-1 text-[15px] text-zinc-100">{billing.subscription.planName}</strong>
                           <span className="mt-1 text-[10px] text-zinc-600">
-                            {formatCredits(billing.subscription.monthlyCredits)} included credits
+                            {billing.subscription.planKey === 'FREE'
+                              ? '1,000 welcome Credits, granted once'
+                              : `${formatCredits(billing.subscription.monthlyCredits)} Credits each billing period`}
                             {billing.mode === 'observe' ? ' · usage preview' : ''}
                           </span>
+                          {billing.subscription.currentPeriodEnd ? (
+                            <span className="mt-1 text-[10px] text-zinc-700">
+                              {billing.subscription.cancelAtPeriodEnd ? 'Ends' : 'Renews'} {formatDateTime(billing.subscription.currentPeriodEnd)}
+                            </span>
+                          ) : null}
                         </span>
-                        <Link
-                          href="/pricing"
-                          className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-300 hover:border-white/15 hover:bg-white/[0.055] hover:text-white"
-                        >
-                          View plans
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </Link>
+                        <span className="flex flex-wrap justify-end gap-2">
+                          {billing.subscription.planKey !== 'FREE' ? (
+                            <button
+                              type="button"
+                              onClick={() => void openBillingPortal()}
+                              disabled={billingAction}
+                              className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-300 hover:border-white/15 hover:bg-white/[0.055] hover:text-white disabled:cursor-not-allowed disabled:text-zinc-600"
+                            >
+                              {billingAction ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+                              Manage billing
+                            </button>
+                          ) : null}
+                          <Link
+                            href="/pricing"
+                            className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-300 hover:border-white/15 hover:bg-white/[0.055] hover:text-white"
+                          >
+                            View plans
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Link>
+                        </span>
+                      </section>
+
+                      <section className="pt-7">
+                        <div className="flex items-end justify-between gap-5">
+                          <div>
+                            <h2 className="text-sm font-semibold text-zinc-100">Payments</h2>
+                            <p className="mt-1 text-[11px] text-zinc-600">Subscription invoices and permanent Credit packs.</p>
+                          </div>
+                          <ReceiptText className="h-4 w-4 text-zinc-700" />
+                        </div>
+
+                        <div className="mt-4 border-y border-white/[0.09]">
+                          {billing.recentPayments.length > 0 ? billing.recentPayments.map((payment) => (
+                            <article key={payment.id} className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-5 border-b border-white/[0.09] py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_120px_100px]">
+                              <span className="grid min-w-0">
+                                <strong className="truncate text-xs text-zinc-200">
+                                  {payment.kind === 'CREDIT_PACK'
+                                    ? `${formatCredits(payment.creditsGranted)} Credit pack`
+                                    : `${payment.planKey || 'Subscription'} plan`}
+                                </strong>
+                                <span className="mt-1 truncate text-[10px] text-zinc-600">
+                                  {payment.status.toLowerCase().replaceAll('_', ' ')}
+                                  {payment.creditsReversed > 0
+                                    ? ` · ${formatCredits(payment.creditsReversed)} Credits reversed`
+                                    : ''}
+                                  {` · ${formatCredits(payment.lotRemainingCredits)} Credits remaining`}
+                                </span>
+                              </span>
+                              <span className="hidden text-[10px] text-zinc-600 sm:block">
+                                {formatDateTime(payment.paidAt || payment.createdAt)}
+                              </span>
+                              <span className="text-right">
+                                <strong className="block text-xs text-zinc-200">
+                                  {formatMoney(payment.amountTotalCents, payment.currency)}
+                                </strong>
+                                <span className="text-[9px] uppercase text-zinc-700">{payment.status}</span>
+                              </span>
+                            </article>
+                          )) : (
+                            <div className="flex min-h-28 items-center justify-center px-4 text-center text-xs text-zinc-600">
+                              Completed Stripe payments will appear here.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-4 flex gap-3 rounded-[7px] border border-white/[0.09] bg-white/[0.025] p-4">
+                          <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#8eb3ff]" />
+                          <span className="grid">
+                            <strong className="text-[11px] text-zinc-300">Refunds are reviewed manually</strong>
+                            <span className="mt-1 text-[10px] leading-5 text-zinc-600">
+                              Email{' '}
+                              <a className="text-zinc-300 hover:text-white" href={`mailto:${billing.refundPolicy.contactEmail}`}>
+                                {billing.refundPolicy.contactEmail}
+                              </a>
+                              . For non-platform issues, requests are eligible when no more than{' '}
+                              {formatCredits(billing.refundPolicy.usageLimitCredits)} Credits have been used from that purchase batch.
+                            </span>
+                          </span>
+                        </div>
                       </section>
 
                       <section className="pt-7">

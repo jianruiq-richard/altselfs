@@ -54,11 +54,15 @@ model User {
   // Executive Assistantcomment
   executiveAssistantRuns ExecutiveAssistantRun[]
 
-  creditAccount      CreditAccount?
-  creditSubscription CreditSubscription?
-  creditReservations CreditReservation[]
-  creditLedger       CreditLedgerEntry[]
-  agentUsageRecords  AgentUsageRecord[]
+  creditAccount        CreditAccount?
+  creditSubscription   CreditSubscription?
+  creditReservations   CreditReservation[]
+  creditLedger         CreditLedgerEntry[]
+  creditLots           CreditLot[]
+  creditLotAllocations CreditLotAllocation[]
+  agentUsageRecords    AgentUsageRecord[]
+  creditPayments       CreditPayment[]
+  stripeWebhookEvents  StripeWebhookEvent[]
 
   @@index([email], map: "users_email_idx")
   @@map("users")
@@ -77,9 +81,11 @@ model CreditAccount {
   investorId String @unique
   investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
 
-  reservations CreditReservation[]
-  ledger       CreditLedgerEntry[]
-  usageRecords AgentUsageRecord[]
+  reservations   CreditReservation[]
+  ledger         CreditLedgerEntry[]
+  lots           CreditLot[]
+  lotAllocations CreditLotAllocation[]
+  usageRecords   AgentUsageRecord[]
 
   @@map("credit_accounts")
 }
@@ -91,9 +97,14 @@ model CreditSubscription {
   monthlyCredits         Int       @default(0)
   currentPeriodStart     DateTime?
   currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean   @default(false)
+  scheduledPlanKey       String?
+  graceEndsAt            DateTime?
   provider               String?
   providerCustomerId     String?
   providerSubscriptionId String?
+  providerPriceId        String?
+  latestInvoiceId        String?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
@@ -102,6 +113,113 @@ model CreditSubscription {
 
   @@index([status, currentPeriodEnd])
   @@map("credit_subscriptions")
+}
+
+model CreditPayment {
+  id                          String    @id @default(cuid())
+  kind                        String
+  status                      String    @default("PENDING")
+  planKey                     String?
+  packKey                     String?
+  creditsGranted              Int       @default(0)
+  creditsReversed             Int       @default(0)
+  amountSubtotalCents         Int       @default(0)
+  amountTotalCents            Int       @default(0)
+  refundedAmountCents         Int       @default(0)
+  currency                    String    @default("usd")
+  lifetimeSpentCreditsAtGrant Int       @default(0)
+  provider                    String    @default("stripe")
+  providerCheckoutSessionId   String?   @unique
+  providerPaymentIntentId     String?   @unique
+  providerInvoiceId           String?   @unique
+  providerChargeId            String?
+  paidAt                      DateTime?
+  refundedAt                  DateTime?
+  metadata                    Json?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  investorId String
+  investor   User       @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  creditLot  CreditLot?
+
+  @@index([investorId, createdAt])
+  @@index([status, createdAt])
+  @@index([providerChargeId])
+  @@map("credit_payments")
+}
+
+model CreditLot {
+  id              String   @id @default(cuid())
+  sourceType      String
+  status          String   @default("ACTIVE")
+  grantedCredits  Int
+  consumedCredits Int      @default(0)
+  reversedCredits Int      @default(0)
+  idempotencyKey  String   @unique
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  paymentId String?        @unique
+  payment   CreditPayment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  allocations CreditLotAllocation[]
+
+  @@index([accountId, status, createdAt])
+  @@index([investorId, createdAt])
+  @@map("credit_lots")
+}
+
+model CreditLotAllocation {
+  id            String   @id @default(cuid())
+  debitKey      String
+  amountCredits Int
+  runId         String?
+  threadId      String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  investorId String
+  investor   User   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  lotId String
+  lot   CreditLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@unique([lotId, debitKey])
+  @@index([accountId, createdAt])
+  @@index([investorId, debitKey])
+  @@index([runId])
+  @@map("credit_lot_allocations")
+}
+
+model StripeWebhookEvent {
+  id          String    @id
+  type        String
+  status      String    @default("PROCESSING")
+  livemode    Boolean   @default(false)
+  objectId    String?
+  error       String?
+  payload     Json?
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  investorId String?
+  investor   User?   @relation(fields: [investorId], references: [id], onDelete: SetNull)
+
+  @@index([status, receivedAt])
+  @@index([investorId, receivedAt])
+  @@map("stripe_webhook_events")
 }
 
 model CreditReservation {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import Link from 'next/link';
-import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
+import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, LockKeyhole, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
@@ -16,6 +16,7 @@ import {
   ExecutiveDailyBriefingBrowser,
 } from '@/components/executive-daily-briefing-browser';
 import { MarkdownMessage } from '@/components/markdown-message';
+import { getBillingPlan } from '@/lib/billing-plans';
 
 type ChatMessage = {
   id?: string;
@@ -259,18 +260,20 @@ type HermesModelOption = {
   detail: string;
 };
 
-const DEFAULT_HERMES_MODEL: HermesModelOption['value'] = 'claude-sonnet-4-6';
+const PRO_HERMES_MODEL: HermesModelOption['value'] = 'claude-sonnet-4-6';
+const LITE_HERMES_MODEL: HermesModelOption['value'] = 'deepseek/deepseek-v3.2';
+const DEFAULT_HERMES_MODEL: HermesModelOption['value'] = PRO_HERMES_MODEL;
 
 const hermesModelOptions: HermesModelOption[] = [
   {
     value: 'claude-sonnet-4-6',
-    label: 'Claude Sonnet 4.6',
-    detail: 'Hermes via APIYI',
+    label: 'Altselfs Pro',
+    detail: 'Advanced reasoning for complex decisions, deeper discussion, and execution.',
   },
   {
     value: 'deepseek/deepseek-v3.2',
-    label: 'DeepSeek 3.2',
-    detail: 'Hermes via OpenRouter',
+    label: 'Altselfs Lite',
+    detail: 'Balanced reasoning for everyday discussion and reliable execution.',
   },
 ];
 
@@ -2215,6 +2218,7 @@ export default function InvestorAgentChatPage() {
   const [stoppingRun, setStoppingRun] = useState(false);
   const [recoveringRunState, setRecoveringRunState] = useState(false);
   const [hermesModel, setHermesModel] = useState<HermesModelOption['value']>(DEFAULT_HERMES_MODEL);
+  const [hermesModelMenuOpen, setHermesModelMenuOpen] = useState(false);
   const [connectors, setConnectors] = useState<ConnectorItem[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
   const [connectorsError, setConnectorsError] = useState<string | null>(null);
@@ -2280,8 +2284,11 @@ export default function InvestorAgentChatPage() {
         ? 'Planner errors'
         : 'View planner'
         : 'Open planner';
+  const billingPlan = getBillingPlan(billingCapacity?.subscription.planKey);
+  const canUseProModel = billingPlan.modelTiers.includes('PRO');
+  const effectiveHermesModel = canUseProModel ? hermesModel : LITE_HERMES_MODEL;
   const selectedHermesModel =
-    hermesModelOptions.find((option) => option.value === hermesModel) ||
+    hermesModelOptions.find((option) => option.value === effectiveHermesModel) ||
     hermesModelOptions.find((option) => option.value === DEFAULT_HERMES_MODEL) ||
     hermesModelOptions[0];
   const attachmentUploadBusy = attachments.some((attachment) => attachment.uploadStatus === 'queued' || attachment.uploadStatus === 'uploading');
@@ -2336,6 +2343,11 @@ export default function InvestorAgentChatPage() {
   useEffect(() => {
     window.localStorage.setItem(HERMES_MODEL_STORAGE_KEY, hermesModel);
   }, [hermesModel]);
+
+  useEffect(() => {
+    if (!billingCapacity || canUseProModel || hermesModel !== PRO_HERMES_MODEL) return;
+    setHermesModel(LITE_HERMES_MODEL);
+  }, [billingCapacity, canUseProModel, hermesModel]);
 
   useEffect(() => {
     if (!isExecutive) return;
@@ -2978,6 +2990,24 @@ export default function InvestorAgentChatPage() {
   }, [openSessionMenuId]);
 
   useEffect(() => {
+    if (!hermesModelMenuOpen) return;
+    const closeMenu = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-hermes-model-menu="true"]')) return;
+      setHermesModelMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setHermesModelMenuOpen(false);
+    };
+    window.addEventListener('click', closeMenu);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('click', closeMenu);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [hermesModelMenuOpen]);
+
+  useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       if (suppressNextAutoScrollRef.current) {
         suppressNextAutoScrollRef.current = false;
@@ -3450,7 +3480,7 @@ export default function InvestorAgentChatPage() {
           threadId: requestThreadId,
           message: content,
           displayMessage: displayContent,
-          hermesModel,
+          hermesModel: effectiveHermesModel,
           clientRequestId,
           connectorScope,
           uploadedArtifacts,
@@ -3862,9 +3892,61 @@ export default function InvestorAgentChatPage() {
             <span className="mt-0.5 block truncate text-[10px] text-zinc-600">AI cofounder workspace · Context scoped to this discussion</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <select value={hermesModel} onChange={(event) => setHermesModel(normalizeHermesModelOption(event.target.value))} disabled={sending || recoveringRunState} title={`Current: ${selectedHermesModel.detail}`} className="h-9 rounded-[7px] border border-white/[0.09] bg-[#111214] px-3 text-[11px] font-semibold text-zinc-300 outline-none hover:border-white/15 disabled:opacity-50">
-              {hermesModelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
+            <div data-hermes-model-menu="true" className="relative">
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={hermesModelMenuOpen}
+                disabled={sending || recoveringRunState}
+                onClick={() => setHermesModelMenuOpen((open) => !open)}
+                className="flex h-9 min-w-[148px] items-center justify-between gap-3 rounded-[7px] border border-white/[0.09] bg-[#111214] px-3 text-[11px] font-semibold text-zinc-300 outline-none transition hover:border-white/15 hover:bg-white/[0.035] focus-visible:border-[#8eb3ff]/45 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span>{selectedHermesModel.label}</span>
+                <ChevronDown className={`h-3.5 w-3.5 text-zinc-600 transition-transform ${hermesModelMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {hermesModelMenuOpen ? (
+                <div
+                  role="listbox"
+                  aria-label="Choose an Altselfs model"
+                  className="absolute right-0 top-[42px] z-50 w-[330px] overflow-hidden rounded-[8px] border border-white/[0.13] bg-[#18191b] p-1.5 shadow-[0_24px_70px_rgba(0,0,0,.62)]"
+                >
+                  {hermesModelOptions.map((option) => {
+                    const selected = option.value === effectiveHermesModel;
+                    const locked = option.value === PRO_HERMES_MODEL && !canUseProModel;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        disabled={locked}
+                        onClick={() => {
+                          setHermesModel(normalizeHermesModelOption(option.value));
+                          setHermesModelMenuOpen(false);
+                        }}
+                        className={`grid min-h-[72px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[7px] px-3 py-2.5 text-left transition disabled:cursor-not-allowed ${
+                          selected
+                            ? 'bg-white/[0.065]'
+                            : locked
+                              ? 'opacity-45'
+                              : 'hover:bg-white/[0.045]'
+                        }`}
+                      >
+                        <span className="grid min-w-0">
+                          <strong className="text-[12px] font-semibold text-zinc-100">{option.label}</strong>
+                          <span className="mt-1 text-[10px] leading-4 text-zinc-500">{option.detail}</span>
+                        </span>
+                        {selected
+                          ? <Check className="h-4 w-4 text-[#9dbbff]" />
+                          : locked
+                            ? <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-zinc-500"><LockKeyhole className="h-3 w-3" />Pro plan</span>
+                            : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
             <button type="button" className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/5 hover:text-white" title="Discussion details"><Info className="h-4 w-4" /></button>
           </div>
         </header>

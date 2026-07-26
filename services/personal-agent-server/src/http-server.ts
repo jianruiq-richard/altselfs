@@ -63,6 +63,15 @@ import {
   getAdminBillingDetail,
   updateAdminBillingSubscription,
 } from './admin-billing.js';
+import {
+  StripeBillingError,
+  changeStripePlan,
+  createStripeCheckout,
+  createStripePortal,
+  getStripeCatalog,
+  handleStripeWebhook,
+  refundStripePayment,
+} from './stripe-billing.js';
 import { releaseRunCredits } from './credit-settlement.js';
 import { getActiveRuntoolScope, isAgentRunCancelledError } from './run-control.js';
 import { normalizeToolNameList } from './connector-tool-scope.js';
@@ -140,6 +149,80 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         return json(res, 200, await getBillingSummary(config, investorId));
       }
 
+      if (req.method === 'GET' && url.pathname === '/internal/billing/catalog') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        return json(res, 200, getStripeCatalog(config));
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/billing/stripe/checkout') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        try {
+          return json(res, 200, await createStripeCheckout(config, {
+            investorId: body.investorId,
+            email: body.email,
+            name: body.name,
+            purchaseKind: body.purchaseKind,
+            planKey: body.planKey,
+            packKey: body.packKey,
+            requestId: body.requestId,
+          }));
+        } catch (error) {
+          return stripeBillingErrorJson(res, error);
+        }
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/billing/stripe/portal') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        try {
+          return json(res, 200, await createStripePortal(config, {
+            investorId: body.investorId,
+            email: body.email,
+            name: body.name,
+          }));
+        } catch (error) {
+          return stripeBillingErrorJson(res, error);
+        }
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/billing/stripe/change-plan') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        try {
+          return json(res, 200, await changeStripePlan(config, {
+            investorId: body.investorId,
+            email: body.email,
+            name: body.name,
+            planKey: body.planKey,
+            requestId: body.requestId,
+          }));
+        } catch (error) {
+          return stripeBillingErrorJson(res, error);
+        }
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/billing/stripe/webhook') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const signature = Array.isArray(req.headers['stripe-signature'])
+          ? req.headers['stripe-signature'][0]
+          : req.headers['stripe-signature'];
+        try {
+          const rawBody = await readRawBody(req);
+          return json(res, 200, await handleStripeWebhook(config, rawBody, signature));
+        } catch (error) {
+          return stripeBillingErrorJson(res, error);
+        }
+      }
+
       if (req.method === 'GET' && url.pathname === '/internal/admin/billing/user') {
         if (!config) return json(res, 500, { error: 'config missing' });
         if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
@@ -191,6 +274,24 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           }));
         } catch (error) {
           return adminBillingErrorJson(res, error);
+        }
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/admin/billing/refund') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        try {
+          return json(res, 200, await refundStripePayment(config, {
+            investorId: body.investorId,
+            paymentId: body.paymentId,
+            reason: body.reason,
+            platformFault: body.platformFault,
+            admin: body.admin,
+          }));
+        } catch (error) {
+          return stripeBillingErrorJson(res, error);
         }
       }
 
@@ -1571,6 +1672,26 @@ function adminBillingErrorJson(res: http.ServerResponse, error: unknown) {
   });
 }
 
+function stripeBillingErrorJson(res: http.ServerResponse, error: unknown) {
+  if (error instanceof StripeBillingError) {
+    return json(res, error.httpStatus, {
+      error: error.message,
+      code: error.code,
+      details: error.details,
+    });
+  }
+  if (error instanceof BillingUnavailableError) {
+    return json(res, error.httpStatus, {
+      error: error.message,
+      code: error.code,
+    });
+  }
+  console.error('[stripe-billing] request failed', error);
+  return json(res, 500, {
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
 function isLoopbackRequest(req: http.IncomingMessage) {
   const address = req.socket.remoteAddress || '';
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
@@ -2023,6 +2144,26 @@ function readJsonBody(req: http.IncomingMessage) {
         reject(error);
       }
     });
+    req.on('error', reject);
+  });
+}
+
+function readRawBody(req: http.IncomingMessage) {
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    const maxBodyBytes = readMaxBodyBytes();
+    req.on('data', (chunk) => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += buffer.byteLength;
+      if (size > maxBodyBytes) {
+        reject(new Error('request body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(buffer);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }

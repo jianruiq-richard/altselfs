@@ -12,6 +12,12 @@ type AdminBillingAgentDetail = {
   ledger: Array<Record<string, unknown>>;
   usageRecords: Array<Record<string, unknown>>;
   reservations: Array<Record<string, unknown>>;
+  payments: Array<Record<string, unknown>>;
+  refundPolicy: {
+    contactEmail: string;
+    usageLimitCredits: number;
+    selfService: false;
+  };
 };
 
 type AdminAgentResourceDetail = {
@@ -306,6 +312,12 @@ export async function getAdminUserDetail(userId: string) {
     ledger: ledgerPayload,
     usageRecords: usagePayload,
     reservations: reservationPayload,
+    payments: billing.detail?.payments ?? [],
+    refundPolicy: billing.detail?.refundPolicy ?? {
+      contactEmail: 'contact@astromar.org',
+      usageLimitCredits: 2_000,
+      selfService: false,
+    },
     executiveRuns: executiveRuns.map((run) => ({
       id: run.id,
       status: run.status,

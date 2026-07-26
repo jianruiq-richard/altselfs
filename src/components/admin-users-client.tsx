@@ -7,6 +7,8 @@ import {
   Clock3,
   CreditCard,
   LoaderCircle,
+  ReceiptText,
+  RotateCcw,
   Search,
   UserRound,
   WalletCards,
@@ -80,6 +82,12 @@ type AdminUserDetail = {
   ledger: LedgerEntry[];
   usageRecords: UsageRecord[];
   reservations: ReservationRecord[];
+  payments: PaymentRecord[];
+  refundPolicy: {
+    contactEmail: string;
+    usageLimitCredits: number;
+    selfService: false;
+  };
   executiveRuns: ExecutiveRunRecord[];
   contextRuns: ContextRunRecord[];
   resourceUsage: {
@@ -155,6 +163,33 @@ type ReservationRecord = {
   expiresAt: string;
   settledAt: string | null;
   createdAt: string;
+};
+
+type PaymentRecord = {
+  id: string;
+  kind: string;
+  status: string;
+  planKey: string | null;
+  packKey: string | null;
+  creditsGranted: number;
+  creditsReversed: number;
+  amountSubtotalCents: number;
+  amountTotalCents: number;
+  refundedAmountCents: number;
+  currency: string;
+  providerCheckoutSessionId: string | null;
+  providerPaymentIntentId: string | null;
+  providerInvoiceId: string | null;
+  providerChargeId: string | null;
+  lifetimeSpentCreditsAtGrant: number;
+  usedSinceGrant: number;
+  lotRemainingCredits: number;
+  standardRefundEligible: boolean;
+  paidAt: string | null;
+  refundedAt: string | null;
+  metadata: unknown;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type ExecutiveRunRecord = {
@@ -248,7 +283,12 @@ type AdminThreadDetail = {
   }>;
 };
 
-const PLAN_OPTIONS = ['FREE', 'STARTER', 'PRO', 'SCALE'];
+const PLAN_OPTIONS = [
+  { value: 'FREE', label: 'FREE' },
+  { value: 'STARTER', label: 'STARTER' },
+  { value: 'PRO', label: 'PRO' },
+  { value: 'SCALE', label: 'ULTRA' },
+];
 const SUBSCRIPTION_STATUS_OPTIONS = ['ACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELLED'];
 
 export function AdminUsersClient({ adminName }: { adminName: string }) {
@@ -266,7 +306,7 @@ export function AdminUsersClient({ adminName }: { adminName: string }) {
   const [subscriptionForm, setSubscriptionForm] = useState({
     planKey: 'FREE',
     status: 'ACTIVE',
-    monthlyCredits: '1000',
+    monthlyCredits: '0',
     currentPeriodStart: '',
     currentPeriodEnd: '',
     provider: '',
@@ -534,7 +574,12 @@ export function AdminUsersClient({ adminName }: { adminName: string }) {
 
                 <section className="grid gap-5 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                   <div className="space-y-5">
-                    <BillingTables detail={detail} />
+                    <BillingTables
+                      detail={detail}
+                      onRefunded={async () => {
+                        await Promise.all([loadUsers(query), loadDetail(detail.user.id)]);
+                      }}
+                    />
                     <RunTables detail={detail} />
                   </div>
                   <ThreadInspector
@@ -706,7 +751,7 @@ function SubscriptionForm({
             onChange={(event) => onChange({ ...form, planKey: event.target.value })}
             className="mt-1 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-slate-100 outline-none"
           >
-            {PLAN_OPTIONS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
+            {PLAN_OPTIONS.map((plan) => <option key={plan.value} value={plan.value}>{plan.label}</option>)}
           </select>
         </label>
         <label className="text-sm text-slate-400">
@@ -807,9 +852,17 @@ type SubscriptionFormProps = {
   reason: string;
 };
 
-function BillingTables({ detail }: { detail: AdminUserDetail }) {
+function BillingTables({
+  detail,
+  onRefunded,
+}: {
+  detail: AdminUserDetail;
+  onRefunded: () => Promise<void>;
+}) {
   return (
     <div className="space-y-5">
+      <PaymentRefundPanel detail={detail} onRefunded={onRefunded} />
+
       <Panel title="Credit ledger" subtitle="Latest balance, reservation, and admin changes.">
         <div className="max-h-[420px] overflow-auto">
           <table className="w-full text-left text-sm">
@@ -879,6 +932,165 @@ function BillingTables({ detail }: { detail: AdminUserDetail }) {
         </div>
       </Panel>
     </div>
+  );
+}
+
+function PaymentRefundPanel({
+  detail,
+  onRefunded,
+}: {
+  detail: AdminUserDetail;
+  onRefunded: () => Promise<void>;
+}) {
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [platformFault, setPlatformFault] = useState(false);
+  const [reviewed, setReviewed] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+
+  const submitRefund = async (payment: PaymentRecord) => {
+    if (refunding || !reviewed || !reason.trim()) return;
+    setRefunding(true);
+    setRefundError(null);
+    try {
+      await fetchJson(`/api/admin/users/${encodeURIComponent(detail.user.id)}/refund`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          paymentId: payment.id,
+          reason: reason.trim(),
+          platformFault,
+        }),
+      });
+      setSelectedPaymentId(null);
+      setReason('');
+      setPlatformFault(false);
+      setReviewed(false);
+      await onRefunded();
+    } catch (error) {
+      setRefundError(errorMessage(error));
+    } finally {
+      setRefunding(false);
+    }
+  };
+
+  return (
+    <Panel
+      title="Stripe payments and refunds"
+      subtitle={`Refund requests arrive through ${detail.refundPolicy.contactEmail}. Standard requests allow up to ${formatCredits(detail.refundPolicy.usageLimitCredits)} Credits of usage.`}
+    >
+      <div className="max-h-[560px] space-y-2 overflow-auto">
+        {detail.payments.map((payment) => {
+          const remainingCredits = Math.max(0, payment.creditsGranted - payment.creditsReversed);
+          const canRefund = payment.status === 'PAID' && remainingCredits > 0;
+          const expanded = selectedPaymentId === payment.id;
+          return (
+            <article key={payment.id} className="rounded-lg border border-white/10 bg-black/20 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ReceiptText className="h-4 w-4 text-slate-500" />
+                    <strong className="text-sm text-slate-100">
+                      {payment.kind === 'CREDIT_PACK'
+                        ? `${formatCredits(payment.creditsGranted)} Credit pack`
+                        : `${payment.planKey || 'Subscription'} invoice`}
+                    </strong>
+                    <StatusPill status={payment.status} />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {formatDateTime(payment.paidAt || payment.createdAt)}
+                    {' · '}
+                    {formatMoney(payment.amountTotalCents, payment.currency)}
+                    {' · '}
+                    {formatCredits(payment.usedSinceGrant)} used from this Credit batch
+                    {' · '}
+                    {formatCredits(payment.lotRemainingCredits)} remaining
+                  </p>
+                  <p className="mt-1 font-mono text-[11px] text-slate-600">
+                    {payment.providerInvoiceId || payment.providerPaymentIntentId || payment.id}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!canRefund}
+                  onClick={() => {
+                    setSelectedPaymentId(expanded ? null : payment.id);
+                    setReason('');
+                    setPlatformFault(false);
+                    setReviewed(false);
+                    setRefundError(null);
+                  }}
+                  className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-red-400/20 bg-red-500/[0.08] px-3 text-xs font-medium text-red-200 hover:bg-red-500/[0.14] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-slate-600"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {canRefund ? 'Review refund' : 'Not refundable'}
+                </button>
+              </div>
+
+              {expanded ? (
+                <div className="mt-4 border-t border-white/10 pt-4">
+                  {!payment.standardRefundEligible ? (
+                    <div className="mb-3 rounded-md border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                      Standard refund limit exceeded. Continue only when the refund is due to platform responsibility.
+                    </div>
+                  ) : null}
+                  {refundError ? (
+                    <div className="mb-3 rounded-md border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+                      {refundError}
+                    </div>
+                  ) : null}
+                  <label className="block text-xs text-slate-400">
+                    Audit reason
+                    <textarea
+                      value={reason}
+                      onChange={(event) => setReason(event.target.value)}
+                      rows={3}
+                      placeholder="Summarize the customer request and review decision."
+                      className="mt-1 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600"
+                    />
+                  </label>
+                  <label className="mt-3 flex items-start gap-2 text-xs text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={platformFault}
+                      onChange={(event) => setPlatformFault(event.target.checked)}
+                      className="mt-0.5"
+                    />
+                    Platform responsibility override
+                  </label>
+                  <label className="mt-3 flex items-start gap-2 text-xs text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={reviewed}
+                      onChange={(event) => setReviewed(event.target.checked)}
+                      className="mt-0.5"
+                    />
+                    I reviewed the customer email and understand this issues a full Stripe refund, reverses{' '}
+                    {formatCredits(remainingCredits)} Credits, and may make the balance negative.
+                  </label>
+                  <button
+                    type="button"
+                    disabled={
+                      refunding ||
+                      !reviewed ||
+                      !reason.trim() ||
+                      (!payment.standardRefundEligible && !platformFault)
+                    }
+                    onClick={() => void submitRefund(payment)}
+                    className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-md bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:bg-red-500/20 disabled:text-red-200/50"
+                  >
+                    {refunding ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                    Issue full refund
+                  </button>
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
+        {detail.payments.length === 0 ? <EmptyState label="No Stripe payments recorded." /> : null}
+      </div>
+    </Panel>
   );
 }
 
@@ -1203,6 +1415,13 @@ function formatDateTime(value: string | null | undefined) {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function formatMoney(amountCents: number, currency: string) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: (currency || 'usd').toUpperCase(),
+  }).format(Math.max(0, amountCents) / 100);
 }
 
 function formatBytes(bytes: number | null | undefined) {

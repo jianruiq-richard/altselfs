@@ -5,17 +5,18 @@ import {
   getRequiredBillingPool,
   runSerializableBillingTransaction,
 } from './billing-database.js';
+import { createCreditLot } from './credit-lots.js';
 import { AGENT_PRICING_VERSION } from './usage-meter.js';
 import { id, isRecord } from './util.js';
 
 const PLAN_LIMITS: Record<string, { name: string; concurrentTasks: number; monthlyCredits: number }> = {
-  FREE: { name: 'Free', concurrentTasks: 1, monthlyCredits: 1_000 },
+  FREE: { name: 'Free', concurrentTasks: 1, monthlyCredits: 0 },
   STARTER: { name: 'Starter', concurrentTasks: 3, monthlyCredits: 20_000 },
   PRO: { name: 'Pro', concurrentTasks: 10, monthlyCredits: 40_000 },
-  SCALE: { name: 'Scale', concurrentTasks: 20, monthlyCredits: 200_000 },
+  SCALE: { name: 'Ultra', concurrentTasks: 20, monthlyCredits: 200_000 },
 };
 
-type AccountRow = {
+export type AccountRow = {
   id: string;
   balanceCredits: number;
   reservedCredits: number;
@@ -30,6 +31,10 @@ type SubscriptionRow = {
   monthlyCredits: number;
   currentPeriodStart: Date | null;
   currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  scheduledPlanKey: string | null;
+  graceEndsAt: Date | null;
+  provider: string | null;
 };
 
 export type CreditAuthorization = {
@@ -99,12 +104,30 @@ export async function authorizeAgentRun(
     const refreshedAccount = await releaseExpiredReservations(client, account, now);
     const subscription = await getSubscription(client, input.investorId);
     const plan = planFor(subscription.planKey);
-    if (!['ACTIVE', 'TRIALING'].includes(subscription.status.toUpperCase())) {
+    const subscriptionActive = ['ACTIVE', 'TRIALING'].includes(subscription.status.toUpperCase())
+      || (
+        subscription.status.toUpperCase() === 'PAST_DUE' &&
+        subscription.graceEndsAt instanceof Date &&
+        subscription.graceEndsAt.getTime() > now.getTime()
+      );
+    if (!subscriptionActive) {
       throw new CreditAdmissionError(
         402,
         'SUBSCRIPTION_INACTIVE',
         'Your subscription is not active.',
         { subscriptionStatus: subscription.status },
+      );
+    }
+    if (!planAllowsHermesModel(subscription.planKey, input.hermesModel)) {
+      throw new CreditAdmissionError(
+        403,
+        'MODEL_NOT_INCLUDED',
+        'Altselfs Pro is available on Pro and Ultra plans.',
+        {
+          planKey: subscription.planKey,
+          requestedModel: input.hermesModel || null,
+          allowedModelTier: 'LITE',
+        },
       );
     }
 
@@ -262,7 +285,7 @@ export async function getBillingCapacity(config: ServerConfig, investorId: strin
 export async function getBillingSummary(config: ServerConfig, investorId: string) {
   const capacity = await getBillingCapacity(config, investorId);
   const pool = getRequiredBillingPool(config);
-  const [ledger, usage] = await Promise.all([
+  const [ledger, usage, payments] = await Promise.all([
     pool.query(
       [
         'select l.id, l.type, l."amountCredits", l."reservedDeltaCredits", l."balanceAfterCredits",',
@@ -287,6 +310,20 @@ export async function getBillingSummary(config: ServerConfig, investorId: string
       ].join(' '),
       [investorId],
     ),
+    pool.query(
+      [
+        'select p.id, p.kind, p.status, p."planKey", p."packKey", p."creditsGranted",',
+        'p."creditsReversed", p."amountSubtotalCents", p."amountTotalCents",',
+        'p."refundedAmountCents", p.currency, p."providerInvoiceId", p."paidAt",',
+        'p."refundedAt", p."lifetimeSpentCreditsAtGrant", p."createdAt",',
+        'coalesce(l."consumedCredits", 0) as "lotConsumedCredits",',
+        'greatest(0, coalesce(l."grantedCredits" - l."consumedCredits" - l."reversedCredits", 0))',
+        'as "lotRemainingCredits" from credit_payments p',
+        'left join credit_lots l on l."paymentId" = p.id',
+        'where p."investorId" = $1 order by p."createdAt" desc, p.id desc limit 40',
+      ].join(' '),
+      [investorId],
+    ).catch(() => ({ rows: [] as Array<Record<string, unknown>> })),
   ]);
   return {
     ...capacity,
@@ -332,10 +369,41 @@ export async function getBillingSummary(config: ServerConfig, investorId: string
       threadTitle: typeof row.threadTitle === 'string' ? row.threadTitle : null,
       createdAt: dateIso(row.createdAt),
     })),
+    recentPayments: payments.rows.map((row) => {
+      const usedSinceGrant = Math.max(0, numberValue(row.lotConsumedCredits));
+      return {
+        id: String(row.id || ''),
+        kind: String(row.kind || ''),
+        status: String(row.status || ''),
+        planKey: typeof row.planKey === 'string' ? row.planKey : null,
+        packKey: typeof row.packKey === 'string' ? row.packKey : null,
+        creditsGranted: numberValue(row.creditsGranted),
+        creditsReversed: numberValue(row.creditsReversed),
+        amountSubtotalCents: numberValue(row.amountSubtotalCents),
+        amountTotalCents: numberValue(row.amountTotalCents),
+        refundedAmountCents: numberValue(row.refundedAmountCents),
+        currency: String(row.currency || 'usd'),
+        providerInvoiceId: typeof row.providerInvoiceId === 'string' ? row.providerInvoiceId : null,
+        usedSinceGrant,
+        lotRemainingCredits: Math.max(0, numberValue(row.lotRemainingCredits)),
+        standardRefundEligible: (
+          numberValue(row.creditsGranted) > numberValue(row.creditsReversed) &&
+          usedSinceGrant <= config.stripeRefundUsageLimitCredits
+        ),
+        paidAt: dateIsoOrNull(row.paidAt),
+        refundedAt: dateIsoOrNull(row.refundedAt),
+        createdAt: dateIso(row.createdAt),
+      };
+    }),
+    refundPolicy: {
+      contactEmail: config.stripeRefundContactEmail,
+      usageLimitCredits: config.stripeRefundUsageLimitCredits,
+      selfService: false,
+    },
   };
 }
 
-async function ensureBillingAccount(config: ServerConfig, client: PoolClient, investorId: string): Promise<AccountRow> {
+export async function ensureBillingAccount(config: ServerConfig, client: PoolClient, investorId: string): Promise<AccountRow> {
   const existing = await client.query(
     [
       'select id, "balanceCredits", "reservedCredits", "lifetimeGrantedCredits",',
@@ -361,6 +429,17 @@ async function ensureBillingAccount(config: ServerConfig, client: PoolClient, in
     [accountId, welcomeCredits, investorId],
   );
   await ensureFreeSubscription(client, investorId);
+  if (welcomeCredits > 0) {
+    await createCreditLot(client, {
+      investorId,
+      accountId,
+      sourceType: 'WELCOME',
+      grantedCredits: welcomeCredits,
+      balanceBeforeCredits: 0,
+      idempotencyKey: `welcome:${investorId}`,
+      metadata: { pricingVersion: AGENT_PRICING_VERSION },
+    });
+  }
   await client.query(
     [
       'insert into credit_ledger_entries',
@@ -405,7 +484,8 @@ async function ensureFreeSubscription(client: PoolClient, investorId: string) {
 async function getSubscription(client: PoolClient, investorId: string): Promise<SubscriptionRow> {
   const result = await client.query(
     [
-      'select "planKey", status, "monthlyCredits", "currentPeriodStart", "currentPeriodEnd"',
+      'select "planKey", status, "monthlyCredits", "currentPeriodStart", "currentPeriodEnd",',
+      '"cancelAtPeriodEnd", "scheduledPlanKey", "graceEndsAt", provider',
       'from credit_subscriptions where "investorId" = $1',
     ].join(' '),
     [investorId],
@@ -417,6 +497,10 @@ async function getSubscription(client: PoolClient, investorId: string): Promise<
     monthlyCredits: numberValue(row.monthlyCredits || PLAN_LIMITS.FREE.monthlyCredits),
     currentPeriodStart: row.currentPeriodStart instanceof Date ? row.currentPeriodStart : null,
     currentPeriodEnd: row.currentPeriodEnd instanceof Date ? row.currentPeriodEnd : null,
+    cancelAtPeriodEnd: row.cancelAtPeriodEnd === true,
+    scheduledPlanKey: typeof row.scheduledPlanKey === 'string' ? row.scheduledPlanKey : null,
+    graceEndsAt: row.graceEndsAt instanceof Date ? row.graceEndsAt : null,
+    provider: typeof row.provider === 'string' ? row.provider : null,
   };
 }
 
@@ -553,6 +637,10 @@ function buildCapacity(
       concurrentTaskLimit: plan.concurrentTasks,
       currentPeriodStart: subscription.currentPeriodStart?.toISOString() || null,
       currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() || null,
+      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      scheduledPlanKey: subscription.scheduledPlanKey,
+      graceEndsAt: subscription.graceEndsAt?.toISOString() || null,
+      provider: subscription.provider,
     },
     capacity: {
       activeTaskCount,
@@ -566,6 +654,18 @@ function buildCapacity(
 
 function planFor(planKey: string) {
   return PLAN_LIMITS[planKey.toUpperCase()] || PLAN_LIMITS.FREE;
+}
+
+function planAllowsHermesModel(planKey: string, hermesModel: string | undefined) {
+  if (!isProHermesModel(hermesModel)) return true;
+  return ['PRO', 'SCALE'].includes(planKey.toUpperCase());
+}
+
+function isProHermesModel(hermesModel: string | undefined) {
+  const normalized = String(hermesModel || '').trim().toLowerCase();
+  return normalized === 'claude-sonnet-4-6'
+    || normalized === 'sonnet-4-6'
+    || normalized.endsWith('/claude-sonnet-4-6');
 }
 
 function accountRow(row: Record<string, unknown>): AccountRow {

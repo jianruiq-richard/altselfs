@@ -699,6 +699,106 @@ export async function getAgentContextOpsUserUsage(config) {
         threads: readRowNumber(row.threads),
     }));
 }
+export async function getAgentContextOpsSingleUserUsage(config, investorId) {
+    if (!config.contextDatabaseUrl || !investorId.trim())
+        return null;
+    const pool = await getRequiredContextPool(config);
+    const result = await pool.query(`
+    with usage_rows as (
+      select
+        investor_id,
+        thread_id,
+        octet_length(content) + coalesce(octet_length(metadata::text), 0) as bytes,
+        1 as messages,
+        0 as artifacts,
+        0 as runs
+      from agent_context_messages
+      where investor_id = $1
+
+      union all
+
+      select
+        investor_id,
+        thread_id,
+        coalesce(size_bytes, 0)
+          + coalesce(octet_length(content_text), 0)
+          + coalesce(octet_length(metadata::text), 0) as bytes,
+        0 as messages,
+        1 as artifacts,
+        0 as runs
+      from agent_context_artifacts
+      where investor_id = $1
+
+      union all
+
+      select
+        investor_id,
+        thread_id,
+        coalesce(octet_length(request::text), 0)
+          + coalesce(octet_length(result::text), 0)
+          + coalesce(octet_length(error), 0) as bytes,
+        0 as messages,
+        0 as artifacts,
+        1 as runs
+      from agent_context_runs
+      where investor_id = $1
+
+      union all
+
+      select
+        t.investor_id,
+        s.thread_id,
+        octet_length(s.summary) as bytes,
+        0 as messages,
+        0 as artifacts,
+        0 as runs
+      from agent_context_thread_summaries s
+      join agent_context_threads t on t.thread_id = s.thread_id
+      where t.investor_id = $1
+    ),
+    investor_users as (
+      select investor_id, max(user_id) as user_id
+      from agent_context_threads
+      where investor_id = $1
+      group by investor_id
+    ),
+    disk_usage as (
+      select
+        investor_id,
+        max(user_id) as user_id,
+        coalesce(sum(disk_bytes), 0) as disk_bytes
+      from agent_context_sandbox_state
+      where investor_id = $1
+      group by investor_id
+    )
+    select
+      coalesce(max(t.user_id), max(d.user_id), coalesce(u.investor_id, d.investor_id)) as user_id,
+      coalesce(u.investor_id, d.investor_id) as investor_id,
+      coalesce(max(d.disk_bytes), 0) as disk_bytes,
+      coalesce(sum(u.bytes), 0) as rds_bytes,
+      coalesce(sum(u.messages), 0) as messages,
+      coalesce(sum(u.artifacts), 0) as artifacts,
+      coalesce(sum(u.runs), 0) as runs,
+      count(distinct u.thread_id) as threads
+    from usage_rows u
+    full outer join disk_usage d on d.investor_id = u.investor_id
+    left join investor_users t on t.investor_id = coalesce(u.investor_id, d.investor_id)
+    group by coalesce(u.investor_id, d.investor_id)
+  `, [investorId]);
+    const row = result.rows[0];
+    if (!row)
+        return null;
+    return {
+        userId: String(row.user_id || ''),
+        investorId: String(row.investor_id || investorId),
+        diskBytes: readRowNumber(row.disk_bytes),
+        rdsBytes: readRowNumber(row.rds_bytes),
+        messages: readRowNumber(row.messages),
+        artifacts: readRowNumber(row.artifacts),
+        runs: readRowNumber(row.runs),
+        threads: readRowNumber(row.threads),
+    };
+}
 export async function touchAgentRunHeartbeat(config, input) {
     if (!config.contextDatabaseUrl)
         return;

@@ -1,4 +1,5 @@
 import { getBillingPool, runSerializableBillingTransaction } from './billing-database.js';
+import { consumeCreditLotsFifo } from './credit-lots.js';
 import { isRecord } from './util.js';
 export async function settleRunCredits(config, input) {
     const usage = extractAgentRunUsage(input.raw);
@@ -30,6 +31,17 @@ export async function settleRunCredits(config, input) {
         const nextBalance = row.balanceCredits - billedCredits;
         const nextReserved = Math.max(0, row.accountReservedCredits - row.reservedCredits);
         const settledStatus = nextBalance < 0 ? 'OVERDRAWN' : 'CAPTURED';
+        if (billedCredits > 0) {
+            await consumeCreditLotsFifo(client, {
+                investorId: row.investorId,
+                accountId: row.accountId,
+                amountCredits: billedCredits,
+                debitKey: `run:${input.runId}`,
+                runId: input.runId,
+                threadId: row.threadId,
+                metadata: { component: 'agent_task' },
+            });
+        }
         await client.query([
             'update credit_accounts',
             'set "balanceCredits" = $2, "reservedCredits" = $3,',
@@ -152,6 +164,21 @@ export async function settleMemoryReviewCredits(config, input) {
             : 0;
         const nextBalance = row.balanceCredits - billedCredits;
         const usageRunId = `${input.sourceRunId}:memory-review:${input.jobId}`;
+        if (billedCredits > 0) {
+            await consumeCreditLotsFifo(client, {
+                investorId: row.investorId,
+                accountId: row.accountId,
+                amountCredits: billedCredits,
+                debitKey: `memory-review:${input.jobId}`,
+                runId: usageRunId,
+                threadId: row.threadId,
+                metadata: {
+                    component: 'memory_review',
+                    sourceRunId: input.sourceRunId,
+                    memoryReviewJobId: input.jobId,
+                },
+            });
+        }
         await client.query([
             'update credit_accounts',
             'set "balanceCredits" = $2,',

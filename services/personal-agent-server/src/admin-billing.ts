@@ -1,14 +1,15 @@
 import type { PoolClient } from 'pg';
 import type { ServerConfig } from './config.js';
 import { runSerializableBillingTransaction } from './billing-database.js';
+import { consumeCreditLotsFifo, createCreditLot } from './credit-lots.js';
 import { AGENT_PRICING_VERSION } from './usage-meter.js';
 import { id, isRecord } from './util.js';
 
 const ADMIN_PLAN_LIMITS: Record<string, { name: string; concurrentTasks: number; monthlyCredits: number }> = {
-  FREE: { name: 'Free', concurrentTasks: 1, monthlyCredits: 1_000 },
+  FREE: { name: 'Free', concurrentTasks: 1, monthlyCredits: 0 },
   STARTER: { name: 'Starter', concurrentTasks: 3, monthlyCredits: 20_000 },
   PRO: { name: 'Pro', concurrentTasks: 10, monthlyCredits: 40_000 },
-  SCALE: { name: 'Scale', concurrentTasks: 20, monthlyCredits: 200_000 },
+  SCALE: { name: 'Ultra', concurrentTasks: 20, monthlyCredits: 200_000 },
 };
 
 const CREDIT_ACTIONS = new Set(['GRANT', 'DEDUCT', 'REFUND']);
@@ -33,9 +34,14 @@ type SubscriptionRow = {
   monthlyCredits: number;
   currentPeriodStart: Date | null;
   currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  scheduledPlanKey: string | null;
+  graceEndsAt: Date | null;
   provider: string | null;
   providerCustomerId: string | null;
   providerSubscriptionId: string | null;
+  providerPriceId: string | null;
+  latestInvoiceId: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
 };
@@ -95,6 +101,20 @@ export async function getAdminBillingDetail(config: ServerConfig, investorId: st
       ].join(' '),
       [normalizedInvestorId],
     );
+    const payments = await client.query(
+      [
+        'select p.id, p.kind, p.status, p."planKey", p."packKey", p."creditsGranted", p."creditsReversed",',
+        'p."amountSubtotalCents", p."amountTotalCents", p."refundedAmountCents", p.currency, p.provider,',
+        'p."providerCheckoutSessionId", p."providerPaymentIntentId", p."providerInvoiceId",',
+        'p."providerChargeId", p."lifetimeSpentCreditsAtGrant", p."paidAt", p."refundedAt", p.metadata,',
+        'p."createdAt", p."updatedAt", coalesce(l."consumedCredits", 0) as "lotConsumedCredits",',
+        'greatest(0, coalesce(l."grantedCredits" - l."consumedCredits" - l."reversedCredits", 0))',
+        'as "lotRemainingCredits"',
+        'from credit_payments p left join credit_lots l on l."paymentId" = p.id',
+        'where p."investorId" = $1 order by p."createdAt" desc, p.id desc limit 120',
+      ].join(' '),
+      [normalizedInvestorId],
+    );
     const availableCredits = Math.max(0, account.balanceCredits - account.reservedCredits);
     return {
       source: 'personal-agent-server',
@@ -119,15 +139,58 @@ export async function getAdminBillingDetail(config: ServerConfig, investorId: st
         concurrentTaskLimit: plan.concurrentTasks,
         currentPeriodStart: dateIsoOrNull(subscription.currentPeriodStart),
         currentPeriodEnd: dateIsoOrNull(subscription.currentPeriodEnd),
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        scheduledPlanKey: subscription.scheduledPlanKey,
+        graceEndsAt: dateIsoOrNull(subscription.graceEndsAt),
         provider: subscription.provider,
         providerCustomerId: subscription.providerCustomerId,
         providerSubscriptionId: subscription.providerSubscriptionId,
+        providerPriceId: subscription.providerPriceId,
+        latestInvoiceId: subscription.latestInvoiceId,
         createdAt: dateIsoOrNull(subscription.createdAt),
         updatedAt: dateIsoOrNull(subscription.updatedAt),
       },
       ledger: ledger.rows.map(mapLedgerRow),
       usageRecords: usage.rows.map(mapUsageRow),
       reservations: reservations.rows.map(mapReservationRow),
+      payments: payments.rows.map((row) => {
+        const usedSinceGrant = Math.max(0, numberValue(row.lotConsumedCredits));
+        return {
+          id: String(row.id || ''),
+          kind: String(row.kind || ''),
+          status: String(row.status || ''),
+          planKey: typeof row.planKey === 'string' ? row.planKey : null,
+          packKey: typeof row.packKey === 'string' ? row.packKey : null,
+          creditsGranted: numberValue(row.creditsGranted),
+          creditsReversed: numberValue(row.creditsReversed),
+          amountSubtotalCents: numberValue(row.amountSubtotalCents),
+          amountTotalCents: numberValue(row.amountTotalCents),
+          refundedAmountCents: numberValue(row.refundedAmountCents),
+          currency: String(row.currency || 'usd'),
+          provider: String(row.provider || 'stripe'),
+          providerCheckoutSessionId: typeof row.providerCheckoutSessionId === 'string' ? row.providerCheckoutSessionId : null,
+          providerPaymentIntentId: typeof row.providerPaymentIntentId === 'string' ? row.providerPaymentIntentId : null,
+          providerInvoiceId: typeof row.providerInvoiceId === 'string' ? row.providerInvoiceId : null,
+          providerChargeId: typeof row.providerChargeId === 'string' ? row.providerChargeId : null,
+          lifetimeSpentCreditsAtGrant: numberValue(row.lifetimeSpentCreditsAtGrant),
+          usedSinceGrant,
+          lotRemainingCredits: Math.max(0, numberValue(row.lotRemainingCredits)),
+          standardRefundEligible: (
+            numberValue(row.creditsGranted) > numberValue(row.creditsReversed) &&
+            usedSinceGrant <= config.stripeRefundUsageLimitCredits
+          ),
+          paidAt: dateIsoOrNull(row.paidAt),
+          refundedAt: dateIsoOrNull(row.refundedAt),
+          metadata: cleanJson(row.metadata),
+          createdAt: dateIso(row.createdAt),
+          updatedAt: dateIso(row.updatedAt),
+        };
+      }),
+      refundPolicy: {
+        contactEmail: config.stripeRefundContactEmail,
+        usageLimitCredits: config.stripeRefundUsageLimitCredits,
+        selfService: false,
+      },
     };
   });
 }
@@ -150,6 +213,7 @@ export async function adjustAdminBillingCredits(
   const amountCredits = normalizePositiveInteger(input.amountCredits, 'amountCredits');
   const reason = normalizeReason(input.reason);
   const admin = normalizeAdminActor(input.admin);
+  const operationId = id('op');
 
   return runSerializableBillingTransaction(config, async (client) => {
     await ensureUserExists(client, investorId);
@@ -191,6 +255,25 @@ export async function adjustAdminBillingCredits(
       ],
     );
     const updated = accountRow(updatedResult.rows[0]);
+    if (action === 'DEDUCT') {
+      await consumeCreditLotsFifo(client, {
+        investorId,
+        accountId: account.id,
+        amountCredits,
+        debitKey: `admin:deduct:${operationId}`,
+        metadata: { admin, reason, action },
+      });
+    } else {
+      await createCreditLot(client, {
+        investorId,
+        accountId: account.id,
+        sourceType: action === 'GRANT' ? 'ADMIN_GRANT' : 'ADMIN_REFUND',
+        grantedCredits: amountCredits,
+        balanceBeforeCredits: account.balanceCredits,
+        idempotencyKey: `admin:${action.toLowerCase()}:${operationId}`,
+        metadata: { admin, reason, action },
+      });
+    }
     const ledgerResult = await client.query(
       [
         'insert into credit_ledger_entries',
@@ -207,7 +290,7 @@ export async function adjustAdminBillingCredits(
         updated.balanceCredits,
         updated.reservedCredits,
         reason,
-        `admin:${action.toLowerCase()}:${investorId}:${id('op')}`,
+        `admin:${action.toLowerCase()}:${investorId}:${operationId}`,
         JSON.stringify({
           admin,
           action,
@@ -385,6 +468,17 @@ async function ensureAdminBillingAccount(config: ServerConfig, client: PoolClien
     [accountId, welcomeCredits, investorId],
   );
   await ensureFreeSubscription(client, investorId);
+  if (welcomeCredits > 0) {
+    await createCreditLot(client, {
+      investorId,
+      accountId,
+      sourceType: 'WELCOME',
+      grantedCredits: welcomeCredits,
+      balanceBeforeCredits: 0,
+      idempotencyKey: `welcome:${investorId}`,
+      metadata: { pricingVersion: AGENT_PRICING_VERSION },
+    });
+  }
   await client.query(
     [
       'insert into credit_ledger_entries',
@@ -431,7 +525,8 @@ async function getSubscription(client: PoolClient, investorId: string): Promise<
   const result = await client.query(
     [
       'select id, "planKey", status, "monthlyCredits", "currentPeriodStart", "currentPeriodEnd",',
-      'provider, "providerCustomerId", "providerSubscriptionId", "createdAt", "updatedAt"',
+      '"cancelAtPeriodEnd", "scheduledPlanKey", "graceEndsAt", provider, "providerCustomerId",',
+      '"providerSubscriptionId", "providerPriceId", "latestInvoiceId", "createdAt", "updatedAt"',
       'from credit_subscriptions where "investorId" = $1',
     ].join(' '),
     [investorId],
@@ -542,9 +637,14 @@ function subscriptionRow(row: Record<string, unknown>): SubscriptionRow {
     monthlyCredits: numberValue(row.monthlyCredits || planFor(planKey).monthlyCredits),
     currentPeriodStart: dateOrNull(row.currentPeriodStart),
     currentPeriodEnd: dateOrNull(row.currentPeriodEnd),
+    cancelAtPeriodEnd: row.cancelAtPeriodEnd === true,
+    scheduledPlanKey: typeof row.scheduledPlanKey === 'string' ? row.scheduledPlanKey : null,
+    graceEndsAt: dateOrNull(row.graceEndsAt),
     provider: typeof row.provider === 'string' ? row.provider : null,
     providerCustomerId: typeof row.providerCustomerId === 'string' ? row.providerCustomerId : null,
     providerSubscriptionId: typeof row.providerSubscriptionId === 'string' ? row.providerSubscriptionId : null,
+    providerPriceId: typeof row.providerPriceId === 'string' ? row.providerPriceId : null,
+    latestInvoiceId: typeof row.latestInvoiceId === 'string' ? row.latestInvoiceId : null,
     createdAt: dateOrNull(row.createdAt),
     updatedAt: dateOrNull(row.updatedAt),
   };
@@ -557,9 +657,14 @@ function subscriptionSnapshot(value: SubscriptionRow) {
     monthlyCredits: value.monthlyCredits,
     currentPeriodStart: dateIsoOrNull(value.currentPeriodStart),
     currentPeriodEnd: dateIsoOrNull(value.currentPeriodEnd),
+    cancelAtPeriodEnd: value.cancelAtPeriodEnd,
+    scheduledPlanKey: value.scheduledPlanKey,
+    graceEndsAt: dateIsoOrNull(value.graceEndsAt),
     provider: value.provider,
     providerCustomerId: value.providerCustomerId,
     providerSubscriptionId: value.providerSubscriptionId,
+    providerPriceId: value.providerPriceId,
+    latestInvoiceId: value.latestInvoiceId,
   };
 }
 

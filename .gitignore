@@ -63,3 +63,4 @@ docs/
 
 # .debug/
 .debug/
+**/node_modules/

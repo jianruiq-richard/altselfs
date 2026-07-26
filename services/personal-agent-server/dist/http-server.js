@@ -9,9 +9,11 @@ import { isPersonalDatatool, runPersonalDatatool } from './tools/personal-data.j
 import { runSandboxExectool } from './tools/sandbox-exec.js';
 import { disablePersonalConnection, listPersonalConnections, upsertFeishuCliConnection, upsertFeishuOAuthConnection, upsertGmailOAuthConnection, upsertMetaOAuthConnection, updateFeishuConnectionFeaturePackages, } from './personal-data-store.js';
 import { completeFeishuCliAuthorization, continueFeishuCliAuthorization, DEFAULT_FEISHU_CLI_FEATURE_PACKAGES, normalizeFeishuCliFeaturePackages, startFeishuCliAuthorization, } from './feishu-cli.js';
-import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, getAgentContextArtifactsByIds, patchAgentContextArtifactMetadata, persistAgentArtifacts, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnRejected, persistAgentTurnSuccess, requestAgentRunCancellation, touchAgentRunHeartbeat, } from './agent-context-store.js';
+import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, getAgentContextOpsSingleUserUsage, getAgentContextArtifactsByIds, patchAgentContextArtifactMetadata, persistAgentArtifacts, persistAgentRunEvent, persistAgentTurnError, persistAgentTurnCancelled, persistAgentTurnInput, persistAgentTurnRejected, persistAgentTurnSuccess, requestAgentRunCancellation, touchAgentRunHeartbeat, } from './agent-context-store.js';
 import { createDirectUploadPolicy, createSignedObjectUrl, isArtifactObjectStorageConfigured, } from './artifact-storage.js';
 import { authorizeAgentRun, BillingUnavailableError, CreditAdmissionError, getBillingCapacity, getBillingSummary, } from './credit-admission.js';
+import { AdminBillingError, adjustAdminBillingCredits, getAdminBillingDetail, updateAdminBillingSubscription, } from './admin-billing.js';
+import { StripeBillingError, changeStripePlan, createStripeCheckout, createStripePortal, getStripeCatalog, handleStripeWebhook, refundStripePayment, } from './stripe-billing.js';
 import { releaseRunCredits } from './credit-settlement.js';
 import { getActiveRuntoolScope, isAgentRunCancelledError } from './run-control.js';
 import { normalizeToolNameList } from './connector-tool-scope.js';
@@ -51,7 +53,19 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 if (!isOpsAuthorized(req))
                     return json(res, 403, { error: 'Forbidden' });
                 const jobs = memoryReviewQueue ? await memoryReviewQueue.listRecent(100) : [];
-                return json(res, 200, await buildOpsSnapshot(config, jobs));
+                const includeUserResources = url.searchParams.get('includeUserResources') !== 'false';
+                return json(res, 200, await buildOpsSnapshot(config, jobs, { includeUserResources }));
+            }
+            if (req.method === 'GET' && url.pathname === '/internal/admin/resources/user') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const investorId = url.searchParams.get('investorId')?.trim() || '';
+                if (!investorId)
+                    return json(res, 400, { error: 'investorId is required' });
+                const userId = url.searchParams.get('userId')?.trim() || undefined;
+                return json(res, 200, await buildOpsSingleUserResource(config, { investorId, userId }));
             }
             if (req.method === 'GET' && url.pathname === '/internal/billing/capacity') {
                 if (!config)
@@ -72,6 +86,176 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 if (!investorId)
                     return json(res, 400, { error: 'investorId is required' });
                 return json(res, 200, await getBillingSummary(config, investorId));
+            }
+            if (req.method === 'GET' && url.pathname === '/internal/billing/catalog') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                return json(res, 200, getStripeCatalog(config));
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/billing/stripe/checkout') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                try {
+                    return json(res, 200, await createStripeCheckout(config, {
+                        investorId: body.investorId,
+                        email: body.email,
+                        name: body.name,
+                        purchaseKind: body.purchaseKind,
+                        planKey: body.planKey,
+                        packKey: body.packKey,
+                        requestId: body.requestId,
+                    }));
+                }
+                catch (error) {
+                    return stripeBillingErrorJson(res, error);
+                }
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/billing/stripe/portal') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                try {
+                    return json(res, 200, await createStripePortal(config, {
+                        investorId: body.investorId,
+                        email: body.email,
+                        name: body.name,
+                    }));
+                }
+                catch (error) {
+                    return stripeBillingErrorJson(res, error);
+                }
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/billing/stripe/change-plan') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                try {
+                    return json(res, 200, await changeStripePlan(config, {
+                        investorId: body.investorId,
+                        email: body.email,
+                        name: body.name,
+                        planKey: body.planKey,
+                        requestId: body.requestId,
+                    }));
+                }
+                catch (error) {
+                    return stripeBillingErrorJson(res, error);
+                }
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/billing/stripe/webhook') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const signature = Array.isArray(req.headers['stripe-signature'])
+                    ? req.headers['stripe-signature'][0]
+                    : req.headers['stripe-signature'];
+                try {
+                    const rawBody = await readRawBody(req);
+                    return json(res, 200, await handleStripeWebhook(config, rawBody, signature));
+                }
+                catch (error) {
+                    return stripeBillingErrorJson(res, error);
+                }
+            }
+            if (req.method === 'GET' && url.pathname === '/internal/admin/billing/user') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const investorId = url.searchParams.get('investorId')?.trim() || '';
+                if (!investorId)
+                    return json(res, 400, { error: 'investorId is required' });
+                try {
+                    return json(res, 200, await getAdminBillingDetail(config, investorId));
+                }
+                catch (error) {
+                    return adminBillingErrorJson(res, error);
+                }
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/admin/billing/credits') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                try {
+                    return json(res, 200, await adjustAdminBillingCredits(config, {
+                        investorId: body.investorId,
+                        action: body.action,
+                        amountCredits: body.amountCredits,
+                        reason: body.reason,
+                        admin: body.admin,
+                    }));
+                }
+                catch (error) {
+                    return adminBillingErrorJson(res, error);
+                }
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/admin/billing/subscription') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                try {
+                    return json(res, 200, await updateAdminBillingSubscription(config, {
+                        investorId: body.investorId,
+                        planKey: body.planKey,
+                        status: body.status,
+                        monthlyCredits: body.monthlyCredits,
+                        currentPeriodStart: body.currentPeriodStart,
+                        currentPeriodEnd: body.currentPeriodEnd,
+                        provider: body.provider,
+                        providerCustomerId: body.providerCustomerId,
+                        providerSubscriptionId: body.providerSubscriptionId,
+                        reason: body.reason,
+                        admin: body.admin,
+                    }));
+                }
+                catch (error) {
+                    return adminBillingErrorJson(res, error);
+                }
+            }
+            if (req.method === 'POST' && url.pathname === '/internal/admin/billing/refund') {
+                if (!config)
+                    return json(res, 500, { error: 'config missing' });
+                if (!isOpsAuthorized(req))
+                    return json(res, 403, { error: 'Forbidden' });
+                const body = await readJsonBody(req);
+                if (!isRecord(body))
+                    return json(res, 400, { error: 'JSON body must be an object' });
+                try {
+                    return json(res, 200, await refundStripePayment(config, {
+                        investorId: body.investorId,
+                        paymentId: body.paymentId,
+                        reason: body.reason,
+                        platformFault: body.platformFault,
+                        admin: body.admin,
+                    }));
+                }
+                catch (error) {
+                    return stripeBillingErrorJson(res, error);
+                }
             }
             if (req.method === 'GET' && url.pathname === '/internal/personal-data/accounts') {
                 if (!config)
@@ -1419,6 +1603,43 @@ function html(res, status, body) {
     });
     res.end(body);
 }
+function adminBillingErrorJson(res, error) {
+    if (error instanceof AdminBillingError) {
+        return json(res, error.httpStatus, {
+            error: error.message,
+            code: error.code,
+            details: error.details,
+        });
+    }
+    if (error instanceof BillingUnavailableError) {
+        return json(res, error.httpStatus, {
+            error: error.message,
+            code: error.code,
+        });
+    }
+    return json(res, 500, {
+        error: error instanceof Error ? error.message : String(error),
+    });
+}
+function stripeBillingErrorJson(res, error) {
+    if (error instanceof StripeBillingError) {
+        return json(res, error.httpStatus, {
+            error: error.message,
+            code: error.code,
+            details: error.details,
+        });
+    }
+    if (error instanceof BillingUnavailableError) {
+        return json(res, error.httpStatus, {
+            error: error.message,
+            code: error.code,
+        });
+    }
+    console.error('[stripe-billing] request failed', error);
+    return json(res, 500, {
+        error: error instanceof Error ? error.message : String(error),
+    });
+}
 function isLoopbackRequest(req) {
     const address = req.socket.remoteAddress || '';
     return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
@@ -1577,7 +1798,8 @@ function publicMetaConnectionMetadata(metadata) {
         instagramAccounts: Array.isArray(metadata.instagram_accounts) ? metadata.instagram_accounts.slice(0, 20) : [],
     };
 }
-async function buildOpsSnapshot(config, jobs) {
+async function buildOpsSnapshot(config, jobs, options = {}) {
+    const includeUserResources = options.includeUserResources !== false;
     const [resources, userResources, apiAccounts] = await Promise.all([
         Promise.all([
             diskResource('/', 'system disk'),
@@ -1586,7 +1808,7 @@ async function buildOpsSnapshot(config, jobs) {
             diskResource(config.codexHomeRoot, 'codex home root'),
             diskResource(config.hermesHomeRoot, 'hermes home root'),
         ]),
-        buildOpsUserResources(config),
+        includeUserResources ? buildOpsUserResources(config) : Promise.resolve([]),
         getRapidApiQuotaSnapshots().catch(() => []),
     ]);
     const jobCounts = jobs.reduce((acc, job) => {
@@ -1652,6 +1874,22 @@ async function buildOpsUserResources(config) {
     }
     return Array.from(byKey.values()).sort((a, b) => (b.ecsDiskBytes + b.agentRdsBytes) - (a.ecsDiskBytes + a.agentRdsBytes)).slice(0, 200);
 }
+async function buildOpsSingleUserResource(config, input) {
+    const [diskBytes, rdsRow] = await Promise.all([
+        getOpsSingleUserDiskUsage(config, [input.userId, input.investorId].filter((item) => Boolean(item))).catch(() => 0),
+        getAgentContextOpsSingleUserUsage(config, input.investorId).catch(() => null),
+    ]);
+    return {
+        userId: rdsRow?.userId || input.userId || '',
+        investorId: rdsRow?.investorId || input.investorId,
+        ecsDiskBytes: Math.max(diskBytes, rdsRow?.diskBytes || 0),
+        agentRdsBytes: rdsRow?.rdsBytes || 0,
+        agentMessages: rdsRow?.messages || 0,
+        agentArtifacts: rdsRow?.artifacts || 0,
+        agentRuns: rdsRow?.runs || 0,
+        agentThreads: rdsRow?.threads || 0,
+    };
+}
 function findUserResourceByDiskSegment(resources, segment) {
     for (const [key, value] of resources.entries()) {
         if (value.userId && sanitizePathSegment(value.userId) === segment)
@@ -1679,6 +1917,20 @@ async function getOpsUserDiskUsage(config) {
         }
     }
     return rows;
+}
+async function getOpsSingleUserDiskUsage(config, identifiers) {
+    const roots = config.runtimeStateMode === 'sandbox'
+        ? [path.join(config.sandboxStorageRoot, 'users')]
+        : [config.workspaceRoot, config.hermesWorkspaceRoot, config.codexHomeRoot, config.hermesHomeRoot];
+    const segments = Array.from(new Set(identifiers.map((identifier) => sanitizePathSegment(identifier)).filter(Boolean)));
+    let largestBytes = 0;
+    for (const root of roots) {
+        for (const segment of segments) {
+            const bytes = await calculateDirectoryBytes(path.join(root, segment)).catch(() => 0);
+            largestBytes = Math.max(largestBytes, bytes);
+        }
+    }
+    return largestBytes;
 }
 async function diskResource(pathname, label) {
     try {
@@ -1787,6 +2039,25 @@ function readJsonBody(req) {
                 reject(error);
             }
         });
+        req.on('error', reject);
+    });
+}
+function readRawBody(req) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        let size = 0;
+        const maxBodyBytes = readMaxBodyBytes();
+        req.on('data', (chunk) => {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            size += buffer.byteLength;
+            if (size > maxBodyBytes) {
+                reject(new Error('request body too large'));
+                req.destroy();
+                return;
+            }
+            chunks.push(buffer);
+        });
+        req.on('end', () => resolve(Buffer.concat(chunks)));
         req.on('error', reject);
     });
 }

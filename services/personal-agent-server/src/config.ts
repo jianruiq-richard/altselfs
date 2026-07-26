@@ -106,6 +106,21 @@ export type ServerConfig = {
   creditsWelcomeGrant: number;
   creditsConcurrencyHold: number;
   creditsReservationTtlMinutes: number;
+  stripeSecretKey?: string;
+  stripeWebhookSecret?: string;
+  stripeAppBaseUrl: string;
+  stripePriceStarterMonthly?: string;
+  stripePriceProMonthly?: string;
+  stripePriceUltraMonthly?: string;
+  stripePriceCredits20000?: string;
+  stripePriceCredits40000?: string;
+  stripePriceCredits80000?: string;
+  stripePriceCredits100000?: string;
+  stripePortalConfigurationId?: string;
+  stripeAutomaticTaxEnabled: boolean;
+  stripeRefundContactEmail: string;
+  stripeRefundUsageLimitCredits: number;
+  stripePaymentGraceDays: number;
   hermesApiyiInputRate: number;
   hermesApiyiOutputRate: number;
   hermesApiyiCacheReadRate: number;
@@ -524,6 +539,21 @@ export function loadConfig(): ServerConfig {
     creditsWelcomeGrant: readIntEnv('CREDITS_WELCOME_GRANT', 1_000),
     creditsConcurrencyHold: readIntEnv('CREDITS_CONCURRENCY_HOLD', 50),
     creditsReservationTtlMinutes: readIntEnv('CREDITS_RESERVATION_TTL_MINUTES', 120),
+    stripeSecretKey: process.env.STRIPE_SECRET_KEY?.trim() || undefined,
+    stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET?.trim() || undefined,
+    stripeAppBaseUrl: readEnv('STRIPE_APP_BASE_URL', 'https://altselfs.com').replace(/\/$/, ''),
+    stripePriceStarterMonthly: process.env.STRIPE_PRICE_STARTER_MONTHLY?.trim() || undefined,
+    stripePriceProMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY?.trim() || undefined,
+    stripePriceUltraMonthly: process.env.STRIPE_PRICE_ULTRA_MONTHLY?.trim() || undefined,
+    stripePriceCredits20000: process.env.STRIPE_PRICE_CREDITS_20000?.trim() || undefined,
+    stripePriceCredits40000: process.env.STRIPE_PRICE_CREDITS_40000?.trim() || undefined,
+    stripePriceCredits80000: process.env.STRIPE_PRICE_CREDITS_80000?.trim() || undefined,
+    stripePriceCredits100000: process.env.STRIPE_PRICE_CREDITS_100000?.trim() || undefined,
+    stripePortalConfigurationId: process.env.STRIPE_PORTAL_CONFIGURATION_ID?.trim() || undefined,
+    stripeAutomaticTaxEnabled: readBoolEnv('STRIPE_AUTOMATIC_TAX_ENABLED', false),
+    stripeRefundContactEmail: readEnv('STRIPE_REFUND_CONTACT_EMAIL', 'contact@astromar.org'),
+    stripeRefundUsageLimitCredits: readIntEnv('STRIPE_REFUND_USAGE_LIMIT_CREDITS', 2_000),
+    stripePaymentGraceDays: readIntEnv('STRIPE_PAYMENT_GRACE_DAYS', 3),
     hermesApiyiInputRate: readFloatEnv('HERMES_APIYI_INPUT_RATE', 3),
     hermesApiyiOutputRate: readFloatEnv('HERMES_APIYI_OUTPUT_RATE', 15),
     hermesApiyiCacheReadRate: readFloatEnv('HERMES_APIYI_CACHE_READ_RATE', 0.3),

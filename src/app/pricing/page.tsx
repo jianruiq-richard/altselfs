@@ -5,11 +5,13 @@ import {
   ArrowRight,
   Check,
   CircleGauge,
-  Clock3,
   LoaderCircle,
+  Mail,
   MessageCircle,
+  Package,
   RefreshCw,
   Search,
+  ShieldCheck,
   Sparkles,
   Telescope,
   WalletCards,
@@ -32,6 +34,17 @@ type BillingSummary = {
   };
 };
 
+type BillingCatalog = {
+  configured: boolean;
+  plans: Record<string, { priceId: string | null }>;
+  packs: Record<string, { priceId: string | null; credits: number; amountCents: number }>;
+  refundPolicy: {
+    contactEmail: string;
+    usageLimitCredits: number;
+    selfService: false;
+  };
+};
+
 const WORKLOAD_BENCHMARKS = {
   quickDiscussionCredits: 35,
   standardResearchCredits: 150,
@@ -39,27 +52,32 @@ const WORKLOAD_BENCHMARKS = {
 };
 
 const workloadExamples = [
-  { label: 'Quick discussions', capacity: 'about 28 per 1,000 credits', detail: 'Typical Hermes-only conversation turns' },
-  { label: 'Standard research tasks', capacity: 'about 6 per 1,000 credits', detail: 'Hermes with Codex research or tool execution' },
+  { label: 'Quick discussions', capacity: 'about 28 per 1,000 credits', detail: 'Typical conversational agent turns' },
+  { label: 'Standard research tasks', capacity: 'about 6 per 1,000 credits', detail: 'Agent research and tool execution' },
   { label: 'Deep research runs', capacity: 'about 2 per 1,000 credits', detail: 'Longer multi-step execution, files, or artifact work' },
 ];
 
 export default function PricingPage() {
   const [summary, setSummary] = useState<BillingSummary | null>(null);
+  const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [billingAction, setBillingAction] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const loadSummary = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/billing/summary', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
-      const data = (await response.json().catch(() => ({}))) as BillingSummary & { error?: string };
-      if (!response.ok) throw new Error(data.error || 'Failed to load billing details');
+      const [summaryResponse, catalogResponse] = await Promise.all([
+        fetch('/api/billing/summary', { cache: 'no-store', credentials: 'same-origin' }),
+        fetch('/api/billing/catalog', { cache: 'no-store', credentials: 'same-origin' }),
+      ]);
+      const data = (await summaryResponse.json().catch(() => ({}))) as BillingSummary & { error?: string };
+      const catalogData = (await catalogResponse.json().catch(() => ({}))) as BillingCatalog & { error?: string };
+      if (!summaryResponse.ok) throw new Error(data.error || 'Failed to load billing details');
       setSummary(data);
+      if (catalogResponse.ok) setCatalog(catalogData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load billing details');
     } finally {
@@ -70,6 +88,35 @@ export default function PricingPage() {
   useEffect(() => {
     void loadSummary();
   }, []);
+
+  const runBillingAction = async (
+    actionKey: string,
+    path: string,
+    body?: Record<string, unknown>,
+  ) => {
+    setBillingAction(actionKey);
+    setActionMessage(null);
+    try {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = (await response.json().catch(() => ({}))) as { url?: string; message?: string; error?: string };
+      if (!response.ok) throw new Error(data.error || 'Billing action failed.');
+      if (data.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      setActionMessage(data.message || 'Billing update submitted. Your account will refresh after payment confirmation.');
+      await loadSummary();
+    } catch (actionError) {
+      setActionMessage(actionError instanceof Error ? actionError.message : 'Billing action failed.');
+    } finally {
+      setBillingAction(null);
+    }
+  };
 
   return (
     <AstromarWorkspaceShell mobileTitle="Pricing">
@@ -136,7 +183,8 @@ export default function PricingPage() {
             <section className="grid gap-3 py-8 sm:grid-cols-2 xl:grid-cols-4" aria-label="Available plans">
               {BILLING_PLANS.map((plan) => {
                 const current = summary?.subscription.planKey === plan.key;
-                const estimate = estimatePlanWorkload(plan.monthlyCredits);
+                const includedCredits = plan.key === 'FREE' ? 1_000 : plan.monthlyCredits;
+                const estimate = estimatePlanWorkload(includedCredits);
                 return (
                   <article
                     key={plan.key}
@@ -158,21 +206,50 @@ export default function PricingPage() {
                       <p className="mt-3 min-h-10 text-[11px] leading-5 text-zinc-500">{plan.description}</p>
                     </div>
                     <div className="mt-6 grid content-start gap-3 border-t border-white/[0.09] pt-5">
-                      <PlanFeature icon={Sparkles} text={`${formatCredits(plan.monthlyCredits)} credits`} />
+                      <PlanFeature
+                        icon={Sparkles}
+                        text={plan.key === 'FREE'
+                          ? '1,000 welcome Credits, once'
+                          : `${formatCredits(plan.monthlyCredits)} Credits each billing period`}
+                      />
                       <PlanFeature icon={CircleGauge} text={`${plan.concurrentTasks} concurrent task${plan.concurrentTasks === 1 ? '' : 's'}`} />
-                      <PlanFeature icon={Clock3} text={plan.scheduledTasks > 0 ? `${plan.scheduledTasks} scheduled tasks` : 'Manual tasks'} />
-                      <PlanFeature icon={Check} text="Hermes and Codex execution" />
+                      <PlanFeature
+                        icon={Check}
+                        text={plan.modelTiers.includes('PRO') ? 'Altselfs Lite and Pro' : 'Altselfs Lite only'}
+                      />
                       <PlanFeature icon={MessageCircle} text={`${estimate.discussions} discussions approximately`} />
                       <PlanFeature icon={Search} text={`${estimate.researchTasks} research tasks approximately`} />
                       <PlanFeature icon={Telescope} text={`${estimate.deepTasks} deep tasks approximately`} />
                     </div>
                     {current ? (
-                      <button type="button" disabled className="mt-6 min-h-10 rounded-[7px] border border-[#46d19a]/20 bg-[#46d19a]/[0.06] px-3 text-[11px] font-bold text-[#46d19a]">
-                        Current plan
+                      <button
+                        type="button"
+                        disabled={plan.key === 'FREE' || billingAction !== null || !catalog?.configured}
+                        onClick={() => void runBillingAction('portal', '/api/billing/portal')}
+                        className="mt-6 min-h-10 rounded-[7px] border border-[#46d19a]/20 bg-[#46d19a]/[0.06] px-3 text-[11px] font-bold text-[#46d19a] disabled:cursor-default"
+                      >
+                        {billingAction === 'portal' ? 'Opening...' : plan.key === 'FREE' ? 'Current plan' : 'Manage plan'}
                       </button>
+                    ) : plan.key === 'FREE' ? (
+                      <span className="mt-6 flex min-h-10 items-center justify-center rounded-[7px] border border-white/[0.09] px-3 text-[11px] font-bold text-zinc-600">
+                        Included at signup
+                      </span>
                     ) : (
-                      <button type="button" disabled className="mt-6 min-h-10 cursor-not-allowed rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-500">
-                        Available soon
+                      <button
+                        type="button"
+                        disabled={billingAction !== null || !catalog?.configured || !catalog.plans[plan.key]?.priceId}
+                        onClick={() => void runBillingAction(
+                          `plan:${plan.key}`,
+                          '/api/billing/change-plan',
+                          { planKey: plan.key },
+                        )}
+                        className="mt-6 min-h-10 rounded-[7px] border border-white/[0.12] bg-white px-3 text-[11px] font-bold text-zinc-950 hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-white/[0.035] disabled:text-zinc-600"
+                      >
+                        {billingAction === `plan:${plan.key}`
+                          ? 'Preparing...'
+                          : catalog?.configured
+                            ? `Choose ${plan.name}`
+                            : 'Billing setup pending'}
                       </button>
                     )}
                   </article>
@@ -180,11 +257,56 @@ export default function PricingPage() {
               })}
             </section>
 
+            {actionMessage ? (
+              <div className="mb-8 rounded-[7px] border border-[#8eb3ff]/25 bg-[#8eb3ff]/[0.06] px-4 py-3 text-[11px] text-[#b7cdf8]">
+                {actionMessage}
+              </div>
+            ) : null}
+
+            <section className="border-t border-white/[0.09] py-9">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase text-[#8eb3ff]">Permanent balance</span>
+                  <h2 className="mt-2 text-[20px] font-bold text-zinc-100">Add Credits without changing your plan.</h2>
+                  <p className="mt-2 text-[11px] text-zinc-500">Purchased Credits never expire and remain available across plan changes.</p>
+                </div>
+                <span className="text-[11px] font-semibold text-zinc-500">$1 = 1,000 Credits</span>
+              </div>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {Object.entries(catalog?.packs || {
+                  CREDITS_20000: { priceId: null, credits: 20_000, amountCents: 2_000 },
+                  CREDITS_40000: { priceId: null, credits: 40_000, amountCents: 4_000 },
+                  CREDITS_80000: { priceId: null, credits: 80_000, amountCents: 8_000 },
+                  CREDITS_100000: { priceId: null, credits: 100_000, amountCents: 10_000 },
+                }).map(([packKey, pack]) => (
+                  <article key={packKey} className="grid min-h-[154px] grid-rows-[auto_1fr_auto] rounded-[8px] border border-white/[0.09] bg-white/[0.02] p-4">
+                    <Package className="h-4 w-4 text-[#8eb3ff]" />
+                    <span className="mt-4 grid">
+                      <strong className="text-[18px] text-zinc-100">{formatCredits(pack.credits)} Credits</strong>
+                      <span className="mt-1 text-[11px] text-zinc-600">${pack.amountCents / 100} one time</span>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={billingAction !== null || !catalog?.configured || !pack.priceId}
+                      onClick={() => void runBillingAction(
+                        `pack:${packKey}`,
+                        '/api/billing/checkout',
+                        { purchaseKind: 'CREDIT_PACK', packKey },
+                      )}
+                      className="mt-4 min-h-9 rounded-[7px] border border-white/[0.1] bg-white/[0.04] px-3 text-[10px] font-bold text-zinc-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:text-zinc-700"
+                    >
+                      {billingAction === `pack:${packKey}` ? 'Preparing...' : 'Buy Credits'}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+
             <section className="grid gap-8 border-t border-white/[0.09] py-9 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <div>
                 <h2 className="text-[18px] font-bold text-zinc-100">How credits are used</h2>
                 <p className="mt-2 max-w-[520px] text-[11px] leading-5 text-zinc-500">
-                  A small concurrency hold is placed when a task starts. The final charge comes from measured Hermes and Codex usage.
+                  A small concurrency hold is placed when a task starts. The final charge comes from measured agent usage.
                 </p>
                 <div className="mt-5 border-y border-white/[0.09]">
                   {workloadExamples.map((example) => (
@@ -210,6 +332,27 @@ export default function PricingPage() {
                     text="Completed work is charged at actual usage. If the final action exceeds the balance, new tasks pause until the outstanding credits are restored."
                   />
                 </div>
+              </div>
+            </section>
+
+            <section className="grid gap-5 border-t border-white/[0.09] py-9 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="flex gap-3">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#8eb3ff]" />
+                <span>
+                  <strong className="text-xs text-zinc-200">Credits do not expire</strong>
+                  <p className="mt-1.5 text-[10px] leading-5 text-zinc-600">
+                    Welcome, subscription, and purchased Credits remain on the account until used or reversed by an approved refund.
+                  </p>
+                </span>
+              </div>
+              <div className="flex gap-3">
+                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#8eb3ff]" />
+                <span>
+                  <strong className="text-xs text-zinc-200">Manual refund review</strong>
+                  <p className="mt-1.5 text-[10px] leading-5 text-zinc-600">
+                    Contact {catalog?.refundPolicy.contactEmail || 'contact@astromar.org'}. For non-platform issues, a subscription invoice or Credit pack may be refunded when no more than {formatCredits(catalog?.refundPolicy.usageLimitCredits || 2_000)} Credits have been used from that Credit batch.
+                  </p>
+                </span>
               </div>
             </section>
           </div>

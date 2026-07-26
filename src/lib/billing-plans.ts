@@ -1,4 +1,5 @@
 export type BillingPlanKey = 'FREE' | 'STARTER' | 'PRO' | 'SCALE';
+export type AltselfsModelTier = 'LITE' | 'PRO';
 
 export type BillingPlan = {
   key: BillingPlanKey;
@@ -7,6 +8,7 @@ export type BillingPlan = {
   monthlyCredits: number;
   concurrentTasks: number;
   scheduledTasks: number;
+  modelTiers: AltselfsModelTier[];
   description: string;
   highlighted?: boolean;
 };
@@ -16,9 +18,10 @@ export const BILLING_PLANS: BillingPlan[] = [
     key: 'FREE',
     name: 'Free',
     priceUsd: 0,
-    monthlyCredits: 1_000,
+    monthlyCredits: 0,
     concurrentTasks: 1,
     scheduledTasks: 0,
+    modelTiers: ['LITE'],
     description: 'Explore the workspace and run occasional agent tasks.',
   },
   {
@@ -28,6 +31,7 @@ export const BILLING_PLANS: BillingPlan[] = [
     monthlyCredits: 20_000,
     concurrentTasks: 3,
     scheduledTasks: 5,
+    modelTiers: ['LITE'],
     description: 'For consistent research, analysis, and daily execution.',
   },
   {
@@ -37,16 +41,18 @@ export const BILLING_PLANS: BillingPlan[] = [
     monthlyCredits: 40_000,
     concurrentTasks: 10,
     scheduledTasks: 20,
+    modelTiers: ['LITE', 'PRO'],
     description: 'For heavier agent workloads and parallel projects.',
     highlighted: true,
   },
   {
     key: 'SCALE',
-    name: 'Scale',
+    name: 'Ultra',
     priceUsd: 200,
     monthlyCredits: 200_000,
     concurrentTasks: 20,
     scheduledTasks: 20,
+    modelTiers: ['LITE', 'PRO'],
     description: 'For teams operating multiple continuous workflows.',
   },
 ];
