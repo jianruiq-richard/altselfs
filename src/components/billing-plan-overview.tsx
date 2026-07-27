@@ -152,7 +152,7 @@ function PlanBenefit({
 function getPlanStatus(subscription: PlanSubscription) {
   if (subscription.cancelAtPeriodEnd) {
     return {
-      label: 'Cancels at period end',
+      label: 'Cancellation scheduled',
       className: 'border-amber-300/20 bg-amber-300/[0.07] text-amber-200',
     };
   }

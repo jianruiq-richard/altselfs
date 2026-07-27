@@ -183,6 +183,42 @@ export async function createStripePortal(
   return { url: session.url };
 }
 
+async function createStripeCancellationPortal(
+  config: ServerConfig,
+  input: { investorId: unknown; email?: unknown; name?: unknown },
+) {
+  const investorId = requiredString(input.investorId, 'investorId');
+  const stripe = requiredStripe(config);
+  const subscription = await loadSubscription(config, investorId);
+  const subscriptionId = optionalString(subscription?.providerSubscriptionId);
+  if (!subscriptionId) {
+    throw new StripeBillingError(409, 'NO_ACTIVE_STRIPE_SUBSCRIPTION', 'No active Stripe subscription is available to cancel.');
+  }
+  const customerId = await ensureStripeCustomer(config, stripe, {
+    investorId,
+    email: optionalString(input.email),
+    name: optionalString(input.name),
+  });
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    ...(config.stripePortalConfigurationId ? { configuration: config.stripePortalConfigurationId } : {}),
+    return_url: `${config.stripeAppBaseUrl}/profile`,
+    flow_data: {
+      type: 'subscription_cancel',
+      after_completion: {
+        type: 'redirect',
+        redirect: {
+          return_url: `${config.stripeAppBaseUrl}/profile?billing=cancelled`,
+        },
+      },
+      subscription_cancel: {
+        subscription: subscriptionId,
+      },
+    },
+  });
+  return { url: session.url };
+}
+
 export function buildStripeUpgradePortalFeatures(
   target: { priceId: string; productId: string },
 ): Stripe.BillingPortal.ConfigurationCreateParams.Features {
@@ -303,7 +339,7 @@ export async function changeStripePlan(
   if (targetPlanKey === 'FREE') {
     return {
       action: 'PORTAL',
-      ...(await createStripePortal(config, input)),
+      ...(await createStripeCancellationPortal(config, input)),
       message: 'Cancellation takes effect at the end of the current billing period. Unused Credits remain available.',
     };
   }
@@ -1307,6 +1343,10 @@ async function upsertSubscriptionFromStripe(
   const deleted = subscription.status === 'canceled';
   const resolvedPlanKey = deleted ? 'FREE' : planKey;
   const priceId = deleted ? null : stripeId(subscription.items.data[0]?.price);
+  const cancellationScheduled = !deleted && (
+    subscription.cancel_at_period_end === true ||
+    typeof subscription.cancel_at === 'number'
+  );
   await client.query(
     [
       'update credit_subscriptions set "planKey" = $2, status = $3, "monthlyCredits" = $4,',
@@ -1322,7 +1362,7 @@ async function upsertSubscriptionFromStripe(
       PLAN_CATALOG[resolvedPlanKey].monthlyCredits,
       period.start,
       period.end,
-      subscription.cancel_at_period_end,
+      cancellationScheduled,
       'stripe',
       stripeId(subscription.customer),
       deleted ? null : subscription.id,
