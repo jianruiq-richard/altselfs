@@ -2,7 +2,7 @@
 
 import { ArrowRight, CircleGauge, LoaderCircle, Sparkles } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 
 export type BillingCapacityData = {
@@ -40,6 +40,12 @@ export function BillingCapacityPopover({
   const controlled = data !== undefined;
   const [internalData, setInternalData] = useState<BillingCapacityData | null>(null);
   const [internalLoading, setInternalLoading] = useState(!controlled);
+  const [hoverOpen, setHoverOpen] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const open = hoverOpen || focusOpen || pinnedOpen;
 
   const loadCapacity = useCallback(async (showLoading = false) => {
     if (showLoading) setInternalLoading(true);
@@ -71,6 +77,30 @@ export function BillingCapacityPopover({
     return () => window.clearInterval(interval);
   }, [controlled, internalData, loadCapacity]);
 
+  useEffect(() => {
+    if (!pinnedOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setPinnedOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setHoverOpen(false);
+      setFocusOpen(false);
+      setPinnedOpen(false);
+      triggerRef.current?.focus();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pinnedOpen]);
+
   const capacity = controlled ? data : internalData;
   const isLoading = controlled ? loading : internalLoading;
   const plan = getBillingPlan(capacity?.subscription.planKey);
@@ -82,8 +112,21 @@ export function BillingCapacityPopover({
   const rail = variant === 'rail';
 
   return (
-    <div className={`group/billing relative z-40 ${rail ? 'h-full w-full' : 'shrink-0'}`}>
+    <div
+      ref={rootRef}
+      className={`relative z-40 ${rail ? 'h-full w-full' : 'shrink-0'}`}
+      onPointerEnter={() => setHoverOpen(true)}
+      onPointerLeave={() => setHoverOpen(false)}
+      onFocusCapture={() => setFocusOpen(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setFocusOpen(false);
+          setPinnedOpen(false);
+        }
+      }}
+    >
       <button
+        ref={triggerRef}
         type="button"
         className={`grid items-center text-left outline-none transition-colors hover:bg-white/[0.025] focus-visible:bg-white/[0.035] ${
           rail
@@ -91,6 +134,9 @@ export function BillingCapacityPopover({
             : 'h-9 min-w-[154px] grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-[7px] border border-white/[0.09] bg-white/[0.025] px-2.5'
         }`}
         aria-label="View credits and task capacity"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setPinnedOpen((current) => !current)}
       >
         <span className="flex min-w-0 items-center gap-2">
           <span
@@ -122,8 +168,16 @@ export function BillingCapacityPopover({
       </button>
 
       <div
-        className={`pointer-events-none absolute z-50 translate-y-1 opacity-0 transition duration-150 group-hover/billing:pointer-events-auto group-hover/billing:translate-y-0 group-hover/billing:opacity-100 group-focus-within/billing:pointer-events-auto group-focus-within/billing:translate-y-0 group-focus-within/billing:opacity-100 ${
-          rail ? 'right-3 top-[54px] w-[calc(100%-24px)]' : 'right-0 top-[42px] w-[286px]'
+        role="dialog"
+        aria-label="Credits and task capacity"
+        className={`absolute z-50 transition duration-150 ${
+          open
+            ? 'pointer-events-auto translate-y-0 opacity-100'
+            : 'pointer-events-none translate-y-1 opacity-0'
+        } ${
+          rail
+            ? 'right-3 top-[54px] w-[calc(100%-24px)] pt-2.5'
+            : 'right-0 top-full w-[286px] pt-1.5'
         }`}
       >
         <div className="overflow-hidden rounded-[8px] border border-white/[0.13] bg-[#17181a] shadow-[0_24px_70px_rgba(0,0,0,.58)]">
