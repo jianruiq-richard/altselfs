@@ -183,6 +183,90 @@ export async function createStripePortal(
   return { url: session.url };
 }
 
+export function buildStripeUpgradePortalFeatures(
+  prices: Array<{ priceId: string; productId: string }>,
+): Stripe.BillingPortal.ConfigurationCreateParams.Features {
+  const pricesByProduct = new Map<string, string[]>();
+  for (const { priceId, productId } of prices) {
+    pricesByProduct.set(productId, [...(pricesByProduct.get(productId) || []), priceId]);
+  }
+  return {
+    invoice_history: { enabled: true },
+    payment_method_update: { enabled: true },
+    subscription_update: {
+      enabled: true,
+      default_allowed_updates: ['price'],
+      products: [...pricesByProduct].map(([product, productPrices]) => ({
+        product,
+        prices: productPrices,
+      })),
+      billing_cycle_anchor: 'now',
+      proration_behavior: 'none',
+    },
+  };
+}
+
+async function ensureStripeUpgradePortalConfiguration(config: ServerConfig, stripe: Stripe) {
+  const purpose = 'altselfs_plan_upgrade_confirmation';
+  const configuredId = config.stripeUpgradePortalConfigurationId;
+  let configurationId = configuredId || null;
+
+  if (!configurationId) {
+    const configurations = await stripe.billingPortal.configurations.list({
+      active: true,
+      limit: 100,
+    });
+    configurationId = configurations.data.find(
+      (configuration) => configuration.metadata?.altselfsPurpose === purpose,
+    )?.id || null;
+  }
+
+  const prices = await Promise.all(
+    (['STARTER', 'PRO', 'SCALE'] as const).map(async (planKey) => {
+      const priceId = priceIdForPlan(config, planKey);
+      const price = await stripe.prices.retrieve(priceId);
+      const productId = stripeId(price.product);
+      if (!productId) {
+        throw new StripeBillingError(
+          409,
+          'STRIPE_PRICE_PRODUCT_MISSING',
+          `Stripe price ${priceId} is not attached to a product.`,
+        );
+      }
+      return { priceId, productId };
+    }),
+  );
+  const features = buildStripeUpgradePortalFeatures(prices);
+
+  if (configurationId) {
+    const configuration = await stripe.billingPortal.configurations.update(configurationId, {
+      active: true,
+      name: 'Altselfs plan upgrade confirmation',
+      default_return_url: `${config.stripeAppBaseUrl}/pricing`,
+      features,
+      metadata: {
+        altselfsPurpose: purpose,
+        altselfsVersion: '1',
+      },
+    });
+    return configuration.id;
+  }
+
+  const configuration = await stripe.billingPortal.configurations.create(
+    {
+      name: 'Altselfs plan upgrade confirmation',
+      default_return_url: `${config.stripeAppBaseUrl}/pricing`,
+      features,
+      metadata: {
+        altselfsPurpose: purpose,
+        altselfsVersion: '1',
+      },
+    },
+    { idempotencyKey: 'altselfs:portal-configuration:plan-upgrade:v1' },
+  );
+  return configuration.id;
+}
+
 export async function changeStripePlan(
   config: ServerConfig,
   input: {
@@ -252,19 +336,19 @@ export async function changeStripePlan(
   const planKey = paidPlanKey(targetPlanKey);
   const priceId = priceIdForPlan(config, planKey);
   const requestId = optionalString(input.requestId) || id('upgrade');
-  const updated = await stripe.subscriptions.update(
+  const configurationId = await ensureStripeUpgradePortalConfiguration(config, stripe);
+
+  // Store upgrade context without changing the billable item. Stripe applies the
+  // actual plan update only after the customer confirms it on the hosted page.
+  await stripe.subscriptions.update(
     stripeSubscription.id,
     {
-      items: [{ id: item.id, price: priceId }],
-      billing_cycle_anchor: 'now',
-      payment_behavior: 'error_if_incomplete',
-      proration_behavior: 'none',
       metadata: {
         ...stripeSubscription.metadata,
         investorId,
-        planKey,
         planChangeKind: 'IMMEDIATE_UPGRADE',
         planChangeRequestId: requestId,
+        requestedPlanKey: planKey,
         previousPlanKey: currentPlanKey,
         previousPriceId: stripeId(item.price) || '',
         previousLatestInvoiceId: subscription.latestInvoiceId || '',
@@ -275,11 +359,34 @@ export async function changeStripePlan(
       idempotencyKey: `plan-upgrade:${investorId}:${planKey}:${requestId}`,
     },
   );
+
+  const portalSession = await stripe.billingPortal.sessions.create({
+    customer: requiredString(stripeId(stripeSubscription.customer), 'stripeCustomerId'),
+    configuration: configurationId,
+    return_url: `${config.stripeAppBaseUrl}/pricing`,
+    flow_data: {
+      type: 'subscription_update_confirm',
+      after_completion: {
+        type: 'redirect',
+        redirect: {
+          return_url: `${config.stripeAppBaseUrl}/profile?billing=success`,
+        },
+      },
+      subscription_update_confirm: {
+        subscription: stripeSubscription.id,
+        items: [{
+          id: item.id,
+          price: priceId,
+          quantity: item.quantity || 1,
+        }],
+      },
+    },
+  });
+
   return {
-    action: 'UPGRADE',
-    status: updated.status,
-    pendingUpdate: false,
-    message: 'The new plan starts today for a full month. Existing Credits remain available.',
+    action: 'PORTAL_CONFIRM',
+    url: portalSession.url,
+    message: 'Confirm the new plan and payment details with Stripe. Existing Credits remain available.',
   };
 }
 
@@ -492,9 +599,11 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
   const planKey = planKeyForSubscription(config, subscription);
   const plan = PLAN_CATALOG[planKey];
   const billingReason = String(invoice.billing_reason || '');
+  const requestedPlanKey = optionalString(subscription.metadata.requestedPlanKey)?.toUpperCase();
   const isUpgrade = (
     billingReason === 'subscription_update' &&
-    subscription.metadata.planChangeKind === 'IMMEDIATE_UPGRADE'
+    subscription.metadata.planChangeKind === 'IMMEDIATE_UPGRADE' &&
+    (!requestedPlanKey || requestedPlanKey === planKey)
   );
   const credits = plan.monthlyCredits;
   const paymentSource = await invoicePaymentSource(stripe, invoice.id);
@@ -574,6 +683,22 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
     }
     await upsertSubscriptionFromStripe(client, investorId, subscription, planKey, period, invoice.id);
   });
+  if (isUpgrade) {
+    await stripe.subscriptions.update(subscription.id, {
+      metadata: {
+        ...subscription.metadata,
+        investorId,
+        planKey,
+        planChangeKind: '',
+        planChangeRequestId: '',
+        requestedPlanKey: '',
+        previousPlanKey: '',
+        previousPriceId: '',
+        previousLatestInvoiceId: '',
+        previousPeriodEnd: '',
+      },
+    });
+  }
   return investorId;
 }
 
