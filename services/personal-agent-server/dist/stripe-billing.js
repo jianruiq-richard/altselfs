@@ -118,12 +118,82 @@ export async function createStripePortal(config, input) {
         email: optionalString(input.email),
         name: optionalString(input.name),
     });
+    const configurationId = await ensureStripeBillingManagementPortalConfiguration(config, stripe);
     const session = await stripe.billingPortal.sessions.create({
         customer: customerId,
+        configuration: configurationId,
         return_url: `${config.stripeAppBaseUrl}/profile`,
-        ...(config.stripePortalConfigurationId ? { configuration: config.stripePortalConfigurationId } : {}),
     });
     return { url: session.url };
+}
+async function createStripeCancellationPortal(config, input) {
+    const investorId = requiredString(input.investorId, 'investorId');
+    const stripe = requiredStripe(config);
+    const subscription = await loadSubscription(config, investorId);
+    const subscriptionId = optionalString(subscription?.providerSubscriptionId);
+    if (!subscriptionId) {
+        throw new StripeBillingError(409, 'NO_ACTIVE_STRIPE_SUBSCRIPTION', 'No active Stripe subscription is available to cancel.');
+    }
+    const customerId = await ensureStripeCustomer(config, stripe, {
+        investorId,
+        email: optionalString(input.email),
+        name: optionalString(input.name),
+    });
+    const session = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        ...(config.stripePortalConfigurationId ? { configuration: config.stripePortalConfigurationId } : {}),
+        return_url: `${config.stripeAppBaseUrl}/profile`,
+        flow_data: {
+            type: 'subscription_cancel',
+            after_completion: {
+                type: 'redirect',
+                redirect: {
+                    return_url: `${config.stripeAppBaseUrl}/profile?billing=cancelled`,
+                },
+            },
+            subscription_cancel: {
+                subscription: subscriptionId,
+            },
+        },
+    });
+    return { url: session.url };
+}
+async function ensureStripeBillingManagementPortalConfiguration(config, stripe) {
+    const purpose = 'altselfs_billing_management';
+    const version = '1';
+    const configurations = await stripe.billingPortal.configurations.list({
+        active: true,
+        limit: 100,
+    });
+    const configurationId = configurations.data.find((configuration) => (configuration.metadata?.altselfsPurpose === purpose
+        && configuration.metadata?.altselfsVersion === version))?.id || null;
+    const features = {
+        customer_update: {
+            enabled: true,
+            allowed_updates: ['address', 'email', 'name', 'phone', 'tax_id'],
+        },
+        invoice_history: { enabled: true },
+        payment_method_update: { enabled: true },
+        subscription_cancel: { enabled: false },
+        subscription_update: { enabled: false },
+    };
+    const metadata = {
+        altselfsPurpose: purpose,
+        altselfsVersion: version,
+    };
+    const params = {
+        active: true,
+        name: 'Altselfs billing management',
+        default_return_url: `${config.stripeAppBaseUrl}/profile`,
+        features,
+        metadata,
+    };
+    if (configurationId) {
+        const configuration = await stripe.billingPortal.configurations.update(configurationId, params);
+        return configuration.id;
+    }
+    const configuration = await stripe.billingPortal.configurations.create(params, { idempotencyKey: `altselfs:portal-configuration:billing-management:${version}` });
+    return configuration.id;
 }
 export function buildStripeUpgradePortalFeatures(target) {
     return {
@@ -207,7 +277,7 @@ export async function changeStripePlan(config, input) {
     if (targetPlanKey === 'FREE') {
         return {
             action: 'PORTAL',
-            ...(await createStripePortal(config, input)),
+            ...(await createStripeCancellationPortal(config, input)),
             message: 'Cancellation takes effect at the end of the current billing period. Unused Credits remain available.',
         };
     }
@@ -963,6 +1033,8 @@ async function upsertSubscriptionFromStripe(client, investorId, subscription, pl
     const deleted = subscription.status === 'canceled';
     const resolvedPlanKey = deleted ? 'FREE' : planKey;
     const priceId = deleted ? null : stripeId(subscription.items.data[0]?.price);
+    const cancellationScheduled = !deleted && (subscription.cancel_at_period_end === true ||
+        typeof subscription.cancel_at === 'number');
     await client.query([
         'update credit_subscriptions set "planKey" = $2, status = $3, "monthlyCredits" = $4,',
         '"currentPeriodStart" = $5, "currentPeriodEnd" = $6, "cancelAtPeriodEnd" = $7,',
@@ -976,7 +1048,7 @@ async function upsertSubscriptionFromStripe(client, investorId, subscription, pl
         PLAN_CATALOG[resolvedPlanKey].monthlyCredits,
         period.start,
         period.end,
-        subscription.cancel_at_period_end,
+        cancellationScheduled,
         'stripe',
         stripeId(subscription.customer),
         deleted ? null : subscription.id,

@@ -220,14 +220,30 @@ export default function PricingPage() {
                       <PlanFeature icon={Telescope} text={`${estimate.deepTasks} deep tasks approximately`} />
                     </div>
                     {current ? (
-                      <button
-                        type="button"
-                        disabled={plan.key === 'FREE' || billingAction !== null || !catalog?.configured}
-                        onClick={() => void runBillingAction('portal', '/api/billing/portal')}
-                        className="mt-6 min-h-10 rounded-[7px] border border-[#46d19a]/20 bg-[#46d19a]/[0.06] px-3 text-[11px] font-bold text-[#46d19a] disabled:cursor-default"
-                      >
-                        {billingAction === 'portal' ? 'Opening...' : plan.key === 'FREE' ? 'Current plan' : 'Manage plan'}
-                      </button>
+                      <div className="mt-6 grid gap-2">
+                        <button
+                          type="button"
+                          disabled={plan.key === 'FREE' || billingAction !== null || !catalog?.configured}
+                          onClick={() => void runBillingAction('portal', '/api/billing/portal')}
+                          className="min-h-10 rounded-[7px] border border-[#46d19a]/20 bg-[#46d19a]/[0.06] px-3 text-[11px] font-bold text-[#46d19a] disabled:cursor-default"
+                        >
+                          {billingAction === 'portal' ? 'Opening...' : plan.key === 'FREE' ? 'Current plan' : 'Manage billing'}
+                        </button>
+                        {plan.key !== 'FREE' && !summary?.subscription.cancelAtPeriodEnd ? (
+                          <button
+                            type="button"
+                            disabled={billingAction !== null || !catalog?.configured}
+                            onClick={() => void runBillingAction(
+                              'cancel',
+                              '/api/billing/change-plan',
+                              { planKey: 'FREE' },
+                            )}
+                            className="min-h-10 rounded-[7px] border border-red-300/15 bg-red-300/[0.045] px-3 text-[11px] font-bold text-red-200 hover:border-red-300/25 hover:bg-red-300/[0.07] disabled:cursor-not-allowed disabled:text-zinc-600"
+                          >
+                            {billingAction === 'cancel' ? 'Opening...' : 'Cancel subscription'}
+                          </button>
+                        ) : null}
+                      </div>
                     ) : plan.key === 'FREE' ? (
                       <span className="mt-6 flex min-h-10 items-center justify-center rounded-[7px] border border-white/[0.09] px-3 text-[11px] font-bold text-zinc-600">
                         Included at signup

@@ -205,7 +205,7 @@ export default function ProfilePage() {
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [billingLoading, setBillingLoading] = useState(true);
   const [billingError, setBillingError] = useState<string | null>(null);
-  const [billingAction, setBillingAction] = useState(false);
+  const [billingAction, setBillingAction] = useState<string | null>(null);
 
   useEffect(() => {
     const requestedView = new URLSearchParams(window.location.search).get('view');
@@ -282,7 +282,7 @@ export default function ProfilePage() {
 
   const openBillingPortal = async () => {
     if (billingAction) return;
-    setBillingAction(true);
+    setBillingAction('portal');
     setBillingError(null);
     try {
       const response = await fetch('/api/billing/portal', {
@@ -295,7 +295,28 @@ export default function ProfilePage() {
     } catch (actionError) {
       setBillingError(actionError instanceof Error ? actionError.message : 'Billing portal could not be opened.');
     } finally {
-      setBillingAction(false);
+      setBillingAction(null);
+    }
+  };
+
+  const openCancellationPortal = async () => {
+    if (billingAction) return;
+    setBillingAction('cancel');
+    setBillingError(null);
+    try {
+      const response = await fetch('/api/billing/change-plan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ planKey: 'FREE' }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!response.ok || !data.url) throw new Error(data.error || 'Cancellation could not be started.');
+      window.location.assign(data.url);
+    } catch (actionError) {
+      setBillingError(actionError instanceof Error ? actionError.message : 'Cancellation could not be started.');
+    } finally {
+      setBillingAction(null);
     }
   };
 
@@ -591,11 +612,22 @@ export default function ProfilePage() {
                                 <button
                                   type="button"
                                   onClick={() => void openBillingPortal()}
-                                  disabled={billingAction}
+                                  disabled={Boolean(billingAction)}
                                   className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-300 hover:border-white/15 hover:bg-white/[0.055] hover:text-white disabled:cursor-not-allowed disabled:text-zinc-600"
                                 >
-                                  {billingAction ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+                                  {billingAction === 'portal' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
                                   Manage billing
+                                </button>
+                              ) : null}
+                              {billing.subscription.planKey !== 'FREE' && !billing.subscription.cancelAtPeriodEnd ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void openCancellationPortal()}
+                                  disabled={Boolean(billingAction)}
+                                  className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-red-300/15 bg-red-300/[0.045] px-3 text-[11px] font-bold text-red-200 hover:border-red-300/25 hover:bg-red-300/[0.07] disabled:cursor-not-allowed disabled:text-zinc-600"
+                                >
+                                  {billingAction === 'cancel' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                                  Cancel subscription
                                 </button>
                               ) : null}
                               <Link

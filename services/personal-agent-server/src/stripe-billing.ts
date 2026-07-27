@@ -175,10 +175,11 @@ export async function createStripePortal(
     email: optionalString(input.email),
     name: optionalString(input.name),
   });
+  const configurationId = await ensureStripeBillingManagementPortalConfiguration(config, stripe);
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
+    configuration: configurationId,
     return_url: `${config.stripeAppBaseUrl}/profile`,
-    ...(config.stripePortalConfigurationId ? { configuration: config.stripePortalConfigurationId } : {}),
   });
   return { url: session.url };
 }
@@ -217,6 +218,54 @@ async function createStripeCancellationPortal(
     },
   });
   return { url: session.url };
+}
+
+async function ensureStripeBillingManagementPortalConfiguration(config: ServerConfig, stripe: Stripe) {
+  const purpose = 'altselfs_billing_management';
+  const version = '1';
+  const configurations = await stripe.billingPortal.configurations.list({
+    active: true,
+    limit: 100,
+  });
+  const configurationId = configurations.data.find(
+    (configuration) => (
+      configuration.metadata?.altselfsPurpose === purpose
+      && configuration.metadata?.altselfsVersion === version
+    ),
+  )?.id || null;
+
+  const features: Stripe.BillingPortal.ConfigurationCreateParams.Features = {
+    customer_update: {
+      enabled: true,
+      allowed_updates: ['address', 'email', 'name', 'phone', 'tax_id'],
+    },
+    invoice_history: { enabled: true },
+    payment_method_update: { enabled: true },
+    subscription_cancel: { enabled: false },
+    subscription_update: { enabled: false },
+  };
+  const metadata = {
+    altselfsPurpose: purpose,
+    altselfsVersion: version,
+  };
+  const params = {
+    active: true,
+    name: 'Altselfs billing management',
+    default_return_url: `${config.stripeAppBaseUrl}/profile`,
+    features,
+    metadata,
+  };
+
+  if (configurationId) {
+    const configuration = await stripe.billingPortal.configurations.update(configurationId, params);
+    return configuration.id;
+  }
+
+  const configuration = await stripe.billingPortal.configurations.create(
+    params,
+    { idempotencyKey: `altselfs:portal-configuration:billing-management:${version}` },
+  );
+  return configuration.id;
 }
 
 export function buildStripeUpgradePortalFeatures(
