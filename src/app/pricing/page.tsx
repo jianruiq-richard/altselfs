@@ -14,10 +14,10 @@ import {
   ShieldCheck,
   Sparkles,
   Telescope,
-  WalletCards,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
+import { BillingPlanOverview } from '@/components/billing-plan-overview';
 import { BILLING_PLANS, formatCredits } from '@/lib/billing-plans';
 
 type BillingSummary = {
@@ -31,6 +31,15 @@ type BillingSummary = {
     planKey: string;
     planName: string;
     status: string;
+    monthlyCredits: number;
+    concurrentTaskLimit: number;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+  };
+  capacity: {
+    activeTaskCount: number;
+    availableTaskSlots: number;
   };
 };
 
@@ -137,47 +146,27 @@ export default function PricingPage() {
 
         <main className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
           <div className="mx-auto w-full max-w-[1180px]">
-            <section className="grid items-end gap-6 border-b border-white/[0.09] pb-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <div className="max-w-[700px]">
-                <span className="text-[10px] font-extrabold uppercase text-[#8eb3ff]">Simple usage pricing</span>
-                <h1 className="mt-3 text-[32px] font-bold leading-[1.08] text-zinc-50 sm:text-[40px]">
-                  Plans built around actual agent work.
-                </h1>
-                <p className="mt-4 max-w-[620px] text-[13px] leading-6 text-zinc-400">
-                  Every dollar includes 1,000 credits. Tasks are metered from the models and execution they actually use.
-                </p>
-              </div>
-
-              <div className="grid min-h-[116px] grid-cols-[minmax(0,1fr)_auto] items-center gap-5 rounded-[8px] border border-white/[0.09] bg-white/[0.025] p-5">
-                <span className="grid min-w-0">
-                  <span className="text-[10px] font-bold uppercase text-zinc-600">Available now</span>
-                  {loading ? (
-                    <span className="mt-3 inline-flex items-center gap-2 text-xs text-zinc-500">
-                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> Loading balance
-                    </span>
-                  ) : error ? (
-                    <button type="button" onClick={() => void loadSummary()} className="mt-3 inline-flex items-center gap-2 text-left text-[11px] text-red-300 hover:text-red-200">
-                      <RefreshCw className="h-3.5 w-3.5" /> Retry
-                    </button>
-                  ) : (
-                    <>
-                      <strong className="mt-2 text-[24px] text-zinc-50">{formatCredits(summary?.account.availableCredits || 0)}</strong>
-                      <span className="text-[10px] text-zinc-500">
-                        credits available
-                        {(summary?.account.reservedCredits || 0) > 0
-                          ? ` · ${formatCredits(summary?.account.reservedCredits || 0)} reserved`
-                          : ''}
-                        {(summary?.account.balanceCredits || 0) < 0
-                          ? ` · ${formatCredits(Math.abs(summary?.account.balanceCredits || 0))} outstanding`
-                          : ''}
-                      </span>
-                    </>
-                  )}
-                </span>
-                <span className="grid h-11 w-11 place-items-center rounded-[8px] border border-white/[0.09] bg-white/[0.04] text-[#8eb3ff]">
-                  <WalletCards className="h-5 w-5" />
-                </span>
-              </div>
+            <section className="border-b border-white/[0.09] pb-8">
+              {loading ? (
+                <div className="flex min-h-[220px] items-center justify-center rounded-[8px] border border-white/[0.09] bg-white/[0.025] text-xs text-zinc-500">
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  Loading current plan
+                </div>
+              ) : error || !summary ? (
+                <div className="flex min-h-[220px] flex-col items-center justify-center rounded-[8px] border border-red-400/20 bg-red-400/[0.04] px-5 text-center">
+                  <span className="text-xs text-red-200">{error || 'Current plan is unavailable.'}</span>
+                  <button type="button" onClick={() => void loadSummary()} className="mt-3 inline-flex items-center gap-2 text-[11px] font-bold text-white hover:underline">
+                    <RefreshCw className="h-3.5 w-3.5" /> Retry
+                  </button>
+                </div>
+              ) : (
+                <BillingPlanOverview
+                  subscription={summary.subscription}
+                  availableCredits={summary.account.availableCredits}
+                  reservedCredits={summary.account.reservedCredits}
+                  capacity={summary.capacity}
+                />
+              )}
             </section>
 
             <section className="grid gap-3 py-8 sm:grid-cols-2 xl:grid-cols-4" aria-label="Available plans">

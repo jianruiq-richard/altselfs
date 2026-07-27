@@ -20,6 +20,7 @@ import {
 import Link from 'next/link';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
 import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
+import { BillingPlanOverview } from '@/components/billing-plan-overview';
 import { formatCredits } from '@/lib/billing-plans';
 import { displayEmail } from '@/lib/user-identifier';
 
@@ -58,11 +59,16 @@ type BillingSummary = {
     planName: string;
     status: string;
     monthlyCredits: number;
+    concurrentTaskLimit: number;
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
     scheduledPlanKey: string | null;
     graceEndsAt: string | null;
+  };
+  capacity: {
+    activeTaskCount: number;
+    availableTaskSlots: number;
   };
   recentLedger: Array<{
     id: string;
@@ -567,42 +573,33 @@ export default function ProfilePage() {
                         />
                       </section>
 
-                      <section className="grid min-h-[82px] grid-cols-[minmax(0,1fr)_auto] items-center gap-5 border-b border-white/[0.09] py-5">
-                        <span className="grid">
-                          <span className="text-[10px] text-zinc-600">Current plan</span>
-                          <strong className="mt-1 text-[15px] text-zinc-100">{billing.subscription.planName}</strong>
-                          <span className="mt-1 text-[10px] text-zinc-600">
-                            {billing.subscription.planKey === 'FREE'
-                              ? '1,000 welcome Credits, granted once'
-                              : `${formatCredits(billing.subscription.monthlyCredits)} Credits each billing period`}
-                            {billing.mode === 'observe' ? ' · usage preview' : ''}
-                          </span>
-                          {billing.subscription.currentPeriodEnd ? (
-                            <span className="mt-1 text-[10px] text-zinc-700">
-                              {billing.subscription.cancelAtPeriodEnd ? 'Ends' : 'Renews'} {formatDateTime(billing.subscription.currentPeriodEnd)}
+                      <section className="border-b border-white/[0.09] py-7">
+                        <BillingPlanOverview
+                          subscription={billing.subscription}
+                          capacity={billing.capacity}
+                          actions={(
+                            <span className="flex flex-wrap gap-2">
+                              {billing.subscription.planKey !== 'FREE' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void openBillingPortal()}
+                                  disabled={billingAction}
+                                  className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-300 hover:border-white/15 hover:bg-white/[0.055] hover:text-white disabled:cursor-not-allowed disabled:text-zinc-600"
+                                >
+                                  {billingAction ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+                                  Manage billing
+                                </button>
+                              ) : null}
+                              <Link
+                                href="/pricing"
+                                className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-300 hover:border-white/15 hover:bg-white/[0.055] hover:text-white"
+                              >
+                                View plans
+                                <ArrowRight className="h-3.5 w-3.5" />
+                              </Link>
                             </span>
-                          ) : null}
-                        </span>
-                        <span className="flex flex-wrap justify-end gap-2">
-                          {billing.subscription.planKey !== 'FREE' ? (
-                            <button
-                              type="button"
-                              onClick={() => void openBillingPortal()}
-                              disabled={billingAction}
-                              className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-300 hover:border-white/15 hover:bg-white/[0.055] hover:text-white disabled:cursor-not-allowed disabled:text-zinc-600"
-                            >
-                              {billingAction ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
-                              Manage billing
-                            </button>
-                          ) : null}
-                          <Link
-                            href="/pricing"
-                            className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-white/[0.09] bg-white/[0.035] px-3 text-[11px] font-bold text-zinc-300 hover:border-white/15 hover:bg-white/[0.055] hover:text-white"
-                          >
-                            View plans
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </Link>
-                        </span>
+                          )}
+                        />
                       </section>
 
                       <section className="pt-7">
