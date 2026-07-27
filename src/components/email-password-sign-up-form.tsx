@@ -67,9 +67,17 @@ export function EmailPasswordSignUpForm() {
       return;
     }
 
-    await setActive?.({ session: sessionId });
-    router.push("/dashboard");
-    router.refresh();
+    await setActive?.({
+      session: sessionId,
+      navigate: async ({ decorateUrl }) => {
+        const destination = decorateUrl("/dashboard");
+        if (destination.startsWith("http")) {
+          window.location.assign(destination);
+          return;
+        }
+        router.replace(destination);
+      },
+    });
   }
 
   async function submitCredentials(event: FormEvent<HTMLFormElement>) {

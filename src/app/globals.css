@@ -39,12 +39,13 @@
 
 html {
   min-height: 100%;
+  background: #090a0a;
   -webkit-text-size-adjust: 100%;
 }
 
 body {
   min-height: 100%;
-  background: #f9fafb;
+  background: #090a0a;
   color: var(--foreground);
   font-family: var(--font-sans);
   line-height: 1.5;
