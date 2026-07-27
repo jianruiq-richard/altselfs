@@ -1,106 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
 import { isDemoMode } from '@/lib/dev-auth';
-import { buildFallbackEmail } from '@/lib/user-identifier';
-import { Prisma } from '@prisma/client';
-
-function deriveTwinDisplayBase(input: {
-  name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}) {
-  const name = String(input.name || '').trim();
-  if (name) return name;
-
-  const email = String(input.email || '').trim();
-  if (email.includes('@')) {
-    const prefix = email.split('@')[0]?.trim();
-    if (prefix) return prefix;
-  }
-
-  const phone = String(input.phone || '').trim();
-  if (phone) return phone;
-
-  return '';
-}
-
-function defaultTwinName(input: {
-  name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}) {
-  const base = deriveTwinDisplayBase(input);
-  return base ? `${base}'s Digital Twin` : 'My Digital Twin';
-}
-
-const DEFAULT_TWIN_PROMPT =
-  'You are my professional digital twin. Represent my background, preferences, and decision style faithfully. Ask clarifying questions when context is missing, stay concise, and avoid inventing facts.';
-
-const DEFAULT_WECHAT_SOURCE_OWNER_EMAIL = 'jianruiq@163.com';
-
-async function seedDefaultWechatSourcesForInvestor(investorId: string) {
-  const templateUser = await prisma.user.findFirst({
-    where: { email: DEFAULT_WECHAT_SOURCE_OWNER_EMAIL },
-    select: {
-      id: true,
-      wechatSources: {
-        select: {
-          biz: true,
-          displayName: true,
-          description: true,
-          lastArticleUrl: true,
-          profile: true,
-          profileUpdatedAt: true,
-          profileConfidence: true,
-          lastProfileEvidence: true,
-          lastScannedAt: true,
-        },
-      },
-    },
-  });
-
-  if (!templateUser || templateUser.id === investorId || templateUser.wechatSources.length === 0) {
-    return;
-  }
-
-  await prisma.investorWechatSource.createMany({
-    data: templateUser.wechatSources.map((source) => ({
-      investorId,
-      biz: source.biz,
-      displayName: source.displayName,
-      description: source.description,
-      lastArticleUrl: source.lastArticleUrl,
-      profileUpdatedAt: source.profileUpdatedAt,
-      profileConfidence: source.profileConfidence,
-      lastScannedAt: source.lastScannedAt,
-      ...(source.profile === null ? {} : { profile: source.profile as Prisma.InputJsonValue }),
-      ...(source.lastProfileEvidence === null
-        ? {}
-        : { lastProfileEvidence: source.lastProfileEvidence as Prisma.InputJsonValue }),
-    })),
-    skipDuplicates: true,
-  });
-}
+import {
+  ProductUserRoleConflictError,
+  provisionProductUser,
+} from '@/lib/user-provisioning';
 
 export async function POST(req: NextRequest) {
   try {
     // Handle demo mode
     if (isDemoMode) {
-      const { clerkId, email, name, role } = await req.json();
+      const { clerkId, email, name, role, nickname, phone, wechatId } = await req.json();
 
       if (!clerkId || !email || !role) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
       }
 
-      // Create user in database for demo
-      const user = await prisma.user.create({
-        data: {
-          clerkId,
-          email,
-          name,
-          role: role === 'INVESTOR' ? 'INVESTOR' : 'CANDIDATE',
-        },
+      const user = await provisionProductUser({
+        clerkId,
+        email,
+        name,
+        role: role === 'INVESTOR' ? 'INVESTOR' : 'CANDIDATE',
+        nickname,
+        phone,
+        wechatId,
       });
 
       return NextResponse.json({ user });
@@ -119,7 +42,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const normalizedEmail = String(email || '').trim() || buildFallbackEmail(userId);
     const normalizedRole = role === 'INVESTOR' ? 'INVESTOR' : 'CANDIDATE';
     if (normalizedRole === 'CANDIDATE' && (!nickname || !phone || !wechatId)) {
       return NextResponse.json(
@@ -127,87 +49,21 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const existingUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
+    const user = await provisionProductUser({
+      clerkId: userId,
+      email,
+      name,
+      role: normalizedRole,
+      nickname,
+      phone,
+      wechatId,
     });
-
-    if (existingUser) {
-      if (existingUser.role !== normalizedRole) {
-        return NextResponse.json(
-          { error: 'Role is already fixed for this account and cannot be changed' },
-          { status: 409 }
-        );
-      }
-
-      const user = await prisma.user.update({
-        where: { clerkId: userId },
-        data: {
-          email: normalizedEmail,
-          name,
-          nickname: normalizedRole === 'CANDIDATE' ? nickname : existingUser.nickname,
-          phone: normalizedRole === 'CANDIDATE' ? phone : existingUser.phone,
-          wechatId: normalizedRole === 'CANDIDATE' ? wechatId : existingUser.wechatId,
-        },
-      });
-
-      if (normalizedRole === 'INVESTOR') {
-        const hasAvatar = await prisma.avatar.findFirst({
-          where: { investorId: user.id },
-          select: { id: true },
-        });
-        if (!hasAvatar) {
-          await prisma.avatar.create({
-            data: {
-              investorId: user.id,
-              name: defaultTwinName({
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-              }),
-              description: 'Default digital twin created during account setup.',
-              systemPrompt: DEFAULT_TWIN_PROMPT,
-              status: 'ACTIVE',
-            },
-          });
-        }
-        await seedDefaultWechatSourcesForInvestor(user.id);
-      }
-
-      return NextResponse.json({ user });
-    }
-
-    // Use authenticated clerk user id, do not trust client-sent clerkId
-    const user = await prisma.user.create({
-      data: {
-        clerkId: userId,
-        email: normalizedEmail,
-        name,
-        nickname: normalizedRole === 'CANDIDATE' ? nickname : null,
-        phone: normalizedRole === 'CANDIDATE' ? phone : null,
-        wechatId: normalizedRole === 'CANDIDATE' ? wechatId : null,
-        role: normalizedRole,
-      },
-    });
-
-    if (normalizedRole === 'INVESTOR') {
-      await prisma.avatar.create({
-        data: {
-          investorId: user.id,
-          name: defaultTwinName({
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-          }),
-          description: 'Default digital twin created during account setup.',
-          systemPrompt: DEFAULT_TWIN_PROMPT,
-          status: 'ACTIVE',
-        },
-      });
-      await seedDefaultWechatSourcesForInvestor(user.id);
-    }
 
     return NextResponse.json({ user });
   } catch (error) {
+    if (error instanceof ProductUserRoleConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error('Error creating user:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

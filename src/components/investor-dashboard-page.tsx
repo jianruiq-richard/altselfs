@@ -1,9 +1,10 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { AstromarDashboardClient } from '@/components/astromar-dashboard-client';
 import { buildExecutiveDailyBriefing } from '@/lib/executive-office';
 import { prisma } from '@/lib/prisma';
 import { resolveHiredTeamKeys } from '@/lib/team-library';
+import { provisionProductUser } from '@/lib/user-provisioning';
 
 const providerLabels: Record<string, string> = {
   GMAIL: 'Gmail',
@@ -104,7 +105,21 @@ export default async function InvestorDashboardPage() {
     },
   });
 
-  if (!dbUser) redirect('/dashboard/setup?role=investor');
+  if (!dbUser) {
+    const clerkUser = await currentUser();
+    if (!clerkUser) redirect('/sign-in');
+
+    await provisionProductUser({
+      clerkId: clerkUser.id,
+      email:
+        clerkUser.primaryEmailAddress?.emailAddress ||
+        clerkUser.emailAddresses.find((item) => item.id === clerkUser.primaryEmailAddressId)?.emailAddress ||
+        clerkUser.emailAddresses[0]?.emailAddress,
+      name: clerkUser.fullName || clerkUser.username,
+      role: 'INVESTOR',
+    });
+    redirect('/dashboard');
+  }
 
   const hiredTeamKeys = resolveHiredTeamKeys({
     teamHires: dbUser.teamHires,

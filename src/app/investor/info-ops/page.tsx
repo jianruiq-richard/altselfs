@@ -62,7 +62,7 @@ export default async function InfoOpsPage({
     },
   });
 
-  if (!dbUser) redirect('/dashboard/setup?role=investor');
+  if (!dbUser) redirect('/dashboard');
 
   const integrationMap = new Map(dbUser.integrations.map((it) => [it.provider, it]));
   const initialWechatSources = dbUser.wechatSources.map((source) => ({
