@@ -153,37 +153,3 @@ export const clerkAuthAppearance = {
     },
   },
 };
-
-export const clerkAuthLocalization = {
-  unstable__errors: {
-    form_password_validation_failed:
-      'This password does not meet the security requirements. Use a stronger, unique password that is different from your email address.',
-    form_password_not_strong_enough:
-      'This password is not strong enough. Use a longer, unique password that is different from your email address.',
-    form_password_pwned:
-      'This password has appeared in a data breach. Choose a different password.',
-    passwordComplexity: {
-      sentencePrefix: 'Your password must contain',
-      minimumLength: '{{length}} or more characters',
-      maximumLength: 'fewer than {{length}} characters',
-      requireNumbers: 'a number',
-      requireLowercase: 'a lowercase letter',
-      requireUppercase: 'an uppercase letter',
-      requireSpecialCharacter: 'a special character',
-    },
-    zxcvbn: {
-      goodPassword:
-        'The password format is valid. A final security check will run when you continue.',
-      notEnough:
-        'This password is not strong enough. Use a longer, less predictable password.',
-      couldBeStronger:
-        'This password works, but it could be stronger. Add more unrelated characters or words.',
-      warnings: {
-        userInputs:
-          'Avoid using your email address, name, or other account information in your password.',
-        pwned:
-          'This password has appeared in a data breach and cannot be used.',
-      },
-    },
-  },
-};

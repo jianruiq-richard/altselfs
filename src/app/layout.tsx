@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from '@clerk/nextjs';
-import { clerkAuthLocalization } from "@/lib/clerk-auth-appearance";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,7 +18,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider localization={clerkAuthLocalization}>
+    <ClerkProvider>
       <html lang="en-US" className="h-full antialiased">
         <body className="min-h-full bg-[#090a0a]">{children}</body>
       </html>

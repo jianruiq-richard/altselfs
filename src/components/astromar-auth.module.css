@@ -502,6 +502,158 @@
   gap: 14px;
 }
 
+.emailForm {
+  display: grid;
+  gap: 14px;
+}
+
+.googleButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  border: 1px solid var(--auth-line-strong);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.googleButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.googleButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.googleMark {
+  color: #78a8ff;
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.authDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--auth-subtle);
+  font-size: 12px;
+}
+
+.authDivider::before,
+.authDivider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--auth-line);
+  content: "";
+}
+
+.passwordInputWrap {
+  position: relative;
+}
+
+.passwordInputWrap .phoneInput {
+  padding-right: 46px;
+}
+
+.passwordVisibilityButton {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--auth-subtle);
+  transform: translateY(-50%);
+}
+
+.passwordVisibilityButton:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: white;
+}
+
+.passwordRules {
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 139, 130, 0.34);
+  border-radius: 8px;
+  background: rgba(255, 86, 78, 0.08);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.passwordRules strong {
+  color: #ff9e96;
+  font-size: 13px;
+}
+
+.passwordRules ul {
+  margin: 7px 0 0;
+  padding-left: 18px;
+}
+
+.verificationIntro h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.verificationIntro p {
+  margin: 5px 0 0;
+  color: var(--auth-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.verificationIntro strong {
+  color: white;
+}
+
+.authBackButton,
+.authTextButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--auth-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.authBackButton {
+  justify-self: start;
+  padding: 0;
+}
+
+.authTextButton {
+  min-height: 34px;
+}
+
+.authBackButton:hover:not(:disabled),
+.authTextButton:hover:not(:disabled) {
+  color: white;
+}
+
+.authBackButton:disabled,
+.authTextButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.clerkCaptcha:empty {
+  display: none;
+}
+
 .phoneField {
   display: grid;
   gap: 7px;

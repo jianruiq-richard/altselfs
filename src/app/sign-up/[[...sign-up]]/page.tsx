@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import { SignUp } from "@clerk/nextjs";
 import { headers } from "next/headers";
 import { AstromarAuthShell } from "@/components/astromar-auth-shell";
+import { EmailPasswordSignUpForm } from "@/components/email-password-sign-up-form";
 import { EmbeddedBrowserAuthGuard } from "@/components/embedded-browser-auth-guard";
 import { PhonePasswordAuthForm } from "@/components/phone-code-auth-form";
-import { clerkAuthAppearance } from "@/lib/clerk-auth-appearance";
 import { isOauthBlockedEmbeddedBrowser } from "@/lib/oauth-browser";
 
 export const metadata: Metadata = {
@@ -45,13 +44,7 @@ export default async function Page({
           initiallyBlocked={isEmbeddedBrowser}
           mode="sign-up"
         >
-          <SignUp
-            forceRedirectUrl="/dashboard"
-            fallbackRedirectUrl="/dashboard"
-            signInUrl="/sign-in?method=email"
-            initialValues={{ emailAddress: "" }}
-            appearance={clerkAuthAppearance}
-          />
+          <EmailPasswordSignUpForm />
         </EmbeddedBrowserAuthGuard>
       )}
     </AstromarAuthShell>
