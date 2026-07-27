@@ -13,7 +13,7 @@ import {
   UserRound,
   WalletCards,
 } from 'lucide-react';
-import { formatCredits } from '@/lib/billing-plans';
+import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 
 type AdminUserListItem = {
   id: string;
@@ -101,6 +101,14 @@ type AdminUserDetail = {
     warning: string | null;
   };
 };
+
+function paymentTitle(payment: AdminUserDetail['payments'][number]) {
+  if (payment.kind === 'CREDIT_PACK') {
+    return `${formatCredits(payment.creditsGranted)} Credit pack`;
+  }
+  if (!payment.planKey) return 'Subscription invoice';
+  return `${getBillingPlan(payment.planKey.toUpperCase()).name} invoice`;
+}
 
 type ThreadSummary = {
   id: string;
@@ -992,9 +1000,7 @@ function PaymentRefundPanel({
                   <div className="flex flex-wrap items-center gap-2">
                     <ReceiptText className="h-4 w-4 text-slate-500" />
                     <strong className="text-sm text-slate-100">
-                      {payment.kind === 'CREDIT_PACK'
-                        ? `${formatCredits(payment.creditsGranted)} Credit pack`
-                        : `${payment.planKey || 'Subscription'} invoice`}
+                      {paymentTitle(payment)}
                     </strong>
                     <StatusPill status={payment.status} />
                   </div>

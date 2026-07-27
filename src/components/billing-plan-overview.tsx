@@ -152,7 +152,7 @@ function PlanBenefit({
 function getPlanStatus(subscription: PlanSubscription) {
   if (subscription.cancelAtPeriodEnd) {
     return {
-      label: 'Cancellation scheduled',
+      label: 'Cancels at period end',
       className: 'border-amber-300/20 bg-amber-300/[0.07] text-amber-200',
     };
   }
@@ -200,12 +200,24 @@ function getPlanPeriod(subscription: PlanSubscription) {
 
   const start = formatPlanDate(subscription.currentPeriodStart);
   const end = formatPlanDate(subscription.currentPeriodEnd);
-  const endLabel = subscription.cancelAtPeriodEnd ? 'Ends' : 'Renews';
+
+  if (subscription.cancelAtPeriodEnd) {
+    return {
+      summary: end ? `Cancels on ${end}. Access remains valid until ${end}.` : 'Cancellation is scheduled.',
+      value: end || 'Pending',
+      detail: end ? 'Valid until cancellation' : 'Awaiting billing update',
+      range: start && end
+        ? `Current period · ${start} – ${end} · Will not renew`
+        : end
+          ? `Subscription cancels on ${end}`
+          : 'Cancellation scheduled; billing period unavailable',
+    };
+  }
 
   return {
-    summary: end ? `${endLabel} ${end}` : 'Billing period is being confirmed.',
+    summary: end ? `Renews ${end}` : 'Billing period is being confirmed.',
     value: end || 'Pending',
-    detail: end ? endLabel : 'Awaiting billing update',
+    detail: end ? 'Renews' : 'Awaiting billing update',
     range: start && end
       ? `Current period · ${start} – ${end}`
       : end

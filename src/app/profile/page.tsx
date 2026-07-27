@@ -21,7 +21,7 @@ import Link from 'next/link';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
 import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
-import { formatCredits } from '@/lib/billing-plans';
+import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 import { displayEmail } from '@/lib/user-identifier';
 
 type Profile = {
@@ -176,6 +176,14 @@ function ledgerTaskLabel(entry: BillingSummary['recentLedger'][number]) {
     if (typeof taskLabel === 'string' && taskLabel.trim()) return taskLabel.trim();
   }
   return entry.threadTitle;
+}
+
+function paymentTitle(payment: BillingSummary['recentPayments'][number]) {
+  if (payment.kind === 'CREDIT_PACK') {
+    return `${formatCredits(payment.creditsGranted)} Credit pack`;
+  }
+  if (!payment.planKey) return 'Subscription';
+  return `${getBillingPlan(payment.planKey.toUpperCase()).name} plan`;
 }
 
 export default function ProfilePage() {
@@ -616,9 +624,7 @@ export default function ProfilePage() {
                             <article key={payment.id} className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-5 border-b border-white/[0.09] py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_120px_100px]">
                               <span className="grid min-w-0">
                                 <strong className="truncate text-xs text-zinc-200">
-                                  {payment.kind === 'CREDIT_PACK'
-                                    ? `${formatCredits(payment.creditsGranted)} Credit pack`
-                                    : `${payment.planKey || 'Subscription'} plan`}
+                                  {paymentTitle(payment)}
                                 </strong>
                                 <span className="mt-1 truncate text-[10px] text-zinc-600">
                                   {payment.status.toLowerCase().replaceAll('_', ' ')}
