@@ -1162,7 +1162,17 @@ async function ensureStripeCustomer(
   );
   const row = result.rows[0];
   if (!row) throw new StripeBillingError(404, 'INVESTOR_NOT_FOUND', 'User not found.');
-  if (row.providerCustomerId) return String(row.providerCustomerId);
+  if (row.providerCustomerId) {
+    const existingCustomerId = String(row.providerCustomerId);
+    try {
+      const existingCustomer = await stripe.customers.retrieve(existingCustomerId);
+      if (!('deleted' in existingCustomer) || existingCustomer.deleted !== true) {
+        return existingCustomerId;
+      }
+    } catch (error) {
+      if (!isStripeMissingResourceError(error)) throw error;
+    }
+  }
   const customer = await stripe.customers.create(
     {
       email: input.email || optionalString(row.email) || undefined,
@@ -1182,6 +1192,15 @@ async function ensureStripeCustomer(
     );
   });
   return customer.id;
+}
+
+function isStripeMissingResourceError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  if ('code' in error && error.code === 'resource_missing') return true;
+  if ('message' in error && typeof error.message === 'string') {
+    return error.message.includes('No such customer');
+  }
+  return false;
 }
 
 async function assertNoSecondPaidSubscription(config: ServerConfig, investorId: string) {
