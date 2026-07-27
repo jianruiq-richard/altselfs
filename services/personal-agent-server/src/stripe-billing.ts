@@ -207,16 +207,31 @@ export async function changeStripePlan(
     );
   }
   const currentPlanKey = normalizePlanKey(subscription?.planKey);
+  const targetRank = PLAN_CATALOG[targetPlanKey as keyof typeof PLAN_CATALOG].rank;
+  const currentRank = PLAN_CATALOG[currentPlanKey].rank;
 
-  if (
-    targetPlanKey === 'FREE' ||
-    PLAN_CATALOG[targetPlanKey as keyof typeof PLAN_CATALOG].rank <= PLAN_CATALOG[currentPlanKey].rank
-  ) {
+  if (targetPlanKey === currentPlanKey) {
+    return {
+      action: 'UNCHANGED',
+      message: `The ${PLAN_CATALOG[currentPlanKey].name} plan is already active.`,
+    };
+  }
+
+  if (targetPlanKey === 'FREE') {
     return {
       action: 'PORTAL',
       ...(await createStripePortal(config, input)),
-      message: 'Downgrades and cancellations take effect at the end of the current billing period.',
+      message: 'Cancellation takes effect at the end of the current billing period. Unused Credits remain available.',
     };
+  }
+
+  if (targetRank < currentRank) {
+    throw new StripeBillingError(
+      409,
+      'PLAN_DOWNGRADE_NOT_SUPPORTED',
+      'Plan downgrades are not available. Cancel the current subscription, then choose a new plan after the billing period ends.',
+      { currentPlanKey, targetPlanKey },
+    );
   }
 
   if (!subscription?.providerSubscriptionId || subscription.provider !== 'stripe') {

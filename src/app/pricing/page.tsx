@@ -183,6 +183,15 @@ export default function PricingPage() {
             <section className="grid gap-3 py-8 sm:grid-cols-2 xl:grid-cols-4" aria-label="Available plans">
               {BILLING_PLANS.map((plan) => {
                 const current = summary?.subscription.planKey === plan.key;
+                const currentPlanIndex = BILLING_PLANS.findIndex(
+                  (candidate) => candidate.key === summary?.subscription.planKey,
+                );
+                const planIndex = BILLING_PLANS.findIndex((candidate) => candidate.key === plan.key);
+                const downgradeBlocked = (
+                  plan.key !== 'FREE' &&
+                  currentPlanIndex > 0 &&
+                  planIndex < currentPlanIndex
+                );
                 const includedCredits = plan.key === 'FREE' ? 1_000 : plan.monthlyCredits;
                 const estimate = estimatePlanWorkload(includedCredits);
                 return (
@@ -237,7 +246,15 @@ export default function PricingPage() {
                     ) : (
                       <button
                         type="button"
-                        disabled={billingAction !== null || !catalog?.configured || !catalog.plans[plan.key]?.priceId}
+                        title={downgradeBlocked
+                          ? 'Cancel your current subscription first. You can choose this plan after the billing period ends.'
+                          : undefined}
+                        disabled={
+                          downgradeBlocked ||
+                          billingAction !== null ||
+                          !catalog?.configured ||
+                          !catalog.plans[plan.key]?.priceId
+                        }
                         onClick={() => void runBillingAction(
                           `plan:${plan.key}`,
                           '/api/billing/change-plan',
@@ -247,6 +264,8 @@ export default function PricingPage() {
                       >
                         {billingAction === `plan:${plan.key}`
                           ? 'Preparing...'
+                          : downgradeBlocked
+                            ? 'Available after cancellation'
                           : catalog?.configured
                             ? `Choose ${plan.name}`
                             : 'Billing setup pending'}
