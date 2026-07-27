@@ -13,7 +13,7 @@ import { getAgentThreadRuntimeStatus, getAgentContextOpsUserUsage, getAgentConte
 import { createDirectUploadPolicy, createSignedObjectUrl, isArtifactObjectStorageConfigured, } from './artifact-storage.js';
 import { authorizeAgentRun, BillingUnavailableError, CreditAdmissionError, getBillingCapacity, getBillingSummary, } from './credit-admission.js';
 import { AdminBillingError, adjustAdminBillingCredits, getAdminBillingDetail, updateAdminBillingSubscription, } from './admin-billing.js';
-import { StripeBillingError, changeStripePlan, createStripeCheckout, createStripePortal, getStripeCatalog, handleStripeWebhook, refundStripePayment, } from './stripe-billing.js';
+import { StripeBillingError, changeStripePlan, createStripeCheckout, createStripePortal, getStripeCatalog, handleStripeWebhook, refundStripePayment, syncCurrentStripeSubscription, } from './stripe-billing.js';
 import { releaseRunCredits } from './credit-settlement.js';
 import { getActiveRuntoolScope, isAgentRunCancelledError } from './run-control.js';
 import { normalizeToolNameList } from './connector-tool-scope.js';
@@ -85,6 +85,9 @@ export function createHttpServer(agent, config, memoryReviewQueue) {
                 const investorId = url.searchParams.get('investorId')?.trim() || '';
                 if (!investorId)
                     return json(res, 400, { error: 'investorId is required' });
+                await syncCurrentStripeSubscription(config, investorId).catch((error) => {
+                    console.warn(`[billing] failed to sync Stripe subscription for ${investorId}: ${error instanceof Error ? error.message : String(error)}`);
+                });
                 return json(res, 200, await getBillingSummary(config, investorId));
             }
             if (req.method === 'GET' && url.pathname === '/internal/billing/catalog') {

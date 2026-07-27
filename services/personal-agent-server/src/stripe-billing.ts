@@ -195,6 +195,21 @@ async function createStripeCancellationPortal(
   if (!subscriptionId) {
     throw new StripeBillingError(409, 'NO_ACTIVE_STRIPE_SUBSCRIPTION', 'No active Stripe subscription is available to cancel.');
   }
+  const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+  if (
+    stripeSubscription.status === 'canceled' ||
+    stripeSubscription.cancel_at_period_end === true ||
+    typeof stripeSubscription.cancel_at === 'number'
+  ) {
+    const synced = await syncKnownStripeSubscription(config, investorId, stripeSubscription);
+    return {
+      action: 'CANCELLATION_SCHEDULED',
+      message: synced.currentPeriodEnd
+        ? `Cancellation is already scheduled for ${formatStripeDate(synced.currentPeriodEnd)}.`
+        : 'Cancellation is already scheduled at the end of the billing period.',
+      subscription: synced,
+    };
+  }
   const customerId = await ensureStripeCustomer(config, stripe, {
     investorId,
     email: optionalString(input.email),
@@ -249,7 +264,6 @@ async function ensureStripeBillingManagementPortalConfiguration(config: ServerCo
     altselfsVersion: version,
   };
   const params = {
-    active: true,
     name: 'Altselfs billing management',
     default_return_url: `${config.stripeAppBaseUrl}/profile`,
     features,
@@ -328,7 +342,6 @@ async function ensureStripeUpgradePortalConfiguration(
 
   if (configurationId) {
     const configuration = await stripe.billingPortal.configurations.update(configurationId, {
-      active: true,
       name,
       default_return_url: `${config.stripeAppBaseUrl}/pricing`,
       features,
@@ -386,9 +399,13 @@ export async function changeStripePlan(
   }
 
   if (targetPlanKey === 'FREE') {
+    const cancellation = await createStripeCancellationPortal(config, input);
+    if ((cancellation as { action?: unknown }).action === 'CANCELLATION_SCHEDULED') {
+      return cancellation;
+    }
     return {
       action: 'PORTAL',
-      ...(await createStripeCancellationPortal(config, input)),
+      ...cancellation,
       message: 'Cancellation takes effect at the end of the current billing period. Unused Credits remain available.',
     };
   }
@@ -815,14 +832,47 @@ async function syncStripeSubscription(config: ServerConfig, subscription: Stripe
     providerCustomerId: stripeId(subscription.customer),
   });
   if (!investorId) return null;
+  await syncKnownStripeSubscription(config, investorId, subscription);
+  return investorId;
+}
+
+export async function syncCurrentStripeSubscription(config: ServerConfig, investorId: string) {
+  if (!config.stripeSecretKey) return { synced: false, reason: 'stripe_not_configured' };
+  const subscription = await loadSubscription(config, investorId);
+  const subscriptionId = optionalString(subscription?.providerSubscriptionId);
+  if (!subscriptionId || subscription?.provider !== 'stripe') {
+    return { synced: false, reason: 'no_stripe_subscription' };
+  }
+  const stripe = requiredStripe(config);
+  const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+  return {
+    synced: true,
+    ...(await syncKnownStripeSubscription(config, investorId, stripeSubscription)),
+  };
+}
+
+async function syncKnownStripeSubscription(
+  config: ServerConfig,
+  investorId: string,
+  subscription: Stripe.Subscription,
+  invoiceId: string | null = null,
+) {
   const deleted = subscription.status === 'canceled';
   const planKey = deleted ? 'FREE' : planKeyForSubscription(config, subscription);
   const period = subscriptionPeriod(subscription);
   await runSerializableBillingTransaction(config, async (client) => {
     await ensureBillingAccount(config, client, investorId);
-    await upsertSubscriptionFromStripe(client, investorId, subscription, planKey, period, null);
+    await upsertSubscriptionFromStripe(client, investorId, subscription, planKey, period, invoiceId);
   });
-  return investorId;
+  return {
+    planKey,
+    status: deleted ? 'ACTIVE' : subscription.status.toUpperCase(),
+    cancelAtPeriodEnd: !deleted && (
+      subscription.cancel_at_period_end === true ||
+      typeof subscription.cancel_at === 'number'
+    ),
+    currentPeriodEnd: period.end?.toISOString() || null,
+  };
 }
 
 async function markSubscriptionPastDue(config: ServerConfig, invoice: Stripe.Invoice) {
@@ -1518,6 +1568,16 @@ function numberValue(value: unknown) {
 function checkoutResponse(session: Stripe.Checkout.Session) {
   if (!session.url) throw new StripeBillingError(502, 'CHECKOUT_URL_MISSING', 'Stripe did not return a Checkout URL.');
   return { id: session.id, url: session.url };
+}
+
+function formatStripeDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'the end of the billing period';
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 function paymentRow(row: Record<string, unknown>): PaymentRow {

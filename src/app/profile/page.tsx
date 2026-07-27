@@ -205,12 +205,22 @@ export default function ProfilePage() {
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [billingLoading, setBillingLoading] = useState(true);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingNotice, setBillingNotice] = useState<string | null>(null);
   const [billingAction, setBillingAction] = useState<string | null>(null);
 
   useEffect(() => {
-    const requestedView = new URLSearchParams(window.location.search).get('view');
+    const params = new URLSearchParams(window.location.search);
+    const requestedView = params.get('view');
+    const billingStatus = params.get('billing');
     if (requestedView === 'account' || requestedView === 'plan' || requestedView === 'archive') {
       setActiveView(requestedView);
+    }
+    if (billingStatus === 'cancelled') {
+      setActiveView('plan');
+      setBillingNotice('Cancellation request received. Your plan remains available until the current billing period ends.');
+    } else if (billingStatus === 'success') {
+      setActiveView('plan');
+      setBillingNotice('Billing updated.');
     }
   }, []);
 
@@ -310,9 +320,14 @@ export default function ProfilePage() {
         credentials: 'same-origin',
         body: JSON.stringify({ planKey: 'FREE' }),
       });
-      const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!response.ok || !data.url) throw new Error(data.error || 'Cancellation could not be started.');
-      window.location.assign(data.url);
+      const data = (await response.json().catch(() => ({}))) as { url?: string; message?: string; error?: string };
+      if (!response.ok) throw new Error(data.error || 'Cancellation could not be started.');
+      if (data.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      setBillingNotice(data.message || 'Cancellation is already scheduled at the end of the billing period.');
+      await loadBilling();
     } catch (actionError) {
       setBillingError(actionError instanceof Error ? actionError.message : 'Cancellation could not be started.');
     } finally {
@@ -577,6 +592,18 @@ export default function ProfilePage() {
                           </button>
                         </div>
                       ) : null}
+                      {billingNotice ? (
+                        <div className="mb-5 flex items-center justify-between gap-4 rounded-[7px] border border-[#8eb3ff]/20 bg-[#8eb3ff]/[0.06] px-4 py-3 text-[11px] text-[#a9c5ff]">
+                          <span>{billingNotice}</span>
+                          <button
+                            type="button"
+                            onClick={() => setBillingNotice(null)}
+                            className="shrink-0 font-bold text-white hover:underline"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      ) : null}
                       <section className="grid gap-3 border-b border-white/[0.09] pb-7 sm:grid-cols-3">
                         <UsageMetric
                           label="Available"
@@ -619,7 +646,11 @@ export default function ProfilePage() {
                                   Manage billing
                                 </button>
                               ) : null}
-                              {billing.subscription.planKey !== 'FREE' && !billing.subscription.cancelAtPeriodEnd ? (
+                              {billing.subscription.planKey !== 'FREE' && billing.subscription.cancelAtPeriodEnd ? (
+                                <span className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-amber-300/20 bg-amber-300/[0.06] px-3 text-[11px] font-bold text-amber-200">
+                                  Cancellation scheduled
+                                </span>
+                              ) : billing.subscription.planKey !== 'FREE' ? (
                                 <button
                                   type="button"
                                   onClick={() => void openCancellationPortal()}

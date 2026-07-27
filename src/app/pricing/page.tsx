@@ -183,6 +183,7 @@ export default function PricingPage() {
                 );
                 const includedCredits = plan.key === 'FREE' ? 1_000 : plan.monthlyCredits;
                 const estimate = estimatePlanWorkload(includedCredits);
+                const cancellationScheduled = current && plan.key !== 'FREE' && summary?.subscription.cancelAtPeriodEnd;
                 return (
                   <article
                     key={plan.key}
@@ -229,7 +230,11 @@ export default function PricingPage() {
                         >
                           {billingAction === 'portal' ? 'Opening...' : plan.key === 'FREE' ? 'Current plan' : 'Manage billing'}
                         </button>
-                        {plan.key !== 'FREE' && !summary?.subscription.cancelAtPeriodEnd ? (
+                        {cancellationScheduled ? (
+                          <span className="flex min-h-10 items-center justify-center rounded-[7px] border border-amber-300/20 bg-amber-300/[0.06] px-3 text-center text-[11px] font-bold text-amber-200">
+                            Cancellation scheduled
+                          </span>
+                        ) : plan.key !== 'FREE' ? (
                           <button
                             type="button"
                             disabled={billingAction !== null || !catalog?.configured}

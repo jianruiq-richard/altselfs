@@ -71,6 +71,7 @@ import {
   getStripeCatalog,
   handleStripeWebhook,
   refundStripePayment,
+  syncCurrentStripeSubscription,
 } from './stripe-billing.js';
 import { releaseRunCredits } from './credit-settlement.js';
 import { getActiveRuntoolScope, isAgentRunCancelledError } from './run-control.js';
@@ -146,6 +147,13 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
         const investorId = url.searchParams.get('investorId')?.trim() || '';
         if (!investorId) return json(res, 400, { error: 'investorId is required' });
+        await syncCurrentStripeSubscription(config, investorId).catch((error) => {
+          console.warn(
+            `[billing] failed to sync Stripe subscription for ${investorId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        });
         return json(res, 200, await getBillingSummary(config, investorId));
       }
 
