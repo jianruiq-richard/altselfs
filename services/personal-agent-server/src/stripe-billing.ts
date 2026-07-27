@@ -184,85 +184,84 @@ export async function createStripePortal(
 }
 
 export function buildStripeUpgradePortalFeatures(
-  prices: Array<{ priceId: string; productId: string }>,
+  target: { priceId: string; productId: string },
 ): Stripe.BillingPortal.ConfigurationCreateParams.Features {
-  const pricesByProduct = new Map<string, string[]>();
-  for (const { priceId, productId } of prices) {
-    pricesByProduct.set(productId, [...(pricesByProduct.get(productId) || []), priceId]);
-  }
   return {
     invoice_history: { enabled: true },
     payment_method_update: { enabled: true },
     subscription_update: {
       enabled: true,
       default_allowed_updates: ['price'],
-      products: [...pricesByProduct].map(([product, productPrices]) => ({
-        product,
-        prices: productPrices,
-      })),
+      products: [{
+        product: target.productId,
+        prices: [target.priceId],
+      }],
       billing_cycle_anchor: 'now',
       proration_behavior: 'none',
     },
   };
 }
 
-async function ensureStripeUpgradePortalConfiguration(config: ServerConfig, stripe: Stripe) {
+async function ensureStripeUpgradePortalConfiguration(
+  config: ServerConfig,
+  stripe: Stripe,
+  planKey: PaidPlanKey,
+  priceId: string,
+) {
   const purpose = 'altselfs_plan_upgrade_confirmation';
-  const configuredId = config.stripeUpgradePortalConfigurationId;
-  let configurationId = configuredId || null;
+  const version = '2';
+  const configurations = await stripe.billingPortal.configurations.list({
+    active: true,
+    limit: 100,
+  });
+  const configurationId = configurations.data.find(
+    (configuration) => (
+      configuration.metadata?.altselfsPurpose === purpose
+      && configuration.metadata?.altselfsVersion === version
+      && configuration.metadata?.altselfsPlanKey === planKey
+      && configuration.metadata?.altselfsPriceId === priceId
+    ),
+  )?.id || null;
 
-  if (!configurationId) {
-    const configurations = await stripe.billingPortal.configurations.list({
-      active: true,
-      limit: 100,
-    });
-    configurationId = configurations.data.find(
-      (configuration) => configuration.metadata?.altselfsPurpose === purpose,
-    )?.id || null;
+  const price = await stripe.prices.retrieve(priceId);
+  const productId = stripeId(price.product);
+  if (!productId) {
+    throw new StripeBillingError(
+      409,
+      'STRIPE_PRICE_PRODUCT_MISSING',
+      `Stripe price ${priceId} is not attached to a product.`,
+    );
   }
-
-  const prices = await Promise.all(
-    (['STARTER', 'PRO', 'SCALE'] as const).map(async (planKey) => {
-      const priceId = priceIdForPlan(config, planKey);
-      const price = await stripe.prices.retrieve(priceId);
-      const productId = stripeId(price.product);
-      if (!productId) {
-        throw new StripeBillingError(
-          409,
-          'STRIPE_PRICE_PRODUCT_MISSING',
-          `Stripe price ${priceId} is not attached to a product.`,
-        );
-      }
-      return { priceId, productId };
-    }),
-  );
-  const features = buildStripeUpgradePortalFeatures(prices);
+  const features = buildStripeUpgradePortalFeatures({ priceId, productId });
+  const metadata = {
+    altselfsPurpose: purpose,
+    altselfsVersion: version,
+    altselfsPlanKey: planKey,
+    altselfsPriceId: priceId,
+  };
+  const name = `Altselfs ${PLAN_CATALOG[planKey].name} upgrade confirmation`;
 
   if (configurationId) {
     const configuration = await stripe.billingPortal.configurations.update(configurationId, {
       active: true,
-      name: 'Altselfs plan upgrade confirmation',
+      name,
       default_return_url: `${config.stripeAppBaseUrl}/pricing`,
       features,
-      metadata: {
-        altselfsPurpose: purpose,
-        altselfsVersion: '1',
-      },
+      metadata,
     });
     return configuration.id;
   }
 
   const configuration = await stripe.billingPortal.configurations.create(
     {
-      name: 'Altselfs plan upgrade confirmation',
+      name,
       default_return_url: `${config.stripeAppBaseUrl}/pricing`,
       features,
-      metadata: {
-        altselfsPurpose: purpose,
-        altselfsVersion: '1',
-      },
+      metadata,
     },
-    { idempotencyKey: 'altselfs:portal-configuration:plan-upgrade:v1' },
+    {
+      idempotencyKey: `altselfs:portal-configuration:plan-upgrade:${planKey}:${priceId}:v2`,
+    },
   );
   return configuration.id;
 }
@@ -336,7 +335,12 @@ export async function changeStripePlan(
   const planKey = paidPlanKey(targetPlanKey);
   const priceId = priceIdForPlan(config, planKey);
   const requestId = optionalString(input.requestId) || id('upgrade');
-  const configurationId = await ensureStripeUpgradePortalConfiguration(config, stripe);
+  const configurationId = await ensureStripeUpgradePortalConfiguration(
+    config,
+    stripe,
+    planKey,
+    priceId,
+  );
 
   // Store upgrade context without changing the billable item. Stripe applies the
   // actual plan update only after the customer confirms it on the hosted page.

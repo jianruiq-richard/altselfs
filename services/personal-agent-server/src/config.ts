@@ -117,7 +117,6 @@ export type ServerConfig = {
   stripePriceCredits80000?: string;
   stripePriceCredits100000?: string;
   stripePortalConfigurationId?: string;
-  stripeUpgradePortalConfigurationId?: string;
   stripeAutomaticTaxEnabled: boolean;
   stripeRefundContactEmail: string;
   stripeRefundUsageLimitCredits: number;
@@ -551,7 +550,6 @@ export function loadConfig(): ServerConfig {
     stripePriceCredits80000: process.env.STRIPE_PRICE_CREDITS_80000?.trim() || undefined,
     stripePriceCredits100000: process.env.STRIPE_PRICE_CREDITS_100000?.trim() || undefined,
     stripePortalConfigurationId: process.env.STRIPE_PORTAL_CONFIGURATION_ID?.trim() || undefined,
-    stripeUpgradePortalConfigurationId: process.env.STRIPE_UPGRADE_PORTAL_CONFIGURATION_ID?.trim() || undefined,
     stripeAutomaticTaxEnabled: readBoolEnv('STRIPE_AUTOMATIC_TAX_ENABLED', false),
     stripeRefundContactEmail: readEnv('STRIPE_REFUND_CONTACT_EMAIL', 'contact@astromar.org'),
     stripeRefundUsageLimitCredits: readIntEnv('STRIPE_REFUND_USAGE_LIMIT_CREDITS', 2_000),
