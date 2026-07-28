@@ -321,6 +321,7 @@
   text-transform: uppercase;
 }
 
+.sectionHeading h1,
 .sectionHeading h2,
 .conversationCopy h2,
 .ctaBand h2 {
@@ -776,6 +777,7 @@
     font-size: 72px;
   }
 
+  .sectionHeading h1,
   .sectionHeading h2,
   .conversationCopy h2,
   .ctaBand h2 {
@@ -885,6 +887,7 @@
     gap: 18px;
   }
 
+  .sectionHeading h1,
   .sectionHeading h2,
   .conversationCopy h2,
   .ctaBand h2 {

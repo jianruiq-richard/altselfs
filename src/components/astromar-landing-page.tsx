@@ -95,7 +95,7 @@ export function AstromarLandingPage() {
           </Link>
 
           <div className={styles.navLinks} aria-label="Primary navigation">
-            <a href="#pricing">Pricing</a>
+            <Link href="/pricing">Pricing</Link>
             <a href="#cases">Use cases</a>
             <a href="#conversation">How it thinks</a>
           </div>
@@ -155,33 +155,6 @@ export function AstromarLandingPage() {
             <span key={source}>{source}</span>
           ))}
         </div>
-      </section>
-
-      <section className={classes("container", "section")} id="pricing">
-        <div className={styles.sectionHeading}>
-          <div>
-            <p className={styles.eyebrow}>Pricing</p>
-            <h2>Usage-based plans for agent work.</h2>
-          </div>
-          <div className={styles.pricingIntro}>
-            <p>
-              Credits measure actual agent work and never expire. Annual billing keeps the same workspace limits,
-              grants the full year of Credits up front, and gives 20% off the equivalent monthly subscription.
-            </p>
-            <Link
-              className={classes("button", "buttonPrimary")}
-              href="/sign-in?method=email&redirect_url=/dashboard"
-            >
-              Get Started
-              <ArrowRight aria-hidden="true" size={16} strokeWidth={2} />
-            </Link>
-          </div>
-        </div>
-        <BillingPlanGrid
-          getStartedHref="/sign-in?method=email&redirect_url=/dashboard"
-          showIntro={false}
-          variant="public"
-        />
       </section>
 
       <section className={classes("container", "section")} id="demo">
@@ -358,6 +331,33 @@ export function AstromarLandingPage() {
             </Link>
           </div>
         </div>
+      </section>
+
+      <section className={classes("container", "section")} id="pricing">
+        <div className={styles.sectionHeading}>
+          <div>
+            <p className={styles.eyebrow}>Pricing</p>
+            <h2>Usage-based plans for agent work.</h2>
+          </div>
+          <div className={styles.pricingIntro}>
+            <p>
+              Credits measure actual agent work and never expire. Annual billing keeps the same workspace limits,
+              grants the full year of Credits up front, and gives 20% off the equivalent monthly subscription.
+            </p>
+            <Link
+              className={classes("button", "buttonPrimary")}
+              href="/sign-in?method=email&redirect_url=/dashboard"
+            >
+              Get Started
+              <ArrowRight aria-hidden="true" size={16} strokeWidth={2} />
+            </Link>
+          </div>
+        </div>
+        <BillingPlanGrid
+          getStartedHref="/sign-in?method=email&redirect_url=/dashboard"
+          showIntro={false}
+          variant="public"
+        />
       </section>
 
       <footer className={styles.footer}>

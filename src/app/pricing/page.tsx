@@ -1,5 +1,6 @@
 'use client';
 
+import { useUser } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
 import {
   ArrowRight,
@@ -13,6 +14,7 @@ import Link from 'next/link';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
 import { BillingPlanGrid, type BillingPlanCatalog } from '@/components/billing-plan-grid';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
+import { PublicPricingPage } from '@/components/public-pricing-page';
 import { type BillingCycle, formatCredits } from '@/lib/billing-plans';
 
 type BillingSummary = {
@@ -56,6 +58,7 @@ const workloadExamples = [
 ];
 
 export default function PricingPage() {
+  const { isLoaded, isSignedIn } = useUser();
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,8 +87,9 @@ export default function PricingPage() {
   };
 
   useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
     void loadSummary();
-  }, []);
+  }, [isLoaded, isSignedIn]);
 
   const runBillingAction = async (
     actionKey: string,
@@ -115,6 +119,21 @@ export default function PricingPage() {
       setBillingAction(null);
     }
   };
+
+  if (!isLoaded) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-[#090909] px-6 text-center text-zinc-400">
+        <div>
+          <p className="text-base font-semibold text-zinc-100">Loading pricing</p>
+          <p className="mt-2 text-sm text-zinc-500">Please wait...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return <PublicPricingPage />;
+  }
 
   return (
     <AstromarWorkspaceShell mobileTitle="Pricing">
