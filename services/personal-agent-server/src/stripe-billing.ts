@@ -48,6 +48,18 @@ type PaymentRow = {
   metadata: Record<string, unknown> | null;
 };
 
+type SubscriptionRow = {
+  planKey: string;
+  status: string;
+  provider: string | null;
+  providerCustomerId: string | null;
+  providerSubscriptionId: string | null;
+  providerPriceId: string | null;
+  latestInvoiceId: string | null;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+};
+
 export class StripeBillingError extends Error {
   constructor(
     readonly httpStatus: number,
@@ -215,7 +227,13 @@ async function createStripeCancellationPortal(
   if (!subscriptionId) {
     throw new StripeBillingError(409, 'NO_ACTIVE_STRIPE_SUBSCRIPTION', 'No active Stripe subscription is available to cancel.');
   }
-  const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const stripeSubscription = await retrieveStripeSubscriptionOrClear(config, stripe, investorId, subscriptionId);
+  if (!stripeSubscription) {
+    return {
+      action: 'UNCHANGED',
+      message: 'No live Stripe subscription is active. The local billing record has been refreshed.',
+    };
+  }
   if (
     stripeSubscription.status === 'canceled' ||
     stripeSubscription.cancel_at_period_end === true ||
@@ -422,7 +440,10 @@ export async function changeStripePlan(
 
   if (targetPlanKey === 'FREE') {
     const cancellation = await createStripeCancellationPortal(config, input);
-    if ((cancellation as { action?: unknown }).action === 'CANCELLATION_SCHEDULED') {
+    if (
+      (cancellation as { action?: unknown }).action === 'CANCELLATION_SCHEDULED' ||
+      (cancellation as { action?: unknown }).action === 'UNCHANGED'
+    ) {
       return cancellation;
     }
     return {
@@ -430,15 +451,6 @@ export async function changeStripePlan(
       ...cancellation,
       message: 'Cancellation takes effect at the end of the current billing period. Unused Credits remain available.',
     };
-  }
-
-  if (targetRank < currentRank) {
-    throw new StripeBillingError(
-      409,
-      'PLAN_DOWNGRADE_NOT_SUPPORTED',
-      'Plan downgrades are not available. Cancel the current subscription, then choose a new plan after the billing period ends.',
-      { currentPlanKey, targetPlanKey },
-    );
   }
 
   if (!subscription?.providerSubscriptionId || subscription.provider !== 'stripe') {
@@ -460,7 +472,34 @@ export async function changeStripePlan(
   }
 
   const stripe = requiredStripe(config);
-  const stripeSubscription = await stripe.subscriptions.retrieve(subscription.providerSubscriptionId);
+  const stripeSubscription = await retrieveStripeSubscriptionOrClear(
+    config,
+    stripe,
+    investorId,
+    subscription.providerSubscriptionId,
+  );
+  if (!stripeSubscription) {
+    return {
+      action: 'CHECKOUT',
+      ...(await createStripeCheckout(config, {
+        ...input,
+        purchaseKind: 'SUBSCRIPTION',
+        planKey: targetPlanKey,
+        billingCycle: selectedBillingCycle,
+      })),
+      message: 'The previous Stripe subscription could not be found in live mode. Confirm a new subscription with Stripe.',
+    };
+  }
+
+  if (targetRank < currentRank) {
+    throw new StripeBillingError(
+      409,
+      'PLAN_DOWNGRADE_NOT_SUPPORTED',
+      'Plan downgrades are not available. Cancel the current subscription, then choose a new plan after the billing period ends.',
+      { currentPlanKey, targetPlanKey },
+    );
+  }
+
   const item = stripeSubscription.items.data[0];
   if (!item) throw new StripeBillingError(409, 'SUBSCRIPTION_ITEM_MISSING', 'The Stripe subscription has no billable item.');
   const currentBillingCycle = billingCycleForPriceId(config, subscription.providerPriceId)
@@ -1254,11 +1293,47 @@ async function ensureStripeCustomer(
   return customer.id;
 }
 
+async function retrieveStripeSubscriptionOrClear(
+  config: ServerConfig,
+  stripe: Stripe,
+  investorId: string,
+  subscriptionId: string,
+) {
+  try {
+    return await stripe.subscriptions.retrieve(subscriptionId);
+  } catch (error) {
+    if (!isStripeMissingResourceError(error)) throw error;
+    await clearMissingStripeSubscription(config, investorId, subscriptionId);
+    return null;
+  }
+}
+
+async function clearMissingStripeSubscription(
+  config: ServerConfig,
+  investorId: string,
+  subscriptionId: string,
+) {
+  await runSerializableBillingTransaction(config, async (client) => {
+    await ensureBillingAccount(config, client, investorId);
+    await client.query(
+      [
+        'update credit_subscriptions set "planKey" = $3, status = $4, "monthlyCredits" = $5,',
+        '"currentPeriodStart" = null, "currentPeriodEnd" = null, "cancelAtPeriodEnd" = false,',
+        '"scheduledPlanKey" = null, "graceEndsAt" = null,',
+        '"providerSubscriptionId" = null, "providerPriceId" = null, "latestInvoiceId" = null,',
+        '"updatedAt" = now()',
+        'where "investorId" = $1 and "providerSubscriptionId" = $2',
+      ].join(' '),
+      [investorId, subscriptionId, 'FREE', 'ACTIVE', PLAN_CATALOG.FREE.monthlyCredits],
+    );
+  });
+}
+
 function isStripeMissingResourceError(error: unknown) {
   if (!error || typeof error !== 'object') return false;
   if ('code' in error && error.code === 'resource_missing') return true;
   if ('message' in error && typeof error.message === 'string') {
-    return error.message.includes('No such customer');
+    return error.message.includes('No such customer') || error.message.includes('No such subscription');
   }
   return false;
 }
@@ -1298,19 +1373,7 @@ async function loadSubscription(config: ServerConfig, investorId: string) {
     ].join(' '),
     [investorId],
   );
-  return result.rows[0] as
-    | {
-        planKey: string;
-        status: string;
-        provider: string | null;
-        providerCustomerId: string | null;
-        providerSubscriptionId: string | null;
-        providerPriceId: string | null;
-        latestInvoiceId: string | null;
-        currentPeriodStart: Date | null;
-        currentPeriodEnd: Date | null;
-      }
-    | undefined;
+  return result.rows[0] as SubscriptionRow | undefined;
 }
 
 async function loadPayment(config: ServerConfig, investorId: string, paymentId: string): Promise<PaymentRow | null> {
