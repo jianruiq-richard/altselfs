@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { BillingPlanGrid } from "@/components/billing-plan-grid";
 import styles from "./astromar-landing-page.module.css";
 
 const scenarios = [
@@ -94,7 +95,7 @@ export function AstromarLandingPage() {
           </Link>
 
           <div className={styles.navLinks} aria-label="Primary navigation">
-            <a href="#demo">Demo</a>
+            <a href="#pricing">Pricing</a>
             <a href="#cases">Use cases</a>
             <a href="#conversation">How it thinks</a>
           </div>
@@ -103,8 +104,8 @@ export function AstromarLandingPage() {
             <Link className={styles.button} href="/sign-in?method=email">
               Sign in
             </Link>
-            <Link className={classes("button", "buttonPrimary")} href="/sign-up?method=email">
-              Sign up
+            <Link className={classes("button", "buttonPrimary")} href="/sign-in?method=email&redirect_url=/dashboard">
+              Get Started
             </Link>
           </div>
         </div>
@@ -154,6 +155,33 @@ export function AstromarLandingPage() {
             <span key={source}>{source}</span>
           ))}
         </div>
+      </section>
+
+      <section className={classes("container", "section")} id="pricing">
+        <div className={styles.sectionHeading}>
+          <div>
+            <p className={styles.eyebrow}>Pricing</p>
+            <h2>Usage-based plans for agent work.</h2>
+          </div>
+          <div className={styles.pricingIntro}>
+            <p>
+              Credits measure actual agent work and never expire. Annual billing keeps the same workspace limits,
+              grants the full year of Credits up front, and gives 20% off the equivalent monthly subscription.
+            </p>
+            <Link
+              className={classes("button", "buttonPrimary")}
+              href="/sign-in?method=email&redirect_url=/dashboard"
+            >
+              Get Started
+              <ArrowRight aria-hidden="true" size={16} strokeWidth={2} />
+            </Link>
+          </div>
+        </div>
+        <BillingPlanGrid
+          getStartedHref="/sign-in?method=email&redirect_url=/dashboard"
+          showIntro={false}
+          variant="public"
+        />
       </section>
 
       <section className={classes("container", "section")} id="demo">

@@ -16,6 +16,7 @@ export async function POST(request: Request) {
         name: investor.name || investor.nickname,
         purchaseKind: body.purchaseKind,
         planKey: body.planKey,
+        billingCycle: body.billingCycle,
         packKey: body.packKey,
         requestId: randomUUID(),
       }),

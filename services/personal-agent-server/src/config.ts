@@ -112,6 +112,9 @@ export type ServerConfig = {
   stripePriceStarterMonthly?: string;
   stripePriceProMonthly?: string;
   stripePriceUltraMonthly?: string;
+  stripePriceStarterYearly?: string;
+  stripePriceProYearly?: string;
+  stripePriceUltraYearly?: string;
   stripePriceCredits20000?: string;
   stripePriceCredits40000?: string;
   stripePriceCredits80000?: string;
@@ -545,6 +548,9 @@ export function loadConfig(): ServerConfig {
     stripePriceStarterMonthly: process.env.STRIPE_PRICE_STARTER_MONTHLY?.trim() || undefined,
     stripePriceProMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY?.trim() || undefined,
     stripePriceUltraMonthly: process.env.STRIPE_PRICE_ULTRA_MONTHLY?.trim() || undefined,
+    stripePriceStarterYearly: process.env.STRIPE_PRICE_STARTER_YEARLY?.trim() || undefined,
+    stripePriceProYearly: process.env.STRIPE_PRICE_PRO_YEARLY?.trim() || undefined,
+    stripePriceUltraYearly: process.env.STRIPE_PRICE_ULTRA_YEARLY?.trim() || undefined,
     stripePriceCredits20000: process.env.STRIPE_PRICE_CREDITS_20000?.trim() || undefined,
     stripePriceCredits40000: process.env.STRIPE_PRICE_CREDITS_40000?.trim() || undefined,
     stripePriceCredits80000: process.env.STRIPE_PRICE_CREDITS_80000?.trim() || undefined,

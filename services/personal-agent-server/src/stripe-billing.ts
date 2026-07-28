@@ -29,6 +29,7 @@ const CREDIT_PACKS = {
 
 type PaidPlanKey = Exclude<keyof typeof PLAN_CATALOG, 'FREE'>;
 type CreditPackKey = keyof typeof CREDIT_PACKS;
+type BillingCycle = 'monthly' | 'yearly';
 
 type PaymentRow = {
   id: string;
@@ -63,9 +64,24 @@ export function getStripeCatalog(config: ServerConfig) {
   return {
     configured: Boolean(config.stripeSecretKey),
     plans: {
-      STARTER: { priceId: config.stripePriceStarterMonthly || null, ...PLAN_CATALOG.STARTER },
-      PRO: { priceId: config.stripePriceProMonthly || null, ...PLAN_CATALOG.PRO },
-      SCALE: { priceId: config.stripePriceUltraMonthly || null, ...PLAN_CATALOG.SCALE },
+      STARTER: {
+        priceId: config.stripePriceStarterMonthly || null,
+        monthlyPriceId: config.stripePriceStarterMonthly || null,
+        yearlyPriceId: config.stripePriceStarterYearly || null,
+        ...PLAN_CATALOG.STARTER,
+      },
+      PRO: {
+        priceId: config.stripePriceProMonthly || null,
+        monthlyPriceId: config.stripePriceProMonthly || null,
+        yearlyPriceId: config.stripePriceProYearly || null,
+        ...PLAN_CATALOG.PRO,
+      },
+      SCALE: {
+        priceId: config.stripePriceUltraMonthly || null,
+        monthlyPriceId: config.stripePriceUltraMonthly || null,
+        yearlyPriceId: config.stripePriceUltraYearly || null,
+        ...PLAN_CATALOG.SCALE,
+      },
     },
     packs: {
       CREDITS_20000: { priceId: config.stripePriceCredits20000 || null, ...CREDIT_PACKS.CREDITS_20000 },
@@ -89,6 +105,7 @@ export async function createStripeCheckout(
     name?: unknown;
     purchaseKind: unknown;
     planKey?: unknown;
+    billingCycle?: unknown;
     packKey?: unknown;
     requestId?: unknown;
   },
@@ -114,7 +131,8 @@ export async function createStripeCheckout(
 
   if (purchaseKind === 'SUBSCRIPTION') {
     const planKey = paidPlanKey(input.planKey);
-    const priceId = priceIdForPlan(config, planKey);
+    const selectedBillingCycle = billingCycle(input.billingCycle);
+    const priceId = priceIdForPlan(config, planKey, selectedBillingCycle);
     await assertNoSecondPaidSubscription(config, investorId);
     const session = await stripe.checkout.sessions.create(
       {
@@ -125,15 +143,17 @@ export async function createStripeCheckout(
           investorId,
           purchaseKind: 'SUBSCRIPTION',
           planKey,
+          billingCycle: selectedBillingCycle,
         },
         subscription_data: {
           metadata: {
             investorId,
             planKey,
+            billingCycle: selectedBillingCycle,
           },
         },
       },
-      { idempotencyKey: `checkout:subscription:${investorId}:${planKey}:${requestId}` },
+      { idempotencyKey: `checkout:subscription:${investorId}:${planKey}:${selectedBillingCycle}:${requestId}` },
     );
     return checkoutResponse(session);
   }
@@ -371,6 +391,7 @@ export async function changeStripePlan(
     email?: unknown;
     name?: unknown;
     planKey: unknown;
+    billingCycle?: unknown;
     requestId?: unknown;
   },
 ) {
@@ -379,6 +400,7 @@ export async function changeStripePlan(
   if (!(targetPlanKey in PLAN_CATALOG)) {
     throw new StripeBillingError(400, 'INVALID_PLAN', 'Unknown billing plan.');
   }
+  const selectedBillingCycle = billingCycle(input.billingCycle);
   const subscription = await loadSubscription(config, investorId);
   if (String(subscription?.status || '').toUpperCase() === 'DISPUTED') {
     throw new StripeBillingError(
@@ -426,6 +448,7 @@ export async function changeStripePlan(
         ...input,
         purchaseKind: 'SUBSCRIPTION',
         planKey: targetPlanKey,
+        billingCycle: selectedBillingCycle,
       })),
     };
   }
@@ -435,7 +458,7 @@ export async function changeStripePlan(
   const item = stripeSubscription.items.data[0];
   if (!item) throw new StripeBillingError(409, 'SUBSCRIPTION_ITEM_MISSING', 'The Stripe subscription has no billable item.');
   const planKey = paidPlanKey(targetPlanKey);
-  const priceId = priceIdForPlan(config, planKey);
+  const priceId = priceIdForPlan(config, planKey, selectedBillingCycle);
   const requestId = optionalString(input.requestId) || id('upgrade');
   const configurationId = await ensureStripeUpgradePortalConfiguration(
     config,
@@ -455,8 +478,10 @@ export async function changeStripePlan(
         planChangeKind: 'IMMEDIATE_UPGRADE',
         planChangeRequestId: requestId,
         requestedPlanKey: planKey,
+        requestedBillingCycle: selectedBillingCycle,
         previousPlanKey: currentPlanKey,
         previousPriceId: stripeId(item.price) || '',
+        previousBillingCycle: billingCycleForPriceId(config, stripeId(item.price)) || '',
         previousLatestInvoiceId: subscription.latestInvoiceId || '',
         previousPeriodEnd: subscription.currentPeriodEnd?.toISOString() || '',
       },
@@ -703,6 +728,7 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
   });
   if (!investorId) throw new StripeBillingError(409, 'INVESTOR_NOT_FOUND', `No user mapped to ${subscription.id}.`);
   const planKey = planKeyForSubscription(config, subscription);
+  const selectedBillingCycle = billingCycleForSubscription(config, subscription);
   const plan = PLAN_CATALOG[planKey];
   const billingReason = String(invoice.billing_reason || '');
   const requestedPlanKey = optionalString(subscription.metadata.requestedPlanKey)?.toUpperCase();
@@ -711,7 +737,7 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
     subscription.metadata.planChangeKind === 'IMMEDIATE_UPGRADE' &&
     (!requestedPlanKey || requestedPlanKey === planKey)
   );
-  const credits = plan.monthlyCredits;
+  const credits = subscriptionCreditsForPlan(planKey, selectedBillingCycle);
   const paymentSource = await invoicePaymentSource(stripe, invoice.id);
   const period = subscriptionPeriod(subscription);
 
@@ -754,11 +780,13 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
           planChangeKind: isUpgrade ? 'IMMEDIATE_UPGRADE' : null,
           previousPlanKey: isUpgrade ? optionalString(subscription.metadata.previousPlanKey) : null,
           previousPriceId: isUpgrade ? optionalString(subscription.metadata.previousPriceId) : null,
+          previousBillingCycle: isUpgrade ? optionalString(subscription.metadata.previousBillingCycle) : null,
           previousLatestInvoiceId: isUpgrade
             ? optionalString(subscription.metadata.previousLatestInvoiceId)
             : null,
           previousPeriodEnd: isUpgrade ? optionalString(subscription.metadata.previousPeriodEnd) : null,
           planChangeRequestId: isUpgrade ? optionalString(subscription.metadata.planChangeRequestId) : null,
+          billingCycle: selectedBillingCycle,
         }),
         investorId,
       ],
@@ -775,9 +803,9 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
         paymentId,
         description: isUpgrade
           ? `${plan.name} subscription upgrade Credits`
-          : `${plan.name} monthly subscription Credits`,
+          : `${plan.name} ${selectedBillingCycle} subscription Credits`,
         idempotencyKey: `stripe:invoice:${invoice.id}`,
-        metadata: { paymentId, invoiceId: invoice.id, billingReason, planKey },
+        metadata: { paymentId, invoiceId: invoice.id, billingReason, planKey, billingCycle: selectedBillingCycle },
       });
       await client.query(
         [
@@ -798,8 +826,10 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
         planChangeKind: '',
         planChangeRequestId: '',
         requestedPlanKey: '',
+        requestedBillingCycle: '',
         previousPlanKey: '',
         previousPriceId: '',
+        previousBillingCycle: '',
         previousLatestInvoiceId: '',
         previousPeriodEnd: '',
       },
@@ -972,7 +1002,11 @@ async function revertStripeSubscriptionAfterRefund(
     );
   }
   const previousPriceId = optionalString(payment.metadata?.previousPriceId)
-    || priceIdForPlan(config, previousPlanKey as PaidPlanKey);
+    || priceIdForPlan(
+      config,
+      previousPlanKey as PaidPlanKey,
+      billingCycle(payment.metadata?.previousBillingCycle),
+    );
   await stripe.subscriptions.update(
     stripeSubscription.id,
     {
@@ -1137,6 +1171,7 @@ async function reversePaymentCredits(
             optionalString(metadata.previousPriceId) || priceIdForPlanOptional(
               config,
               previousPlanKey as PaidPlanKey,
+              billingCycle(metadata.previousBillingCycle),
             ),
             optionalString(metadata.previousLatestInvoiceId),
           ],
@@ -1500,9 +1535,8 @@ function subscriptionPeriod(subscription: Stripe.Subscription) {
 
 function planKeyForSubscription(config: ServerConfig, subscription: Stripe.Subscription): PaidPlanKey {
   const priceId = stripeId(subscription.items.data[0]?.price);
-  const entry = (Object.keys(PLAN_CATALOG) as Array<keyof typeof PLAN_CATALOG>)
-    .find((key) => key !== 'FREE' && priceIdForPlanOptional(config, key) === priceId);
-  if (entry && entry !== 'FREE') return entry;
+  const entry = planKeyForPriceId(config, priceId);
+  if (entry) return entry;
   const metadataPlanKey = optionalString(subscription.metadata.planKey)?.toUpperCase();
   if (metadataPlanKey && metadataPlanKey !== 'FREE' && metadataPlanKey in PLAN_CATALOG) {
     return metadataPlanKey as PaidPlanKey;
@@ -1514,16 +1548,68 @@ function invoiceSubscriptionId(invoice: Stripe.Invoice) {
   return stripeId(invoice.parent?.subscription_details?.subscription);
 }
 
-function priceIdForPlan(config: ServerConfig, planKey: PaidPlanKey) {
-  const value = priceIdForPlanOptional(config, planKey);
+function priceIdForPlan(config: ServerConfig, planKey: PaidPlanKey, selectedBillingCycle: BillingCycle = 'monthly') {
+  const value = priceIdForPlanOptional(config, planKey, selectedBillingCycle);
   if (!value) throw new StripeBillingError(503, 'STRIPE_PRICE_NOT_CONFIGURED', `Stripe price for ${planKey} is not configured.`);
   return value;
 }
 
-function priceIdForPlanOptional(config: ServerConfig, planKey: Exclude<keyof typeof PLAN_CATALOG, 'FREE'>) {
-  if (planKey === 'STARTER') return config.stripePriceStarterMonthly || null;
-  if (planKey === 'PRO') return config.stripePriceProMonthly || null;
-  return config.stripePriceUltraMonthly || null;
+function priceIdForPlanOptional(
+  config: ServerConfig,
+  planKey: Exclude<keyof typeof PLAN_CATALOG, 'FREE'>,
+  selectedBillingCycle: BillingCycle = 'monthly',
+) {
+  if (planKey === 'STARTER') {
+    return selectedBillingCycle === 'yearly'
+      ? config.stripePriceStarterYearly || null
+      : config.stripePriceStarterMonthly || null;
+  }
+  if (planKey === 'PRO') {
+    return selectedBillingCycle === 'yearly'
+      ? config.stripePriceProYearly || null
+      : config.stripePriceProMonthly || null;
+  }
+  return selectedBillingCycle === 'yearly'
+    ? config.stripePriceUltraYearly || null
+    : config.stripePriceUltraMonthly || null;
+}
+
+function planKeyForPriceId(config: ServerConfig, priceId: string | null): PaidPlanKey | null {
+  if (!priceId) return null;
+  for (const key of Object.keys(PLAN_CATALOG) as Array<keyof typeof PLAN_CATALOG>) {
+    if (key === 'FREE') continue;
+    if (
+      priceIdForPlanOptional(config, key, 'monthly') === priceId ||
+      priceIdForPlanOptional(config, key, 'yearly') === priceId
+    ) {
+      return key;
+    }
+  }
+  return null;
+}
+
+function billingCycleForSubscription(config: ServerConfig, subscription: Stripe.Subscription): BillingCycle {
+  return billingCycleForPriceId(config, stripeId(subscription.items.data[0]?.price))
+    || billingCycle(subscription.metadata.billingCycle);
+}
+
+function billingCycleForPriceId(config: ServerConfig, priceId: string | null): BillingCycle | null {
+  if (!priceId) return null;
+  for (const key of Object.keys(PLAN_CATALOG) as Array<keyof typeof PLAN_CATALOG>) {
+    if (key === 'FREE') continue;
+    if (priceIdForPlanOptional(config, key, 'yearly') === priceId) return 'yearly';
+    if (priceIdForPlanOptional(config, key, 'monthly') === priceId) return 'monthly';
+  }
+  return null;
+}
+
+function billingCycle(value: unknown): BillingCycle {
+  return String(value || '').trim().toLowerCase() === 'yearly' ? 'yearly' : 'monthly';
+}
+
+function subscriptionCreditsForPlan(planKey: PaidPlanKey, selectedBillingCycle: BillingCycle) {
+  const monthlyCredits = PLAN_CATALOG[planKey].monthlyCredits;
+  return selectedBillingCycle === 'yearly' ? monthlyCredits * 12 : monthlyCredits;
 }
 
 function priceIdForPack(config: ServerConfig, packKey: CreditPackKey) {

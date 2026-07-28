@@ -338,6 +338,19 @@
   line-height: 1.62;
 }
 
+.pricingIntro {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  max-width: 460px;
+}
+
+.pricingIntro p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.62;
+}
+
 .demoFrame {
   overflow: hidden;
   border: 1px solid var(--line-strong);
@@ -784,6 +797,10 @@
   .conversationGrid,
   .ctaBand {
     grid-template-columns: 1fr;
+  }
+
+  .pricingIntro {
+    max-width: none;
   }
 
   .chatPane {

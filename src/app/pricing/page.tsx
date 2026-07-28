@@ -3,22 +3,17 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowRight,
-  Check,
-  CircleGauge,
   LoaderCircle,
   Mail,
-  MessageCircle,
   Package,
   RefreshCw,
-  Search,
   ShieldCheck,
-  Sparkles,
-  Telescope,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
+import { BillingPlanGrid, type BillingPlanCatalog } from '@/components/billing-plan-grid';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
-import { BILLING_PLANS, formatCredits } from '@/lib/billing-plans';
+import { type BillingCycle, formatCredits } from '@/lib/billing-plans';
 
 type BillingSummary = {
   mode: 'observe' | 'enforce';
@@ -45,19 +40,13 @@ type BillingSummary = {
 
 type BillingCatalog = {
   configured: boolean;
-  plans: Record<string, { priceId: string | null }>;
+  plans: BillingPlanCatalog['plans'];
   packs: Record<string, { priceId: string | null; credits: number; amountCents: number }>;
   refundPolicy: {
     contactEmail: string;
     usageLimitCredits: number;
     selfService: false;
   };
-};
-
-const WORKLOAD_BENCHMARKS = {
-  quickDiscussionCredits: 35,
-  standardResearchCredits: 150,
-  deepResearchCredits: 370,
 };
 
 const workloadExamples = [
@@ -169,122 +158,25 @@ export default function PricingPage() {
               )}
             </section>
 
-            <section className="grid gap-3 py-8 sm:grid-cols-2 xl:grid-cols-4" aria-label="Available plans">
-              {BILLING_PLANS.map((plan) => {
-                const current = summary?.subscription.planKey === plan.key;
-                const currentPlanIndex = BILLING_PLANS.findIndex(
-                  (candidate) => candidate.key === summary?.subscription.planKey,
-                );
-                const planIndex = BILLING_PLANS.findIndex((candidate) => candidate.key === plan.key);
-                const downgradeBlocked = (
-                  plan.key !== 'FREE' &&
-                  currentPlanIndex > 0 &&
-                  planIndex < currentPlanIndex
-                );
-                const includedCredits = plan.key === 'FREE' ? 1_000 : plan.monthlyCredits;
-                const estimate = estimatePlanWorkload(includedCredits);
-                const cancellationScheduled = current && plan.key !== 'FREE' && summary?.subscription.cancelAtPeriodEnd;
-                return (
-                  <article
-                    key={plan.key}
-                    className={`grid min-h-[470px] grid-rows-[auto_auto_minmax(0,1fr)_auto] rounded-[8px] border p-5 ${
-                      plan.highlighted
-                        ? 'border-[#8eb3ff]/40 bg-[#8eb3ff]/[0.055]'
-                        : 'border-white/[0.09] bg-white/[0.02]'
-                    }`}
-                  >
-                    <div className="flex min-h-7 items-start justify-between gap-3">
-                      <h2 className="text-[15px] font-bold text-zinc-100">{plan.name}</h2>
-                      {plan.highlighted ? (
-                        <span className="rounded-full bg-[#8eb3ff]/15 px-2 py-1 text-[9px] font-extrabold text-[#a9c5ff]">Most popular</span>
-                      ) : null}
-                    </div>
-                    <div className="mt-5">
-                      <span className="text-[30px] font-bold text-white">${plan.priceUsd}</span>
-                      <span className="ml-1 text-[10px] text-zinc-600">/ month</span>
-                      <p className="mt-3 min-h-10 text-[11px] leading-5 text-zinc-500">{plan.description}</p>
-                    </div>
-                    <div className="mt-6 grid content-start gap-3 border-t border-white/[0.09] pt-5">
-                      <PlanFeature
-                        icon={Sparkles}
-                        text={plan.key === 'FREE'
-                          ? '1,000 welcome Credits, once'
-                          : `${formatCredits(plan.monthlyCredits)} Credits each billing period`}
-                      />
-                      <PlanFeature icon={CircleGauge} text={`${plan.concurrentTasks} concurrent task${plan.concurrentTasks === 1 ? '' : 's'}`} />
-                      <PlanFeature
-                        icon={Check}
-                        text={plan.modelTiers.includes('PRO') ? 'Altselfs Lite and Pro' : 'Altselfs Lite only'}
-                      />
-                      <PlanFeature icon={MessageCircle} text={`${estimate.discussions} discussions approximately`} />
-                      <PlanFeature icon={Search} text={`${estimate.researchTasks} research tasks approximately`} />
-                      <PlanFeature icon={Telescope} text={`${estimate.deepTasks} deep tasks approximately`} />
-                    </div>
-                    {current ? (
-                      <div className="mt-6 grid gap-2">
-                        <button
-                          type="button"
-                          disabled={plan.key === 'FREE' || billingAction !== null || !catalog?.configured}
-                          onClick={() => void runBillingAction('portal', '/api/billing/portal')}
-                          className="min-h-10 rounded-[7px] border border-[#46d19a]/20 bg-[#46d19a]/[0.06] px-3 text-[11px] font-bold text-[#46d19a] disabled:cursor-default"
-                        >
-                          {billingAction === 'portal' ? 'Opening...' : plan.key === 'FREE' ? 'Current plan' : 'Manage billing'}
-                        </button>
-                        {cancellationScheduled ? (
-                          <span className="flex min-h-10 items-center justify-center rounded-[7px] border border-amber-300/20 bg-amber-300/[0.06] px-3 text-center text-[11px] font-bold text-amber-200">
-                            Cancellation scheduled
-                          </span>
-                        ) : plan.key !== 'FREE' ? (
-                          <button
-                            type="button"
-                            disabled={billingAction !== null || !catalog?.configured}
-                            onClick={() => void runBillingAction(
-                              'cancel',
-                              '/api/billing/change-plan',
-                              { planKey: 'FREE' },
-                            )}
-                            className="min-h-10 rounded-[7px] border border-red-300/15 bg-red-300/[0.045] px-3 text-[11px] font-bold text-red-200 hover:border-red-300/25 hover:bg-red-300/[0.07] disabled:cursor-not-allowed disabled:text-zinc-600"
-                          >
-                            {billingAction === 'cancel' ? 'Opening...' : 'Cancel subscription'}
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : plan.key === 'FREE' ? (
-                      <span className="mt-6 flex min-h-10 items-center justify-center rounded-[7px] border border-white/[0.09] px-3 text-[11px] font-bold text-zinc-600">
-                        Included at signup
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        title={downgradeBlocked
-                          ? 'Cancel your current subscription first. You can choose this plan after the billing period ends.'
-                          : undefined}
-                        disabled={
-                          downgradeBlocked ||
-                          billingAction !== null ||
-                          !catalog?.configured ||
-                          !catalog.plans[plan.key]?.priceId
-                        }
-                        onClick={() => void runBillingAction(
-                          `plan:${plan.key}`,
-                          '/api/billing/change-plan',
-                          { planKey: plan.key },
-                        )}
-                        className="mt-6 min-h-10 rounded-[7px] border border-white/[0.12] bg-white px-3 text-[11px] font-bold text-zinc-950 hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-white/[0.035] disabled:text-zinc-600"
-                      >
-                        {billingAction === `plan:${plan.key}`
-                          ? 'Preparing...'
-                          : downgradeBlocked
-                            ? 'Available after cancellation'
-                          : catalog?.configured
-                            ? `Choose ${plan.name}`
-                            : 'Billing setup pending'}
-                      </button>
-                    )}
-                  </article>
-                );
-              })}
-            </section>
+            <BillingPlanGrid
+              billingAction={billingAction}
+              cancelAtPeriodEnd={summary?.subscription.cancelAtPeriodEnd}
+              catalog={catalog}
+              className="py-8"
+              currentPlanKey={summary?.subscription.planKey}
+              onCancelSubscription={() => void runBillingAction(
+                'cancel',
+                '/api/billing/change-plan',
+                { planKey: 'FREE' },
+              )}
+              onChoosePlan={(planKey, billingCycle) => void runBillingAction(
+                planActionKey(planKey, billingCycle),
+                '/api/billing/change-plan',
+                { planKey, billingCycle },
+              )}
+              onOpenPortal={() => void runBillingAction('portal', '/api/billing/portal')}
+              variant="account"
+            />
 
             {actionMessage ? (
               <div className="mb-8 rounded-[7px] border border-[#8eb3ff]/25 bg-[#8eb3ff]/[0.06] px-4 py-3 text-[11px] text-[#b7cdf8]">
@@ -391,37 +283,8 @@ export default function PricingPage() {
   );
 }
 
-function estimatePlanWorkload(monthlyCredits: number) {
-  return {
-    discussions: formatApproxCount(monthlyCredits / WORKLOAD_BENCHMARKS.quickDiscussionCredits),
-    researchTasks: formatApproxCount(monthlyCredits / WORKLOAD_BENCHMARKS.standardResearchCredits),
-    deepTasks: formatApproxCount(monthlyCredits / WORKLOAD_BENCHMARKS.deepResearchCredits),
-  };
-}
-
-function formatApproxCount(value: number) {
-  const safeValue = Math.max(1, Math.floor(value));
-  const rounded = safeValue >= 1_000
-    ? Math.round(safeValue / 100) * 100
-    : safeValue >= 100
-      ? Math.round(safeValue / 10) * 10
-      : safeValue;
-  return new Intl.NumberFormat('en-US').format(rounded);
-}
-
-function PlanFeature({
-  icon: Icon,
-  text,
-}: {
-  icon: typeof Check;
-  text: string;
-}) {
-  return (
-    <span className="flex items-center gap-2.5 text-[11px] text-zinc-400">
-      <Icon className="h-3.5 w-3.5 shrink-0 text-zinc-600" />
-      {text}
-    </span>
-  );
+function planActionKey(planKey: string, billingCycle: BillingCycle) {
+  return `plan:${planKey}:${billingCycle}`;
 }
 
 function PolicyRow({ number, title, text }: { number: string; title: string; text: string }) {
