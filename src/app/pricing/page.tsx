@@ -33,6 +33,7 @@ type BillingSummary = {
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
+    billingCycle: string | null;
   };
   capacity: {
     activeTaskCount: number;
@@ -182,6 +183,7 @@ export default function PricingPage() {
               cancelAtPeriodEnd={summary?.subscription.cancelAtPeriodEnd}
               catalog={catalog}
               className="py-8"
+              currentBillingCycle={summary?.subscription.billingCycle}
               currentPlanKey={summary?.subscription.planKey}
               onCancelSubscription={() => void runBillingAction(
                 'cancel',

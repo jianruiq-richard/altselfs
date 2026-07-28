@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Check,
@@ -37,6 +37,7 @@ type BillingPlanGridProps = {
   className?: string;
   catalog?: BillingPlanCatalog | null;
   currentPlanKey?: string | null;
+  currentBillingCycle?: string | null;
   cancelAtPeriodEnd?: boolean;
   billingAction?: string | null;
   getStartedHref?: string;
@@ -56,6 +57,7 @@ export function BillingPlanGrid({
   className = '',
   catalog,
   currentPlanKey,
+  currentBillingCycle,
   cancelAtPeriodEnd = false,
   billingAction,
   getStartedHref = '/sign-in?method=email&redirect_url=/dashboard',
@@ -64,9 +66,16 @@ export function BillingPlanGrid({
   onOpenPortal,
   onCancelSubscription,
 }: BillingPlanGridProps) {
-  const [billingCycle, setBillingCycle] = useBillingCycle();
   const normalizedCurrentPlanKey = normalizePlanKey(currentPlanKey);
+  const normalizedCurrentBillingCycle = normalizeBillingCycle(currentBillingCycle);
+  const [billingCycle, setBillingCycle] = useBillingCycle(normalizedCurrentBillingCycle);
   const currentPlanIndex = BILLING_PLANS.findIndex((plan) => plan.key === normalizedCurrentPlanKey);
+
+  useEffect(() => {
+    if (variant === 'account' && normalizedCurrentBillingCycle) {
+      setBillingCycle(normalizedCurrentBillingCycle);
+    }
+  }, [normalizedCurrentBillingCycle, setBillingCycle, variant]);
 
   return (
     <section className={className} aria-label="Available plans">
@@ -116,6 +125,11 @@ export function BillingPlanGrid({
             <i className="h-1.5 w-1.5 rounded-full bg-[#f2c36b] shadow-[0_0_18px_rgba(242,195,107,0.65)]" aria-hidden="true" />
             20% discount
           </span>
+          {variant === 'account' && normalizedCurrentPlanKey !== 'FREE' && normalizedCurrentBillingCycle ? (
+            <span className="text-[10px] font-semibold text-zinc-600 md:text-right">
+              Current subscription: {formatBillingCycleLabel(normalizedCurrentBillingCycle)}. Upgrades keep this cycle.
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -129,6 +143,14 @@ export function BillingPlanGrid({
             currentPlanIndex > 0 &&
             planIndex < currentPlanIndex
           );
+          const cycleSwitchBlocked = Boolean(
+            variant === 'account' &&
+            normalizedCurrentBillingCycle &&
+            plan.key !== 'FREE' &&
+            currentPlanIndex > 0 &&
+            planIndex > currentPlanIndex &&
+            billingCycle !== normalizedCurrentBillingCycle
+          );
           return (
             <PlanCard
               key={plan.key}
@@ -137,6 +159,8 @@ export function BillingPlanGrid({
               cancelAtPeriodEnd={cancelAtPeriodEnd}
               catalog={catalog}
               current={current}
+              currentBillingCycle={normalizedCurrentBillingCycle}
+              cycleSwitchBlocked={cycleSwitchBlocked}
               downgradeBlocked={downgradeBlocked}
               getStartedHref={getStartedHref}
               onCancelSubscription={onCancelSubscription}
@@ -152,8 +176,8 @@ export function BillingPlanGrid({
   );
 }
 
-function useBillingCycle() {
-  return useState<BillingCycle>('monthly');
+function useBillingCycle(initialBillingCycle?: BillingCycle | null) {
+  return useState<BillingCycle>(initialBillingCycle || 'monthly');
 }
 
 function PlanCard({
@@ -162,6 +186,8 @@ function PlanCard({
   billingCycle,
   catalog,
   current,
+  currentBillingCycle,
+  cycleSwitchBlocked,
   downgradeBlocked,
   cancelAtPeriodEnd,
   billingAction,
@@ -175,6 +201,8 @@ function PlanCard({
   billingCycle: BillingCycle;
   catalog?: BillingPlanCatalog | null;
   current: boolean;
+  currentBillingCycle: BillingCycle | null;
+  cycleSwitchBlocked: boolean;
   downgradeBlocked: boolean;
   cancelAtPeriodEnd: boolean;
   billingAction?: string | null;
@@ -279,9 +307,12 @@ function PlanCard({
           type="button"
           title={downgradeBlocked
             ? 'Cancel your current subscription first. You can choose this plan after the billing period ends.'
+            : cycleSwitchBlocked && currentBillingCycle
+              ? `Choose ${formatBillingCycleLabel(currentBillingCycle)} billing to upgrade immediately. Billing cycle changes are available after cancellation.`
             : undefined}
           disabled={
             downgradeBlocked ||
+            cycleSwitchBlocked ||
             billingAction !== null ||
             !paidPlanConfigured
           }
@@ -295,6 +326,8 @@ function PlanCard({
             </span>
           ) : downgradeBlocked ? (
             'Available after cancellation'
+          ) : cycleSwitchBlocked && currentBillingCycle ? (
+            `Use ${formatBillingCycleLabel(currentBillingCycle)} billing`
           ) : paidPlanConfigured ? (
             `Choose ${plan.name}`
           ) : (
@@ -321,6 +354,16 @@ function configuredPriceId(
 function normalizePlanKey(value: string | null | undefined): BillingPlanKey {
   if (value === 'STARTER' || value === 'PRO' || value === 'SCALE') return value;
   return 'FREE';
+}
+
+function normalizeBillingCycle(value: string | null | undefined): BillingCycle | null {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'monthly' || normalized === 'yearly') return normalized;
+  return null;
+}
+
+function formatBillingCycleLabel(value: BillingCycle) {
+  return value === 'yearly' ? 'Yearly' : 'Monthly';
 }
 
 function PlanFeature({

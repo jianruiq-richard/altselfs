@@ -413,7 +413,7 @@ export async function changeStripePlan(
   const targetRank = PLAN_CATALOG[targetPlanKey as keyof typeof PLAN_CATALOG].rank;
   const currentRank = PLAN_CATALOG[currentPlanKey].rank;
 
-  if (targetPlanKey === currentPlanKey) {
+  if (targetPlanKey === 'FREE' && currentPlanKey === 'FREE') {
     return {
       action: 'UNCHANGED',
       message: `The ${PLAN_CATALOG[currentPlanKey].name} plan is already active.`,
@@ -442,6 +442,12 @@ export async function changeStripePlan(
   }
 
   if (!subscription?.providerSubscriptionId || subscription.provider !== 'stripe') {
+    if (targetPlanKey === currentPlanKey) {
+      return {
+        action: 'UNCHANGED',
+        message: `The ${PLAN_CATALOG[currentPlanKey].name} plan is already active.`,
+      };
+    }
     return {
       action: 'CHECKOUT',
       ...(await createStripeCheckout(config, {
@@ -457,6 +463,25 @@ export async function changeStripePlan(
   const stripeSubscription = await stripe.subscriptions.retrieve(subscription.providerSubscriptionId);
   const item = stripeSubscription.items.data[0];
   if (!item) throw new StripeBillingError(409, 'SUBSCRIPTION_ITEM_MISSING', 'The Stripe subscription has no billable item.');
+  const currentBillingCycle = billingCycleForPriceId(config, subscription.providerPriceId)
+    || billingCycleForSubscription(config, stripeSubscription);
+
+  if (selectedBillingCycle !== currentBillingCycle) {
+    throw new StripeBillingError(
+      409,
+      'BILLING_CYCLE_SWITCH_NOT_SUPPORTED',
+      `This subscription is billed ${currentBillingCycle}. Choose a ${currentBillingCycle} plan to upgrade immediately, or cancel renewal and choose a new billing cycle after the current period ends.`,
+      { currentPlanKey, targetPlanKey, currentBillingCycle, requestedBillingCycle: selectedBillingCycle },
+    );
+  }
+
+  if (targetPlanKey === currentPlanKey) {
+    return {
+      action: 'UNCHANGED',
+      message: `The ${PLAN_CATALOG[currentPlanKey].name} plan is already active.`,
+    };
+  }
+
   const planKey = paidPlanKey(targetPlanKey);
   const priceId = priceIdForPlan(config, planKey, selectedBillingCycle);
   const requestId = optionalString(input.requestId) || id('upgrade');

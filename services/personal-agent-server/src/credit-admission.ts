@@ -35,6 +35,7 @@ type SubscriptionRow = {
   scheduledPlanKey: string | null;
   graceEndsAt: Date | null;
   provider: string | null;
+  providerPriceId: string | null;
 };
 
 export type CreditAuthorization = {
@@ -485,7 +486,7 @@ async function getSubscription(client: PoolClient, investorId: string): Promise<
   const result = await client.query(
     [
       'select "planKey", status, "monthlyCredits", "currentPeriodStart", "currentPeriodEnd",',
-      '"cancelAtPeriodEnd", "scheduledPlanKey", "graceEndsAt", provider',
+      '"cancelAtPeriodEnd", "scheduledPlanKey", "graceEndsAt", provider, "providerPriceId"',
       'from credit_subscriptions where "investorId" = $1',
     ].join(' '),
     [investorId],
@@ -501,6 +502,7 @@ async function getSubscription(client: PoolClient, investorId: string): Promise<
     scheduledPlanKey: typeof row.scheduledPlanKey === 'string' ? row.scheduledPlanKey : null,
     graceEndsAt: row.graceEndsAt instanceof Date ? row.graceEndsAt : null,
     provider: typeof row.provider === 'string' ? row.provider : null,
+    providerPriceId: typeof row.providerPriceId === 'string' ? row.providerPriceId : null,
   };
 }
 
@@ -641,6 +643,7 @@ function buildCapacity(
       scheduledPlanKey: subscription.scheduledPlanKey,
       graceEndsAt: subscription.graceEndsAt?.toISOString() || null,
       provider: subscription.provider,
+      billingCycle: billingCycleForPriceId(config, subscription.providerPriceId),
     },
     capacity: {
       activeTaskCount,
@@ -666,6 +669,25 @@ function isProHermesModel(hermesModel: string | undefined) {
   return normalized === 'claude-sonnet-4-6'
     || normalized === 'sonnet-4-6'
     || normalized.endsWith('/claude-sonnet-4-6');
+}
+
+function billingCycleForPriceId(config: ServerConfig, priceId: string | null): 'monthly' | 'yearly' | null {
+  if (!priceId) return null;
+  if (
+    priceId === config.stripePriceStarterYearly ||
+    priceId === config.stripePriceProYearly ||
+    priceId === config.stripePriceUltraYearly
+  ) {
+    return 'yearly';
+  }
+  if (
+    priceId === config.stripePriceStarterMonthly ||
+    priceId === config.stripePriceProMonthly ||
+    priceId === config.stripePriceUltraMonthly
+  ) {
+    return 'monthly';
+  }
+  return null;
 }
 
 function accountRow(row: Record<string, unknown>): AccountRow {
