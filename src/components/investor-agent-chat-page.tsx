@@ -2198,12 +2198,15 @@ export function InvestorAgentChatPage() {
   const initialPersonalAgentCache = isExecutive
     ? getWorkspaceCachedStale<PersonalAgentCachedPage>(WORKSPACE_CACHE_KEYS.personalAgentDefault)
     : null;
+  const initialPersonalAgentSessionsCache = isExecutive
+    ? getWorkspaceCachedStale<{ sessions?: AgentSessionSummary[] }>(WORKSPACE_CACHE_KEYS.personalAgentSessions)
+    : null;
   const initialBillingCapacity = getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
   const initialConnectorsCache = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
 
   const [threadId, setThreadId] = useState<string | null>(initialPersonalAgentCache?.threadId || null);
   const [sessions, setSessions] = useState<AgentSessionSummary[]>(
-    () => initialPersonalAgentCache?.sessions || [],
+    () => initialPersonalAgentCache?.sessions || initialPersonalAgentSessionsCache?.sessions || [],
   );
   const [creatingSession, setCreatingSession] = useState(false);
   const [openSessionMenuId, setOpenSessionMenuId] = useState<string | null>(null);
@@ -2285,6 +2288,9 @@ export function InvestorAgentChatPage() {
       messages: Array.isArray(page.messages) ? page.messages : [],
       hasMore: Boolean(page.hasMore),
     };
+    setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
+      sessions: normalized.sessions,
+    });
     setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentDefault, normalized);
     if (normalized.threadId) {
       setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentThread(normalized.threadId), normalized);
@@ -2307,7 +2313,8 @@ export function InvestorAgentChatPage() {
     const threadCache = targetThreadId
       ? getWorkspaceCachedStale<PersonalAgentCachedPage>(WORKSPACE_CACHE_KEYS.personalAgentThread(targetThreadId))
       : null;
-    return threadCache || getWorkspaceCachedStale<PersonalAgentCachedPage>(WORKSPACE_CACHE_KEYS.personalAgentDefault);
+    if (targetThreadId) return threadCache;
+    return getWorkspaceCachedStale<PersonalAgentCachedPage>(WORKSPACE_CACHE_KEYS.personalAgentDefault);
   }, []);
 
   const loadBillingCapacity = useCallback(async (
@@ -2890,6 +2897,11 @@ export function InvestorAgentChatPage() {
     if (cached) {
       applyPersonalAgentCachedPage(cached);
       showBlockingLoading = false;
+    } else if (requestedThreadId) {
+      selectThreadId(requestedThreadId);
+      messagesAutoFollowRef.current = true;
+      setMessages([]);
+      setHasMoreMessages(false);
     }
     if (showBlockingLoading) setLoading(true);
     setRecoveringRunState(showBlockingLoading);

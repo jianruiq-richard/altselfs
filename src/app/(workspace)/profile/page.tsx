@@ -18,7 +18,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
-import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
+import { BillingCapacityPopover, type BillingCapacityData } from '@/components/billing-capacity-popover';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 import { displayEmail } from '@/lib/user-identifier';
@@ -191,6 +191,45 @@ function paymentTitle(payment: BillingSummary['recentPayments'][number]) {
   return `${getBillingPlan(payment.planKey.toUpperCase()).name} plan`;
 }
 
+function billingSummaryFromCapacity(capacity: BillingCapacityData): BillingSummary {
+  const plan = getBillingPlan(capacity.subscription.planKey);
+  return {
+    mode: capacity.mode,
+    account: {
+      balanceCredits: capacity.account.balanceCredits,
+      reservedCredits: capacity.account.reservedCredits,
+      availableCredits: capacity.account.availableCredits,
+      lifetimeGrantedCredits: capacity.account.balanceCredits,
+      lifetimeSpentCredits: 0,
+      lifetimeRefundedCredits: 0,
+    },
+    subscription: {
+      planKey: capacity.subscription.planKey,
+      planName: capacity.subscription.planName || plan.name,
+      status: 'active',
+      monthlyCredits: plan.monthlyCredits,
+      concurrentTaskLimit: capacity.subscription.concurrentTaskLimit,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+      scheduledPlanKey: null,
+      graceEndsAt: null,
+    },
+    capacity: {
+      activeTaskCount: capacity.capacity.activeTaskCount,
+      availableTaskSlots: capacity.capacity.availableTaskSlots,
+    },
+    recentLedger: [],
+    recentUsage: [],
+    recentPayments: [],
+    refundPolicy: {
+      contactEmail: 'support@altselfs.com',
+      usageLimitCredits: 1_000,
+      selfService: false,
+    },
+  };
+}
+
 export default function ProfilePage() {
   const cachedProfile = getWorkspaceCachedStale<{ user?: Profile }>(WORKSPACE_CACHE_KEYS.userProfile)?.user || null;
   const [activeView, setActiveView] = useState<SettingsView>('account');
@@ -218,6 +257,7 @@ export default function ProfilePage() {
   const [billingLoading, setBillingLoading] = useState(!billing);
   const [billingLoaded, setBillingLoaded] = useState(Boolean(billing));
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingPartial, setBillingPartial] = useState(false);
   const [billingNotice, setBillingNotice] = useState<string | null>(null);
   const [billingAction, setBillingAction] = useState<string | null>(null);
 
@@ -312,8 +352,23 @@ export default function ProfilePage() {
         { force: true, ttlMs: 45_000 },
       );
       setBilling(data);
+      setBillingPartial(false);
     } catch (loadError) {
-      setBillingError(loadError instanceof Error ? loadError.message : 'Failed to load plan and usage');
+      const message = loadError instanceof Error ? loadError.message : 'Failed to load plan and usage';
+      try {
+        const cachedCapacity = getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
+        const capacity = cachedCapacity || await fetchWorkspaceJson<BillingCapacityData>(
+          WORKSPACE_CACHE_KEYS.billingCapacity,
+          '/api/billing/capacity',
+          {},
+          { force: true, ttlMs: 30_000 },
+        );
+        setBilling(billingSummaryFromCapacity(capacity));
+        setBillingPartial(true);
+        setBillingError(`${message} Showing current plan from live capacity data.`);
+      } catch {
+        setBillingError(message);
+      }
     } finally {
       setBillingLoading(false);
       setBillingLoaded(true);
@@ -628,7 +683,7 @@ export default function ProfilePage() {
                     <>
                       {billingError ? (
                         <div className="mb-5 flex items-center justify-between gap-4 rounded-[7px] border border-red-400/20 bg-red-400/[0.06] px-4 py-3 text-[11px] text-red-200">
-                          <span>{billingError}</span>
+                          <span>{billingPartial ? `Limited view: ${billingError}` : billingError}</span>
                           <button
                             type="button"
                             onClick={() => setBillingError(null)}

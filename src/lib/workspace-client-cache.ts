@@ -64,7 +64,7 @@ export async function fetchWorkspaceJson<T>(
   if (!options.force && existing?.value !== undefined && ttlMs > 0 && now() - existing.updatedAt <= ttlMs) {
     return existing.value;
   }
-  if (existing?.inflight) return existing.inflight;
+  if (existing?.inflight && !options.force) return existing.inflight;
 
   const inflight = fetch(url, {
     cache: 'no-store',
@@ -117,6 +117,7 @@ export const WORKSPACE_CACHE_KEYS = {
   billingSummary: 'workspace:billing-summary',
   userProfile: 'workspace:user-profile',
   archivedSessions: 'workspace:archived-sessions',
+  personalAgentSessions: 'workspace:personal-agent:sessions',
   personalAgentDefault: 'workspace:personal-agent:default',
   personalAgentThread: (threadId: string) => `workspace:personal-agent:thread:${threadId}`,
 };
@@ -161,12 +162,20 @@ export function prefetchWorkspaceRouteData(href: string) {
   }
 
   if (pathname.startsWith('/investor/chat')) {
-    prefetchWorkspaceJson<unknown>(
+    void fetchWorkspaceJson<Record<string, unknown>>(
       WORKSPACE_CACHE_KEYS.personalAgentDefault,
       '/api/investor/personal-agent?sessions=1',
       {},
       { ttlMs: 30_000 },
-    );
+    )
+      .then((payload) => {
+        if (Array.isArray(payload.sessions)) {
+          setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
+            sessions: payload.sessions,
+          });
+        }
+      })
+      .catch(() => undefined);
     prefetchWorkspaceJson<{ connectors?: unknown[] }>(
       WORKSPACE_CACHE_KEYS.connectors,
       '/api/investor/connectors',
