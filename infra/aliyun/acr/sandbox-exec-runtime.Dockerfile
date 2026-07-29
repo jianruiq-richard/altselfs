@@ -12,6 +12,7 @@ RUN apt-get update \
     curl \
     jq \
     bash \
+    poppler-utils \
   && pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com \
     beautifulsoup4 \
     lxml \
