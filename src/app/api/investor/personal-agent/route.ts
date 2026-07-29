@@ -729,7 +729,8 @@ async function handleGet(req: NextRequest, timing: ServerTiming) {
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const requestedThreadId = req.nextUrl.searchParams.get('threadId')?.trim();
-  const includeSessions = req.nextUrl.searchParams.get('sessions') === '1';
+  const sessionsOnly = req.nextUrl.searchParams.get('sessionsOnly') === '1';
+  const includeSessions = sessionsOnly || req.nextUrl.searchParams.get('sessions') === '1';
   const sessionStatusParam = req.nextUrl.searchParams.get('sessionStatus')?.trim().toLowerCase();
   const sessionStatus: AgentThreadStatus = sessionStatusParam === 'archived' ? 'ARCHIVED' : 'ACTIVE';
   const sessions = includeSessions
@@ -739,6 +740,15 @@ async function handleGet(req: NextRequest, timing: ServerTiming) {
         'Discussion list',
       )
     : undefined;
+  if (sessionsOnly) {
+    const defaultThreadId = sessionStatus === 'ACTIVE'
+      ? requestedThreadId || sessions?.[0]?.id || null
+      : null;
+    return NextResponse.json({
+      threadId: defaultThreadId,
+      sessions: sessions || [],
+    });
+  }
   const statusRequested = req.nextUrl.searchParams.get('status') === '1';
   if (statusRequested) {
     const thread = requestedThreadId

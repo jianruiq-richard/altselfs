@@ -15,7 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InvestorConnectorsData } from '@/lib/investor-connectors-data';
 import {
   fetchWorkspaceJson,
@@ -93,6 +93,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<ConnectorCategory>('all');
+  const loadStartedRef = useRef(false);
 
   const loadConnectors = useCallback(async (options: { showLoading?: boolean; force?: boolean } = {}) => {
     const showLoading = options.showLoading ?? false;
@@ -114,17 +115,22 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
   }, []);
 
   useEffect(() => {
+    if (loadStartedRef.current) return;
+    loadStartedRef.current = true;
     if (initialData) {
       setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, initialData);
       void loadConnectors({ showLoading: false, force: true });
       return;
     }
-    if (cachedConnectors?.connectors?.length) {
+    const cached = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
+    if (cached?.connectors?.length) {
+      setConnectors(cached.connectors);
+      setLoading(false);
       void loadConnectors({ showLoading: false, force: true });
       return;
     }
     void loadConnectors({ showLoading: true, force: false });
-  }, [cachedConnectors?.connectors?.length, initialData, loadConnectors]);
+  }, [initialData, loadConnectors]);
 
   const connectedCount = connectors.filter((connector) => connector.connected).length;
   const filteredConnectors = useMemo(() => {

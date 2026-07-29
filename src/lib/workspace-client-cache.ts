@@ -163,14 +163,15 @@ export function prefetchWorkspaceRouteData(href: string) {
 
   if (pathname.startsWith('/investor/chat')) {
     void fetchWorkspaceJson<Record<string, unknown>>(
-      WORKSPACE_CACHE_KEYS.personalAgentDefault,
-      '/api/investor/personal-agent?sessions=1',
+      WORKSPACE_CACHE_KEYS.personalAgentSessions,
+      '/api/investor/personal-agent?sessionsOnly=1',
       {},
       { ttlMs: 30_000 },
     )
       .then((payload) => {
         if (Array.isArray(payload.sessions)) {
           setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
+            threadId: typeof payload.threadId === 'string' ? payload.threadId : null,
             sessions: payload.sessions,
           });
         }
