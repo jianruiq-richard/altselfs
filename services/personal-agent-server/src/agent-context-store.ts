@@ -622,6 +622,48 @@ export async function getAgentContextArtifactsByIds(
   return result.rows.map(rowToAgentContextArtifactRecord);
 }
 
+export async function getAgentContextArtifactByWorkspacePath(
+  config: ServerConfig,
+  input: {
+    investorId: string;
+    threadId: string;
+    relativePath: string;
+    workspacePath?: string | null;
+  }
+): Promise<AgentContextArtifactRecord | null> {
+  const investorId = input.investorId.trim();
+  const threadId = input.threadId.trim();
+  const relativePath = input.relativePath.trim();
+  if (!investorId || !threadId || !relativePath) return null;
+
+  const relativePaths = Array.from(new Set([
+    relativePath,
+    relativePath.split('\\').join('/'),
+  ].filter(Boolean)));
+  const workspacePath = input.workspacePath?.trim() || '';
+  const pool = await getRequiredContextPool(config);
+  const result = await pool.query(
+    [
+      'select id, investor_id as "investorId", thread_id as "threadId", run_id as "runId",',
+      'kind, name, mime_type as "mimeType", size_bytes as "sizeBytes", content_text as "contentText",',
+      'metadata, created_at as "createdAt", updated_at as "updatedAt"',
+      'from agent_context_artifacts',
+      'where investor_id = $1',
+      'and thread_id = $2',
+      'and (',
+      "metadata->>'relativePath' = any($3::text[])",
+      "or metadata->>'outputRelativePath' = any($3::text[])",
+      "or ($4 <> '' and metadata->>'workspacePath' = $4)",
+      ')',
+      'order by created_at desc, id desc',
+      'limit 1',
+    ].join(' '),
+    [investorId, threadId, relativePaths, workspacePath]
+  );
+  const row = result.rows[0];
+  return row ? rowToAgentContextArtifactRecord(row) : null;
+}
+
 export async function patchAgentContextArtifactMetadata(
   config: ServerConfig,
   input: {

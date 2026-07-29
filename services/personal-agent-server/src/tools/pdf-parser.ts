@@ -1,6 +1,10 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {
+  getAgentContextArtifactByWorkspacePath,
+  patchAgentContextArtifactMetadata,
+} from '../agent-context-store.js';
 import { callOpenRouterFileParser } from '../artifact-ingestion.js';
 import type { ServerConfig } from '../config.js';
 import { isRecord, nowIso, truncate } from '../util.js';
@@ -9,6 +13,7 @@ export type PdfParserContext = {
   workspace?: string;
   runId?: string;
   userId?: string;
+  investorId?: string;
   threadId?: string;
 };
 
@@ -97,12 +102,25 @@ export async function runPdfOpenRouterParsertool(
     const outputPath = path.join(parsedDir, outputName);
     await fs.writeFile(outputPath, remote.text, 'utf8');
     const outputRelativePath = path.relative(resolved.workspaceRoot, outputPath);
+    const outputBytes = Buffer.byteLength(remote.text, 'utf8');
+    const effectiveEngine = engine || process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'mistral-ocr';
     await appendIndexEntry(resolved.workspaceRoot, {
       pdfPath: resolved.relativePath,
       parsedTextPath: outputRelativePath,
       annotationHash: remote.annotationHash || '',
       generationId: remote.generationId || '',
-      engine: engine || process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'mistral-ocr',
+      engine: effectiveEngine,
+    });
+    const artifactMetadata = await registerOpenRouterParsedText(config, context, {
+      sourcePdfRelativePath: resolved.relativePath,
+      sourcePdfWorkspacePath: resolved.absolutePath,
+      parsedTextPath: outputPath,
+      parsedTextRelativePath: outputRelativePath,
+      parsedAt: fetchedAt,
+      engine: effectiveEngine,
+      annotationHash: remote.annotationHash || '',
+      generationId: remote.generationId || '',
+      outputBytes,
     });
 
     return JSON.stringify({
@@ -110,11 +128,12 @@ export async function runPdfOpenRouterParsertool(
       fetchedAt,
       ok: true,
       input: { path: resolved.relativePath },
-      engine: engine || process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'mistral-ocr',
+      engine: effectiveEngine,
       parsedTextPath: outputRelativePath,
       annotationHash: remote.annotationHash || null,
       openRouterGenerationId: remote.generationId || null,
-      outputBytes: Buffer.byteLength(remote.text, 'utf8'),
+      outputBytes,
+      artifactMetadata,
       preview: truncate(remote.text, DEFAULT_PREVIEW_CHARS),
       nextStep: 'Inspect parsedTextPath in the workspace before answering from the PDF.',
     }, null, 2);
@@ -126,6 +145,116 @@ export async function runPdfOpenRouterParsertool(
       input: { path: resolved.relativePath },
       error: error instanceof Error ? error.message : String(error),
     }, null, 2);
+  }
+}
+
+type OpenRouterParsedTextMetadataPatchInput = {
+  existingMetadata?: Record<string, unknown> | null;
+  parsedTextPath: string;
+  parsedTextRelativePath: string;
+  parsedAt: string;
+  engine: string;
+  annotationHash?: string;
+  generationId?: string;
+  outputBytes: number;
+};
+
+export function buildOpenRouterParsedTextMetadataPatch(input: OpenRouterParsedTextMetadataPatchInput) {
+  const existingMetadata = isRecord(input.existingMetadata) ? input.existingMetadata : {};
+  const existingParsedTextPath = metadataString(existingMetadata, 'parsedTextPath');
+  const existingParsedTextRelativePath = metadataString(existingMetadata, 'parsedTextRelativePath');
+  const existingParser = metadataString(existingMetadata, 'parser');
+  const patch: Record<string, unknown> = {
+    parser: 'openrouter_file_parser',
+    bestParsedTextSource: 'openrouter_file_parser',
+    parsedTextPath: input.parsedTextPath,
+    parsedTextRelativePath: input.parsedTextRelativePath,
+    openRouterParsedTextPath: input.parsedTextPath,
+    openRouterParsedTextRelativePath: input.parsedTextRelativePath,
+    openRouterParsedAt: input.parsedAt,
+    openRouterPdfEngine: input.engine,
+    openRouterOutputBytes: input.outputBytes,
+    inlineInContext: false,
+  };
+  const parserModel = process.env.OPENROUTER_FILE_PARSER_MODEL?.trim();
+  if (parserModel) patch.openRouterFileParserModel = parserModel;
+  if (input.annotationHash) patch.annotationHash = input.annotationHash;
+  if (input.generationId) patch.openRouterGenerationId = input.generationId;
+  if (existingParsedTextPath && existingParsedTextPath !== input.parsedTextPath) {
+    patch.localParsedTextPath = metadataString(existingMetadata, 'localParsedTextPath') || existingParsedTextPath;
+  }
+  if (existingParsedTextRelativePath && existingParsedTextRelativePath !== input.parsedTextRelativePath) {
+    patch.localParsedTextRelativePath =
+      metadataString(existingMetadata, 'localParsedTextRelativePath') || existingParsedTextRelativePath;
+  }
+  if (existingParser && !existingParser.startsWith('openrouter_file_parser')) {
+    patch.localParser = metadataString(existingMetadata, 'localParser') || existingParser;
+  }
+  return patch;
+}
+
+async function registerOpenRouterParsedText(
+  config: ServerConfig,
+  context: PdfParserContext,
+  input: {
+    sourcePdfRelativePath: string;
+    sourcePdfWorkspacePath: string;
+    parsedTextPath: string;
+    parsedTextRelativePath: string;
+    parsedAt: string;
+    engine: string;
+    annotationHash: string;
+    generationId: string;
+    outputBytes: number;
+  }
+) {
+  const investorId = context.investorId?.trim() || context.userId?.trim() || '';
+  const threadId = context.threadId?.trim() || '';
+  if (!config.contextDatabaseUrl) return { patched: false, reason: 'context database is not configured' };
+  if (!investorId || !threadId) return { patched: false, reason: 'investorId or threadId is missing' };
+
+  try {
+    const artifact = await getAgentContextArtifactByWorkspacePath(config, {
+      investorId,
+      threadId,
+      relativePath: input.sourcePdfRelativePath,
+      workspacePath: input.sourcePdfWorkspacePath,
+    });
+    if (!artifact) {
+      return {
+        patched: false,
+        reason: 'matching source PDF artifact was not found',
+        sourcePdfPath: input.sourcePdfRelativePath,
+      };
+    }
+    await patchAgentContextArtifactMetadata(config, {
+      artifactId: artifact.id,
+      investorId,
+      threadId,
+      runId: context.runId || artifact.runId || undefined,
+      metadata: buildOpenRouterParsedTextMetadataPatch({
+        existingMetadata: artifact.metadata,
+        parsedTextPath: input.parsedTextPath,
+        parsedTextRelativePath: input.parsedTextRelativePath,
+        parsedAt: input.parsedAt,
+        engine: input.engine,
+        annotationHash: input.annotationHash,
+        generationId: input.generationId,
+        outputBytes: input.outputBytes,
+      }),
+    });
+    return {
+      patched: true,
+      artifactId: artifact.id,
+      sourcePdfPath: input.sourcePdfRelativePath,
+      parsedTextPath: input.parsedTextRelativePath,
+    };
+  } catch (error) {
+    return {
+      patched: false,
+      reason: error instanceof Error ? error.message : String(error),
+      sourcePdfPath: input.sourcePdfRelativePath,
+    };
   }
 }
 
@@ -174,4 +303,9 @@ async function appendIndexEntry(
 function safeFileStem(name: string) {
   const stem = name.replace(/\.[^.]+$/, '') || 'pdf';
   return stem.replace(/[^a-zA-Z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'pdf';
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
 }

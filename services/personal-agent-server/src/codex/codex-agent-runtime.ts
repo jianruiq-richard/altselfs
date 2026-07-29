@@ -117,6 +117,9 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
 
       const sandboxExecContext: SandboxExecContext = {
         userId: input.userId,
+        investorId: typeof input.metadata?.investorId === 'string' && input.metadata.investorId.trim()
+          ? input.metadata.investorId.trim()
+          : input.userId,
         threadId: input.threadId,
         runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : undefined,
         workspace,

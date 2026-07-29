@@ -8,6 +8,7 @@ import { isRecord, nowIso, truncate } from '../util.js';
 
 export type SandboxExecContext = {
   userId?: string;
+  investorId?: string;
   threadId?: string;
   runId?: string;
   workspace?: string;

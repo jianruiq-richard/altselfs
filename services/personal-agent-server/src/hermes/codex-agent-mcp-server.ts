@@ -318,6 +318,7 @@ async function runCodexAgentTool(argumentsValue: unknown) {
 
     const sandboxExecContext: SandboxExecContext = {
       userId: runtime.userId,
+      investorId: runtime.investorId,
       threadId: runtime.threadId,
       runId: runtime.runId,
       workspace: runtime.workspace,
