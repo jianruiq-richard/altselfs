@@ -1,10 +1,13 @@
 'use client';
 
-import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
 import {
   BillingCapacityPopover,
   type BillingCapacityData,
 } from '@/components/billing-capacity-popover';
+import {
+  startWorkspaceNavigation,
+  WorkspaceRightRailSlot,
+} from '@/components/workspace-layout-client';
 import {
   Activity,
   ArrowUp,
@@ -142,7 +145,9 @@ export function AstromarDashboardClient({
   const openDiscussion = (nextPrompt?: string) => {
     const value = (nextPrompt ?? prompt).trim();
     const query = value ? `?prompt=${encodeURIComponent(value)}` : '';
-    router.push(`/investor/chat/100${query}`);
+    const destination = `/investor/chat/100${query}`;
+    startWorkspaceNavigation(destination);
+    router.push(destination);
   };
 
   const activeWorkCards = activeWork
@@ -209,7 +214,8 @@ export function AstromarDashboardClient({
   );
 
   return (
-    <AstromarWorkspaceShell mobileTitle="Home" rightRail={rightRail}>
+    <>
+      <WorkspaceRightRailSlot>{rightRail}</WorkspaceRightRailSlot>
       <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] md:grid-rows-[64px_minmax(0,1fr)_auto]">
         <header className="hidden items-center justify-between border-b border-white/[0.09] px-6 md:flex">
           <div>
@@ -362,6 +368,6 @@ export function AstromarDashboardClient({
           </form>
         </div>
       </div>
-    </AstromarWorkspaceShell>
+    </>
   );
 }

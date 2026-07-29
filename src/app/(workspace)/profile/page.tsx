@@ -18,7 +18,6 @@ import {
   UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
 import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
@@ -199,11 +198,13 @@ export default function ProfilePage() {
 
   const [archivedSessions, setArchivedSessions] = useState<ArchivedConversation[]>([]);
   const [archivedLoading, setArchivedLoading] = useState(true);
+  const [archivedLoaded, setArchivedLoaded] = useState(false);
   const [archivedError, setArchivedError] = useState<string | null>(null);
   const [archiveActionId, setArchiveActionId] = useState<string | null>(null);
   const [archiveQuery, setArchiveQuery] = useState('');
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [billingLoading, setBillingLoading] = useState(true);
+  const [billingLoaded, setBillingLoaded] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<string | null>(null);
   const [billingAction, setBillingAction] = useState<string | null>(null);
@@ -263,6 +264,7 @@ export default function ProfilePage() {
       setArchivedError(loadError instanceof Error ? loadError.message : 'Failed to load archived conversations');
     } finally {
       setArchivedLoading(false);
+      setArchivedLoaded(true);
     }
   }, []);
 
@@ -281,14 +283,23 @@ export default function ProfilePage() {
       setBillingError(loadError instanceof Error ? loadError.message : 'Failed to load plan and usage');
     } finally {
       setBillingLoading(false);
+      setBillingLoaded(true);
     }
   }, []);
 
   useEffect(() => {
     void loadProfile();
+  }, [loadProfile]);
+
+  useEffect(() => {
+    if (activeView !== 'archive' || archivedLoaded) return;
     void loadArchivedSessions();
+  }, [activeView, archivedLoaded, loadArchivedSessions]);
+
+  useEffect(() => {
+    if (activeView !== 'plan' || billingLoaded) return;
     void loadBilling();
-  }, [loadArchivedSessions, loadBilling, loadProfile]);
+  }, [activeView, billingLoaded, loadBilling]);
 
   const openBillingPortal = async () => {
     if (billingAction) return;
@@ -406,8 +417,7 @@ export default function ProfilePage() {
   const displayName = profile?.nickname || profile?.name || 'Astromar user';
 
   return (
-    <AstromarWorkspaceShell mobileTitle="Settings">
-      <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] md:grid-rows-[64px_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] md:grid-rows-[64px_minmax(0,1fr)]">
         <header className="hidden items-center justify-between border-b border-white/[0.09] px-6 md:flex">
           <div>
             <strong className="block text-[13px] text-zinc-100">Settings</strong>
@@ -898,8 +908,7 @@ export default function ProfilePage() {
             </div>
           </div>
         </main>
-      </div>
-    </AstromarWorkspaceShell>
+    </div>
   );
 }
 

@@ -1,6 +1,5 @@
 'use client';
 
-import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
 import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import {
   BarChart3,
@@ -112,8 +111,7 @@ export function AstromarConnectorsPage() {
   }, [category, connectors, query]);
 
   return (
-    <AstromarWorkspaceShell mobileTitle="Connectors">
-      <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] md:grid-rows-[64px_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] md:grid-rows-[64px_minmax(0,1fr)]">
         <header className="hidden items-center justify-between border-b border-white/[0.09] px-6 md:flex">
           <div>
             <strong className="block text-[13px] text-zinc-100">Connectors</strong>
@@ -232,7 +230,6 @@ export function AstromarConnectorsPage() {
             )}
           </div>
         </main>
-      </div>
-    </AstromarWorkspaceShell>
+    </div>
   );
 }

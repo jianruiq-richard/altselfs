@@ -1,35 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
+import { ServerTiming } from '@/lib/server-timing';
 
 export async function GET() {
+  const timing = new ServerTiming('api.user.profile');
   try {
-    const { userId } = await auth();
+    const { userId } = await timing.time('auth', () => auth(), 'Clerk authentication');
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return timing.finish(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
     }
 
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        nickname: true,
-        phone: true,
-        wechatId: true,
-        role: true,
-      },
-    });
+    const user = await timing.time(
+      'db_profile',
+      () => prisma.user.findUnique({
+        where: { clerkId: userId },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          nickname: true,
+          phone: true,
+          wechatId: true,
+          role: true,
+        },
+      }),
+      'User profile query',
+    );
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return timing.finish(NextResponse.json({ error: 'User not found' }, { status: 404 }));
     }
 
-    return NextResponse.json({ user });
+    return timing.finish(NextResponse.json({ user }));
   } catch (error) {
     console.error('Error fetching profile:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return timing.finish(NextResponse.json({ error: 'Internal server error' }, { status: 500 }));
   }
 }
 

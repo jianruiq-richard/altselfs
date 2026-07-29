@@ -6,7 +6,11 @@ import Link from 'next/link';
 import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, LockKeyhole, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
-import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
+import {
+  useWorkspacePageChrome,
+  WorkspaceRightRailSlot,
+  WorkspaceSidebarSlot,
+} from '@/components/workspace-layout-client';
 import {
   BillingCapacityPopover,
   type BillingCapacityData,
@@ -2172,7 +2176,7 @@ function StreamingAssistantMessage({ content }: { content: string }) {
   );
 }
 
-export default function InvestorAgentChatPage() {
+export function InvestorAgentChatPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -2823,7 +2827,7 @@ export default function InvestorAgentChatPage() {
       setPersistedBriefing(null);
       setPlannerSteps([]);
       if (loadedThreadId) {
-        await refreshPersonalAgentStatus(loadedThreadId);
+        void refreshPersonalAgentStatus(loadedThreadId);
       }
       if (showExecutiveControls && getStoredActiveRunId()) {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
@@ -3683,6 +3687,14 @@ export default function InvestorAgentChatPage() {
     }
   };
 
+  const activeSession = sessions.find((session) => session.id === threadId);
+  useWorkspacePageChrome({
+    mobileTitle: isExecutive ? activeSession?.title || 'Discussion' : 'AI Assistant',
+    onNewDiscussion: isExecutive ? createNewSession : undefined,
+    newDiscussionBusy: isExecutive && creatingSession,
+    newDiscussionDisabled: isExecutive && (startingRun || recoveringRunState || loading),
+  });
+
   if (!isExecutive) {
     return (
       <FigmaShell
@@ -3702,7 +3714,6 @@ export default function InvestorAgentChatPage() {
     );
   }
 
-  const activeSession = sessions.find((session) => session.id === threadId);
   const connectedConnectors = connectors.filter((connector) => connector.connected && connector.conversationAvailable !== false);
   const activeRunKey = activeRunId || activeWorkTiming?.runId || '';
   const activeWorkStatus = activeWorkTiming?.status || (startingRun ? 'AUTHORIZING' : 'RUNNING');
@@ -3877,14 +3888,9 @@ export default function InvestorAgentChatPage() {
   );
 
   return (
-    <AstromarWorkspaceShell
-      mobileTitle={activeSession?.title || 'Discussion'}
-      sidebarContent={sessionSidebar}
-      rightRail={rightRail}
-      onNewDiscussion={() => void createNewSession()}
-      newDiscussionBusy={creatingSession}
-      newDiscussionDisabled={startingRun || recoveringRunState || loading}
-    >
+    <>
+      <WorkspaceSidebarSlot>{sessionSidebar}</WorkspaceSidebarSlot>
+      <WorkspaceRightRailSlot>{rightRail}</WorkspaceRightRailSlot>
       <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] md:grid-rows-[64px_minmax(0,1fr)_auto]">
         <header className="hidden items-center justify-between gap-4 border-b border-white/[0.09] px-6 md:flex">
           <div className="min-w-0">
@@ -4093,6 +4099,6 @@ export default function InvestorAgentChatPage() {
           {error ? <p className="mx-auto mt-2 max-w-[820px] text-[11px] text-red-300">{error}</p> : null}
         </div>
       </div>
-    </AstromarWorkspaceShell>
+    </>
   );
 }

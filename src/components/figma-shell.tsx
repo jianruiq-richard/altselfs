@@ -1,6 +1,7 @@
 'use client';
 
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
+import { useHasSharedWorkspaceLayout } from '@/components/workspace-layout-client';
 
 export function FigmaShell({
   homeHref = '/dashboard',
@@ -17,9 +18,9 @@ export function FigmaShell({
   showPageHeader?: boolean;
   children: React.ReactNode;
 }) {
-  return (
-    <AstromarWorkspaceShell mobileTitle={title || 'Astromar'} homeHref={homeHref}>
-      <div className="h-full min-h-0 overflow-y-auto bg-[#090a0a] text-zinc-100">
+  const hasSharedWorkspaceLayout = useHasSharedWorkspaceLayout();
+  const content = (
+    <div className="h-full min-h-0 overflow-y-auto bg-[#090a0a] text-zinc-100">
         <div className="mx-auto w-full max-w-7xl px-4 py-5 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-8">
           {showPageHeader ? (
             <div className="mb-6 flex flex-col gap-3 border-b border-white/[0.09] pb-6 md:flex-row md:items-start md:justify-between">
@@ -33,6 +34,13 @@ export function FigmaShell({
           {children}
         </div>
       </div>
+  );
+
+  if (hasSharedWorkspaceLayout) return content;
+
+  return (
+    <AstromarWorkspaceShell mobileTitle={title || 'Astromar'} homeHref={homeHref}>
+      {content}
     </AstromarWorkspaceShell>
   );
 }

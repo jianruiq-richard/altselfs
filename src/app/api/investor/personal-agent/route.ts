@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import { NextRequest, NextResponse } from 'next/server';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import { prisma } from '@/lib/prisma';
+import { ServerTiming } from '@/lib/server-timing';
 import {
   appendThreadMessage,
   appendtoolCall,
@@ -723,25 +724,39 @@ function applyConnectorScopeToInfoSources(
   return enabledInfoSources.filter((source) => allowed.has(source.provider));
 }
 
-export async function GET(req: NextRequest) {
-  const investor = await getInvestorOrNull();
+async function handleGet(req: NextRequest, timing: ServerTiming) {
+  const investor = await getInvestorOrNull(timing);
   if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const requestedThreadId = req.nextUrl.searchParams.get('threadId')?.trim();
   const includeSessions = req.nextUrl.searchParams.get('sessions') === '1';
   const sessionStatusParam = req.nextUrl.searchParams.get('sessionStatus')?.trim().toLowerCase();
   const sessionStatus: AgentThreadStatus = sessionStatusParam === 'archived' ? 'ARCHIVED' : 'ACTIVE';
-  const sessions = includeSessions ? await listAgentThreads(investor.id, PERSONAL_AGENT_TYPE, 100, sessionStatus) : undefined;
+  const sessions = includeSessions
+    ? await timing.time(
+        'db_sessions',
+        () => listAgentThreads(investor.id, PERSONAL_AGENT_TYPE, 100, sessionStatus),
+        'Discussion list',
+      )
+    : undefined;
   const statusRequested = req.nextUrl.searchParams.get('status') === '1';
   if (statusRequested) {
     const thread = requestedThreadId
-      ? await getThreadMessagesPage({
-          investorId: investor.id,
-          agentType: PERSONAL_AGENT_TYPE,
-          threadId: requestedThreadId,
-          limit: 60,
-        })
-      : await getLatestThreadWithMessages(investor.id, PERSONAL_AGENT_TYPE);
+      ? await timing.time(
+          'db_messages',
+          () => getThreadMessagesPage({
+            investorId: investor.id,
+            agentType: PERSONAL_AGENT_TYPE,
+            threadId: requestedThreadId,
+            limit: 60,
+          }),
+          'Discussion messages for status recovery',
+        )
+      : await timing.time(
+          'db_messages',
+          () => getLatestThreadWithMessages(investor.id, PERSONAL_AGENT_TYPE),
+          'Latest discussion messages for status recovery',
+        );
     const threadId = requestedThreadId || (thread && 'id' in thread ? thread.id : null);
     const statusMessages = thread && Array.isArray(thread.messages) ? toClientMessages(thread.messages) : [];
     const statusHasMore = thread
@@ -774,10 +789,14 @@ export async function GET(req: NextRequest) {
       });
       const runId = req.nextUrl.searchParams.get('runId')?.trim();
       if (runId) query.set('runId', runId);
-      const response = await fetch(`${getPersonalAgentServerUrl()}/v1/threads/status?${query.toString()}`, {
-        cache: 'no-store',
-        headers: personalAgentServiceHeaders(),
-      });
+      const response = await timing.time(
+        'upstream_status',
+        () => fetch(`${getPersonalAgentServerUrl()}/v1/threads/status?${query.toString()}`, {
+          cache: 'no-store',
+          headers: personalAgentServiceHeaders(),
+        }),
+        'personal-agent thread status',
+      );
       const statusPayload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok) {
         return NextResponse.json(
@@ -785,17 +804,25 @@ export async function GET(req: NextRequest) {
           { status: 502 }
         );
       }
-      const syncedTerminalRun = await syncTerminalPersonalAgentRun({
-        threadId,
-        statusPayload,
-      }).catch(() => false);
+      const syncedTerminalRun = await timing.time(
+        'db_run_sync',
+        () => syncTerminalPersonalAgentRun({
+          threadId,
+          statusPayload,
+        }).catch(() => false),
+        'Persist terminal run state',
+      );
       const nextThreadPage = syncedTerminalRun
-        ? await getThreadMessagesPage({
-            investorId: investor.id,
-            agentType: PERSONAL_AGENT_TYPE,
-            threadId,
-            limit: 60,
-          }).catch(() => null)
+        ? await timing.time(
+            'db_messages_sync',
+            () => getThreadMessagesPage({
+              investorId: investor.id,
+              agentType: PERSONAL_AGENT_TYPE,
+              threadId,
+              limit: 60,
+            }).catch(() => null),
+            'Reload messages after run sync',
+          )
         : null;
       const nextMessages = nextThreadPage
         ? toClientMessages(nextThreadPage.messages)
@@ -818,13 +845,17 @@ export async function GET(req: NextRequest) {
   if (requestedThreadId) {
     const beforeMessageId = req.nextUrl.searchParams.get('before')?.trim() || null;
     const parsedLimit = Number(req.nextUrl.searchParams.get('limit') || '');
-    const page = await getThreadMessagesPage({
-      investorId: investor.id,
-      agentType: PERSONAL_AGENT_TYPE,
-      threadId: requestedThreadId,
-      beforeMessageId,
-      limit: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 60,
-    });
+    const page = await timing.time(
+      'db_messages',
+      () => getThreadMessagesPage({
+        investorId: investor.id,
+        agentType: PERSONAL_AGENT_TYPE,
+        threadId: requestedThreadId,
+        beforeMessageId,
+        limit: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 60,
+      }),
+      'Discussion message page',
+    );
 
     if (!page) return NextResponse.json({ error: 'Thread not found' }, { status: 404 });
 
@@ -837,13 +868,30 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const thread = await getLatestThreadWithMessages(investor.id, PERSONAL_AGENT_TYPE);
+  const thread = await timing.time(
+    'db_messages',
+    () => getLatestThreadWithMessages(investor.id, PERSONAL_AGENT_TYPE),
+    'Latest discussion messages',
+  );
   return NextResponse.json({
     threadId: thread?.id || null,
     messages: thread ? toClientMessages(thread.messages) : [],
     hasMore: thread ? thread._count.messages > thread.messages.length : false,
     ...(sessions ? { sessions } : {}),
   });
+}
+
+export async function GET(req: NextRequest) {
+  const timing = new ServerTiming('api.investor.personal-agent.get');
+  try {
+    return timing.finish(await handleGet(req, timing));
+  } catch (error) {
+    console.error('Failed to load personal agent data:', error);
+    return timing.finish(NextResponse.json(
+      { error: 'Failed to load discussion data.' },
+      { status: 500 },
+    ));
+  }
 }
 
 export async function PUT(req: NextRequest) {

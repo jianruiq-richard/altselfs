@@ -18,11 +18,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 type WorkspaceNavKey = 'home' | 'discussion' | 'connectors' | 'settings';
+type SidebarLocation = 'desktop' | 'mobile';
 
 type AstromarWorkspaceShellProps = {
   children: React.ReactNode;
   mobileTitle: string;
-  sidebarContent?: React.ReactNode;
+  sidebarContent?: React.ReactNode | ((location: SidebarLocation) => React.ReactNode);
   rightRail?: React.ReactNode;
   onNewDiscussion?: () => void;
   newDiscussionBusy?: boolean;
@@ -92,7 +93,10 @@ export function AstromarWorkspaceShell({
     .map((part) => part.slice(0, 1).toUpperCase())
     .join('') || 'U';
 
-  const sidebar = (
+  const renderSidebarContent = (location: SidebarLocation) => (
+    typeof sidebarContent === 'function' ? sidebarContent(location) : sidebarContent
+  );
+  const sidebar = (location: SidebarLocation) => (
     <div className="flex h-full min-h-0 flex-col bg-[#0c0d0e] text-zinc-100">
       <div className="flex h-16 shrink-0 items-center justify-between px-4">
         <Link href={homeHref} className="inline-flex items-center gap-2.5 font-semibold text-zinc-50">
@@ -156,7 +160,9 @@ export function AstromarWorkspaceShell({
         })}
       </nav>
 
-      <div className="astromar-scrollbar astromar-scrollbar-stable min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{sidebarContent}</div>
+      <div className="astromar-scrollbar astromar-scrollbar-stable min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+        {renderSidebarContent(location)}
+      </div>
 
       <div className="shrink-0 border-t border-white/[0.09] bg-[#0c0d0e] p-3">
         <Link
@@ -189,7 +195,7 @@ export function AstromarWorkspaceShell({
         rightRail ? 'xl:grid-cols-[244px_minmax(0,1fr)_304px]' : ''
       }`}
     >
-      <aside className="hidden min-h-0 border-r border-white/[0.09] md:block">{sidebar}</aside>
+      <aside className="hidden min-h-0 border-r border-white/[0.09] md:block">{sidebar('desktop')}</aside>
 
       {mobileSidebarOpen ? (
         <button
@@ -204,7 +210,7 @@ export function AstromarWorkspaceShell({
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {sidebar}
+        {sidebar('mobile')}
       </aside>
 
       <section className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#090a0a]">

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
 import { prisma } from '@/lib/prisma';
+import { ServerTiming } from '@/lib/server-timing';
 
 type ConnectorType = 'app' | 'data_source';
 
@@ -81,45 +82,60 @@ function normalizeAccount(account: PersonalAccount) {
 }
 
 export async function GET() {
-  const investor = await getInvestorOrNull();
-  if (!investor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const timing = new ServerTiming('api.investor.connectors');
+  const investor = await getInvestorOrNull(timing);
+  if (!investor) return timing.finish(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
 
   const warnings: string[] = [];
-  let personalAccounts: ReturnType<typeof normalizeAccount>[] = [];
-  try {
-    const query = new URLSearchParams({ investorId: investor.id });
-    if (investor.email) query.set('userId', investor.email);
-    const data = await personalAgentInternalFetch<{ accounts?: PersonalAccount[] }>(
-      `/internal/personal-data/accounts?${query.toString()}`,
-      {},
-      { attempts: 1, timeoutMs: 5000 }
-    );
-    personalAccounts = Array.isArray(data.accounts) ? data.accounts.map(normalizeAccount) : [];
-  } catch (error) {
-    warnings.push(error instanceof Error ? error.message : 'personal-agent-server unavailable');
-  }
-
-  const [integrations, wechatSources] = await Promise.all([
-    prisma.investorIntegration.findMany({
-      where: {
-        investorId: investor.id,
-        provider: {
-          in: [...COMPETITIVE_CONNECTORS.map((connector) => connector.dbProvider), 'XIAOHONGSHU'],
+  const personalAccountsPromise = timing.time(
+    'upstream_accounts',
+    async () => {
+      try {
+        const query = new URLSearchParams({ investorId: investor.id });
+        if (investor.email) query.set('userId', investor.email);
+        const data = await personalAgentInternalFetch<{ accounts?: PersonalAccount[] }>(
+          `/internal/personal-data/accounts?${query.toString()}`,
+          {},
+          { attempts: 1, timeoutMs: 5000 }
+        );
+        return Array.isArray(data.accounts) ? data.accounts.map(normalizeAccount) : [];
+      } catch (error) {
+        warnings.push(error instanceof Error ? error.message : 'personal-agent-server unavailable');
+        return [] as ReturnType<typeof normalizeAccount>[];
+      }
+    },
+    'personal-agent connected accounts',
+  );
+  const connectorRowsPromise = timing.time(
+    'db_connectors',
+    () => Promise.all([
+      prisma.investorIntegration.findMany({
+        where: {
+          investorId: investor.id,
+          provider: {
+            in: [...COMPETITIVE_CONNECTORS.map((connector) => connector.dbProvider), 'XIAOHONGSHU'],
+          },
         },
-      },
-      select: {
-        provider: true,
-        status: true,
-        accountEmail: true,
-        accountName: true,
-        updatedAt: true,
-      },
-    }),
-    prisma.investorWechatSource.findMany({
-      where: { investorId: investor.id },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true, displayName: true, updatedAt: true },
-    }),
+        select: {
+          provider: true,
+          status: true,
+          accountEmail: true,
+          accountName: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.investorWechatSource.findMany({
+        where: { investorId: investor.id },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true, displayName: true, updatedAt: true },
+      }),
+    ]),
+    'Connector integrations and WeChat sources',
+  );
+
+  const [personalAccounts, [integrations, wechatSources]] = await Promise.all([
+    personalAccountsPromise,
+    connectorRowsPromise,
   ]);
   const integrationMap = new Map(integrations.map((integration) => [integration.provider, integration]));
   const rapidApiConfigured = Boolean(process.env.RAPIDAPI_KEY?.trim());
@@ -204,8 +220,8 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({
+  return timing.finish(NextResponse.json({
     connectors: [...personal, ...managedSources, ...competitive],
     warnings,
-  });
+  }));
 }
