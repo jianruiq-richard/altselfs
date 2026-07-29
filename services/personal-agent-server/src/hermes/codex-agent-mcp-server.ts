@@ -21,6 +21,11 @@ import {
   type SandboxExecContext,
 } from '../tools/sandbox-exec.js';
 import {
+  createPdfOpenRouterParserDynamictool,
+  isPdfOpenRouterParsertool,
+  runPdfOpenRouterParsertool,
+} from '../tools/pdf-parser.js';
+import {
   createPersonalDataDynamictools,
   isPersonalDatatool,
   runPersonalDatatool,
@@ -485,6 +490,9 @@ async function buildDynamicTools(config: ServerConfig, runtime: RuntimeEnv, sele
   if (config.sandboxExecEnabled && process.env.ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL !== '0') {
     tools.push(createSandboxExecDynamictool());
   }
+  if (process.env[config.openRouterApiKeyEnv]?.trim()) {
+    tools.push(createPdfOpenRouterParserDynamictool());
+  }
 
   const enabledSources = filterByConnectorScope(runtime.enabledInfoSources, runtime.connectorScope.enabledConnectorKeys);
   const competitorNames = getRapidApiCompetitortoolNamesForProviders(enabledSources);
@@ -574,6 +582,14 @@ async function handleCodexServerRequest(
     }
     if ((!namespace && isSandboxExectool(tool)) || (namespace === 'altselfs' && tool === 'sandbox_exec')) {
       const resultText = await runSandboxExectool(params.arguments, config, sandboxExecContext);
+      client.respond(requestId, {
+        contentItems: [{ type: 'inputText', text: resultText }],
+        success: !resultText.includes('"error"'),
+      });
+      return;
+    }
+    if (!namespace && isPdfOpenRouterParsertool(tool)) {
+      const resultText = await runPdfOpenRouterParsertool(params.arguments, config, sandboxExecContext);
       client.respond(requestId, {
         contentItems: [{ type: 'inputText', text: resultText }],
         success: !resultText.includes('"error"'),

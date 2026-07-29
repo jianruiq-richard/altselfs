@@ -7,6 +7,7 @@ import { isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-search.js';
 import { createRapidApiCompetitorDynamictools, isRapidApiCompetitortool, runRapidApiCompetitortool, } from '../tools/rapidapi-competitor.js';
 import { createSandboxExecDynamictool, isSandboxExectool, runSandboxExectool, } from '../tools/sandbox-exec.js';
+import { createPdfOpenRouterParserDynamictool, isPdfOpenRouterParsertool, runPdfOpenRouterParsertool, } from '../tools/pdf-parser.js';
 import { createPersonalDataDynamictools, isPersonalDatatool, runPersonalDatatool, } from '../tools/personal-data.js';
 import { prepareTemporaryOpenAiAuth } from './openai-auth-lock.js';
 export class CodexAgentRuntime {
@@ -311,6 +312,8 @@ export class CodexAgentRuntime {
         const tools = selection.provider === 'openai' ? [] : [createWebSearchDynamictool()];
         if (this.config.sandboxExecEnabled)
             tools.push(createSandboxExecDynamictool());
+        if (process.env[this.config.openRouterApiKeyEnv]?.trim())
+            tools.push(createPdfOpenRouterParserDynamictool());
         if (input.profileId === 'codex-competitive-intelligence') {
             const connectorScope = getConnectorScope(input.metadata);
             const enabledCompetitorSources = filterByConnectorScope(getEnabledInfoSourceNames(input.metadata), connectorScope.enabledConnectorKeys);
@@ -360,6 +363,14 @@ export class CodexAgentRuntime {
             }
             if ((!namespace && isSandboxExectool(tool)) || (namespace === 'altselfs' && tool === 'sandbox_exec')) {
                 const resultText = await runSandboxExectool(params.arguments, this.config, sandboxExecContext);
+                client.respond(requestId, {
+                    contentItems: [{ type: 'inputText', text: resultText }],
+                    success: !resultText.includes('"error"'),
+                });
+                return 'handled';
+            }
+            if (!namespace && isPdfOpenRouterParsertool(tool)) {
+                const resultText = await runPdfOpenRouterParsertool(params.arguments, this.config, sandboxExecContext);
                 client.respond(requestId, {
                     contentItems: [{ type: 'inputText', text: resultText }],
                     success: !resultText.includes('"error"'),

@@ -1632,7 +1632,7 @@ function openRouterFileParserOptions(messages: OpenRouterChatMessage[]) {
       {
         id: 'file-parser',
         pdf: {
-          engine: process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'cloudflare-ai',
+          engine: process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'mistral-ocr',
         },
       },
     ],

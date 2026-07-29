@@ -9,6 +9,7 @@ import { prepareTemporaryOpenAiAuth } from '../codex/openai-auth-lock.js';
 import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-search.js';
 import { RAPIDAPI_COMPETITOR_TOOL_PROVIDER_NAMES, createRapidApiCompetitorDynamictools, getRapidApiCompetitortoolNamesForProviders, isRapidApiCompetitortool, runRapidApiCompetitortool, } from '../tools/rapidapi-competitor.js';
 import { createSandboxExecDynamictool, isSandboxExectool, runSandboxExectool, } from '../tools/sandbox-exec.js';
+import { createPdfOpenRouterParserDynamictool, isPdfOpenRouterParsertool, runPdfOpenRouterParsertool, } from '../tools/pdf-parser.js';
 import { createPersonalDataDynamictools, isPersonalDatatool, runPersonalDatatool, } from '../tools/personal-data.js';
 import { buildConnectorToolScopeInstruction } from '../connector-tool-scope.js';
 import { isRecord, nowIso, truncate } from '../util.js';
@@ -377,6 +378,9 @@ async function buildDynamicTools(config, runtime, selection) {
     if (config.sandboxExecEnabled && process.env.ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL !== '0') {
         tools.push(createSandboxExecDynamictool());
     }
+    if (process.env[config.openRouterApiKeyEnv]?.trim()) {
+        tools.push(createPdfOpenRouterParserDynamictool());
+    }
     const enabledSources = filterByConnectorScope(runtime.enabledInfoSources, runtime.connectorScope.enabledConnectorKeys);
     const competitorNames = getRapidApiCompetitortoolNamesForProviders(enabledSources);
     if (enabledSources.length > 0) {
@@ -454,6 +458,14 @@ async function handleCodexServerRequest(client, request, config, sandboxExecCont
         }
         if ((!namespace && isSandboxExectool(tool)) || (namespace === 'altselfs' && tool === 'sandbox_exec')) {
             const resultText = await runSandboxExectool(params.arguments, config, sandboxExecContext);
+            client.respond(requestId, {
+                contentItems: [{ type: 'inputText', text: resultText }],
+                success: !resultText.includes('"error"'),
+            });
+            return;
+        }
+        if (!namespace && isPdfOpenRouterParsertool(tool)) {
+            const resultText = await runPdfOpenRouterParsertool(params.arguments, config, sandboxExecContext);
             client.respond(requestId, {
                 contentItems: [{ type: 'inputText', text: resultText }],
                 success: !resultText.includes('"error"'),

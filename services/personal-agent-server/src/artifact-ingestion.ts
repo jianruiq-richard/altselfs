@@ -40,6 +40,19 @@ export type GeneratedWorkspaceArtifactsResult = {
 type ParsedAttachment = {
   text: string;
   parser: string;
+  annotationHash?: string;
+  generationId?: string;
+  pdfTextStats?: PdfTextStats;
+};
+
+type PdfTextStats = {
+  pageCount: number;
+  textPageCount: number;
+  densePageCount: number;
+  nonWhitespaceChars: number;
+  charsPerPage: number;
+  textPageRatio: number;
+  densePageRatio: number;
 };
 
 export async function ingestWorkspaceAttachments(
@@ -77,7 +90,7 @@ export async function ingestWorkspaceAttachments(
         return null;
       });
       const parsedTextPath = parsed?.text
-        ? path.join(parsedDir, `${basename}.txt`)
+        ? path.join(parsedDir, `${basename}.md`)
         : '';
       if (parsed?.text && parsedTextPath) {
         await fs.writeFile(parsedTextPath, parsed.text, 'utf8');
@@ -92,6 +105,9 @@ export async function ingestWorkspaceAttachments(
         originalName: attachment.name,
         sha256: crypto.createHash('sha256').update(decoded.bytes).digest('hex'),
         parser: parsed?.parser || null,
+        annotationHash: parsed?.annotationHash || null,
+        openRouterGenerationId: parsed?.generationId || null,
+        pdfTextStats: parsed?.pdfTextStats || null,
         inlineInContext: false,
       };
       const artifact: AgentContextArtifactInput = {
@@ -111,6 +127,8 @@ export async function ingestWorkspaceAttachments(
         `- ${attachment.name || basename}`,
         `  - path: ${metadata.relativePath}`,
         parsedTextPath ? `  - parsed_text: ${metadata.parsedTextRelativePath}` : '  - parsed_text: unavailable',
+        metadata.annotationHash ? `  - annotation_hash: ${metadata.annotationHash}` : '',
+        metadata.pdfTextStats ? `  - pdf_text_stats: ${formatPdfTextStats(metadata.pdfTextStats)}` : '',
         `  - mime_type: ${artifact.mimeType || 'unknown'}`,
         `  - size_bytes: ${artifact.sizeBytes || 0}`,
         ''
@@ -266,7 +284,7 @@ async function ingestObjectStorageArtifact(input: {
   };
   const parsed = await parseAttachment(input.config, attachment, { mimeType, bytes }, filePath).catch(() => null);
   const parsedTextPath = parsed?.text
-    ? path.join(input.parsedDir, `${basename}.txt`)
+    ? path.join(input.parsedDir, `${basename}.md`)
     : '';
   if (parsed?.text && parsedTextPath) {
     await fs.writeFile(parsedTextPath, parsed.text, 'utf8');
@@ -285,6 +303,9 @@ async function ingestObjectStorageArtifact(input: {
     originalName: input.artifact.name,
     sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
     parser: parsed?.parser || null,
+    annotationHash: parsed?.annotationHash || null,
+    openRouterGenerationId: parsed?.generationId || null,
+    pdfTextStats: parsed?.pdfTextStats || null,
     inlineInContext: false,
   };
   const artifact: AgentContextArtifactInput = {
@@ -303,6 +324,8 @@ async function ingestObjectStorageArtifact(input: {
     `- ${artifact.name || basename}`,
     `  - path: ${metadata.relativePath}`,
     parsedTextPath ? `  - parsed_text: ${metadata.parsedTextRelativePath}` : '  - parsed_text: unavailable',
+    metadata.annotationHash ? `  - annotation_hash: ${metadata.annotationHash}` : '',
+    metadata.pdfTextStats ? `  - pdf_text_stats: ${formatPdfTextStats(metadata.pdfTextStats)}` : '',
     `  - mime_type: ${artifact.mimeType || 'unknown'}`,
     `  - size_bytes: ${artifact.sizeBytes || 0}`,
     ''
@@ -433,6 +456,7 @@ async function parseAttachment(
   filePath: string
 ): Promise<ParsedAttachment | null> {
   const mimeType = decoded.mimeType || attachment.type || 'application/octet-stream';
+  const pdf = isPdfFile(mimeType, attachment.name);
   if (isImageMimeType(mimeType)) {
     const text = await callOpenRouterImageParser(config, {
       name: attachment.name,
@@ -444,6 +468,25 @@ async function parseAttachment(
   if (isLocalStructuredFile(mimeType, attachment.name)) {
     const local = await parseWithLocalPython(filePath, mimeType, attachment.name).catch(() => null);
     if (local?.text) return local;
+    if (pdf) {
+      const apiKey = process.env[config.openRouterApiKeyEnv]?.trim();
+      if (!apiKey) return local;
+      try {
+        const remote = await callOpenRouterFileParser(config, {
+          name: attachment.name,
+          dataUrl: attachment.dataUrl,
+        });
+        return {
+          text: remote.text,
+          parser: 'openrouter_file_parser_mistral_ocr',
+          annotationHash: remote.annotationHash,
+          generationId: remote.generationId,
+          pdfTextStats: local?.pdfTextStats,
+        };
+      } catch {
+        return local;
+      }
+    }
   }
   if (decoded.mimeType.startsWith('text/') || decoded.mimeType === 'application/json') {
     return {
@@ -456,15 +499,24 @@ async function parseAttachment(
 
   const apiKey = process.env[config.openRouterApiKeyEnv]?.trim();
   if (!apiKey) return null;
-  const text = await callOpenRouterFileParser(config, {
+  const remote = await callOpenRouterFileParser(config, {
     name: attachment.name,
     dataUrl: attachment.dataUrl,
   });
-  return { text, parser: 'openrouter_file_parser' };
+  return {
+    text: remote.text,
+    parser: 'openrouter_file_parser',
+    annotationHash: remote.annotationHash,
+    generationId: remote.generationId,
+  };
 }
 
 function isImageMimeType(mimeType: string) {
   return mimeType.startsWith('image/');
+}
+
+function isPdfFile(mimeType: string, name: string) {
+  return mimeType === 'application/pdf' || name.toLowerCase().endsWith('.pdf');
 }
 
 function isLocalStructuredFile(mimeType: string, name: string) {
@@ -489,14 +541,27 @@ function isLocalStructuredFile(mimeType: string, name: string) {
 async function parseWithLocalPython(filePath: string, mimeType: string, name: string): Promise<ParsedAttachment | null> {
   const result = await runPythonArtifactParser({ filePath, mimeType, name, maxChars: readParserMaxChars() });
   if (!result.text.trim()) return null;
+  const pdfTextStats = isPdfFile(mimeType, name)
+    ? extractPdfTextStats(result.stats)
+    : undefined;
   return {
     text: result.text,
     parser: result.parser || 'local_python_parser',
+    pdfTextStats,
   };
 }
 
 function runPythonArtifactParser(input: { filePath: string; mimeType: string; name: string; maxChars: number }) {
-  return new Promise<{ text: string; parser: string }>((resolve, reject) => {
+  return new Promise<{
+    text: string;
+    parser: string;
+    stats?: {
+      pageCount: number;
+      textPageCount: number;
+      densePageCount: number;
+      nonWhitespaceChars: number;
+    };
+  }>((resolve, reject) => {
     const child = spawn(process.env.ARTIFACT_PYTHON_BIN || 'python3', ['-c', PYTHON_ARTIFACT_PARSER], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -527,6 +592,12 @@ function runPythonArtifactParser(input: { filePath: string; mimeType: string; na
         resolve({
           text: typeof parsed.text === 'string' ? parsed.text.slice(0, input.maxChars) : '',
           parser: typeof parsed.parser === 'string' ? parsed.parser : 'local_python_parser',
+          stats: isRecord(parsed.stats) ? {
+            pageCount: readNonNegativeNumber(parsed.stats.pageCount),
+            textPageCount: readNonNegativeNumber(parsed.stats.textPageCount),
+            densePageCount: readNonNegativeNumber(parsed.stats.densePageCount),
+            nonWhitespaceChars: readNonNegativeNumber(parsed.stats.nonWhitespaceChars),
+          } : undefined,
         });
       } catch (error) {
         reject(error);
@@ -536,11 +607,53 @@ function runPythonArtifactParser(input: { filePath: string; mimeType: string; na
   });
 }
 
+export function extractPdfTextStats(stats?: {
+  pageCount: number;
+  textPageCount: number;
+  densePageCount: number;
+  nonWhitespaceChars: number;
+}): PdfTextStats {
+  const pageCount = Math.max(1, stats?.pageCount || 0);
+  const textPageCount = Math.min(pageCount, stats?.textPageCount || 0);
+  const densePageCount = Math.min(pageCount, stats?.densePageCount || 0);
+  const nonWhitespaceChars = stats?.nonWhitespaceChars || 0;
+  const charsPerPage = nonWhitespaceChars / pageCount;
+  const textPageRatio = textPageCount / pageCount;
+  const densePageRatio = densePageCount / pageCount;
+  return {
+    pageCount,
+    textPageCount,
+    densePageCount,
+    nonWhitespaceChars,
+    charsPerPage,
+    textPageRatio,
+    densePageRatio,
+  };
+}
+
+function formatPdfTextStats(stats: PdfTextStats) {
+  return [
+    `pages=${stats.pageCount}`,
+    `text_pages=${stats.textPageCount}`,
+    `dense_pages=${stats.densePageCount}`,
+    `chars=${stats.nonWhitespaceChars}`,
+    `chars_per_page=${Math.round(stats.charsPerPage)}`,
+  ].join(' ');
+}
+
+function readNonNegativeNumber(value: unknown) {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : 0;
+}
+
 const PYTHON_ARTIFACT_PARSER = String.raw`
 import csv
 import io
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
 import traceback
 import zipfile
@@ -572,36 +685,75 @@ def parse_csv(path, delimiter, max_chars):
             break
     return output.getvalue()[:max_chars]
 
+def pdf_stats(page_texts):
+    counts = [len(re.sub(r"\\s+", "", text or "")) for text in page_texts]
+    return {
+        "pageCount": len(page_texts),
+        "textPageCount": sum(1 for count in counts if count > 0),
+        "densePageCount": sum(1 for count in counts if count >= 120),
+        "nonWhitespaceChars": sum(counts),
+    }
+
+def render_pdf_pages(page_texts, max_chars):
+    chunks = []
+    length = 0
+    for page_index, text in enumerate(page_texts, start=1):
+        chunk = f"\\n\\n--- Page {page_index} ---\\n\\n{text or ''}"
+        chunks.append(chunk)
+        length += len(chunk)
+        if length >= max_chars:
+            break
+    return "".join(chunks)[:max_chars]
+
 def parse_pdf(path, max_chars):
+    if shutil.which("pdfinfo") and shutil.which("pdftotext"):
+        try:
+            info = subprocess.run(
+                ["pdfinfo", path],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            ).stdout
+            page_match = re.search(r"^Pages:\\s+(\\d+)\\s*$", info, re.MULTILINE)
+            page_count = int(page_match.group(1)) if page_match else 0
+            extracted = subprocess.run(
+                ["pdftotext", "-layout", "-enc", "UTF-8", path, "-"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            ).stdout
+            page_texts = extracted.split("\\f")
+            if page_texts and not page_texts[-1].strip():
+                page_texts.pop()
+            if page_count > len(page_texts):
+                page_texts.extend([""] * (page_count - len(page_texts)))
+            if page_texts:
+                return render_pdf_pages(page_texts, max_chars), "local_pdf_poppler", pdf_stats(page_texts)
+        except Exception:
+            pass
     try:
         import pdfplumber
-        chunks = []
+        page_texts = []
         with pdfplumber.open(path) as pdf:
             for page_index, page in enumerate(pdf.pages, start=1):
                 text = page.extract_text() or ""
                 tables = page.extract_tables() or []
-                if text.strip():
-                    chunks.append(f"\\n--- Page {page_index} ---\\n{text}")
+                page_chunks = [text]
                 for table_index, table in enumerate(tables, start=1):
-                    chunks.append(f"\\n--- Page {page_index} Table {table_index} ---")
+                    page_chunks.append(f"\\n\\n#### Table {table_index}\\n")
                     for row in table:
-                        chunks.append("\\t".join("" if cell is None else str(cell) for cell in row))
-                if sum(len(chunk) for chunk in chunks) >= max_chars:
-                    break
-        return "\\n".join(chunks)[:max_chars], "local_pdf_pdfplumber"
+                        page_chunks.append("\\t".join("" if cell is None else str(cell) for cell in row))
+                page_texts.append("\\n".join(page_chunks))
+        return render_pdf_pages(page_texts, max_chars), "local_pdf_pdfplumber", pdf_stats(page_texts)
     except Exception:
         pass
     try:
         from pypdf import PdfReader
         reader = PdfReader(path)
-        chunks = []
-        for page_index, page in enumerate(reader.pages, start=1):
-            text = page.extract_text() or ""
-            if text.strip():
-                chunks.append(f"\\n--- Page {page_index} ---\\n{text}")
-            if sum(len(chunk) for chunk in chunks) >= max_chars:
-                break
-        return "\\n".join(chunks)[:max_chars], "local_pdf_pypdf"
+        page_texts = [(page.extract_text() or "") for page in reader.pages]
+        return render_pdf_pages(page_texts, max_chars), "local_pdf_pypdf", pdf_stats(page_texts)
     except Exception as exc:
         raise RuntimeError(f"PDF parser unavailable or failed: {exc}")
 
@@ -664,8 +816,9 @@ def main():
 
     if not path or not os.path.isfile(path):
         raise RuntimeError("file not found")
+    stats = None
     if mime_type == "application/pdf" or ext == ".pdf":
-        text, parser = parse_pdf(path, max_chars)
+        text, parser, stats = parse_pdf(path, max_chars)
     elif ext == ".docx" or mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         try:
             text, parser = parse_docx(path, max_chars)
@@ -681,7 +834,7 @@ def main():
         text, parser = read_text_file(path, max_chars), "local_text_python"
     else:
         raise RuntimeError(f"unsupported local parser for mime={mime_type} ext={ext}")
-    emit({"text": clip(text, max_chars), "parser": parser})
+    emit({"text": clip(text, max_chars), "parser": parser, "stats": stats})
 
 try:
     main()
@@ -737,54 +890,109 @@ async function callOpenRouterImageParser(
   return text.slice(0, readParserMaxChars());
 }
 
-async function callOpenRouterFileParser(config: ServerConfig, file: { name: string; dataUrl: string }) {
-  const response = await fetch(`${config.openRouterBaseUrl.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${process.env[config.openRouterApiKeyEnv]}`,
-      'content-type': 'application/json',
-      'x-title': config.openRouterAppTitle,
-    },
-    body: JSON.stringify({
-      model: process.env.OPENROUTER_FILE_PARSER_MODEL || 'qwen/qwen3.6-flash',
-      temperature: 0,
-      max_tokens: Number(process.env.OPENROUTER_FILE_PARSER_MAX_TOKENS || 12000),
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'You are a document extraction tool. Extract the file content faithfully; preserve headings, tables, bullets, names, dates, amounts, and URLs.',
-            },
-            {
-              type: 'file',
-              file: {
-                filename: file.name,
-                file_data: file.dataUrl,
+export async function callOpenRouterFileParser(
+  config: ServerConfig,
+  file: { name: string; dataUrl: string; engine?: string }
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), readOpenRouterFileParserTimeoutMs());
+  let response: Response;
+  try {
+    response = await fetch(`${config.openRouterBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${process.env[config.openRouterApiKeyEnv]}`,
+        'content-type': 'application/json',
+        'x-title': config.openRouterAppTitle,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: process.env.OPENROUTER_FILE_PARSER_MODEL || 'qwen/qwen3.6-flash',
+        temperature: 0,
+        max_tokens: Number(process.env.OPENROUTER_FILE_PARSER_MAX_TOKENS || 128),
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Parse this PDF faithfully. Preserve the full document in the file annotation, including page boundaries, headings, tables, bullets, names, dates, amounts, and URLs. Reply only with a short confirmation; do not summarize.',
               },
-            },
-          ],
-        },
-      ],
-      plugins: [
-        {
-          id: 'file-parser',
-          pdf: {
-            engine: process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'cloudflare-ai',
+              {
+                type: 'file',
+                file: {
+                  filename: file.name,
+                  file_data: file.dataUrl,
+                },
+              },
+            ],
           },
-        },
-      ],
-    }),
-  });
+        ],
+        plugins: [
+          {
+            id: 'file-parser',
+            pdf: {
+              engine: file.engine || process.env.OPENROUTER_MULTIMODAL_PDF_ENGINE || 'mistral-ocr',
+            },
+          },
+        ],
+      }),
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`OpenRouter file parser timed out after ${readOpenRouterFileParserTimeoutMs()}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const payload = (await response.json().catch(() => ({}))) as unknown;
+  const annotation = extractFileAnnotation(payload);
   if (!response.ok) {
+    if (annotation.text) {
+      return {
+        text: annotation.text.slice(0, readParserMaxChars()),
+        annotationHash: annotation.hash,
+        generationId: extractGenerationId(payload, response),
+      };
+    }
     throw new Error(`OpenRouter file parser HTTP ${response.status}: ${extractErrorMessage(payload)}`);
   }
-  const text = extractMessageText(payload).trim();
+  const text = (annotation.text || extractMessageText(payload)).trim();
   if (!text) throw new Error('OpenRouter file parser returned empty text');
-  return text.slice(0, readParserMaxChars());
+  return {
+    text: text.slice(0, readParserMaxChars()),
+    annotationHash: annotation.hash,
+    generationId: extractGenerationId(payload, response),
+  };
+}
+
+export function extractFileAnnotation(payload: unknown) {
+  if (!isRecord(payload)) return { text: '', hash: '' };
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  const first = choices.find(isRecord);
+  const message = isRecord(first?.message) ? first.message : {};
+  const successAnnotations = Array.isArray(message.annotations) ? message.annotations : [];
+  const error = isRecord(payload.error) ? payload.error : {};
+  const errorMetadata = isRecord(error.metadata) ? error.metadata : {};
+  const errorAnnotations = Array.isArray(errorMetadata.file_annotations) ? errorMetadata.file_annotations : [];
+  for (const annotation of [...successAnnotations, ...errorAnnotations]) {
+    if (!isRecord(annotation)) continue;
+    const file = isRecord(annotation.file) ? annotation.file : {};
+    const text = extractTextParts(file.content).trim();
+    if (!text) continue;
+    return {
+      text,
+      hash: typeof file.hash === 'string' ? file.hash : '',
+    };
+  }
+  return { text: '', hash: '' };
+}
+
+function extractGenerationId(payload: unknown, response: Response) {
+  if (isRecord(payload) && typeof payload.id === 'string') return payload.id;
+  return response.headers.get('x-generation-id') || '';
 }
 
 function extractMessageText(payload: unknown) {
@@ -839,12 +1047,17 @@ function metadataStringValue(value: unknown) {
 
 function readParserMaxChars() {
   const value = Number(process.env.OPENROUTER_FILE_PARSER_MAX_CHARS || '');
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 60000;
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1_000_000;
 }
 
 function readLocalParserTimeoutMs() {
   const value = Number(process.env.ARTIFACT_LOCAL_PARSER_TIMEOUT_MS || '');
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 30_000;
+}
+
+function readOpenRouterFileParserTimeoutMs() {
+  const value = Number(process.env.OPENROUTER_FILE_PARSER_TIMEOUT_MS || '');
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 20 * 60 * 1000;
 }
 
 function readGeneratedMaxFiles() {

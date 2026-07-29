@@ -17,6 +17,11 @@ import {
   type SandboxExecContext,
 } from '../tools/sandbox-exec.js';
 import {
+  createPdfOpenRouterParserDynamictool,
+  isPdfOpenRouterParsertool,
+  runPdfOpenRouterParsertool,
+} from '../tools/pdf-parser.js';
+import {
   createPersonalDataDynamictools,
   isPersonalDatatool,
   runPersonalDatatool,
@@ -347,6 +352,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
   private async buildDynamictools(input: ChildAgentRunInput, selection: CodexModelSelection) {
     const tools: unknown[] = selection.provider === 'openai' ? [] : [createWebSearchDynamictool()];
     if (this.config.sandboxExecEnabled) tools.push(createSandboxExecDynamictool());
+    if (process.env[this.config.openRouterApiKeyEnv]?.trim()) tools.push(createPdfOpenRouterParserDynamictool());
     if (input.profileId === 'codex-competitive-intelligence') {
       const connectorScope = getConnectorScope(input.metadata);
       const enabledCompetitorSources = filterByConnectorScope(
@@ -406,6 +412,14 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       }
       if ((!namespace && isSandboxExectool(tool)) || (namespace === 'altselfs' && tool === 'sandbox_exec')) {
         const resultText = await runSandboxExectool(params.arguments, this.config, sandboxExecContext);
+        client.respond(requestId, {
+          contentItems: [{ type: 'inputText', text: resultText }],
+          success: !resultText.includes('"error"'),
+        });
+        return 'handled';
+      }
+      if (!namespace && isPdfOpenRouterParsertool(tool)) {
+        const resultText = await runPdfOpenRouterParsertool(params.arguments, this.config, sandboxExecContext);
         client.respond(requestId, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: !resultText.includes('"error"'),
