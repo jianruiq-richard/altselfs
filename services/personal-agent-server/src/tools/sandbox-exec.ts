@@ -33,7 +33,7 @@ export function createSandboxExecDynamictool() {
     namespace: null,
     name: 'altselfs_sandbox_exec',
     description:
-      'Run a short Python or shell command in the current Altselfs sandbox workspace when deterministic computation, parsing, scraping, or file transformation is needed. The command runs in an isolated Docker container with limited CPU, memory, process count, timeout, and workspace-only filesystem access. Prefer registered platform tools for third-party data. Do not use this for repository edits or package builds.',
+      'Run a short Python or shell command in the current Altselfs sandbox workspace when deterministic computation, parsing, scraping, or file transformation is needed. The command runs in an isolated Docker container with limited CPU, memory, process count, timeout, and workspace-only filesystem access. For PDFs, try the preinstalled Poppler tools (`pdfinfo`, then `pdftotext -layout`) first, use pypdf/pdfplumber only when Poppler extraction is unusable, and use page-scoped OCR only as the final fallback. Prefer registered platform tools for third-party data. Do not use this for repository edits or package builds.',
     inputSchema: {
       type: 'object',
       properties: {
