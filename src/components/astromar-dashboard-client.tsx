@@ -22,6 +22,11 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import {
+  fetchWorkspaceJson,
+  getWorkspaceCachedStale,
+  WORKSPACE_CACHE_KEYS,
+} from '@/lib/workspace-client-cache';
 
 type DashboardMetric = {
   label: string;
@@ -110,18 +115,20 @@ export function AstromarDashboardClient({
 }: AstromarDashboardClientProps) {
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
-  const [billingCapacity, setBillingCapacity] = useState<BillingCapacityData | null>(null);
-  const [billingCapacityLoading, setBillingCapacityLoading] = useState(false);
+  const [billingCapacity, setBillingCapacity] = useState<BillingCapacityData | null>(
+    () => getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity),
+  );
+  const [billingCapacityLoading, setBillingCapacityLoading] = useState(!billingCapacity);
 
   const loadBillingCapacity = useCallback(async (showLoading = false) => {
     if (showLoading) setBillingCapacityLoading(true);
     try {
-      const response = await fetch('/api/billing/capacity', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
-      const data = (await response.json().catch(() => ({}))) as BillingCapacityData & { error?: string };
-      if (!response.ok) throw new Error(data.error || 'Failed to load account capacity');
+      const data = await fetchWorkspaceJson<BillingCapacityData>(
+        WORKSPACE_CACHE_KEYS.billingCapacity,
+        '/api/billing/capacity',
+        {},
+        { force: true, ttlMs: 30_000 },
+      );
       setBillingCapacity(data);
     } catch {
       setBillingCapacity(null);
@@ -131,7 +138,7 @@ export function AstromarDashboardClient({
   }, []);
 
   useEffect(() => {
-    void loadBillingCapacity(true);
+    void loadBillingCapacity(!getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity));
   }, [loadBillingCapacity]);
 
   useEffect(() => {

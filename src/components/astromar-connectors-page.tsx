@@ -16,6 +16,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { InvestorConnectorsData } from '@/lib/investor-connectors-data';
+import {
+  fetchWorkspaceJson,
+  getWorkspaceCachedStale,
+  setWorkspaceCached,
+  WORKSPACE_CACHE_KEYS,
+} from '@/lib/workspace-client-cache';
 
 type ConnectorAccount = {
   connectionId: string;
@@ -74,31 +81,50 @@ function connectorAccountLabel(connector: ConnectorItem) {
   return 'Not connected';
 }
 
-export function AstromarConnectorsPage() {
-  const [connectors, setConnectors] = useState<ConnectorItem[]>([]);
-  const [loading, setLoading] = useState(true);
+type AstromarConnectorsPageProps = {
+  initialData?: InvestorConnectorsData | null;
+};
+
+export function AstromarConnectorsPage({ initialData = null }: AstromarConnectorsPageProps) {
+  const cachedConnectors = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
+  const initialConnectors = initialData?.connectors || cachedConnectors?.connectors || [];
+  const [connectors, setConnectors] = useState<ConnectorItem[]>(initialConnectors);
+  const [loading, setLoading] = useState(initialConnectors.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<ConnectorCategory>('all');
 
-  const loadConnectors = useCallback(async () => {
-    setLoading(true);
+  const loadConnectors = useCallback(async (options: { showLoading?: boolean; force?: boolean } = {}) => {
+    const showLoading = options.showLoading ?? false;
+    if (showLoading) setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/investor/connectors', { cache: 'no-store', credentials: 'same-origin' });
-      const data = (await response.json().catch(() => ({}))) as { connectors?: ConnectorItem[]; error?: string };
-      if (!response.ok) throw new Error(data.error || 'Failed to load connectors');
+      const data = await fetchWorkspaceJson<{ connectors?: ConnectorItem[] }>(
+        WORKSPACE_CACHE_KEYS.connectors,
+        '/api/investor/connectors',
+        {},
+        { force: options.force ?? true, ttlMs: 45_000 },
+      );
       setConnectors(Array.isArray(data.connectors) ? data.connectors : []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load connectors');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadConnectors();
-  }, [loadConnectors]);
+    if (initialData) {
+      setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, initialData);
+      void loadConnectors({ showLoading: false, force: true });
+      return;
+    }
+    if (cachedConnectors?.connectors?.length) {
+      void loadConnectors({ showLoading: false, force: true });
+      return;
+    }
+    void loadConnectors({ showLoading: true, force: false });
+  }, [cachedConnectors?.connectors?.length, initialData, loadConnectors]);
 
   const connectedCount = connectors.filter((connector) => connector.connected).length;
   const filteredConnectors = useMemo(() => {
@@ -119,7 +145,7 @@ export function AstromarConnectorsPage() {
           </div>
           <div className="flex items-center gap-2">
             <BillingCapacityPopover />
-            <button type="button" onClick={() => void loadConnectors()} className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/5 hover:text-white" title="Refresh connections">
+            <button type="button" onClick={() => void loadConnectors({ showLoading: connectors.length === 0, force: true })} className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/5 hover:text-white" title="Refresh connections">
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
@@ -171,7 +197,7 @@ export function AstromarConnectorsPage() {
             {error ? (
               <div className="mb-4 flex items-center justify-between gap-4 rounded-[8px] border border-red-400/20 bg-red-400/[0.06] px-4 py-3 text-xs text-red-200">
                 <span>{error}</span>
-                <button type="button" onClick={() => void loadConnectors()} className="font-bold hover:text-white">Retry</button>
+                <button type="button" onClick={() => void loadConnectors({ showLoading: connectors.length === 0, force: true })} className="font-bold hover:text-white">Retry</button>
               </div>
             ) : null}
 

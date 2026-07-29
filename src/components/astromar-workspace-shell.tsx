@@ -16,6 +16,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { prefetchWorkspaceRouteData } from '@/lib/workspace-client-cache';
 
 type WorkspaceNavKey = 'home' | 'discussion' | 'connectors' | 'settings';
 type SidebarLocation = 'desktop' | 'mobile';
@@ -73,6 +74,22 @@ export function AstromarWorkspaceShell({
     router.replace(buildSignInRedirectUrl());
   }, [isLoaded, isSignedIn, router]);
 
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    const prefetchCommonRoutes = () => {
+      ['/investor/chat/100', '/connectors', '/profile'].forEach((href) => {
+        router.prefetch(href);
+        prefetchWorkspaceRouteData(href);
+      });
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleCallback = window.requestIdleCallback(prefetchCommonRoutes, { timeout: 2500 });
+      return () => window.cancelIdleCallback(idleCallback);
+    }
+    const timeout = globalThis.setTimeout(prefetchCommonRoutes, 1200);
+    return () => globalThis.clearTimeout(timeout);
+  }, [isLoaded, isSignedIn, router]);
+
   if (!isLoaded || !isSignedIn) {
     return (
       <div className="grid min-h-dvh place-items-center bg-[#090a0a] px-6 text-center text-zinc-400">
@@ -96,6 +113,11 @@ export function AstromarWorkspaceShell({
   const renderSidebarContent = (location: SidebarLocation) => (
     typeof sidebarContent === 'function' ? sidebarContent(location) : sidebarContent
   );
+  const handleNavigationIntent = (href: string) => {
+    router.prefetch(href);
+    prefetchWorkspaceRouteData(href);
+  };
+
   const sidebar = (location: SidebarLocation) => (
     <div className="flex h-full min-h-0 flex-col bg-[#0c0d0e] text-zinc-100">
       <div className="flex h-16 shrink-0 items-center justify-between px-4">
@@ -148,6 +170,8 @@ export function AstromarWorkspaceShell({
             <Link
               key={item.key}
               href={item.key === 'home' ? homeHref : item.href}
+              onPointerEnter={() => handleNavigationIntent(item.key === 'home' ? homeHref : item.href)}
+              onFocus={() => handleNavigationIntent(item.key === 'home' ? homeHref : item.href)}
               onClick={() => setMobileSidebarOpen(false)}
               className={`flex min-h-[38px] items-center gap-2.5 rounded-[7px] px-3 text-[13px] transition-colors ${
                 active ? 'bg-white/[0.085] text-white' : 'text-zinc-400 hover:bg-white/[0.045] hover:text-white'

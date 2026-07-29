@@ -16,6 +16,12 @@ import {
   type BillingCapacityData,
 } from '@/components/billing-capacity-popover';
 import {
+  fetchWorkspaceJson,
+  getWorkspaceCachedStale,
+  setWorkspaceCached,
+  WORKSPACE_CACHE_KEYS,
+} from '@/lib/workspace-client-cache';
+import {
   EXECUTIVE_UPDATE_BRIEFING_PROMPT,
   ExecutiveDailyBriefingBrowser,
 } from '@/components/executive-daily-briefing-browser';
@@ -165,6 +171,13 @@ type PersonalAgentFinalData = {
   runId?: string;
   cancelled?: boolean;
   code?: string;
+};
+
+type PersonalAgentCachedPage = {
+  threadId?: string | null;
+  messages?: ChatMessage[];
+  sessions?: AgentSessionSummary[];
+  hasMore?: boolean;
 };
 
 type CodexStreamItemStatus = 'running' | 'completed' | 'error';
@@ -2182,14 +2195,23 @@ export function InvestorAgentChatPage() {
   const searchParams = useSearchParams();
   const agentId = params.agentId as string;
   const isExecutive = agentId === '100';
+  const initialPersonalAgentCache = isExecutive
+    ? getWorkspaceCachedStale<PersonalAgentCachedPage>(WORKSPACE_CACHE_KEYS.personalAgentDefault)
+    : null;
+  const initialBillingCapacity = getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
+  const initialConnectorsCache = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
 
-  const [threadId, setThreadId] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<AgentSessionSummary[]>([]);
+  const [threadId, setThreadId] = useState<string | null>(initialPersonalAgentCache?.threadId || null);
+  const [sessions, setSessions] = useState<AgentSessionSummary[]>(
+    () => initialPersonalAgentCache?.sessions || [],
+  );
   const [creatingSession, setCreatingSession] = useState(false);
   const [openSessionMenuId, setOpenSessionMenuId] = useState<string | null>(null);
   const [sessionActionBusyId, setSessionActionBusyId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    () => initialPersonalAgentCache?.messages || [],
+  );
+  const [hasMoreMessages, setHasMoreMessages] = useState(Boolean(initialPersonalAgentCache?.hasMore));
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [persistedBriefing, setPersistedBriefing] = useState<PersistedBriefing | null>(null);
@@ -2200,8 +2222,8 @@ export function InvestorAgentChatPage() {
   const [sending, setSending] = useState(false);
   const [startingRun, setStartingRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [billingCapacity, setBillingCapacity] = useState<BillingCapacityData | null>(null);
-  const [billingCapacityLoading, setBillingCapacityLoading] = useState(false);
+  const [billingCapacity, setBillingCapacity] = useState<BillingCapacityData | null>(initialBillingCapacity);
+  const [billingCapacityLoading, setBillingCapacityLoading] = useState(!initialBillingCapacity);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');
   const [promptSaved, setPromptSaved] = useState('');
@@ -2223,15 +2245,17 @@ export function InvestorAgentChatPage() {
   const [recoveringRunState, setRecoveringRunState] = useState(false);
   const [hermesModel, setHermesModel] = useState<HermesModelOption['value']>(DEFAULT_HERMES_MODEL);
   const [hermesModelMenuOpen, setHermesModelMenuOpen] = useState(false);
-  const [connectors, setConnectors] = useState<ConnectorItem[]>([]);
-  const [connectorsLoading, setConnectorsLoading] = useState(false);
+  const [connectors, setConnectors] = useState<ConnectorItem[]>(
+    () => initialConnectorsCache?.connectors || [],
+  );
+  const [connectorsLoading, setConnectorsLoading] = useState(!initialConnectorsCache?.connectors?.length);
   const [connectorsError, setConnectorsError] = useState<string | null>(null);
   const [selectedConnectorKeys, setSelectedConnectorKeys] = useState<string[]>([]);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const liveStreamRunIdRef = useRef<string | null>(null);
   const requestedStopRunIdRef = useRef<string | null>(null);
-  const selectedThreadIdRef = useRef<string | null>(null);
+  const selectedThreadIdRef = useRef<string | null>(initialPersonalAgentCache?.threadId || null);
   const submissionInFlightRef = useRef(false);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const messagesAutoFollowRef = useRef(true);
@@ -2254,23 +2278,53 @@ export function InvestorAgentChatPage() {
     router.replace(buildSignInRedirectUrl());
   }, [router]);
 
+  const cachePersonalAgentPage = useCallback((page: PersonalAgentCachedPage) => {
+    const normalized: PersonalAgentCachedPage = {
+      threadId: page.threadId || null,
+      sessions: Array.isArray(page.sessions) ? page.sessions : [],
+      messages: Array.isArray(page.messages) ? page.messages : [],
+      hasMore: Boolean(page.hasMore),
+    };
+    setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentDefault, normalized);
+    if (normalized.threadId) {
+      setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentThread(normalized.threadId), normalized);
+    }
+  }, []);
+
+  const applyPersonalAgentCachedPage = useCallback((page: PersonalAgentCachedPage) => {
+    const cachedThreadId = typeof page.threadId === 'string' ? page.threadId : null;
+    if (cachedThreadId) selectThreadId(cachedThreadId);
+    if (Array.isArray(page.sessions)) setSessions(page.sessions);
+    const cachedMessages = Array.isArray(page.messages) ? page.messages : [];
+    if (cachedMessages.length > 0 || cachedThreadId) {
+      messagesAutoFollowRef.current = true;
+      setMessages(cachedMessages);
+    }
+    if (typeof page.hasMore === 'boolean') setHasMoreMessages(page.hasMore);
+  }, [selectThreadId]);
+
+  const getCachedPersonalAgentPage = useCallback((targetThreadId?: string | null) => {
+    const threadCache = targetThreadId
+      ? getWorkspaceCachedStale<PersonalAgentCachedPage>(WORKSPACE_CACHE_KEYS.personalAgentThread(targetThreadId))
+      : null;
+    return threadCache || getWorkspaceCachedStale<PersonalAgentCachedPage>(WORKSPACE_CACHE_KEYS.personalAgentDefault);
+  }, []);
+
   const loadBillingCapacity = useCallback(async (
     options: { showLoading?: boolean } = {},
   ): Promise<BillingCapacityData | null> => {
     if (options.showLoading) setBillingCapacityLoading(true);
     try {
-      const response = await fetch('/api/billing/capacity', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
-      const data = (await response.json().catch(() => ({}))) as BillingCapacityData & { error?: string };
-      if (!response.ok) {
-        if (response.status === 401) handleSessionExpired();
-        return null;
-      }
+      const data = await fetchWorkspaceJson<BillingCapacityData>(
+        WORKSPACE_CACHE_KEYS.billingCapacity,
+        '/api/billing/capacity',
+        {},
+        { force: true, ttlMs: 30_000 },
+      );
       setBillingCapacity(data);
       return data;
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('401')) handleSessionExpired();
       return null;
     } finally {
       if (options.showLoading) setBillingCapacityLoading(false);
@@ -2356,20 +2410,23 @@ export function InvestorAgentChatPage() {
   useEffect(() => {
     if (!isExecutive) return;
     let cancelled = false;
-    setConnectorsLoading(true);
+    const cached = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
+    if (Array.isArray(cached?.connectors)) {
+      setConnectors(cached.connectors);
+      setConnectorsLoading(false);
+    } else {
+      setConnectorsLoading(true);
+    }
     setConnectorsError(null);
-    fetch('/api/investor/connectors', {
-      cache: 'no-store',
-      credentials: 'same-origin',
-    })
-      .then(async (res) => {
-        const data = (await res.json().catch(() => ({}))) as { connectors?: ConnectorItem[]; error?: string };
-        if (!res.ok) throw new Error(data.error || 'Failed to load connectors');
-        return Array.isArray(data.connectors) ? data.connectors : [];
-      })
+    fetchWorkspaceJson<{ connectors?: ConnectorItem[] }>(
+      WORKSPACE_CACHE_KEYS.connectors,
+      '/api/investor/connectors',
+      {},
+      { force: true, ttlMs: 45_000 },
+    )
       .then((items) => {
         if (cancelled) return;
-        setConnectors(items);
+        setConnectors(Array.isArray(items.connectors) ? items.connectors : []);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -2603,6 +2660,14 @@ export function InvestorAgentChatPage() {
       if (typeof data.hasMore === 'boolean') {
         setHasMoreMessages(data.hasMore);
       }
+      if (Array.isArray(data.sessions) || Array.isArray(data.messages)) {
+        cachePersonalAgentPage({
+          threadId: recoveredThreadId || requestedThreadId || null,
+          sessions: Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : sessions,
+          messages: Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : messages,
+          hasMore: typeof data.hasMore === 'boolean' ? data.hasMore : hasMoreMessages,
+        });
+      }
       const sandbox = isRecord(data.sandbox) ? data.sandbox : {};
       const activeRun = isRecord(data.activeRun) ? data.activeRun : {};
       const status = typeof sandbox.status === 'string'
@@ -2715,9 +2780,25 @@ export function InvestorAgentChatPage() {
         const result = isRecord(latestTerminalRun.result) ? latestTerminalRun.result : {};
         const reply = typeof result.reply === 'string' ? result.reply : '';
         if (recoveredMessages.length > 0) {
-          setMessages(appendAssistantReplyIfMissing(recoveredMessages, reply));
+          const nextMessages = appendAssistantReplyIfMissing(recoveredMessages, reply);
+          setMessages(nextMessages);
+          cachePersonalAgentPage({
+            threadId: recoveredThreadId || requestedThreadId || threadId,
+            sessions,
+            messages: nextMessages,
+            hasMore: hasMoreMessages,
+          });
         } else if (reply.trim()) {
-          setMessages((prev) => appendAssistantReplyIfMissing(prev, reply));
+          setMessages((prev) => {
+            const nextMessages = appendAssistantReplyIfMissing(prev, reply);
+            cachePersonalAgentPage({
+              threadId: recoveredThreadId || requestedThreadId || threadId,
+              sessions,
+              messages: nextMessages,
+              hasMore: hasMoreMessages,
+            });
+            return nextMessages;
+          });
         }
         setError(null);
         return 'success';
@@ -2738,7 +2819,15 @@ export function InvestorAgentChatPage() {
         }
 
         const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
-        if (recoveredMessages.length > 0) setMessages(recoveredMessages);
+        if (recoveredMessages.length > 0) {
+          setMessages(recoveredMessages);
+          cachePersonalAgentPage({
+            threadId: recoveredThreadId || requestedThreadId || threadId,
+            sessions,
+            messages: recoveredMessages,
+            hasMore: hasMoreMessages,
+          });
+        }
         const terminalError = typeof latestTerminalRun.error === 'string' && latestTerminalRun.error.trim()
           ? latestTerminalRun.error.trim()
             : latestTerminalStatus === 'CANCELLED'
@@ -2757,13 +2846,21 @@ export function InvestorAgentChatPage() {
         setSending(false);
       }
       const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
-      if (recoveredMessages.length > 0) setMessages(recoveredMessages);
+      if (recoveredMessages.length > 0) {
+        setMessages(recoveredMessages);
+        cachePersonalAgentPage({
+          threadId: recoveredThreadId || requestedThreadId || threadId,
+          sessions,
+          messages: recoveredMessages,
+          hasMore: hasMoreMessages,
+        });
+      }
       return 'idle';
     } catch {
       // Status recovery is best-effort; the normal send flow still reports errors.
       return 'unavailable';
     }
-  }, [activeRunId, handleSessionExpired, selectThreadId, threadId]);
+  }, [activeRunId, cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, messages, selectThreadId, sessions, threadId]);
 
   const resetPersonalAgentRunState = useCallback(() => {
     activeRunIdRef.current = null;
@@ -2788,9 +2885,14 @@ export function InvestorAgentChatPage() {
     if (!isExecutive) return;
     const requestedThreadId = targetThreadId || null;
     if (requestedThreadId) selectedThreadIdRef.current = requestedThreadId;
-    const showBlockingLoading = options?.showBlockingLoading ?? true;
+    let showBlockingLoading = options?.showBlockingLoading ?? true;
+    const cached = getCachedPersonalAgentPage(requestedThreadId);
+    if (cached) {
+      applyPersonalAgentCachedPage(cached);
+      showBlockingLoading = false;
+    }
     if (showBlockingLoading) setLoading(true);
-    setRecoveringRunState(true);
+    setRecoveringRunState(showBlockingLoading);
     setError(null);
     try {
       const query = new URLSearchParams({ sessions: '1' });
@@ -2823,6 +2925,12 @@ export function InvestorAgentChatPage() {
       messagesAutoFollowRef.current = true;
       setMessages(loadedMessages);
       setHasMoreMessages(Boolean(data.hasMore));
+      cachePersonalAgentPage({
+        threadId: loadedThreadId,
+        sessions: Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : [],
+        messages: loadedMessages,
+        hasMore: Boolean(data.hasMore),
+      });
       setBriefing(null);
       setPersistedBriefing(null);
       setPlannerSteps([]);
@@ -2838,7 +2946,7 @@ export function InvestorAgentChatPage() {
       if (showBlockingLoading) setLoading(false);
       setRecoveringRunState(false);
     }
-  }, [handleSessionExpired, isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, selectThreadId, showExecutiveControls]);
+  }, [applyPersonalAgentCachedPage, cachePersonalAgentPage, getCachedPersonalAgentPage, handleSessionExpired, isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, selectThreadId, showExecutiveControls]);
 
   useEffect(() => {
     if (!threadId || !activeRunId) return;
@@ -2855,7 +2963,9 @@ export function InvestorAgentChatPage() {
   }, [loadData]);
 
   useEffect(() => {
-    void loadBillingCapacity({ showLoading: true });
+    void loadBillingCapacity({
+      showLoading: !getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity),
+    });
   }, [loadBillingCapacity]);
 
   useEffect(() => {
@@ -2888,11 +2998,19 @@ export function InvestorAgentChatPage() {
         return;
       }
       resetPersonalAgentRunState();
-      selectThreadId(typeof data.threadId === 'string' ? data.threadId : null);
+      const createdThreadId = typeof data.threadId === 'string' ? data.threadId : null;
+      const nextSessions = Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : [];
+      selectThreadId(createdThreadId);
       messagesAutoFollowRef.current = true;
       setMessages([]);
       setHasMoreMessages(false);
-      setSessions(Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : []);
+      setSessions(nextSessions);
+      cachePersonalAgentPage({
+        threadId: createdThreadId,
+        sessions: nextSessions,
+        messages: [],
+        hasMore: false,
+      });
       setInput('');
       setAttachments([]);
       window.requestAnimationFrame(() => {
@@ -2904,7 +3022,7 @@ export function InvestorAgentChatPage() {
       setCreatingSession(false);
       setRecoveringRunState(false);
     }
-  }, [creatingSession, handleSessionExpired, recoveringRunState, resetPersonalAgentRunState, selectThreadId, startingRun]);
+  }, [cachePersonalAgentPage, creatingSession, handleSessionExpired, recoveringRunState, resetPersonalAgentRunState, selectThreadId, startingRun]);
 
   const switchSession = useCallback(async (targetThreadId: string) => {
     if (!targetThreadId || targetThreadId === threadId || startingRun || recoveringRunState) return;
@@ -2971,6 +3089,12 @@ export function InvestorAgentChatPage() {
 
       const nextSessions = Array.isArray(data.sessions) ? data.sessions : [];
       setSessions(nextSessions);
+      cachePersonalAgentPage({
+        threadId,
+        sessions: nextSessions,
+        messages,
+        hasMore: hasMoreMessages,
+      });
 
       if ((action === 'archive' || action === 'delete') && session.id === threadId) {
         await loadData(nextSessions[0]?.id || null, { showBlockingLoading: true });
@@ -2980,7 +3104,7 @@ export function InvestorAgentChatPage() {
     } finally {
       setSessionActionBusyId(null);
     }
-  }, [handleSessionExpired, loadData, recoveringRunState, sending, sessionActionBusyId, startingRun, threadId]);
+  }, [cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, loadData, messages, recoveringRunState, sending, sessionActionBusyId, startingRun, threadId]);
 
   useEffect(() => {
     if (!openSessionMenuId) return;
@@ -3064,7 +3188,14 @@ export function InvestorAgentChatPage() {
       setMessages((currentMessages) => {
         const existingIds = new Set(currentMessages.map((message) => message.id).filter(Boolean));
         const dedupedOlderMessages = olderMessages.filter((message) => !message.id || !existingIds.has(message.id));
-        return [...dedupedOlderMessages, ...currentMessages];
+        const nextMessages = [...dedupedOlderMessages, ...currentMessages];
+        cachePersonalAgentPage({
+          threadId,
+          sessions,
+          messages: nextMessages,
+          hasMore: Boolean(data.hasMore),
+        });
+        return nextMessages;
       });
 
       window.requestAnimationFrame(() => {
@@ -3078,7 +3209,7 @@ export function InvestorAgentChatPage() {
       loadingOlderMessagesRef.current = false;
       setLoadingOlderMessages(false);
     }
-  }, [handleSessionExpired, hasMoreMessages, messages, threadId]);
+  }, [cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, messages, sessions, threadId]);
 
   const handleMessagesScroll = useCallback(() => {
     const viewport = messagesViewportRef.current;
@@ -3284,16 +3415,23 @@ export function InvestorAgentChatPage() {
     }
     const syncedThreadId = typeof data.threadId === 'string' ? data.threadId : '';
     if (syncedThreadId) selectThreadId(syncedThreadId);
+    const syncedSessions = Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : null;
     if (Array.isArray(data.sessions)) {
-      setSessions(data.sessions as AgentSessionSummary[]);
+      setSessions(syncedSessions || []);
     }
     if (typeof data.hasMore === 'boolean') {
       setHasMoreMessages(data.hasMore);
     }
     const syncedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
     if (syncedMessages.length > 0) setMessages(syncedMessages);
+    cachePersonalAgentPage({
+      threadId: syncedThreadId || targetThreadId || threadId || null,
+      sessions: syncedSessions || sessions,
+      messages: syncedMessages.length > 0 ? syncedMessages : messages,
+      hasMore: typeof data.hasMore === 'boolean' ? data.hasMore : hasMoreMessages,
+    });
     return syncedMessages;
-  }, [handleSessionExpired, selectThreadId]);
+  }, [cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, messages, selectThreadId, sessions, threadId]);
 
   const hasSyncedCurrentUserTurn = useCallback(async (
     expectedUserContent: string,
@@ -3576,11 +3714,22 @@ export function InvestorAgentChatPage() {
       }
 
       if (asyncThreadId) selectThreadId(asyncThreadId);
-      if (Array.isArray(data.sessions)) setSessions(data.sessions);
-      if (typeof data.hasMore === 'boolean') setHasMoreMessages(data.hasMore);
+      const nextSessionsAfterStart = Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : sessions;
+      const nextHasMoreAfterStart = typeof data.hasMore === 'boolean' ? data.hasMore : hasMoreMessages;
+      if (Array.isArray(data.sessions)) setSessions(nextSessionsAfterStart);
+      if (typeof data.hasMore === 'boolean') setHasMoreMessages(nextHasMoreAfterStart);
+      const serverMessagesAfterStart = Array.isArray(data.messages) && data.messages.length >= nextMessages.length
+        ? (data.messages as ChatMessage[])
+        : nextMessages;
       if (Array.isArray(data.messages) && data.messages.length >= nextMessages.length) {
         setMessages(data.messages);
       }
+      cachePersonalAgentPage({
+        threadId: asyncThreadId,
+        sessions: nextSessionsAfterStart,
+        messages: serverMessagesAfterStart,
+        hasMore: nextHasMoreAfterStart,
+      });
       activeRunIdRef.current = runId;
       liveStreamRunIdRef.current = null;
       setActiveRunId(runId);

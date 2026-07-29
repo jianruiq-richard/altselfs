@@ -22,6 +22,12 @@ import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 import { displayEmail } from '@/lib/user-identifier';
+import {
+  fetchWorkspaceJson,
+  getWorkspaceCachedStale,
+  setWorkspaceCached,
+  WORKSPACE_CACHE_KEYS,
+} from '@/lib/workspace-client-cache';
 
 type Profile = {
   id: string;
@@ -186,25 +192,31 @@ function paymentTitle(payment: BillingSummary['recentPayments'][number]) {
 }
 
 export default function ProfilePage() {
+  const cachedProfile = getWorkspaceCachedStale<{ user?: Profile }>(WORKSPACE_CACHE_KEYS.userProfile)?.user || null;
   const [activeView, setActiveView] = useState<SettingsView>('account');
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(cachedProfile);
+  const [profileLoading, setProfileLoading] = useState(!profile);
   const [saving, setSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileSuccess, setProfileSuccess] = useState(false);
-  const [nickname, setNickname] = useState('');
-  const [phone, setPhone] = useState('');
-  const [wechatId, setWechatId] = useState('');
+  const [nickname, setNickname] = useState(cachedProfile?.nickname || '');
+  const [phone, setPhone] = useState(cachedProfile?.phone || '');
+  const [wechatId, setWechatId] = useState(cachedProfile?.wechatId || '');
 
-  const [archivedSessions, setArchivedSessions] = useState<ArchivedConversation[]>([]);
-  const [archivedLoading, setArchivedLoading] = useState(true);
-  const [archivedLoaded, setArchivedLoaded] = useState(false);
+  const [archivedSessions, setArchivedSessions] = useState<ArchivedConversation[]>(() => {
+    const cached = getWorkspaceCachedStale<{ sessions?: ArchivedConversation[] }>(WORKSPACE_CACHE_KEYS.archivedSessions);
+    return Array.isArray(cached?.sessions) ? cached.sessions : [];
+  });
+  const [archivedLoading, setArchivedLoading] = useState(archivedSessions.length === 0);
+  const [archivedLoaded, setArchivedLoaded] = useState(archivedSessions.length > 0);
   const [archivedError, setArchivedError] = useState<string | null>(null);
   const [archiveActionId, setArchiveActionId] = useState<string | null>(null);
   const [archiveQuery, setArchiveQuery] = useState('');
-  const [billing, setBilling] = useState<BillingSummary | null>(null);
-  const [billingLoading, setBillingLoading] = useState(true);
-  const [billingLoaded, setBillingLoaded] = useState(false);
+  const [billing, setBilling] = useState<BillingSummary | null>(
+    () => getWorkspaceCachedStale<BillingSummary>(WORKSPACE_CACHE_KEYS.billingSummary),
+  );
+  const [billingLoading, setBillingLoading] = useState(!billing);
+  const [billingLoaded, setBillingLoaded] = useState(Boolean(billing));
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<string | null>(null);
   const [billingAction, setBillingAction] = useState<string | null>(null);
@@ -226,15 +238,25 @@ export default function ProfilePage() {
   }, []);
 
   const loadProfile = useCallback(async () => {
-    setProfileLoading(true);
+    const cached = getWorkspaceCachedStale<{ user?: Profile }>(WORKSPACE_CACHE_KEYS.userProfile);
+    if (cached?.user) {
+      setProfile(cached.user);
+      setNickname(cached.user.nickname || '');
+      setPhone(cached.user.phone || '');
+      setWechatId(cached.user.wechatId || '');
+      setProfileLoading(false);
+    } else {
+      setProfileLoading(true);
+    }
     setProfileError(null);
     try {
-      const response = await fetch('/api/user/profile', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
-      const data = (await response.json().catch(() => ({}))) as { user?: Profile; error?: string };
-      if (!response.ok || !data.user) throw new Error(data.error || 'Failed to load account settings');
+      const data = await fetchWorkspaceJson<{ user?: Profile }>(
+        WORKSPACE_CACHE_KEYS.userProfile,
+        '/api/user/profile',
+        {},
+        { force: true, ttlMs: 120_000 },
+      );
+      if (!data.user) throw new Error('Failed to load account settings');
       setProfile(data.user);
       setNickname(data.user.nickname || '');
       setPhone(data.user.phone || '');
@@ -247,18 +269,22 @@ export default function ProfilePage() {
   }, []);
 
   const loadArchivedSessions = useCallback(async () => {
-    setArchivedLoading(true);
+    const cached = getWorkspaceCachedStale<{ sessions?: ArchivedConversation[] }>(WORKSPACE_CACHE_KEYS.archivedSessions);
+    if (Array.isArray(cached?.sessions)) {
+      setArchivedSessions(cached.sessions);
+      setArchivedLoading(false);
+      setArchivedLoaded(true);
+    } else {
+      setArchivedLoading(true);
+    }
     setArchivedError(null);
     try {
-      const response = await fetch('/api/investor/personal-agent?sessions=1&sessionStatus=archived', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
-      const data = (await response.json().catch(() => ({}))) as {
-        sessions?: ArchivedConversation[];
-        error?: string;
-      };
-      if (!response.ok) throw new Error(data.error || 'Failed to load archived conversations');
+      const data = await fetchWorkspaceJson<{ sessions?: ArchivedConversation[] }>(
+        WORKSPACE_CACHE_KEYS.archivedSessions,
+        '/api/investor/personal-agent?sessions=1&sessionStatus=archived',
+        {},
+        { force: true, ttlMs: 45_000 },
+      );
       setArchivedSessions(Array.isArray(data.sessions) ? data.sessions : []);
     } catch (loadError) {
       setArchivedError(loadError instanceof Error ? loadError.message : 'Failed to load archived conversations');
@@ -269,15 +295,22 @@ export default function ProfilePage() {
   }, []);
 
   const loadBilling = useCallback(async () => {
-    setBillingLoading(true);
+    const cached = getWorkspaceCachedStale<BillingSummary>(WORKSPACE_CACHE_KEYS.billingSummary);
+    if (cached) {
+      setBilling(cached);
+      setBillingLoading(false);
+      setBillingLoaded(true);
+    } else {
+      setBillingLoading(true);
+    }
     setBillingError(null);
     try {
-      const response = await fetch('/api/billing/summary', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
-      const data = (await response.json().catch(() => ({}))) as BillingSummary & { error?: string };
-      if (!response.ok) throw new Error(data.error || 'Failed to load plan and usage');
+      const data = await fetchWorkspaceJson<BillingSummary>(
+        WORKSPACE_CACHE_KEYS.billingSummary,
+        '/api/billing/summary',
+        {},
+        { force: true, ttlMs: 45_000 },
+      );
       setBilling(data);
     } catch (loadError) {
       setBillingError(loadError instanceof Error ? loadError.message : 'Failed to load plan and usage');
@@ -371,6 +404,7 @@ export default function ProfilePage() {
       setNickname(data.user.nickname || '');
       setPhone(data.user.phone || '');
       setWechatId(data.user.wechatId || '');
+      setWorkspaceCached(WORKSPACE_CACHE_KEYS.userProfile, { user: data.user });
       setProfileSuccess(true);
       window.setTimeout(() => setProfileSuccess(false), 2200);
     } catch (saveError) {
@@ -406,7 +440,9 @@ export default function ProfilePage() {
         error?: string;
       };
       if (!response.ok) throw new Error(data.error || 'Failed to update archived conversation');
-      setArchivedSessions(Array.isArray(data.archivedSessions) ? data.archivedSessions : []);
+      const nextArchivedSessions = Array.isArray(data.archivedSessions) ? data.archivedSessions : [];
+      setArchivedSessions(nextArchivedSessions);
+      setWorkspaceCached(WORKSPACE_CACHE_KEYS.archivedSessions, { sessions: nextArchivedSessions });
     } catch (actionError) {
       setArchivedError(actionError instanceof Error ? actionError.message : 'Failed to update archived conversation');
     } finally {

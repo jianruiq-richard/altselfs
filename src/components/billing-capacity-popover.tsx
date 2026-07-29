@@ -4,6 +4,11 @@ import { ArrowRight, CircleGauge, LoaderCircle, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
+import {
+  fetchWorkspaceJson,
+  getWorkspaceCachedStale,
+  WORKSPACE_CACHE_KEYS,
+} from '@/lib/workspace-client-cache';
 
 export type BillingCapacityData = {
   mode: 'observe' | 'enforce';
@@ -38,8 +43,10 @@ export function BillingCapacityPopover({
   variant = 'compact',
 }: BillingCapacityPopoverProps) {
   const controlled = data !== undefined;
-  const [internalData, setInternalData] = useState<BillingCapacityData | null>(null);
-  const [internalLoading, setInternalLoading] = useState(!controlled);
+  const [internalData, setInternalData] = useState<BillingCapacityData | null>(
+    () => getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity),
+  );
+  const [internalLoading, setInternalLoading] = useState(!controlled && !internalData);
   const [hoverOpen, setHoverOpen] = useState(false);
   const [focusOpen, setFocusOpen] = useState(false);
   const [pinnedOpen, setPinnedOpen] = useState(false);
@@ -50,12 +57,12 @@ export function BillingCapacityPopover({
   const loadCapacity = useCallback(async (showLoading = false) => {
     if (showLoading) setInternalLoading(true);
     try {
-      const response = await fetch('/api/billing/capacity', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
-      const payload = (await response.json().catch(() => ({}))) as BillingCapacityData & { error?: string };
-      if (!response.ok) throw new Error(payload.error || 'Failed to load account capacity');
+      const payload = await fetchWorkspaceJson<BillingCapacityData>(
+        WORKSPACE_CACHE_KEYS.billingCapacity,
+        '/api/billing/capacity',
+        {},
+        { force: true, ttlMs: 30_000 },
+      );
       setInternalData(payload);
     } catch {
       setInternalData(null);
@@ -66,7 +73,7 @@ export function BillingCapacityPopover({
 
   useEffect(() => {
     if (controlled) return;
-    void loadCapacity(true);
+    void loadCapacity(!getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity));
   }, [controlled, loadCapacity]);
 
   useEffect(() => {
