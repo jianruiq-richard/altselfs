@@ -63,3 +63,38 @@ test('OpenRouter error metadata annotations remain usable after inference failur
   assert.equal(annotation.hash, 'reusable-hash');
   assert.equal(annotation.text, 'OCR completed before provider failure');
 });
+
+test('OpenRouter file annotation extractor chooses the largest parsed body across choices and error metadata', () => {
+  const annotation = extractFileAnnotation({
+    choices: [{
+      message: {
+        annotations: [{
+          type: 'file',
+          file: {
+            hash: 'small-hash',
+            content: [{ type: 'text', text: 'short confirmation' }],
+          },
+        }],
+      },
+    }],
+    error: {
+      metadata: {
+        file_annotations: [{
+          type: 'file',
+          file: {
+            hash: 'large-hash',
+            name: 'contract.pdf',
+            content: [
+              { type: 'text', text: '# Page 1\n合同正文' },
+              { type: 'image_url', image_url: { url: 'data:image/png;base64,ignored' } },
+              { type: 'text', text: '# Page 2\n费用和解除条款' },
+            ],
+          },
+        }],
+      },
+    },
+  });
+
+  assert.equal(annotation.hash, 'large-hash');
+  assert.equal(annotation.text, '# Page 1\n合同正文\n# Page 2\n费用和解除条款');
+});

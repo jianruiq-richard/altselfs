@@ -20,7 +20,7 @@ export function createPdfOpenRouterParserDynamictool() {
     namespace: null,
     name: TOOL_NAME,
     description:
-      'Parse a PDF that is already in the current Altselfs workspace with OpenRouter file-parser. Use this only after you have inspected the local parsed Markdown/text-layer extraction and, by model judgment, it appears incomplete, header/footer-only, scanned, or missing user-requested正文. The server uses Mistral OCR by default, saves the full parsed Markdown under artifacts/parsed, and returns the saved path plus annotation hash. Pass only a workspace-relative PDF path.',
+      'Parse a PDF that is already in the current Altselfs workspace with OpenRouter file-parser. Use this only after you have inspected the local parsed Markdown/text-layer extraction and, by model judgment, it appears incomplete, header/footer-only, scanned, or missing user-requested正文. This tool prompt is parse-only: “只解析当前文档并返回短确认，不要总结和思考。” The server uses Mistral OCR by default, extracts OpenRouter file annotations instead of relying on the model reply, saves the full parsed Markdown under artifacts/parsed, and returns the saved path plus annotation hash. Pass only a workspace-relative PDF path.',
     inputSchema: {
       type: 'object',
       properties: {

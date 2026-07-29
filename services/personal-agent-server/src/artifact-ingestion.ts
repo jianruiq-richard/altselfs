@@ -45,6 +45,9 @@ type ParsedAttachment = {
   pdfTextStats?: PdfTextStats;
 };
 
+const DEFAULT_OPENROUTER_FILE_PARSER_MODEL = 'deepseek/deepseek-v3.2';
+const OPENROUTER_FILE_PARSER_CONFIRMATION_PROMPT = '只解析当前文档并返回短确认，不要总结和思考。';
+
 type PdfTextStats = {
   pageCount: number;
   textPageCount: number;
@@ -903,20 +906,22 @@ export async function callOpenRouterFileParser(
       headers: {
         authorization: `Bearer ${process.env[config.openRouterApiKeyEnv]}`,
         'content-type': 'application/json',
-        'x-title': config.openRouterAppTitle,
+        'HTTP-Referer': process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_APP_URL || 'https://www.altselfs.com',
+        'X-Title': config.openRouterAppTitle,
+        'X-OpenRouter-Title': config.openRouterAppTitle,
       },
       signal: controller.signal,
       body: JSON.stringify({
-        model: process.env.OPENROUTER_FILE_PARSER_MODEL || 'qwen/qwen3.6-flash',
+        model: process.env.OPENROUTER_FILE_PARSER_MODEL || DEFAULT_OPENROUTER_FILE_PARSER_MODEL,
         temperature: 0,
-        max_tokens: Number(process.env.OPENROUTER_FILE_PARSER_MAX_TOKENS || 128),
+        max_tokens: Number(process.env.OPENROUTER_FILE_PARSER_MAX_TOKENS || 16),
         messages: [
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: 'Parse this PDF faithfully. Preserve the full document in the file annotation, including page boundaries, headings, tables, bullets, names, dates, amounts, and URLs. Reply only with a short confirmation; do not summarize.',
+                text: process.env.OPENROUTER_FILE_PARSER_PROMPT || OPENROUTER_FILE_PARSER_CONFIRMATION_PROMPT,
               },
               {
                 type: 'file',
@@ -960,7 +965,9 @@ export async function callOpenRouterFileParser(
     throw new Error(`OpenRouter file parser HTTP ${response.status}: ${extractErrorMessage(payload)}`);
   }
   const text = (annotation.text || extractMessageText(payload)).trim();
-  if (!text) throw new Error('OpenRouter file parser returned empty text');
+  if (!text) {
+    throw new Error(`OpenRouter file parser returned empty text${describeFileAnnotationExtraction(payload)}`);
+  }
   return {
     text: text.slice(0, readParserMaxChars()),
     annotationHash: annotation.hash,
@@ -969,25 +976,91 @@ export async function callOpenRouterFileParser(
 }
 
 export function extractFileAnnotation(payload: unknown) {
-  if (!isRecord(payload)) return { text: '', hash: '' };
-  const choices = Array.isArray(payload.choices) ? payload.choices : [];
-  const first = choices.find(isRecord);
-  const message = isRecord(first?.message) ? first.message : {};
-  const successAnnotations = Array.isArray(message.annotations) ? message.annotations : [];
-  const error = isRecord(payload.error) ? payload.error : {};
-  const errorMetadata = isRecord(error.metadata) ? error.metadata : {};
-  const errorAnnotations = Array.isArray(errorMetadata.file_annotations) ? errorMetadata.file_annotations : [];
-  for (const annotation of [...successAnnotations, ...errorAnnotations]) {
-    if (!isRecord(annotation)) continue;
-    const file = isRecord(annotation.file) ? annotation.file : {};
-    const text = extractTextParts(file.content).trim();
-    if (!text) continue;
+  const annotations = extractFileAnnotations(payload);
+  if (annotations[0]) {
     return {
-      text,
-      hash: typeof file.hash === 'string' ? file.hash : '',
+      text: annotations[0].text,
+      hash: annotations[0].hash,
     };
   }
   return { text: '', hash: '' };
+}
+
+type ExtractedFileAnnotation = {
+  text: string;
+  hash: string;
+  name: string;
+};
+
+function extractFileAnnotations(payload: unknown): ExtractedFileAnnotation[] {
+  if (!isRecord(payload)) return [];
+  const candidates: unknown[] = [];
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  for (const choice of choices) {
+    if (!isRecord(choice)) continue;
+    const message = isRecord(choice.message) ? choice.message : {};
+    if (Array.isArray(message.annotations)) candidates.push(...message.annotations);
+  }
+  const error = isRecord(payload.error) ? payload.error : {};
+  const errorMetadata = isRecord(error.metadata) ? error.metadata : {};
+  if (Array.isArray(errorMetadata.file_annotations)) candidates.push(...errorMetadata.file_annotations);
+  collectNestedFileAnnotations(payload, candidates);
+
+  const deduped = new Map<string, ExtractedFileAnnotation>();
+  for (const candidate of candidates) {
+    const annotation = normalizeFileAnnotation(candidate);
+    if (!annotation?.text) continue;
+    const key = annotation.hash || `${annotation.name}:${annotation.text.slice(0, 128)}`;
+    const existing = deduped.get(key);
+    if (!existing || annotation.text.length > existing.text.length) {
+      deduped.set(key, annotation);
+    }
+  }
+  return Array.from(deduped.values()).sort((a, b) => b.text.length - a.text.length);
+}
+
+function normalizeFileAnnotation(annotation: unknown): ExtractedFileAnnotation | null {
+  if (!isRecord(annotation)) return null;
+  const file = isRecord(annotation.file) ? annotation.file : annotation;
+  const text = extractTextParts(file.content).trim();
+  if (!text) return null;
+  return {
+    text,
+    hash: typeof file.hash === 'string' ? file.hash : '',
+    name: typeof file.name === 'string' ? file.name : '',
+  };
+}
+
+function collectNestedFileAnnotations(value: unknown, output: unknown[], seen = new WeakSet<object>()) {
+  if (!value || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectNestedFileAnnotations(item, output, seen);
+    return;
+  }
+
+  if (!isRecord(value)) return;
+  if (isRecord(value.file) && (value.type === 'file' || value.file.content !== undefined)) {
+    output.push(value);
+  } else if (value.content !== undefined && (typeof value.hash === 'string' || typeof value.name === 'string')) {
+    output.push(value);
+  }
+
+  for (const child of Object.values(value)) {
+    collectNestedFileAnnotations(child, output, seen);
+  }
+}
+
+function describeFileAnnotationExtraction(payload: unknown) {
+  if (!isRecord(payload)) return ' (payload is not an object)';
+  const annotations = extractFileAnnotations(payload);
+  const choices = Array.isArray(payload.choices) ? payload.choices.length : 0;
+  const error = isRecord(payload.error) ? payload.error : {};
+  const errorMetadata = isRecord(error.metadata) ? error.metadata : {};
+  const metadataAnnotations = Array.isArray(errorMetadata.file_annotations) ? errorMetadata.file_annotations.length : 0;
+  return ` (choices=${choices}, errorFileAnnotations=${metadataAnnotations}, extractedAnnotations=${annotations.length}, error=${extractErrorMessage(payload)})`;
 }
 
 function extractGenerationId(payload: unknown, response: Response) {
