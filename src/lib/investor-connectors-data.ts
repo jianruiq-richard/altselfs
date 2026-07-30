@@ -99,6 +99,14 @@ const COMPETITIVE_CONNECTORS = [
   },
 ] as const;
 
+const ENABLED_CONNECTOR_KEYS = new Set([
+  'gmail',
+  'feishu',
+  'similarweb_api1',
+  'semrush13',
+  'domain_metrics_check',
+]);
+
 function readString(value: unknown) {
   return typeof value === 'string' ? value : '';
 }
@@ -258,7 +266,7 @@ export async function loadInvestorConnectors(
   });
 
   return {
-    connectors: [...personal, ...managedSources, ...competitive],
+    connectors: [...personal, ...managedSources, ...competitive].filter((connector) => ENABLED_CONNECTOR_KEYS.has(connector.key)),
     warnings,
   };
 }

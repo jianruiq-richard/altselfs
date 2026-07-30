@@ -4,7 +4,7 @@ import { exchangeGoogleReadonlyCode, fetchGmailProfile } from '@/lib/integration
 import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
 
 function redirectWithResult(req: NextRequest, status: string, detail?: string) {
-  const url = new URL('/investor/info-ops', req.url);
+  const url = new URL('/connectors', req.url);
   url.searchParams.set('integrationProvider', 'gmail');
   url.searchParams.set('integrationStatus', status);
   if (detail) url.searchParams.set('integrationDetail', detail);

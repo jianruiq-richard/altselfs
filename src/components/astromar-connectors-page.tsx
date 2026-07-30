@@ -5,16 +5,15 @@ import {
   BarChart3,
   Check,
   Gauge,
-  Image,
+  LoaderCircle,
   Mail,
-  Megaphone,
   MessageSquare,
   Plus,
   RefreshCw,
   Search,
+  X,
   type LucideIcon,
 } from 'lucide-react';
-import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InvestorConnectorsData } from '@/lib/investor-connectors-data';
 import {
@@ -26,6 +25,7 @@ import {
 
 type ConnectorAccount = {
   connectionId: string;
+  provider?: string;
   accountEmail: string;
   displayName: string;
   status: string;
@@ -44,30 +44,81 @@ type ConnectorItem = {
   manageHref?: string;
 };
 
-type ConnectorCategory = 'all' | 'communication' | 'social' | 'intelligence';
+type ConnectorCategory = 'all' | 'communication' | 'intelligence';
+type DrawerMode = 'connect' | 'manage' | 'disconnect';
+type DrawerPhase = 'idle' | 'waiting' | 'done';
+type FeishuPhase = 'idle' | 'app_setup' | 'setup_opened' | 'user_auth' | 'auth_opened';
+
+type FeishuFlowState = {
+  phase: FeishuPhase;
+  setupUrl?: string;
+  authUrl?: string;
+  userCode?: string;
+};
+
+const SUPPORTED_CONNECTOR_KEYS = new Set([
+  'gmail',
+  'feishu',
+  'similarweb_api1',
+  'semrush13',
+  'domain_metrics_check',
+]);
 
 const categories: Array<{ key: ConnectorCategory; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'communication', label: 'Communication' },
-  { key: 'social', label: 'Social' },
   { key: 'intelligence', label: 'Intelligence' },
 ];
 
+const FEISHU_FEATURE_PACKAGES = [
+  { key: 'messages', label: 'Messages', description: 'IM history' },
+  { key: 'docs', label: 'Docs', description: 'Docs and wiki' },
+  { key: 'calendar', label: 'Calendar', description: 'Events' },
+  { key: 'contacts', label: 'Contacts', description: 'Directory' },
+  { key: 'meetings', label: 'Meetings', description: 'Optional' },
+] as const;
+
+const DEFAULT_FEISHU_PACKAGES = ['messages', 'docs', 'calendar', 'contacts'];
+
+const CONNECTOR_PERMISSIONS: Record<string, Array<{ title: string; description: string }>> = {
+  gmail: [
+    { title: 'Search inbox', description: 'Find relevant emails when a task needs them.' },
+    { title: 'Read selected threads', description: 'Summarize thread contents and attachments.' },
+    { title: 'Draft replies', description: 'Draft only; sending remains confirmation-gated.' },
+  ],
+  feishu: [
+    { title: 'Messages and docs', description: 'Use selected Lark context when you ask for it.' },
+    { title: 'Calendar and contacts', description: 'Read schedule and people context for relevant tasks.' },
+    { title: 'Scoped feature packages', description: 'Only enabled packages are available to the agent.' },
+  ],
+  similarweb_api1: [
+    { title: 'Domain traffic', description: 'Fetch public traffic and engagement estimates.' },
+    { title: 'Audience signals', description: 'Country, device, and source estimates when available.' },
+  ],
+  semrush13: [
+    { title: 'Domain overview', description: 'Traffic, authority, and public domain metrics.' },
+    { title: 'Keywords and backlinks', description: 'SEO visibility and backlink summary estimates.' },
+  ],
+  domain_metrics_check: [
+    { title: 'Authority metrics', description: 'DA, PA, spam score, DR, and link authority proxies.' },
+    { title: 'Backlink signals', description: 'Backlink and referring-domain summaries.' },
+  ],
+};
+
+function supportedConnectors(connectors: ConnectorItem[]) {
+  return connectors.filter((connector) => SUPPORTED_CONNECTOR_KEYS.has(connector.key));
+}
+
 function connectorCategory(connector: ConnectorItem): Exclude<ConnectorCategory, 'all'> {
-  if (connector.key === 'meta' || connector.key === 'xiaohongshu') return 'social';
-  if (connector.type === 'data_source') return 'intelligence';
-  return 'communication';
+  return connector.type === 'data_source' ? 'intelligence' : 'communication';
 }
 
 function connectorIcon(connector: ConnectorItem): { Icon: LucideIcon; color: string } {
   if (connector.key === 'gmail') return { Icon: Mail, color: 'text-[#ff7d73]' };
   if (connector.key === 'feishu') return { Icon: MessageSquare, color: 'text-[#8eb3ff]' };
-  if (connector.key === 'meta') return { Icon: Megaphone, color: 'text-[#f38eea]' };
-  if (connector.key === 'wechat') return { Icon: MessageSquare, color: 'text-[#46d19a]' };
   if (connector.key.includes('similarweb')) return { Icon: Gauge, color: 'text-[#8eb3ff]' };
   if (connector.key.includes('semrush')) return { Icon: BarChart3, color: 'text-[#e9b85a]' };
   if (connector.key.includes('domain')) return { Icon: Search, color: 'text-[#46d19a]' };
-  if (connector.key.includes('xiaohongshu')) return { Icon: Image, color: 'text-[#ff7464]' };
   return { Icon: Plus, color: 'text-zinc-400' };
 }
 
@@ -75,10 +126,29 @@ function connectorAccountLabel(connector: ConnectorItem) {
   const labels = connector.accounts
     .map((account) => account.displayName || account.accountEmail)
     .filter(Boolean);
-  if (labels.length > 0) return labels.join(', ');
+  if (labels.length > 1) return `${labels.length} accounts`;
+  if (labels.length === 1) return labels[0];
+  if (connector.connected && connector.type === 'data_source') return 'Platform key configured';
   if (connector.connected) return 'Connected';
   if (connector.platformConfigured === false) return 'Platform setup required';
   return 'Not connected';
+}
+
+function accountName(account: ConnectorAccount) {
+  return account.displayName || account.accountEmail || 'Connected account';
+}
+
+function openPopup(url: string) {
+  if (typeof window === 'undefined') return null;
+  const popup = window.open(url, '_blank', 'width=980,height=820,noopener=false,noreferrer=false');
+  if (popup) {
+    try {
+      popup.focus();
+    } catch {
+      // Browser-controlled focus behavior.
+    }
+  }
+  return popup;
 }
 
 type AstromarConnectorsPageProps = {
@@ -87,13 +157,35 @@ type AstromarConnectorsPageProps = {
 
 export function AstromarConnectorsPage({ initialData = null }: AstromarConnectorsPageProps) {
   const cachedConnectors = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
-  const initialConnectors = initialData?.connectors || cachedConnectors?.connectors || [];
+  const initialConnectors = supportedConnectors(initialData?.connectors || cachedConnectors?.connectors || []);
   const [connectors, setConnectors] = useState<ConnectorItem[]>(initialConnectors);
   const [loading, setLoading] = useState(initialConnectors.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<ConnectorCategory>('all');
+  const [activeConnectorKey, setActiveConnectorKey] = useState<string | null>(null);
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>('connect');
+  const [drawerPhase, setDrawerPhase] = useState<DrawerPhase>('idle');
+  const [drawerMessage, setDrawerMessage] = useState('');
+  const [drawerError, setDrawerError] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [disconnectAccount, setDisconnectAccount] = useState<ConnectorAccount | null>(null);
+  const [feishuPackages, setFeishuPackages] = useState<string[]>(DEFAULT_FEISHU_PACKAGES);
+  const [feishuFlow, setFeishuFlow] = useState<FeishuFlowState>({ phase: 'idle' });
   const loadStartedRef = useRef(false);
+  const pollRef = useRef<number | null>(null);
+  const oauthBaselineRef = useRef({ key: '', accountCount: 0, requireNewAccount: false });
+
+  const activeConnector = useMemo(
+    () => connectors.find((connector) => connector.key === activeConnectorKey) || null,
+    [activeConnectorKey, connectors],
+  );
+
+  const clearPolling = useCallback(() => {
+    if (pollRef.current === null || typeof window === 'undefined') return;
+    window.clearInterval(pollRef.current);
+    pollRef.current = null;
+  }, []);
 
   const loadConnectors = useCallback(async (options: { showLoading?: boolean; force?: boolean } = {}) => {
     const showLoading = options.showLoading ?? false;
@@ -106,9 +198,13 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
         {},
         { force: options.force ?? true, ttlMs: 45_000 },
       );
-      setConnectors(Array.isArray(data.connectors) ? data.connectors : []);
+      const next = supportedConnectors(Array.isArray(data.connectors) ? data.connectors : []);
+      setConnectors(next);
+      setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, { ...data, connectors: next });
+      return next;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load connectors');
+      return null;
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -118,19 +214,23 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
     if (loadStartedRef.current) return;
     loadStartedRef.current = true;
     if (initialData) {
-      setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, initialData);
+      const next = { ...initialData, connectors: supportedConnectors(initialData.connectors || []) };
+      setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, next);
       void loadConnectors({ showLoading: false, force: true });
       return;
     }
     const cached = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
-    if (cached?.connectors?.length) {
-      setConnectors(cached.connectors);
+    const supportedCached = supportedConnectors(cached?.connectors || []);
+    if (supportedCached.length) {
+      setConnectors(supportedCached);
       setLoading(false);
       void loadConnectors({ showLoading: false, force: true });
       return;
     }
     void loadConnectors({ showLoading: true, force: false });
   }, [initialData, loadConnectors]);
+
+  useEffect(() => () => clearPolling(), [clearPolling]);
 
   const connectedCount = connectors.filter((connector) => connector.connected).length;
   const filteredConnectors = useMemo(() => {
@@ -141,6 +241,529 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
       return categoryMatches && queryMatches;
     });
   }, [category, connectors, query]);
+
+  const resetDrawerState = (connector: ConnectorItem, mode: DrawerMode) => {
+    clearPolling();
+    setActiveConnectorKey(connector.key);
+    setDrawerMode(mode);
+    setDrawerPhase('idle');
+    setDrawerMessage('');
+    setDrawerError('');
+    setActionLoading(false);
+    setDisconnectAccount(null);
+    setFeishuFlow({ phase: 'idle' });
+    oauthBaselineRef.current = {
+      key: connector.key,
+      accountCount: connector.accounts.length,
+      requireNewAccount: mode === 'connect' && connector.connected && connector.accounts.length > 0,
+    };
+  };
+
+  const openConnectorDrawer = (connector: ConnectorItem) => {
+    resetDrawerState(connector, connector.connected ? 'manage' : 'connect');
+  };
+
+  const closeDrawer = () => {
+    if (actionLoading) return;
+    clearPolling();
+    setActiveConnectorKey(null);
+    setDrawerPhase('idle');
+    setDrawerMessage('');
+    setDrawerError('');
+    setDisconnectAccount(null);
+  };
+
+  const markDone = async (message: string) => {
+    setDrawerPhase('done');
+    setDrawerMessage(message);
+    setDrawerError('');
+    await loadConnectors({ showLoading: false, force: true });
+  };
+
+  const refreshOAuthStatus = useCallback(async () => {
+    const baseline = oauthBaselineRef.current;
+    if (!baseline.key) return false;
+    const latest = await loadConnectors({ showLoading: false, force: true });
+    const connector = latest?.find((item) => item.key === baseline.key);
+    const connected = Boolean(connector?.connected);
+    const accountCount = connector?.accounts.length || 0;
+    const complete = baseline.requireNewAccount ? accountCount > baseline.accountCount : connected;
+    if (complete) {
+      clearPolling();
+      setDrawerPhase('done');
+      setDrawerMessage(`${connector?.label || 'Connector'} connected.`);
+      setDrawerError('');
+      setActionLoading(false);
+      return true;
+    }
+    return false;
+  }, [clearPolling, loadConnectors]);
+
+  const startOAuthPolling = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    clearPolling();
+    let attempts = 0;
+    pollRef.current = window.setInterval(() => {
+      attempts += 1;
+      void refreshOAuthStatus().then((complete) => {
+        if (complete) return;
+        if (attempts >= 45) {
+          clearPolling();
+          setDrawerError('Still waiting for authorization. If you finished it, refresh status or reopen the connector.');
+        }
+      });
+    }, 2000);
+  }, [clearPolling, refreshOAuthStatus]);
+
+  const startGmailAuthorization = () => {
+    if (!activeConnector) return;
+    const popup = openPopup(activeConnector.connectHref || '/api/investor/personal-data/gmail/connect');
+    if (!popup) {
+      window.location.href = activeConnector.connectHref || '/api/investor/personal-data/gmail/connect';
+      return;
+    }
+    setDrawerPhase('waiting');
+    setDrawerMessage('Finish Gmail authorization in the opened window. This drawer will update when the account is connected.');
+    startOAuthPolling();
+  };
+
+  const enableCompetitiveSource = async (connector: ConnectorItem) => {
+    setActionLoading(true);
+    setDrawerError('');
+    try {
+      const res = await fetch(`/api/investor/competitive-data-source/${connector.key}`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Failed to enable ${connector.label}`);
+      await markDone(`${connector.label} enabled.`);
+    } catch (actionError) {
+      setDrawerError(actionError instanceof Error ? actionError.message : `Failed to enable ${connector.label}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const startFeishuSetup = async () => {
+    setActionLoading(true);
+    setDrawerError('');
+    try {
+      const params = new URLSearchParams({
+        response: 'json',
+        packages: feishuPackages.join(','),
+      });
+      const res = await fetch(`/api/investor/personal-data/feishu/connect?${params.toString()}`, {
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to start Lark setup.');
+      setFeishuFlow({
+        phase: 'app_setup',
+        setupUrl: typeof data.setupUrl === 'string' ? data.setupUrl : '',
+      });
+      setDrawerMessage('Lark setup link is ready.');
+    } catch (actionError) {
+      setDrawerError(actionError instanceof Error ? actionError.message : 'Failed to start Lark setup.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const continueFeishuSetup = async () => {
+    setActionLoading(true);
+    setDrawerError('');
+    try {
+      const res = await fetch('/api/investor/personal-data/feishu/complete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'continue' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Lark setup is not complete yet.');
+      if (data.phase === 'connected' || data.account) {
+        await markDone('Lark connected.');
+        return;
+      }
+      setFeishuFlow((current) => ({
+        ...current,
+        phase: 'user_auth',
+        authUrl: typeof data.authUrl === 'string' ? data.authUrl : current.authUrl,
+        userCode: typeof data.userCode === 'string' ? data.userCode : '',
+      }));
+      setDrawerMessage(data.authUrl ? 'Lark account authorization link is ready.' : 'Still waiting for Lark app setup to complete.');
+    } catch (actionError) {
+      setDrawerError(actionError instanceof Error ? actionError.message : 'Lark setup is not complete yet.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const completeFeishuBinding = async () => {
+    setActionLoading(true);
+    setDrawerError('');
+    try {
+      const res = await fetch('/api/investor/personal-data/feishu/complete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'complete' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Connection is not complete yet.');
+      await markDone('Lark connected.');
+    } catch (actionError) {
+      setDrawerError(actionError instanceof Error ? actionError.message : 'Connection is not complete yet.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleFeishuPrimary = () => {
+    if (feishuFlow.phase === 'idle') {
+      void startFeishuSetup();
+      return;
+    }
+    if (feishuFlow.phase === 'app_setup' && feishuFlow.setupUrl) {
+      openPopup(feishuFlow.setupUrl);
+      setFeishuFlow((current) => ({ ...current, phase: 'setup_opened' }));
+      setDrawerMessage('Finish Lark app setup in the opened window, then continue.');
+      return;
+    }
+    if (feishuFlow.phase === 'setup_opened') {
+      void continueFeishuSetup();
+      return;
+    }
+    if (feishuFlow.phase === 'user_auth' && feishuFlow.authUrl) {
+      openPopup(feishuFlow.authUrl);
+      setFeishuFlow((current) => ({ ...current, phase: 'auth_opened' }));
+      setDrawerMessage('Approve Lark account access, then complete binding.');
+      return;
+    }
+    if (feishuFlow.phase === 'auth_opened') {
+      void completeFeishuBinding();
+    }
+  };
+
+  const disconnectCompetitiveSource = async (connector: ConnectorItem) => {
+    const res = await fetch(`/api/investor/competitive-data-source/${connector.key}`, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Failed to disconnect ${connector.label}`);
+  };
+
+  const disconnectPersonalAccount = async (account: ConnectorAccount) => {
+    const res = await fetch(`/api/investor/personal-data/accounts/${encodeURIComponent(account.connectionId)}`, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Failed to disconnect ${accountName(account)}`);
+  };
+
+  const handleDisconnect = async () => {
+    if (!activeConnector) return;
+    setActionLoading(true);
+    setDrawerError('');
+    try {
+      if (activeConnector.type === 'data_source') {
+        await disconnectCompetitiveSource(activeConnector);
+        await markDone(`${activeConnector.label} disconnected.`);
+      } else if (disconnectAccount) {
+        await disconnectPersonalAccount(disconnectAccount);
+        await markDone(`${accountName(disconnectAccount)} disconnected.`);
+      } else {
+        await Promise.all(activeConnector.accounts.map(disconnectPersonalAccount));
+        await markDone(`${activeConnector.label} disconnected.`);
+      }
+    } catch (actionError) {
+      setDrawerError(actionError instanceof Error ? actionError.message : `Failed to disconnect ${activeConnector.label}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handlePrimaryAction = () => {
+    if (!activeConnector) return;
+    if (drawerPhase === 'done') {
+      closeDrawer();
+      return;
+    }
+    if (drawerPhase === 'waiting') {
+      void refreshOAuthStatus();
+      return;
+    }
+    if (drawerMode === 'manage') {
+      closeDrawer();
+      return;
+    }
+    if (drawerMode === 'disconnect') {
+      void handleDisconnect();
+      return;
+    }
+    if (activeConnector.key === 'gmail') {
+      startGmailAuthorization();
+      return;
+    }
+    if (activeConnector.key === 'feishu') {
+      handleFeishuPrimary();
+      return;
+    }
+    if (activeConnector.type === 'data_source') {
+      void enableCompetitiveSource(activeConnector);
+    }
+  };
+
+  const primaryButtonLabel = () => {
+    if (!activeConnector) return 'Continue';
+    if (actionLoading) return 'Working...';
+    if (drawerPhase === 'done') return 'Done';
+    if (drawerPhase === 'waiting') return 'Refresh status';
+    if (drawerMode === 'manage') return 'Done';
+    if (drawerMode === 'disconnect') return 'Disconnect';
+    if (activeConnector.key === 'feishu') {
+      if (feishuFlow.phase === 'idle') return 'Start setup';
+      if (feishuFlow.phase === 'app_setup') return 'Open setup';
+      if (feishuFlow.phase === 'setup_opened') return 'I finished setup';
+      if (feishuFlow.phase === 'user_auth') return 'Open authorization';
+      if (feishuFlow.phase === 'auth_opened') return 'Complete binding';
+    }
+    if (activeConnector.type === 'data_source') return 'Enable';
+    return 'Open authorization';
+  };
+
+  const renderFeishuSteps = () => {
+    const stepClass = (step: 'setup' | 'auth' | 'return') => {
+      if (step === 'setup') return ['setup_opened', 'user_auth', 'auth_opened'].includes(feishuFlow.phase) || drawerPhase === 'done'
+        ? 'border-[#46d19a]/20 bg-[#46d19a]/[0.06]'
+        : 'border-[#8eb3ff]/20 bg-[#8eb3ff]/[0.06]';
+      if (step === 'auth') return ['auth_opened'].includes(feishuFlow.phase) || drawerPhase === 'done'
+        ? 'border-[#46d19a]/20 bg-[#46d19a]/[0.06]'
+        : feishuFlow.phase === 'user_auth'
+          ? 'border-[#8eb3ff]/20 bg-[#8eb3ff]/[0.06]'
+          : 'border-white/[0.09] bg-white/[0.022]';
+      return drawerPhase === 'done'
+        ? 'border-[#46d19a]/20 bg-[#46d19a]/[0.06]'
+        : 'border-white/[0.09] bg-white/[0.022]';
+    };
+    return (
+      <div className="grid gap-2">
+        <div className={`rounded-[8px] border p-3 ${stepClass('setup')}`}>
+          <strong className="block text-[11px] text-zinc-100">1. Open Lark setup link</strong>
+          <span className="mt-1 block text-[10px] leading-relaxed text-zinc-500">
+            Configure the Lark app in the opened window.
+          </span>
+        </div>
+        <div className={`rounded-[8px] border p-3 ${stepClass('auth')}`}>
+          <strong className="block text-[11px] text-zinc-100">2. Authorize your account</strong>
+          <span className="mt-1 block text-[10px] leading-relaxed text-zinc-500">
+            {feishuFlow.userCode ? `Use code ${feishuFlow.userCode} if prompted. ` : ''}Approve account access.
+          </span>
+        </div>
+        <div className={`rounded-[8px] border p-3 ${stepClass('return')}`}>
+          <strong className="block text-[11px] text-zinc-100">3. Return to Astromar</strong>
+          <span className="mt-1 block text-[10px] leading-relaxed text-zinc-500">
+            Complete binding here after authorization.
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDrawerBody = () => {
+    if (!activeConnector) return null;
+    if (drawerPhase === 'waiting') {
+      return (
+        <div className="grid min-h-[180px] place-items-center rounded-[12px] border border-white/[0.09] bg-white/[0.024] p-6 text-center">
+          <div>
+            <LoaderCircle className="mx-auto mb-4 h-7 w-7 animate-spin text-[#46d19a]" />
+            <strong className="block text-[17px] text-zinc-100">Waiting for authorization...</strong>
+            <p className="mx-auto mt-2 max-w-[330px] text-[11px] leading-relaxed text-zinc-500">
+              {drawerMessage || 'Finish the provider step in the opened window.'}
+            </p>
+          </div>
+        </div>
+      );
+    }
+    if (drawerPhase === 'done') {
+      return (
+        <div className="rounded-[12px] border border-[#46d19a]/25 bg-[#46d19a]/[0.08] p-4 text-[#dbf9eb]">
+          <strong className="block text-[13px]">{drawerMessage || `${activeConnector.label} updated.`}</strong>
+          <span className="mt-1 block text-[11px] leading-relaxed text-[#dbf9eb]/70">
+            The Connectors page has been refreshed.
+          </span>
+        </div>
+      );
+    }
+    if (drawerMode === 'manage') {
+      return (
+        <div>
+          <div className="rounded-[12px] border border-[#46d19a]/25 bg-[#46d19a]/[0.08] p-4 text-[#dbf9eb]">
+            <strong className="block text-[13px]">{activeConnector.label} is connected</strong>
+            <span className="mt-1 block text-[11px] leading-relaxed text-[#dbf9eb]/70">
+              {connectorAccountLabel(activeConnector)}
+            </span>
+          </div>
+          {activeConnector.accounts.length > 0 ? (
+            <section className="mt-4 rounded-[10px] border border-white/[0.09] bg-white/[0.024] p-3">
+              <h3 className="mb-2 text-[12px] text-zinc-100">
+                {activeConnector.accounts.length > 1 ? 'Accounts' : 'Account'}
+              </h3>
+              <div className="grid gap-2">
+                {activeConnector.accounts.map((account) => (
+                  <div key={account.connectionId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[8px] border border-white/[0.09] bg-white/[0.022] px-3 py-2.5">
+                    <span className="min-w-0">
+                      <strong className="block truncate text-[11px] text-zinc-100">{accountName(account)}</strong>
+                      <span className="mt-0.5 block truncate text-[10px] text-zinc-600">
+                        {account.accountEmail || account.status || 'Connected'}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDisconnectAccount(account);
+                        setDrawerMode('disconnect');
+                        setDrawerPhase('idle');
+                        setDrawerError('');
+                      }}
+                      className="inline-flex h-7 items-center rounded-[7px] border border-red-400/20 bg-red-400/[0.055] px-2 text-[10px] font-bold text-red-200 hover:bg-red-400/[0.1]"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          <section className="mt-4 rounded-[10px] border border-white/[0.09] bg-white/[0.024] p-3">
+            <h3 className="text-[12px] text-zinc-100">Manage</h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+              Keep common actions one click away.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {activeConnector.type !== 'data_source' ? (
+                <button
+                  type="button"
+                  onClick={() => resetDrawerState(activeConnector, 'connect')}
+                  className="inline-flex h-8 items-center rounded-[7px] border border-white/[0.09] bg-white/[0.025] px-3 text-[11px] font-bold text-zinc-300 hover:bg-white/[0.06] hover:text-white"
+                >
+                  Add another account
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setDisconnectAccount(null);
+                  setDrawerMode('disconnect');
+                  setDrawerPhase('idle');
+                  setDrawerError('');
+                }}
+                className="inline-flex h-8 items-center rounded-[7px] border border-red-400/20 bg-red-400/[0.055] px-3 text-[11px] font-bold text-red-200 hover:bg-red-400/[0.1]"
+              >
+                {activeConnector.accounts.length > 1 ? 'Disconnect all' : 'Disconnect'}
+              </button>
+            </div>
+          </section>
+        </div>
+      );
+    }
+    if (drawerMode === 'disconnect') {
+      const target = disconnectAccount ? accountName(disconnectAccount) : activeConnector.label;
+      return (
+        <div className="rounded-[10px] border border-red-400/20 bg-red-400/[0.055] p-4">
+          <h3 className="text-[13px] text-red-100">Disconnect {target}?</h3>
+          <p className="mt-2 text-[11px] leading-relaxed text-red-100/70">
+            {disconnectAccount ? 'This removes only this account.' : 'This removes this connector from future discussions.'} You can reconnect later.
+          </p>
+        </div>
+      );
+    }
+    return (
+      <div>
+        {activeConnector.key === 'feishu' ? (
+          <>
+            <section className="rounded-[10px] border border-white/[0.09] bg-white/[0.024] p-3">
+              <h3 className="text-[12px] text-zinc-100">Choose access</h3>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                Defaults are selected; adjust only if needed.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {FEISHU_FEATURE_PACKAGES.map((feature) => {
+                  const active = feishuPackages.includes(feature.key);
+                  return (
+                    <button
+                      key={feature.key}
+                      type="button"
+                      onClick={() => {
+                        setFeishuPackages((current) => (
+                          current.includes(feature.key)
+                            ? current.filter((item) => item !== feature.key)
+                            : [...current, feature.key]
+                        ));
+                      }}
+                      className={`rounded-[8px] border px-3 py-2 text-left text-[10px] ${
+                        active
+                          ? 'border-[#46d19a]/25 bg-[#46d19a]/[0.08] text-white'
+                          : 'border-white/[0.09] bg-white/[0.022] text-zinc-500'
+                      }`}
+                    >
+                      <strong className="block text-[11px]">{feature.label}</strong>
+                      <span className="mt-0.5 block text-zinc-600">{feature.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+            <section className="mt-3 rounded-[10px] border border-[#8eb3ff]/20 bg-[#8eb3ff]/[0.07] p-3">
+              <h3 className="mb-2 text-[12px] text-zinc-100">Lark authorization</h3>
+              {renderFeishuSteps()}
+            </section>
+          </>
+        ) : (
+          <section className="rounded-[10px] border border-[#8eb3ff]/20 bg-[#8eb3ff]/[0.07] p-3">
+            <h3 className="text-[12px] text-zinc-100">
+              {activeConnector.type === 'data_source' ? 'Enable data source' : 'Authorize account'}
+            </h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+              {activeConnector.type === 'data_source'
+                ? 'This uses the workspace platform key. No OAuth step is needed.'
+                : 'Click once to open the provider authorization window. After callback, return to this drawer.'}
+            </p>
+          </section>
+        )}
+        <section className="mt-3 rounded-[10px] border border-white/[0.09] bg-white/[0.024] p-3">
+          <h3 className="text-[12px] text-zinc-100">Agent access</h3>
+          <div className="mt-2 grid gap-2">
+            {(CONNECTOR_PERMISSIONS[activeConnector.key] || []).map((permission) => (
+              <div key={permission.title} className="rounded-[8px] border border-white/[0.09] bg-white/[0.022] px-3 py-2">
+                <strong className="block text-[11px] text-zinc-200">{permission.title}</strong>
+                <span className="mt-0.5 block text-[10px] leading-relaxed text-zinc-600">{permission.description}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const drawerTitle = activeConnector
+    ? drawerMode === 'disconnect'
+      ? `Disconnect ${disconnectAccount ? accountName(disconnectAccount) : activeConnector.label}`
+      : drawerMode === 'manage'
+        ? `Manage ${activeConnector.label}`
+        : `Connect ${activeConnector.label}`
+    : '';
+  const drawerSubtitle = activeConnector
+    ? drawerMode === 'disconnect'
+      ? 'Remove access from this workspace.'
+      : drawerMode === 'manage'
+        ? 'Connected now. Manage or disconnect it here.'
+        : 'Authorize without leaving the Connectors page.'
+    : '';
+  const canRunPrimary = Boolean(activeConnector && !(activeConnector.platformConfigured === false && activeConnector.type === 'data_source'));
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] md:grid-rows-[64px_minmax(0,1fr)]">
@@ -209,7 +832,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
 
             {loading && connectors.length === 0 ? (
               <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
-                {Array.from({ length: 6 }).map((_, index) => (
+                {Array.from({ length: 5 }).map((_, index) => (
                   <div key={index} className="h-[104px] animate-pulse rounded-[8px] border border-white/[0.09] bg-white/[0.022]" />
                 ))}
               </div>
@@ -217,16 +840,10 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
               <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                 {filteredConnectors.map((connector) => {
                   const { Icon, color } = connectorIcon(connector);
-                  const actionHref = connector.connected ? connector.manageHref : connector.connectHref || connector.manageHref;
                   const canConnect = connector.connected || connector.platformConfigured !== false;
                   const actionClass = connector.connected
                     ? 'border-[#46d19a]/20 bg-[#46d19a]/[0.075] text-[#46d19a]'
                     : 'border-white/[0.09] bg-white/[0.025] text-zinc-400 hover:border-white/15 hover:bg-white/[0.065] hover:text-white';
-                  const action = (
-                    <span className={`grid h-[38px] w-[38px] place-items-center rounded-[8px] border ${actionClass}`}>
-                      {connector.connected ? <Check className="h-[18px] w-[18px]" /> : <Plus className="h-[18px] w-[18px]" />}
-                    </span>
-                  );
                   return (
                     <article
                       key={connector.key}
@@ -242,15 +859,16 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
                         <span className="mt-1 line-clamp-2 block text-xs leading-[1.45] text-zinc-400">{connector.description}</span>
                         <span className="mt-1.5 block truncate text-[10px] text-zinc-600">{connectorAccountLabel(connector)}</span>
                       </span>
-                      {actionHref && canConnect ? (
-                        <Link href={actionHref} title={connector.connected ? `Manage ${connector.label}` : `Connect ${connector.label}`} aria-label={connector.connected ? `Manage ${connector.label}` : `Connect ${connector.label}`}>
-                          {action}
-                        </Link>
-                      ) : (
-                        <button type="button" disabled title="Platform setup required" aria-label={`${connector.label} unavailable`} className="cursor-not-allowed opacity-45">
-                          {action}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        disabled={!canConnect}
+                        onClick={() => openConnectorDrawer(connector)}
+                        title={connector.connected ? `Manage ${connector.label}` : `Connect ${connector.label}`}
+                        aria-label={connector.connected ? `Manage ${connector.label}` : `Connect ${connector.label}`}
+                        className={`grid h-[38px] w-[38px] place-items-center rounded-[8px] border disabled:cursor-not-allowed disabled:opacity-45 ${actionClass}`}
+                      >
+                        {connector.connected ? <Check className="h-[18px] w-[18px]" /> : <Plus className="h-[18px] w-[18px]" />}
+                      </button>
                     </article>
                   );
                 })}
@@ -262,6 +880,67 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
             )}
           </div>
         </main>
+
+        {activeConnector ? (
+          <>
+            <button
+              type="button"
+              aria-label="Close connector drawer"
+              onClick={closeDrawer}
+              className="fixed inset-0 z-40 bg-black/65 backdrop-blur-[5px]"
+            />
+            <aside className="fixed inset-y-0 right-0 z-50 grid w-full max-w-[460px] grid-rows-[auto_minmax(0,1fr)_auto] border-l border-white/[0.16] bg-[linear-gradient(180deg,#17181a,#101113)] shadow-[-28px_0_90px_rgba(0,0,0,.5)]">
+              <header className="grid grid-cols-[minmax(0,1fr)_34px] items-start gap-3 border-b border-white/[0.09] p-[18px]">
+                <div className="min-w-0">
+                  <h2 className="truncate text-lg font-semibold tracking-[-0.025em] text-zinc-50">{drawerTitle}</h2>
+                  <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">{drawerSubtitle}</p>
+                </div>
+                <button type="button" onClick={closeDrawer} className="grid h-[34px] w-[34px] place-items-center rounded-[7px] text-zinc-500 hover:bg-white/5 hover:text-white">
+                  <X className="h-4 w-4" />
+                </button>
+              </header>
+              <div className="astromar-scrollbar min-h-0 overflow-y-auto p-[18px]">
+                {renderDrawerBody()}
+                {drawerMessage && drawerPhase !== 'waiting' && drawerPhase !== 'done' ? (
+                  <p className="mt-3 text-[11px] leading-relaxed text-[#46d19a]">{drawerMessage}</p>
+                ) : null}
+                {drawerError ? (
+                  <p className="mt-3 rounded-[8px] border border-red-400/20 bg-red-400/[0.06] px-3 py-2 text-[11px] leading-relaxed text-red-200">{drawerError}</p>
+                ) : null}
+              </div>
+              <footer className="flex items-center justify-between gap-3 border-t border-white/[0.09] bg-black/20 p-4">
+                <button
+                  type="button"
+                  onClick={drawerPhase === 'done' || drawerMode === 'manage' ? closeDrawer : () => {
+                    if (drawerMode === 'disconnect') {
+                      setDrawerMode('manage');
+                      setDisconnectAccount(null);
+                      setDrawerError('');
+                      return;
+                    }
+                    closeDrawer();
+                  }}
+                  className="inline-flex min-h-[34px] items-center justify-center rounded-[7px] border border-white/[0.09] bg-white/[0.025] px-3 text-[11px] font-bold text-zinc-400 hover:bg-white/[0.06] hover:text-white"
+                >
+                  {drawerPhase === 'done' || drawerMode === 'manage' ? 'Close' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrimaryAction}
+                  disabled={!canRunPrimary || actionLoading}
+                  className={`inline-flex min-h-[34px] items-center justify-center gap-2 rounded-[7px] px-3 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-50 ${
+                    drawerMode === 'disconnect'
+                      ? 'border border-red-400/25 bg-red-400/[0.08] text-red-100 hover:bg-red-400/[0.12]'
+                      : 'border border-white bg-[#f3f3f1] text-[#101010] hover:bg-white'
+                  }`}
+                >
+                  {actionLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {primaryButtonLabel()}
+                </button>
+              </footer>
+            </aside>
+          </>
+        ) : null}
     </div>
   );
 }

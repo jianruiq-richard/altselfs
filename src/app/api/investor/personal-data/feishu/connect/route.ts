@@ -32,7 +32,12 @@ function readFeaturePackages(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const investor = await getInvestorOrNull();
-  if (!investor) return NextResponse.redirect(new URL('/sign-in', req.url));
+  const wantsJson = req.nextUrl.searchParams.get('response') === 'json';
+  if (!investor) {
+    return wantsJson
+      ? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      : NextResponse.redirect(new URL('/sign-in', req.url));
+  }
 
   const state = randomUUID();
   const featurePackages = readFeaturePackages(req);
@@ -49,7 +54,32 @@ export async function GET(req: NextRequest) {
     if (!started.sessionId || !started.setupUrl || !started.profileName) {
       throw new Error('personal-agent-server did not return Feishu CLI setup session.');
     }
-    const url = new URL('/investor/info-ops', req.url);
+    if (wantsJson) {
+      const res = NextResponse.json({
+        ok: true,
+        phase: 'app_setup',
+        setupUrl: started.setupUrl,
+        profileName: started.profileName,
+        expiresAt: started.expiresAt || null,
+        requestedFeaturePackages: started.requestedFeaturePackages || featurePackages,
+      });
+      res.cookies.set('oauth_state_personal_feishu_cli', encodeCookiePayload({
+        state,
+        sessionId: started.sessionId,
+        profileName: started.profileName,
+        expiresAt: started.expiresAt || null,
+        featurePackages: started.requestedFeaturePackages || featurePackages,
+      }), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 30,
+        path: '/',
+      });
+      return res;
+    }
+
+    const url = new URL('/connectors', req.url);
     url.searchParams.set('integrationProvider', 'feishu');
     url.searchParams.set('integrationStatus', 'pending');
     url.searchParams.set('integrationDetail', 'Lark CLI setup started. Complete app setup, then authorize your account.');
@@ -71,7 +101,13 @@ export async function GET(req: NextRequest) {
     });
     return res;
   } catch (err) {
-    const url = new URL('/investor/info-ops', req.url);
+    if (wantsJson) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'Lark CLI setup failed' },
+        { status: 500 },
+      );
+    }
+    const url = new URL('/connectors', req.url);
     url.searchParams.set('integrationProvider', 'feishu');
     url.searchParams.set('integrationStatus', 'error');
     url.searchParams.set('integrationDetail', err instanceof Error ? err.message : 'Lark CLI setup failed');
