@@ -82,7 +82,7 @@ const COMPETITIVE_CONNECTORS = [
   {
     key: 'semrush13',
     label: 'Semrush13',
-    description: 'Domain overview, keyword, backlink, and authority metrics.',
+    description: 'Domain SEO intelligence: traffic estimates, organic and paid keywords, backlinks, competitors, geography, and visibility signals.',
     dbProvider: 'SEMRUSH13',
   },
   {
@@ -94,7 +94,7 @@ const COMPETITIVE_CONNECTORS = [
   {
     key: 'domain_metrics_check',
     label: 'Domain Metrics Check',
-    description: 'DA/PA, Spam Score, Trust Flow, DR, and authority signals.',
+    description: 'Domain authority checks across DA/PA, spam score, Trust Flow, Citation Flow, DR, backlinks, and referring domains.',
     dbProvider: 'DOMAIN_METRICS_CHECK',
   },
 ] as const;

@@ -97,12 +97,14 @@ const CONNECTOR_PERMISSIONS: Record<string, Array<{ title: string; description: 
     { title: 'Acquisition signals', description: 'Review traffic channels, referrals, outgoing links, social sources, and similar websites.' },
   ],
   semrush13: [
-    { title: 'Domain overview', description: 'Traffic, authority, and public domain metrics.' },
-    { title: 'Keywords and backlinks', description: 'SEO visibility and backlink summary estimates.' },
+    { title: 'Domain and competitor view', description: 'Estimate domain traffic, visibility, market position, and competitor relationships.' },
+    { title: 'Search intelligence', description: 'Review organic and paid keyword signals, ranking opportunities, and traffic value estimates.' },
+    { title: 'Backlink and geography signals', description: 'Check backlink summaries, referring-domain context, and country or device distribution when available.' },
   ],
   domain_metrics_check: [
-    { title: 'Authority metrics', description: 'DA, PA, spam score, DR, and link authority proxies.' },
-    { title: 'Backlink signals', description: 'Backlink and referring-domain summaries.' },
+    { title: 'Authority snapshot', description: 'Check DA, PA, DR, Trust Flow, Citation Flow, and related authority signals.' },
+    { title: 'Risk and quality signals', description: 'Use spam score and link-quality indicators to flag domains that need closer review.' },
+    { title: 'Link footprint', description: 'Review backlink scale, referring domains, and source-diversity signals for domain diligence.' },
   ],
 };
 
