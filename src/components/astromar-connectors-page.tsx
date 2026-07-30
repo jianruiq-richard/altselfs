@@ -130,7 +130,7 @@ function connectorAccountLabel(connector: ConnectorItem) {
   if (labels.length === 1) return labels[0];
   if (connector.connected && connector.type === 'data_source') return 'Platform key configured';
   if (connector.connected) return 'Connected';
-  if (connector.platformConfigured === false) return 'Platform setup required';
+  if (connector.platformConfigured === false && connector.type !== 'data_source') return 'Platform setup required';
   return 'Not connected';
 }
 
@@ -729,7 +729,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
             </h3>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
               {activeConnector.type === 'data_source'
-                ? 'This uses the workspace platform key. No OAuth step is needed.'
+                ? 'This turns on this platform-provided source for future discussions. No OAuth step is needed.'
                 : 'Click once to open the provider authorization window. After callback, return to this drawer.'}
             </p>
           </section>
@@ -767,7 +767,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
     activeConnector
     && (
       drawerMode !== 'connect'
-      || activeConnector.type !== 'data_source'
+      || activeConnector.type === 'data_source'
       || activeConnector.platformConfigured !== false
     ),
   );
@@ -847,7 +847,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
               <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                 {filteredConnectors.map((connector) => {
                   const { Icon, color } = connectorIcon(connector);
-                  const canConnect = connector.connected || connector.platformConfigured !== false;
+                  const canConnect = connector.type === 'data_source' || connector.connected || connector.platformConfigured !== false;
                   const actionClass = connector.connected
                     ? 'border-[#46d19a]/20 bg-[#46d19a]/[0.075] text-[#46d19a]'
                     : 'border-white/[0.09] bg-white/[0.025] text-zinc-400 hover:border-white/15 hover:bg-white/[0.065] hover:text-white';
