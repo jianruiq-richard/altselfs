@@ -895,7 +895,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
             {loading && connectors.length === 0 ? (
               <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                 {Array.from({ length: 5 }).map((_, index) => (
-                  <div key={index} className="h-[104px] animate-pulse rounded-[8px] border border-white/[0.09] bg-white/[0.022]" />
+                  <div key={index} className="h-[118px] animate-pulse rounded-[8px] border border-white/[0.09] bg-white/[0.022]" />
                 ))}
               </div>
             ) : filteredConnectors.length > 0 ? (
@@ -910,7 +910,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
                   return (
                     <article
                       key={connector.key}
-                      className={`grid min-h-[104px] grid-cols-[48px_minmax(0,1fr)_38px] items-center gap-3.5 rounded-[8px] border border-white/[0.09] p-4 transition-colors hover:border-white/15 hover:bg-white/[0.04] ${
+                      className={`grid h-[118px] grid-cols-[48px_minmax(0,1fr)_38px] items-center gap-3.5 overflow-hidden rounded-[8px] border border-white/[0.09] p-4 transition-colors hover:border-white/15 hover:bg-white/[0.04] ${
                         connector.connected ? 'bg-[linear-gradient(135deg,rgba(70,209,154,.035),rgba(255,255,255,.02))]' : 'bg-white/[0.022]'
                       }`}
                     >
@@ -928,8 +928,8 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
                           <Icon className="h-6 w-6" />
                         )}
                       </span>
-                      <span className="min-w-0">
-                        <strong className="block text-[15px] text-zinc-100">{connector.label}</strong>
+                      <span className="min-w-0 overflow-hidden">
+                        <strong className="block truncate text-[15px] text-zinc-100">{connector.label}</strong>
                         <span className="mt-1 line-clamp-2 block text-xs leading-[1.45] text-zinc-400">{connector.description}</span>
                         <span className="mt-1.5 block truncate text-[10px] text-zinc-600">{connectorAccountLabel(connector)}</span>
                       </span>
