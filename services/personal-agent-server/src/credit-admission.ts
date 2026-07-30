@@ -284,7 +284,17 @@ export async function getBillingCapacity(config: ServerConfig, investorId: strin
 }
 
 export async function getBillingSummary(config: ServerConfig, investorId: string) {
-  const capacity = await getBillingCapacity(config, investorId);
+  const [capacity, details] = await Promise.all([
+    getBillingCapacity(config, investorId),
+    getBillingDetails(config, investorId),
+  ]);
+  return {
+    ...capacity,
+    ...details,
+  };
+}
+
+export async function getBillingDetails(config: ServerConfig, investorId: string) {
   const pool = getRequiredBillingPool(config);
   const [ledger, usage, payments] = await Promise.all([
     pool.query(
@@ -327,7 +337,6 @@ export async function getBillingSummary(config: ServerConfig, investorId: string
     ).catch(() => ({ rows: [] as Array<Record<string, unknown>> })),
   ]);
   return {
-    ...capacity,
     pricingVersion: AGENT_PRICING_VERSION,
     recentLedger: ledger.rows.map((row) => ({
       id: String(row.id || ''),

@@ -54,6 +54,7 @@ import {
   BillingUnavailableError,
   CreditAdmissionError,
   getBillingCapacity,
+  getBillingDetails,
   getBillingSummary,
   type CreditAuthorization,
 } from './credit-admission.js';
@@ -147,13 +148,18 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
         const investorId = url.searchParams.get('investorId')?.trim() || '';
         if (!investorId) return json(res, 400, { error: 'investorId is required' });
-        await syncCurrentStripeSubscription(config, investorId).catch((error) => {
-          console.warn(
-            `[billing] failed to sync Stripe subscription for ${investorId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-        });
+        const section = url.searchParams.get('section')?.trim().toLowerCase() || 'full';
+        if (section !== 'details') {
+          await syncCurrentStripeSubscription(config, investorId).catch((error) => {
+            console.warn(
+              `[billing] failed to sync Stripe subscription for ${investorId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          });
+        }
+        if (section === 'overview') return json(res, 200, await getBillingCapacity(config, investorId));
+        if (section === 'details') return json(res, 200, await getBillingDetails(config, investorId));
         return json(res, 200, await getBillingSummary(config, investorId));
       }
 

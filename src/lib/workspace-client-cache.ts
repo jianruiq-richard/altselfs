@@ -112,8 +112,11 @@ export function prefetchWorkspaceJson<T>(
 }
 
 export const WORKSPACE_CACHE_KEYS = {
+  workspaceBootstrap: 'workspace:bootstrap',
   connectors: 'workspace:connectors',
   billingCapacity: 'workspace:billing-capacity',
+  billingOverview: 'workspace:billing-overview',
+  billingDetails: 'workspace:billing-details',
   billingSummary: 'workspace:billing-summary',
   userProfile: 'workspace:user-profile',
   archivedSessions: 'workspace:archived-sessions',
@@ -121,6 +124,46 @@ export const WORKSPACE_CACHE_KEYS = {
   personalAgentDefault: 'workspace:personal-agent:default',
   personalAgentThread: (threadId: string) => `workspace:personal-agent:thread:${threadId}`,
 };
+
+export type WorkspaceBootstrapPayload = {
+  user?: unknown;
+  billingCapacity?: unknown;
+  personalAgent?: {
+    threadId?: unknown;
+    sessions?: unknown;
+  };
+  warnings?: unknown;
+};
+
+export function applyWorkspaceBootstrapPayload(payload: WorkspaceBootstrapPayload) {
+  if (!browserReady()) return;
+  setWorkspaceCached(WORKSPACE_CACHE_KEYS.workspaceBootstrap, payload);
+  if (payload.user) {
+    setWorkspaceCached(WORKSPACE_CACHE_KEYS.userProfile, { user: payload.user });
+  }
+  if (payload.billingCapacity) {
+    setWorkspaceCached(WORKSPACE_CACHE_KEYS.billingCapacity, payload.billingCapacity);
+    setWorkspaceCached(WORKSPACE_CACHE_KEYS.billingOverview, payload.billingCapacity);
+  }
+  if (payload.personalAgent && Array.isArray(payload.personalAgent.sessions)) {
+    setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
+      threadId: typeof payload.personalAgent.threadId === 'string' ? payload.personalAgent.threadId : null,
+      sessions: payload.personalAgent.sessions,
+    });
+  }
+}
+
+export function prefetchWorkspaceBootstrap(options: { force?: boolean } = {}) {
+  if (!browserReady()) return;
+  void fetchWorkspaceJson<WorkspaceBootstrapPayload>(
+    WORKSPACE_CACHE_KEYS.workspaceBootstrap,
+    '/api/workspace/bootstrap',
+    {},
+    { ttlMs: 30_000, force: options.force ?? false },
+  )
+    .then(applyWorkspaceBootstrapPayload)
+    .catch(() => undefined);
+}
 
 export function prefetchWorkspaceRouteData(href: string) {
   if (!browserReady()) return;
@@ -152,8 +195,14 @@ export function prefetchWorkspaceRouteData(href: string) {
     );
     if (url.searchParams.get('view') === 'plan') {
       prefetchWorkspaceJson<unknown>(
-        WORKSPACE_CACHE_KEYS.billingSummary,
-        '/api/billing/summary',
+        WORKSPACE_CACHE_KEYS.billingOverview,
+        '/api/billing/summary?section=overview',
+        {},
+        { ttlMs: 45_000 },
+      );
+      prefetchWorkspaceJson<unknown>(
+        WORKSPACE_CACHE_KEYS.billingDetails,
+        '/api/billing/summary?section=details',
         {},
         { ttlMs: 45_000 },
       );

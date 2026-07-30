@@ -16,7 +16,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { prefetchWorkspaceRouteData } from '@/lib/workspace-client-cache';
+import { prefetchWorkspaceBootstrap, prefetchWorkspaceRouteData } from '@/lib/workspace-client-cache';
 
 type WorkspaceNavKey = 'home' | 'discussion' | 'connectors' | 'settings';
 type SidebarLocation = 'desktop' | 'mobile';
@@ -77,6 +77,7 @@ export function AstromarWorkspaceShell({
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     const prefetchCommonRoutes = () => {
+      prefetchWorkspaceBootstrap();
       ['/investor/chat/100', '/connectors', '/profile'].forEach((href) => {
         router.prefetch(href);
         prefetchWorkspaceRouteData(href);

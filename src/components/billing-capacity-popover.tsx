@@ -16,11 +16,23 @@ export type BillingCapacityData = {
     balanceCredits: number;
     reservedCredits: number;
     availableCredits: number;
+    lifetimeGrantedCredits?: number;
+    lifetimeSpentCredits?: number;
+    lifetimeRefundedCredits?: number;
   };
   subscription: {
     planKey: string;
     planName: string;
+    status?: string;
+    monthlyCredits?: number;
     concurrentTaskLimit: number;
+    currentPeriodStart?: string | null;
+    currentPeriodEnd?: string | null;
+    cancelAtPeriodEnd?: boolean;
+    scheduledPlanKey?: string | null;
+    graceEndsAt?: string | null;
+    provider?: string | null;
+    billingCycle?: 'monthly' | 'yearly' | null;
   };
   capacity: {
     activeTaskCount: number;

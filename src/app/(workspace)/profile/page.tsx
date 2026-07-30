@@ -131,6 +131,8 @@ type BillingSummary = {
   };
 };
 
+type BillingDetails = Pick<BillingSummary, 'recentLedger' | 'recentUsage' | 'recentPayments' | 'refundPolicy'>;
+
 const settingsTabs = [
   { key: 'account' as const, label: 'Account', icon: UserRound },
   { key: 'plan' as const, label: 'Plan & usage', icon: CreditCard },
@@ -199,21 +201,21 @@ function billingSummaryFromCapacity(capacity: BillingCapacityData): BillingSumma
       balanceCredits: capacity.account.balanceCredits,
       reservedCredits: capacity.account.reservedCredits,
       availableCredits: capacity.account.availableCredits,
-      lifetimeGrantedCredits: capacity.account.balanceCredits,
-      lifetimeSpentCredits: 0,
-      lifetimeRefundedCredits: 0,
+      lifetimeGrantedCredits: capacity.account.lifetimeGrantedCredits ?? capacity.account.balanceCredits,
+      lifetimeSpentCredits: capacity.account.lifetimeSpentCredits ?? 0,
+      lifetimeRefundedCredits: capacity.account.lifetimeRefundedCredits ?? 0,
     },
     subscription: {
       planKey: capacity.subscription.planKey,
       planName: capacity.subscription.planName || plan.name,
-      status: 'active',
-      monthlyCredits: plan.monthlyCredits,
+      status: capacity.subscription.status || 'active',
+      monthlyCredits: capacity.subscription.monthlyCredits ?? plan.monthlyCredits,
       concurrentTaskLimit: capacity.subscription.concurrentTaskLimit,
-      currentPeriodStart: null,
-      currentPeriodEnd: null,
-      cancelAtPeriodEnd: false,
-      scheduledPlanKey: null,
-      graceEndsAt: null,
+      currentPeriodStart: capacity.subscription.currentPeriodStart ?? null,
+      currentPeriodEnd: capacity.subscription.currentPeriodEnd ?? null,
+      cancelAtPeriodEnd: Boolean(capacity.subscription.cancelAtPeriodEnd),
+      scheduledPlanKey: capacity.subscription.scheduledPlanKey ?? null,
+      graceEndsAt: capacity.subscription.graceEndsAt ?? null,
     },
     capacity: {
       activeTaskCount: capacity.capacity.activeTaskCount,
@@ -230,8 +232,61 @@ function billingSummaryFromCapacity(capacity: BillingCapacityData): BillingSumma
   };
 }
 
+function isBillingSummary(value: unknown): value is BillingSummary {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<BillingSummary>;
+  return Boolean(record.account && record.subscription && record.capacity)
+    && Array.isArray(record.recentLedger)
+    && Array.isArray(record.recentUsage)
+    && Array.isArray(record.recentPayments)
+    && Boolean(record.refundPolicy);
+}
+
+function isBillingDetails(value: unknown): value is BillingDetails {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<BillingDetails>;
+  return Array.isArray(record.recentLedger)
+    && Array.isArray(record.recentUsage)
+    && Array.isArray(record.recentPayments)
+    && Boolean(record.refundPolicy);
+}
+
+function mergeBillingDetails(summary: BillingSummary, details: BillingDetails): BillingSummary {
+  return {
+    ...summary,
+    recentLedger: details.recentLedger,
+    recentUsage: details.recentUsage,
+    recentPayments: details.recentPayments,
+    refundPolicy: details.refundPolicy,
+  };
+}
+
+function billingSummaryFromOverview(value: BillingCapacityData | BillingSummary): BillingSummary {
+  return isBillingSummary(value) ? value : billingSummaryFromCapacity(value);
+}
+
+function BillingSectionLoading({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-28 items-center justify-center px-4 text-center text-xs text-zinc-600">
+      <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" />
+      {label}
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const cachedProfile = getWorkspaceCachedStale<{ user?: Profile }>(WORKSPACE_CACHE_KEYS.userProfile)?.user || null;
+  const cachedBillingSummary = getWorkspaceCachedStale<BillingSummary>(WORKSPACE_CACHE_KEYS.billingSummary);
+  const cachedBillingOverview = getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingOverview)
+    || getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
+  const cachedBillingDetails = getWorkspaceCachedStale<BillingDetails>(WORKSPACE_CACHE_KEYS.billingDetails);
+  const cachedBillingDetailsLoaded = Boolean(cachedBillingSummary || cachedBillingDetails);
+  const initialBilling = cachedBillingSummary
+    || (cachedBillingOverview
+      ? (cachedBillingDetails
+          ? mergeBillingDetails(billingSummaryFromCapacity(cachedBillingOverview), cachedBillingDetails)
+          : billingSummaryFromCapacity(cachedBillingOverview))
+      : null);
   const [activeView, setActiveView] = useState<SettingsView>('account');
   const [profile, setProfile] = useState<Profile | null>(cachedProfile);
   const [profileLoading, setProfileLoading] = useState(!profile);
@@ -251,13 +306,14 @@ export default function ProfilePage() {
   const [archivedError, setArchivedError] = useState<string | null>(null);
   const [archiveActionId, setArchiveActionId] = useState<string | null>(null);
   const [archiveQuery, setArchiveQuery] = useState('');
-  const [billing, setBilling] = useState<BillingSummary | null>(
-    () => getWorkspaceCachedStale<BillingSummary>(WORKSPACE_CACHE_KEYS.billingSummary),
-  );
+  const [billing, setBilling] = useState<BillingSummary | null>(() => initialBilling);
   const [billingLoading, setBillingLoading] = useState(!billing);
   const [billingLoaded, setBillingLoaded] = useState(Boolean(billing));
   const [billingError, setBillingError] = useState<string | null>(null);
-  const [billingPartial, setBillingPartial] = useState(false);
+  const [billingDetailsLoading, setBillingDetailsLoading] = useState(false);
+  const [billingDetailsLoaded, setBillingDetailsLoaded] = useState(cachedBillingDetailsLoaded);
+  const [billingDetailsError, setBillingDetailsError] = useState<string | null>(null);
+  const [billingPartial, setBillingPartial] = useState(Boolean(initialBilling && !cachedBillingDetailsLoaded));
   const [billingNotice, setBillingNotice] = useState<string | null>(null);
   const [billingAction, setBillingAction] = useState<string | null>(null);
 
@@ -334,29 +390,49 @@ export default function ProfilePage() {
     }
   }, []);
 
-  const loadBilling = useCallback(async () => {
-    const cached = getWorkspaceCachedStale<BillingSummary>(WORKSPACE_CACHE_KEYS.billingSummary);
-    if (cached) {
-      setBilling(cached);
+  const loadBillingOverview = useCallback(async (options: { force?: boolean } = {}) => {
+    const cachedSummary = getWorkspaceCachedStale<BillingSummary>(WORKSPACE_CACHE_KEYS.billingSummary);
+    const cachedOverview = getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingOverview)
+      || getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
+    const cachedDetails = getWorkspaceCachedStale<BillingDetails>(WORKSPACE_CACHE_KEYS.billingDetails);
+    if (cachedSummary) {
+      setBilling(cachedSummary);
+      setBillingPartial(false);
+      setBillingDetailsLoaded(true);
       setBillingLoading(false);
-      setBillingLoaded(true);
+    } else if (cachedOverview) {
+      const overview = billingSummaryFromCapacity(cachedOverview);
+      setBilling(cachedDetails ? mergeBillingDetails(overview, cachedDetails) : overview);
+      setBillingPartial(!cachedDetails);
+      setBillingLoading(false);
     } else {
       setBillingLoading(true);
     }
     setBillingError(null);
     try {
-      const data = await fetchWorkspaceJson<BillingSummary>(
-        WORKSPACE_CACHE_KEYS.billingSummary,
-        '/api/billing/summary',
+      const data = await fetchWorkspaceJson<BillingCapacityData | BillingSummary>(
+        WORKSPACE_CACHE_KEYS.billingOverview,
+        '/api/billing/summary?section=overview',
         {},
-        { force: true, ttlMs: 45_000 },
+        { force: options.force ?? true, ttlMs: 45_000 },
       );
-      setBilling(data);
-      setBillingPartial(false);
+      const overview = billingSummaryFromOverview(data);
+      setWorkspaceCached(WORKSPACE_CACHE_KEYS.billingCapacity, data);
+      if (isBillingSummary(data)) {
+        setWorkspaceCached(WORKSPACE_CACHE_KEYS.billingSummary, data);
+        setBilling(data);
+        setBillingDetailsLoaded(true);
+        setBillingPartial(false);
+      } else {
+        const details = getWorkspaceCachedStale<BillingDetails>(WORKSPACE_CACHE_KEYS.billingDetails);
+        setBilling(details ? mergeBillingDetails(overview, details) : overview);
+        setBillingPartial(!details);
+      }
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : 'Failed to load plan and usage';
       try {
-        const cachedCapacity = getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
+        const cachedCapacity = getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingOverview)
+          || getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
         const capacity = cachedCapacity || await fetchWorkspaceJson<BillingCapacityData>(
           WORKSPACE_CACHE_KEYS.billingCapacity,
           '/api/billing/capacity',
@@ -375,6 +451,46 @@ export default function ProfilePage() {
     }
   }, []);
 
+  const loadBillingDetails = useCallback(async (options: { force?: boolean } = {}) => {
+    const cached = getWorkspaceCachedStale<BillingDetails>(WORKSPACE_CACHE_KEYS.billingDetails);
+    if (cached) {
+      setBilling((current) => current ? mergeBillingDetails(current, cached) : current);
+      setBillingDetailsLoaded(true);
+      setBillingDetailsLoading(false);
+    } else {
+      setBillingDetailsLoading(true);
+    }
+    setBillingDetailsError(null);
+    try {
+      const data = await fetchWorkspaceJson<BillingDetails | BillingSummary>(
+        WORKSPACE_CACHE_KEYS.billingDetails,
+        '/api/billing/summary?section=details',
+        {},
+        { force: options.force ?? true, ttlMs: 60_000 },
+      );
+      if (isBillingSummary(data)) {
+        setWorkspaceCached(WORKSPACE_CACHE_KEYS.billingSummary, data);
+        setBilling(data);
+        setBillingPartial(false);
+      } else if (isBillingDetails(data)) {
+        setWorkspaceCached(WORKSPACE_CACHE_KEYS.billingDetails, data);
+        setBilling((current) => current ? mergeBillingDetails(current, data) : current);
+        setBillingPartial(false);
+      }
+      setBillingDetailsLoaded(true);
+    } catch (loadError) {
+      setBillingDetailsError(loadError instanceof Error ? loadError.message : 'Billing details are temporarily unavailable.');
+      setBillingPartial(true);
+    } finally {
+      setBillingDetailsLoading(false);
+    }
+  }, []);
+
+  const loadBilling = useCallback(async () => {
+    await loadBillingOverview({ force: true });
+    void loadBillingDetails({ force: true });
+  }, [loadBillingDetails, loadBillingOverview]);
+
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
@@ -388,6 +504,11 @@ export default function ProfilePage() {
     if (activeView !== 'plan' || billingLoaded) return;
     void loadBilling();
   }, [activeView, billingLoaded, loadBilling]);
+
+  useEffect(() => {
+    if (activeView !== 'plan' || !billingLoaded || billingDetailsLoaded || billingDetailsLoading) return;
+    void loadBillingDetails();
+  }, [activeView, billingDetailsLoaded, billingDetailsLoading, billingLoaded, loadBillingDetails]);
 
   const openBillingPortal = async () => {
     if (billingAction) return;
@@ -705,6 +826,18 @@ export default function ProfilePage() {
                           </button>
                         </div>
                       ) : null}
+                      {billingDetailsError ? (
+                        <div className="mb-5 flex items-center justify-between gap-4 rounded-[7px] border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-[11px] text-amber-100">
+                          <span>Usage, payment, and ledger details are temporarily unavailable.</span>
+                          <button
+                            type="button"
+                            onClick={() => void loadBillingDetails({ force: true })}
+                            className="shrink-0 font-bold text-white hover:underline"
+                          >
+                            Retry details
+                          </button>
+                        </div>
+                      ) : null}
                       <section className="grid gap-3 border-b border-white/[0.09] pb-7 sm:grid-cols-3">
                         <UsageMetric
                           label="Available"
@@ -784,7 +917,9 @@ export default function ProfilePage() {
                         </div>
 
                         <div className="mt-4 border-y border-white/[0.09]">
-                          {billing.recentPayments.length > 0 ? billing.recentPayments.map((payment) => (
+                          {billingDetailsLoading && !billingDetailsLoaded ? (
+                            <BillingSectionLoading label="Loading payments" />
+                          ) : billing.recentPayments.length > 0 ? billing.recentPayments.map((payment) => (
                             <article key={payment.id} className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-5 border-b border-white/[0.09] py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_120px_100px]">
                               <span className="grid min-w-0">
                                 <strong className="truncate text-xs text-zinc-200">
@@ -848,7 +983,9 @@ export default function ProfilePage() {
                         </div>
 
                         <div className="mt-4 border-y border-white/[0.09]">
-                          {billing.recentUsage.length > 0 ? billing.recentUsage.map((usage) => (
+                          {billingDetailsLoading && !billingDetailsLoaded ? (
+                            <BillingSectionLoading label="Loading usage details" />
+                          ) : billing.recentUsage.length > 0 ? billing.recentUsage.map((usage) => (
                             <article key={usage.id} className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-5 border-b border-white/[0.09] py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_110px_90px]">
                               <span className="grid min-w-0">
                                 <strong className="truncate text-xs text-zinc-200">
@@ -883,7 +1020,9 @@ export default function ProfilePage() {
                       <section className="pt-7">
                         <h2 className="text-sm font-semibold text-zinc-100">Credit activity</h2>
                         <div className="mt-4 border-y border-white/[0.09]">
-                          {billing.recentLedger.slice(0, 12).map((entry) => (
+                          {billingDetailsLoading && !billingDetailsLoaded ? (
+                            <BillingSectionLoading label="Loading credit activity" />
+                          ) : billing.recentLedger.length > 0 ? billing.recentLedger.slice(0, 12).map((entry) => (
                             <article key={entry.id} className="grid min-h-[58px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/[0.09] py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_120px_80px]">
                               <span className="grid min-w-0">
                                 <strong className="truncate text-[11px] text-zinc-300">{entry.description}</strong>
@@ -899,7 +1038,11 @@ export default function ProfilePage() {
                                 {entry.amountCredits > 0 ? '+' : ''}{formatSignedCredits(entry.amountCredits)}
                               </strong>
                             </article>
-                          ))}
+                          )) : (
+                            <div className="flex min-h-24 items-center justify-center px-4 text-center text-xs text-zinc-600">
+                              Credit activity will appear here.
+                            </div>
+                          )}
                         </div>
                       </section>
                     </>
