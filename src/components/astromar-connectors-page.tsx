@@ -763,7 +763,14 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
         ? 'Connected now. Manage or disconnect it here.'
         : 'Authorize without leaving the Connectors page.'
     : '';
-  const canRunPrimary = Boolean(activeConnector && !(activeConnector.platformConfigured === false && activeConnector.type === 'data_source'));
+  const canRunPrimary = Boolean(
+    activeConnector
+    && (
+      drawerMode !== 'connect'
+      || activeConnector.type !== 'data_source'
+      || activeConnector.platformConfigured !== false
+    ),
+  );
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] md:grid-rows-[64px_minmax(0,1fr)]">
