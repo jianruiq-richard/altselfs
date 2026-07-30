@@ -75,13 +75,13 @@ const PERSONAL_CONNECTORS = [
 const COMPETITIVE_CONNECTORS = [
   {
     key: 'similarweb_api1',
-    label: 'Similarweb API1',
+    label: 'Similarweb',
     description: 'Website traffic, engagement, rankings, traffic channels, geography, referrals, and similar-site signals.',
     dbProvider: 'SIMILARWEB_API1',
   },
   {
     key: 'semrush13',
-    label: 'Semrush13',
+    label: 'Semrush',
     description: 'Domain SEO intelligence: traffic estimates, organic and paid keywords, backlinks, competitors, geography, and visibility signals.',
     dbProvider: 'SEMRUSH13',
   },

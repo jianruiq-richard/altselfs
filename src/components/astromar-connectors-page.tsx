@@ -14,6 +14,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InvestorConnectorsData } from '@/lib/investor-connectors-data';
 import {
@@ -108,6 +109,53 @@ const CONNECTOR_PERMISSIONS: Record<string, Array<{ title: string; description: 
   ],
 };
 
+const CONNECTOR_LOGOS: Record<string, {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  imageClassName: string;
+  tileClassName?: string;
+}> = {
+  gmail: {
+    src: 'https://www.gstatic.com/images/branding/productlogos/gmail_2026/v2/web/192px.svg',
+    alt: 'Gmail logo',
+    width: 192,
+    height: 192,
+    imageClassName: 'h-7 w-7 object-contain',
+  },
+  feishu: {
+    src: 'https://p16-hera-overseas.larksuitecdn.com/tos-mya-i-lojyj5t9n9/9b87226605154fb7b8141a9c94de22e9.png~tplv-lojyj5t9n9-origin.image',
+    alt: 'Lark logo',
+    width: 700,
+    height: 700,
+    imageClassName: 'h-8 w-8 object-contain',
+  },
+  similarweb_api1: {
+    src: 'https://static-us-west-2.similarcdn.com/build/20260730.master.5285313/dist/scripts/lite-app/assets/4e88b21bb1fbd4df2094.png',
+    alt: 'Similarweb logo',
+    width: 164,
+    height: 87,
+    imageClassName: 'h-auto w-10 object-contain',
+    tileClassName: 'bg-white',
+  },
+  semrush13: {
+    src: 'https://www.semrush.com/__static__/favicon.37cab19e6995.svg',
+    alt: 'Semrush logo',
+    width: 48,
+    height: 48,
+    imageClassName: 'h-7 w-7 object-contain',
+  },
+  domain_metrics_check: {
+    src: 'https://rapidapi-prod-apis.s3.amazonaws.com/7ca418fd-def1-4908-b0ed-448614b747eb.png',
+    alt: 'Domain Metrics Check logo',
+    width: 175,
+    height: 175,
+    imageClassName: 'h-9 w-9 rounded-[6px] object-cover',
+    tileClassName: 'bg-[#b9ff62]',
+  },
+};
+
 function supportedConnectors(connectors: ConnectorItem[]) {
   return connectors.filter((connector) => SUPPORTED_CONNECTOR_KEYS.has(connector.key));
 }
@@ -123,6 +171,10 @@ function connectorIcon(connector: ConnectorItem): { Icon: LucideIcon; color: str
   if (connector.key.includes('semrush')) return { Icon: BarChart3, color: 'text-[#e9b85a]' };
   if (connector.key.includes('domain')) return { Icon: Search, color: 'text-[#46d19a]' };
   return { Icon: Plus, color: 'text-zinc-400' };
+}
+
+function connectorLogo(connector: ConnectorItem) {
+  return CONNECTOR_LOGOS[connector.key] || null;
 }
 
 function connectorAccountLabel(connector: ConnectorItem) {
@@ -850,6 +902,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
               <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                 {filteredConnectors.map((connector) => {
                   const { Icon, color } = connectorIcon(connector);
+                  const logo = connectorLogo(connector);
                   const canConnect = connector.type === 'data_source' || connector.connected || connector.platformConfigured !== false;
                   const actionClass = connector.connected
                     ? 'border-[#46d19a]/20 bg-[#46d19a]/[0.075] text-[#46d19a]'
@@ -861,8 +914,19 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
                         connector.connected ? 'bg-[linear-gradient(135deg,rgba(70,209,154,.035),rgba(255,255,255,.02))]' : 'bg-white/[0.022]'
                       }`}
                     >
-                      <span className={`grid h-12 w-12 place-items-center rounded-[8px] border border-white/[0.09] bg-white/[0.045] ${color}`}>
-                        <Icon className="h-6 w-6" />
+                      <span className={`grid h-12 w-12 place-items-center overflow-hidden rounded-[8px] border border-white/[0.09] ${logo?.tileClassName || 'bg-white/[0.045]'} ${logo ? '' : color}`}>
+                        {logo ? (
+                          <Image
+                            src={logo.src}
+                            alt={logo.alt}
+                            width={logo.width}
+                            height={logo.height}
+                            loading="lazy"
+                            className={logo.imageClassName}
+                          />
+                        ) : (
+                          <Icon className="h-6 w-6" />
+                        )}
                       </span>
                       <span className="min-w-0">
                         <strong className="block text-[15px] text-zinc-100">{connector.label}</strong>
