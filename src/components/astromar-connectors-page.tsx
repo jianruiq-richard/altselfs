@@ -92,8 +92,9 @@ const CONNECTOR_PERMISSIONS: Record<string, Array<{ title: string; description: 
     { title: 'Scoped feature packages', description: 'Only enabled packages are available to the agent.' },
   ],
   similarweb_api1: [
-    { title: 'Domain traffic', description: 'Fetch public traffic and engagement estimates.' },
-    { title: 'Audience signals', description: 'Country, device, and source estimates when available.' },
+    { title: 'Website performance', description: 'Estimate visits, engagement, bounce behavior, pages per visit, and visit duration.' },
+    { title: 'Rankings and geography', description: 'Check global, country, and category rank signals plus top country distribution.' },
+    { title: 'Acquisition signals', description: 'Review traffic channels, referrals, outgoing links, social sources, and similar websites.' },
   ],
   semrush13: [
     { title: 'Domain overview', description: 'Traffic, authority, and public domain metrics.' },

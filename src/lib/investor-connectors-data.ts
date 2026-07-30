@@ -76,7 +76,7 @@ const COMPETITIVE_CONNECTORS = [
   {
     key: 'similarweb_api1',
     label: 'Similarweb API1',
-    description: 'Traffic, ranking, audience, referrals, and engagement metrics.',
+    description: 'Website traffic, engagement, rankings, traffic channels, geography, referrals, and similar-site signals.',
     dbProvider: 'SIMILARWEB_API1',
   },
   {
