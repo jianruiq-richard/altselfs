@@ -12,8 +12,6 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: 'https', hostname: 'www.gstatic.com' },
       { protocol: 'https', hostname: 'p16-hera-overseas.larksuitecdn.com' },
-      { protocol: 'https', hostname: 'static-us-west-2.similarcdn.com' },
-      { protocol: 'https', hostname: 'www.semrush.com' },
       { protocol: 'https', hostname: 'rapidapi-prod-apis.s3.amazonaws.com' },
     ],
   },
