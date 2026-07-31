@@ -1685,6 +1685,42 @@ function extractLinks(...values: Array<string | undefined>) {
   return Array.from(new Set(matches)).slice(0, 4);
 }
 
+function projectStoredRunEvents(recentEvents: unknown[], expectedRunId?: string) {
+  return recentEvents
+    .filter((row) => {
+      if (!isRecord(row)) return false;
+      if (!expectedRunId) return true;
+      const rowRunId = typeof row.run_id === 'string'
+        ? row.run_id
+        : typeof row.runId === 'string'
+          ? row.runId
+          : '';
+      return !rowRunId || rowRunId === expectedRunId;
+    })
+    .map((row, index) => {
+      if (!isRecord(row)) return null;
+      const storedPayload = isRecord(row.payload) ? row.payload : {};
+      const eventPayload = isRecord(storedPayload.payload) ? storedPayload.payload : storedPayload;
+      const timestamp = typeof storedPayload.timestamp === 'string'
+        ? storedPayload.timestamp
+        : typeof row.created_at === 'string'
+          ? row.created_at
+          : typeof row.createdAt === 'string'
+            ? row.createdAt
+            : new Date().toISOString();
+      const envelope = {
+        type: 'event',
+        event: {
+          type: typeof row.type === 'string' ? row.type : 'agent_context.event',
+          timestamp,
+          payload: eventPayload,
+        },
+      };
+      return projectCodexStreamItem(envelope, index);
+    })
+    .filter(Boolean) as CodexStreamItem[];
+}
+
 function buildCompletedActivityFromStatus(params: {
   run: Record<string, unknown>;
   events: CodexStreamItem[];
@@ -2027,8 +2063,6 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
     timestampMs(items[items.length - 1]?.timestamp || '') ||
     0;
 
-  if (items.length === 0) return null;
-
   return (
     <div className="flex justify-start">
       <div className="w-full max-w-4xl rounded-[1.65rem] border border-white/10 bg-[#1f1f1f] px-4 py-4 text-sm text-zinc-300 shadow-[0_24px_90px_rgba(0,0,0,0.34)]">
@@ -2040,23 +2074,27 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
               </span>
               <div className="min-w-0">
                 <p className="font-semibold text-zinc-50">Processed {formatDuration(activity.durationMs)}</p>
-                <p className="truncate text-xs text-zinc-500">{items.length} execution updates captured</p>
+                <p className="truncate text-xs text-zinc-500">
+                  {items.length > 0 ? `${items.length} execution updates captured` : 'Run timing captured'}
+                </p>
               </div>
             </div>
             <ChevronDown className="h-4 w-4 shrink-0 text-zinc-500 transition group-open:rotate-180" />
           </summary>
 
-          <div className="mt-4">
-            {items.map((item, index) => (
-              <ActivityStepShell
-                key={`${item.id}-${index}`}
-                item={{ ...item, status: item.status === 'error' ? 'error' : 'completed' }}
-                index={index}
-                total={items.length}
-                durationMs={stepDuration(items, index, completedAtMs)}
-              />
-            ))}
-          </div>
+          {items.length > 0 ? (
+            <div className="mt-4">
+              {items.map((item, index) => (
+                <ActivityStepShell
+                  key={`${item.id}-${index}`}
+                  item={{ ...item, status: item.status === 'error' ? 'error' : 'completed' }}
+                  index={index}
+                  total={items.length}
+                  durationMs={stepDuration(items, index, completedAtMs)}
+                />
+              ))}
+            </div>
+          ) : null}
         </details>
       </div>
     </div>
@@ -2863,35 +2901,7 @@ export function InvestorAgentChatPage() {
           : '';
       const expectedEventRunId = statusRunId || nextRunId;
       const recentEvents = Array.isArray(data.recentEvents) ? data.recentEvents : [];
-      const projected = recentEvents
-        .filter((row) => {
-          if (!expectedEventRunId || !isRecord(row)) return true;
-          const rowRunId = typeof row.run_id === 'string'
-            ? row.run_id
-            : typeof row.runId === 'string'
-              ? row.runId
-              : '';
-          return !rowRunId || rowRunId === expectedEventRunId;
-        })
-        .map((row, index) => {
-          if (!isRecord(row)) return null;
-          const storedPayload = isRecord(row.payload) ? row.payload : {};
-          const eventPayload = isRecord(storedPayload.payload) ? storedPayload.payload : {};
-          const envelope = {
-            type: 'event',
-            event: {
-              type: typeof row.type === 'string' ? row.type : 'agent_context.event',
-              timestamp: typeof storedPayload.timestamp === 'string'
-                ? storedPayload.timestamp
-                : typeof row.created_at === 'string'
-                  ? row.created_at
-                  : new Date().toISOString(),
-              payload: eventPayload,
-            },
-          };
-          return projectCodexStreamItem(envelope, index);
-        })
-        .filter(Boolean) as CodexStreamItem[];
+      const projected = projectStoredRunEvents(recentEvents, expectedEventRunId);
 
       if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING' || activeRunStatus === 'QUEUED') && nextRunId) {
         const statusThreadId = recoveredThreadId || requestedThreadId || threadId || null;
@@ -2944,18 +2954,20 @@ export function InvestorAgentChatPage() {
         ? latestTerminalRun.status
         : '';
       if (latestTerminalRun && latestTerminalStatus === 'SUCCESS') {
+        const latestTerminalRunId = typeof latestTerminalRun.id === 'string' ? latestTerminalRun.id : '';
+        const completedEvents = projected.length > 0
+          ? projected
+          : projectStoredRunEvents(recentEvents, latestTerminalRunId);
         activeRunIdRef.current = null;
         liveStreamRunIdRef.current = null;
         setActiveRunId(null);
         setSending(false);
         setAssistantDraft('');
         setCodexStreamItems([]);
-        if (projected.length > 0) {
-          setCompletedCodexActivity(buildCompletedActivityFromStatus({
-            run: latestTerminalRun,
-            events: projected,
-          }));
-        }
+        setCompletedCodexActivity(buildCompletedActivityFromStatus({
+          run: latestTerminalRun,
+          events: completedEvents,
+        }));
 
         const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
         const result = isRecord(latestTerminalRun.result) ? latestTerminalRun.result : {};
@@ -2986,18 +2998,20 @@ export function InvestorAgentChatPage() {
       }
 
       if (latestTerminalRun && latestTerminalStatus) {
+        const latestTerminalRunId = typeof latestTerminalRun.id === 'string' ? latestTerminalRun.id : '';
+        const completedEvents = projected.length > 0
+          ? projected
+          : projectStoredRunEvents(recentEvents, latestTerminalRunId);
         activeRunIdRef.current = null;
         liveStreamRunIdRef.current = null;
         setActiveRunId(null);
         setSending(false);
         setAssistantDraft('');
         setCodexStreamItems([]);
-        if (projected.length > 0) {
-          setCompletedCodexActivity(buildCompletedActivityFromStatus({
-            run: latestTerminalRun,
-            events: projected,
-          }));
-        }
+        setCompletedCodexActivity(buildCompletedActivityFromStatus({
+          run: latestTerminalRun,
+          events: completedEvents,
+        }));
 
         const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
         if (recoveredMessages.length > 0) {
