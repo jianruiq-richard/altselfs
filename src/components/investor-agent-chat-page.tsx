@@ -185,6 +185,21 @@ type PersonalAgentSessionsPayload = {
   sessions?: AgentSessionSummary[];
 };
 
+function firstNonEmptySessions(...candidates: Array<AgentSessionSummary[] | null | undefined>) {
+  return candidates.find((candidate) => Array.isArray(candidate) && candidate.length > 0) || null;
+}
+
+function pickInitialSessions(
+  pageCache: PersonalAgentCachedPage | null,
+  sessionsCache: { sessions?: AgentSessionSummary[] } | null,
+) {
+  const nonEmpty = firstNonEmptySessions(pageCache?.sessions, sessionsCache?.sessions);
+  if (nonEmpty) return nonEmpty;
+  if (Array.isArray(sessionsCache?.sessions)) return sessionsCache.sessions;
+  if (Array.isArray(pageCache?.sessions)) return pageCache.sessions;
+  return [];
+}
+
 type CodexStreamItemStatus = 'running' | 'completed' | 'error';
 
 type HermesPlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'blocked';
@@ -2229,7 +2244,7 @@ export function InvestorAgentChatPage() {
     : null;
   const initialBillingCapacity = getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
   const initialConnectorsCache = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
-  const initialSessions = initialPersonalAgentCache?.sessions || initialPersonalAgentSessionsCache?.sessions || [];
+  const initialSessions = pickInitialSessions(initialPersonalAgentCache, initialPersonalAgentSessionsCache);
 
   const [threadId, setThreadId] = useState<string | null>(initialPersonalAgentCache?.threadId || null);
   const [sessions, setSessionsState] = useState<AgentSessionSummary[]>(
@@ -2300,13 +2315,20 @@ export function InvestorAgentChatPage() {
   const initialLoadStartedRef = useRef(false);
   const activeWorkDisplayRef = useRef<ActiveWorkPresentation | null>(null);
 
-  const setSessions = useCallback((nextSessions: AgentSessionSummary[]) => {
+  const setSessions = useCallback((
+    nextSessions: AgentSessionSummary[],
+    options: { allowEmpty?: boolean } = {},
+  ) => {
+    if (!options.allowEmpty && nextSessions.length === 0 && sessionsRef.current.length > 0) {
+      return sessionsRef.current;
+    }
     sessionsRef.current = nextSessions;
     setSessionsState(nextSessions);
     setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
       threadId: selectedThreadIdRef.current || nextSessions[0]?.id || null,
       sessions: nextSessions,
     });
+    return nextSessions;
   }, []);
 
   const selectThreadId = useCallback((nextThreadId: string | null) => {
@@ -2320,13 +2342,20 @@ export function InvestorAgentChatPage() {
   }, [router]);
 
   const cachePersonalAgentPage = useCallback((page: PersonalAgentCachedPage) => {
+    const cachedSessions = getWorkspaceCachedStale<PersonalAgentSessionsPayload>(
+      WORKSPACE_CACHE_KEYS.personalAgentSessions,
+    );
+    const stableSessions =
+      firstNonEmptySessions(page.sessions, sessionsRef.current, cachedSessions?.sessions) ||
+      (Array.isArray(page.sessions) ? page.sessions : []);
     const normalized: PersonalAgentCachedPage = {
       threadId: page.threadId || null,
-      sessions: Array.isArray(page.sessions) ? page.sessions : [],
+      sessions: stableSessions,
       messages: Array.isArray(page.messages) ? page.messages : [],
       hasMore: Boolean(page.hasMore),
     };
     setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
+      threadId: normalized.threadId || stableSessions[0]?.id || null,
       sessions: normalized.sessions,
     });
     setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentDefault, normalized);
@@ -2338,7 +2367,7 @@ export function InvestorAgentChatPage() {
   const applyPersonalAgentCachedPage = useCallback((page: PersonalAgentCachedPage) => {
     const cachedThreadId = typeof page.threadId === 'string' ? page.threadId : null;
     if (cachedThreadId) selectThreadId(cachedThreadId);
-    if (Array.isArray(page.sessions)) setSessions(page.sessions);
+    if (Array.isArray(page.sessions) && page.sessions.length > 0) setSessions(page.sessions);
     const cachedMessages = Array.isArray(page.messages) ? page.messages : [];
     if (cachedMessages.length > 0 || cachedThreadId) {
       messagesAutoFollowRef.current = true;
@@ -2958,10 +2987,10 @@ export function InvestorAgentChatPage() {
         { force: options.force ?? true, ttlMs: 30_000 },
       );
       const nextSessions = Array.isArray(data.sessions) ? data.sessions : [];
-      setSessions(nextSessions);
+      const appliedSessions = setSessions(nextSessions);
       return {
-        threadId: typeof data.threadId === 'string' ? data.threadId : nextSessions[0]?.id || null,
-        sessions: nextSessions,
+        threadId: typeof data.threadId === 'string' ? data.threadId : appliedSessions[0]?.id || null,
+        sessions: appliedSessions,
       };
     } catch (loadError) {
       if (loadError instanceof Error && loadError.message.includes('Unauthorized')) {
@@ -3231,7 +3260,7 @@ export function InvestorAgentChatPage() {
       }
 
       const nextSessions = Array.isArray(data.sessions) ? data.sessions : [];
-      setSessions(nextSessions);
+      setSessions(nextSessions, { allowEmpty: true });
       cachePersonalAgentPage({
         threadId,
         sessions: nextSessions,
