@@ -6,7 +6,7 @@ import { AstromarLandingPage } from "@/components/astromar-landing-page";
 export const metadata: Metadata = {
   title: "Astromar | Your AI cofounder",
   description:
-    "Astromar is your AI cofounder, built to think with you, act for you, and turn fragmented context into sharper startup decisions.",
+    "Astromar helps founders track competitor moves, find seed users, and turn ideas into shippable first versions with an AI cofounder.",
 };
 
 export const viewport: Viewport = {

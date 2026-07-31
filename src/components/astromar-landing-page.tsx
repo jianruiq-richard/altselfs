@@ -11,16 +11,16 @@ const scenarios = [
       "Track competitor activity across all channels. Astromar shows you their playbook and suggests your counter-strategy.",
   },
   {
-    lead: "Know what's trending.",
-    decision: "Decide what's urgent.",
+    lead: "Find who needs your product.",
+    decision: "Decide your outreach.",
     detail:
-      "What's gaining traction across your platforms? Astromar surfaces trending signals and tells you what deserves attention today.",
+      "Your first 100 users are already out there. Astromar finds where they gather, what they care about, and how to reach them before anyone else does.",
   },
   {
-    lead: "Find early adopters.",
-    decision: "Decide your approach.",
+    lead: "From idea to live.",
+    decision: "Decide what ships first.",
     detail:
-      "Find the first users who'll truly care. Astromar helps you identify early adopters and craft the outreach that converts.",
+      "Not a prototype. Not a demo. Astromar helps you break down any idea into a shippable first version — then tells you exactly what to build on day one.",
   },
 ] as const;
 
@@ -64,18 +64,21 @@ const activity = [
 const useCases = [
   {
     index: "01",
-    title: "Competitive intelligence",
-    copy: '"Opus Clip posted 3 KOC videos yesterday. Two are performing. Here is what they are testing, and the choice it creates for you."',
+    title: "Know competitor moves. Decide your action.",
+    copy:
+      "Track competitor activity across all channels. Astromar shows you their playbook and suggests your counter-strategy.",
   },
   {
     index: "02",
-    title: "Daily operating judgment",
-    copy: '"Your creator account, inbox, and launch thread changed overnight. These are the 3 moves that matter today."',
+    title: "Find who needs your product. Decide your outreach.",
+    copy:
+      "Your first 100 users are already out there. Astromar finds where they gather, what they care about, and how to reach them before anyone else does.",
   },
   {
     index: "03",
-    title: "Context-aware communication",
-    copy: '"I read the thread, the customer note, and your last decision. Here is the reply that protects the relationship and advances the deal."',
+    title: "From idea to live. Decide what ships first.",
+    copy:
+      "Not a prototype. Not a demo. Astromar helps you break down any idea into a shippable first version — then tells you exactly what to build on day one.",
   },
 ] as const;
 
@@ -262,7 +265,8 @@ export function AstromarLandingPage() {
             <h2>Not a vertical dashboard. A native agentic decision surface.</h2>
           </div>
           <p className={styles.sectionCopy}>
-            Each entry point starts with a real founder question, then keeps going until the tradeoff is clear.
+            Start from a competitor, a product that needs believers, or an idea that needs to go live. Each entry
+            point keeps going until the tradeoff is clear.
           </p>
         </div>
 
@@ -318,7 +322,8 @@ export function AstromarLandingPage() {
             <p className={styles.eyebrow}>Start now</p>
             <h2>Bring your startup context into one decision room.</h2>
             <p>
-              Start with the competitor you cannot ignore. Stay for the decisions you should not make alone.
+              Start with a competitor, a product, or an idea. Astromar turns it into the next decision and the next
+              action.
             </p>
           </div>
           <div className={styles.ctaActions}>
@@ -364,7 +369,7 @@ export function AstromarLandingPage() {
         <div className={classes("container", "footerInner")}>
           <span>Astromar</span>
           <span>Your AI cofounder</span>
-          <span>Competitive intelligence, decisions, execution.</span>
+          <span>Competitive intelligence, seed users, first version.</span>
         </div>
       </footer>
     </main>

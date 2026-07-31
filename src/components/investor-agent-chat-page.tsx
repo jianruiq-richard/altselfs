@@ -278,6 +278,7 @@ type ConnectorItem = {
 type StarterTemplate = {
   eyebrow: string;
   title: string;
+  description: string;
   prompt: string;
   connectorKeys?: string[];
 };
@@ -342,24 +343,64 @@ function sameStringSelection(left: string[], right: string[]) {
 
 const starterTemplates: StarterTemplate[] = [
   {
-    eyebrow: 'Market pulse',
-    title: 'Scan my market',
+    eyebrow: 'Competitor intelligence',
+    title: 'Know competitor moves. Decide your action.',
+    description:
+      'Track competitor activity across channels, reveal their playbook, and choose your counter-strategy.',
     prompt:
-      'Track today’s market and technical updates for my startup. Summarize what changed, why it matters, and what I should do next.',
-    connectorKeys: [],
+      [
+        'Help me build a competitor intelligence brief.',
+        '',
+        'If I have not provided enough context, ask me only for the minimum details you need: my product, 1–3 competitors, target market, and current growth channel.',
+        '',
+        'Then produce:',
+        '1. What each competitor is doing across traffic, search, content, product, pricing, and distribution.',
+        '2. What changed recently and why it matters.',
+        '3. The competitor playbook you infer from those signals.',
+        '4. The counter-strategy I should take next.',
+        '5. One concrete action I should run this week, with the reason it is the highest-leverage move.',
+      ].join('\n'),
+    connectorKeys: ['similarweb', 'semrush'],
   },
   {
-    eyebrow: 'Competition',
-    title: 'Analyze a competitor',
+    eyebrow: 'Seed users',
+    title: 'Find who needs your product. Decide your outreach.',
+    description:
+      'Find early believers, where they gather, what they care about, and how to reach the first 100.',
     prompt:
-      'Analyze a competitor or product idea. Help me judge whether it is worth pursuing, where the opportunity is, and the main risks.',
-    connectorKeys: [],
+      [
+        'Help me find seed users for my product.',
+        '',
+        'If context is missing, ask me only for the minimum details you need: what the product does, who I think it is for, current traction, geography/language, and outreach constraints.',
+        '',
+        'Then produce:',
+        '1. The strongest early believer segments, not broad generic users.',
+        '2. Where these people already gather online or offline, and what signals show urgency.',
+        '3. What they care about, what language they use, and what objections they may have.',
+        '4. A ranked outreach plan for the first 100 users, including channels, message angles, and prioritization.',
+        '5. Three ready-to-send outreach messages.',
+        '6. The evidence that would prove this segment is worth pursuing or should be abandoned.',
+      ].join('\n'),
+    connectorKeys: ['similarweb', 'semrush'],
   },
   {
-    eyebrow: 'Execution',
-    title: 'Build an action plan',
+    eyebrow: 'Ship first',
+    title: 'From idea to live. Decide what ships first.',
+    description:
+      'Break an idea into a shippable first version, then decide exactly what to build on day one.',
     prompt:
-      'Turn my current business problem into an action plan. Break it into priorities, decisions, and next steps.',
+      [
+        'Help me turn an idea into a live first version.',
+        '',
+        'If context is missing, ask me only for the minimum details you need: the idea, target user, core promise, constraints, timeline, and what resources I can use.',
+        '',
+        'Then produce:',
+        '1. The smallest shippable version, not a prototype or demo.',
+        '2. What must be built on day one versus what should be postponed.',
+        '3. The validation path from idea to live to cold start.',
+        '4. A 7-day execution plan with decisions, deliverables, and risks.',
+        '5. The first launch channel and the evidence that would tell us whether to continue, pivot, or stop.',
+      ].join('\n'),
     connectorKeys: [],
   },
 ];
@@ -4421,7 +4462,7 @@ export function InvestorAgentChatPage() {
                           {template.title}
                         </strong>
                         <span className="mt-2 line-clamp-3 block text-[11px] leading-5 text-zinc-500 group-hover:text-zinc-400">
-                          {template.prompt}
+                          {template.description}
                         </span>
                       </button>
                     ))}
