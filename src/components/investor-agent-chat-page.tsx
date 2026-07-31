@@ -260,6 +260,13 @@ type ConnectorItem = {
   manageHref?: string;
 };
 
+type StarterTemplate = {
+  eyebrow: string;
+  title: string;
+  prompt: string;
+  connectorKeys?: string[];
+};
+
 type ConnectorScopePayload = {
   enabledConnectorKeys: string[];
   enabledConnectionIds: string[];
@@ -318,24 +325,27 @@ function sameStringSelection(left: string[], right: string[]) {
   return left.every((value) => rightValues.has(value));
 }
 
-const starterTemplates = [
+const starterTemplates: StarterTemplate[] = [
   {
     eyebrow: 'Market pulse',
     title: 'Scan my market',
     prompt:
       'Track today’s market and technical updates for my startup. Summarize what changed, why it matters, and what I should do next.',
+    connectorKeys: [],
   },
   {
     eyebrow: 'Competition',
     title: 'Analyze a competitor',
     prompt:
       'Analyze a competitor or product idea. Help me judge whether it is worth pursuing, where the opportunity is, and the main risks.',
+    connectorKeys: [],
   },
   {
     eyebrow: 'Execution',
     title: 'Build an action plan',
     prompt:
       'Turn my current business problem into an action plan. Break it into priorities, decisions, and next steps.',
+    connectorKeys: [],
   },
 ];
 
@@ -2484,6 +2494,22 @@ export function InvestorAgentChatPage() {
     enabledConnectorKeys: activeConnectors.map((connector) => connector.key),
     enabledConnectionIds: activeConnectors.flatMap((connector) => connector.connectionIds || []),
   }), [activeConnectors]);
+  const connectorScopeForKeys = useCallback((keys?: string[]): ConnectorScopePayload => {
+    const requestedKeys = Array.from(new Set((keys || []).map((key) => key.trim()).filter(Boolean)));
+    if (requestedKeys.length === 0) return connectorScope;
+    const requested = new Set(requestedKeys);
+    const scopedConnectors = connectors.filter(
+      (connector) => connector.connected && connector.conversationAvailable !== false && requested.has(connector.key)
+    );
+    const nextKeys = scopedConnectors.map((connector) => connector.key);
+    if (nextKeys.length === 0) return connectorScope;
+    if (threadId) connectorSelectionsByThreadRef.current.set(threadId, nextKeys);
+    setSelectedConnectorKeys((current) => sameStringSelection(current, nextKeys) ? current : nextKeys);
+    return {
+      enabledConnectorKeys: nextKeys,
+      enabledConnectionIds: scopedConnectors.flatMap((connector) => connector.connectionIds || []),
+    };
+  }, [connectorScope, connectors, threadId]);
 
   useEffect(() => {
     if (!threadId || connectorsLoading || connectors.length === 0) return;
@@ -3632,7 +3658,7 @@ export function InvestorAgentChatPage() {
     return 'failed';
   }, [handleSessionExpired, hasSyncedCurrentUserTurn, refreshPersonalAgentStatus, threadId]);
 
-  const handleSend = async (textFromSuggestion?: string) => {
+  const handleSend = async (textFromSuggestion?: string, options?: { connectorKeys?: string[] }) => {
     const content = (textFromSuggestion || input).trim();
     const requestAttachments = attachments;
     const hasAttachments = requestAttachments.length > 0;
@@ -3665,6 +3691,7 @@ export function InvestorAgentChatPage() {
     })).filter((artifact) => artifact.id);
     const attachmentThreadId = requestAttachments.find((attachment) => attachment.threadId)?.threadId || null;
     const requestThreadId = threadId || attachmentThreadId;
+    const requestConnectorScope = connectorScopeForKeys(options?.connectorKeys);
 
     const attachmentList = formatAttachmentList(requestAttachments);
     const displayContent = [
@@ -3678,7 +3705,7 @@ export function InvestorAgentChatPage() {
       {
         role: 'user',
         content: displayContent,
-        connectorScope,
+        connectorScope: requestConnectorScope,
         submission: {
           status: 'AUTHORIZING',
           runId: null,
@@ -3721,7 +3748,7 @@ export function InvestorAgentChatPage() {
           displayMessage: displayContent,
           hermesModel: effectiveHermesModel,
           clientRequestId,
-          connectorScope,
+          connectorScope: requestConnectorScope,
           uploadedArtifacts,
         })
       );
@@ -4227,7 +4254,7 @@ export function InvestorAgentChatPage() {
         <header className="hidden items-center justify-between gap-4 border-b border-white/[0.09] px-6 md:flex">
           <div className="min-w-0">
             <strong className="block truncate text-[13px] text-zinc-100">{activeSession?.title || 'New discussion'}</strong>
-            <span className="mt-0.5 block truncate text-[10px] text-zinc-600">AI cofounder workspace · Context scoped to this discussion</span>
+            <span className="mt-0.5 block truncate text-[10px] text-zinc-600">Think with you. Act for you.</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <div data-hermes-model-menu="true" className="relative">
@@ -4310,7 +4337,7 @@ export function InvestorAgentChatPage() {
                       <button
                         key={template.title}
                         type="button"
-                        onClick={() => void handleSend(template.prompt)}
+                        onClick={() => void handleSend(template.prompt, { connectorKeys: template.connectorKeys })}
                         disabled={starterTemplateDisabled}
                         className="group min-h-[128px] rounded-[14px] border border-white/[0.09] bg-white/[0.035] p-4 text-left transition hover:border-white/[0.16] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
                       >
