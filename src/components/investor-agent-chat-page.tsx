@@ -1746,9 +1746,7 @@ function ActivityContent({ item, content }: { item: CodexStreamItem; content: st
       <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.055] px-4 py-3 text-sm leading-6 text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
         <MarkdownMessage
           content={content}
-          renderMediaPreview={({ href, label, kind, key }) => (
-            <InlineMediaPreview key={key} href={href} label={label} kind={kind} />
-          )}
+          renderMediaPreview={(args) => renderInlineMediaPreviewNode(args)}
         />
       </div>
     );
@@ -2058,21 +2056,23 @@ function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArt
   );
 }
 
-function InlineMediaPreview({
+function renderInlineMediaPreviewNode({
   href,
   label,
   kind,
+  key,
   inverted = false,
 }: {
   href: string;
   label: string;
   kind: 'image' | 'link' | 'code' | 'bare';
+  key: string;
   inverted?: boolean;
 }) {
   const artifact = previewArtifactFromUrl(href, label, kind === 'image' ? 'linked_image' : undefined);
   if (!artifact) return null;
   return (
-    <div className="my-2 max-w-full">
+    <div key={key} className="my-2 max-w-full">
       <ArtifactPreviewCard artifact={artifact} inverted={inverted} />
     </div>
   );
@@ -2208,9 +2208,7 @@ function StreamingAssistantMessage({ content }: { content: string }) {
       <div className="max-w-[92%] rounded-[1.35rem] border border-white/10 bg-white/[0.055] px-4 py-3 text-zinc-100 shadow-[0_16px_50px_rgba(0,0,0,0.18)] sm:max-w-2xl agent-activity-text">
         <MarkdownMessage
           content={content}
-          renderMediaPreview={({ href, label, kind, key }) => (
-            <InlineMediaPreview key={key} href={href} label={label} kind={kind} />
-          )}
+          renderMediaPreview={(args) => renderInlineMediaPreviewNode(args)}
         />
       </div>
     </div>
@@ -4396,7 +4394,7 @@ export function InvestorAgentChatPage() {
                     return (
                       <div key={message.id || `user-${index}`} className="flex justify-end">
                         <div className={`max-w-[82%] rounded-[8px_8px_2px_8px] border px-4 py-3 text-[13px] leading-6 text-zinc-100 ${message.submission?.status === 'REJECTED' ? 'border-red-400/25 bg-red-400/[0.06]' : 'border-white/[0.09] bg-white/[0.075]'}`}>
-                          <MarkdownMessage content={visibleContent} inverted renderMediaPreview={({ href, label, kind, key }) => <InlineMediaPreview key={key} href={href} label={label} kind={kind} inverted />} />
+                          <MarkdownMessage content={visibleContent} inverted renderMediaPreview={(args) => renderInlineMediaPreviewNode({ ...args, inverted: true })} />
                           <GeneratedArtifactPreviews artifacts={artifacts} inverted />
                           {message.submission ? (
                             <div className={`mt-2 flex flex-wrap items-center gap-2 border-t pt-2 text-[10px] leading-4 ${message.submission.status === 'REJECTED' ? 'border-red-300/15 text-red-200' : 'border-white/[0.08] text-zinc-500'}`}>
@@ -4431,7 +4429,7 @@ export function InvestorAgentChatPage() {
                         <div className="min-w-0">
                           <div className="mb-2 text-[10px] font-bold uppercase text-zinc-600">Astromar</div>
                           <div className="text-[14px] leading-7 text-zinc-300">
-                            {visibleContent ? <MarkdownMessage content={visibleContent} renderMediaPreview={({ href, label, kind, key }) => <InlineMediaPreview key={key} href={href} label={label} kind={kind} />} /> : null}
+                            {visibleContent ? <MarkdownMessage content={visibleContent} renderMediaPreview={(args) => renderInlineMediaPreviewNode(args)} /> : null}
                             <GeneratedArtifactPreviews artifacts={artifacts} />
                           </div>
                         </div>
