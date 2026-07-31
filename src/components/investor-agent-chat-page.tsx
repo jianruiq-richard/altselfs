@@ -4481,7 +4481,7 @@ export function InvestorAgentChatPage() {
                         type="button"
                         onClick={() => void handleSend(template.prompt, { connectorKeys: template.connectorKeys })}
                         disabled={starterTemplateDisabled}
-                        className="group min-h-[108px] rounded-[14px] border border-white/[0.09] bg-white/[0.035] p-4 text-left transition hover:border-white/[0.16] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
+                        className="group flex min-h-[108px] flex-col items-start justify-start rounded-[14px] border border-white/[0.09] bg-white/[0.035] p-4 text-left transition hover:border-white/[0.16] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-600 group-hover:text-zinc-400">
                           {template.eyebrow}
