@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent as ReactDragEvent } from 'react';
+import type { DragEvent as ReactDragEvent, SetStateAction } from 'react';
 import Link from 'next/link';
 import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, LockKeyhole, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -2301,6 +2301,7 @@ export function InvestorAgentChatPage() {
   const liveStreamRunIdRef = useRef<string | null>(null);
   const requestedStopRunIdRef = useRef<string | null>(null);
   const selectedThreadIdRef = useRef<string | null>(initialPersonalAgentCache?.threadId || null);
+  const messagesThreadIdRef = useRef<string | null>(initialPersonalAgentCache?.threadId || null);
   const threadLoadSeqRef = useRef(0);
   const sessionsRef = useRef<AgentSessionSummary[]>(initialSessions);
   const submissionInFlightRef = useRef(false);
@@ -2334,6 +2335,14 @@ export function InvestorAgentChatPage() {
   const selectThreadId = useCallback((nextThreadId: string | null) => {
     selectedThreadIdRef.current = nextThreadId;
     setThreadId(nextThreadId);
+  }, []);
+
+  const setThreadMessages = useCallback((
+    nextMessages: SetStateAction<ChatMessage[]>,
+    ownerThreadId?: string | null,
+  ) => {
+    messagesThreadIdRef.current = ownerThreadId || null;
+    setMessages(nextMessages);
   }, []);
 
   const handleSessionExpired = useCallback(() => {
@@ -2371,10 +2380,10 @@ export function InvestorAgentChatPage() {
     const cachedMessages = Array.isArray(page.messages) ? page.messages : [];
     if (cachedMessages.length > 0 || cachedThreadId) {
       messagesAutoFollowRef.current = true;
-      setMessages(cachedMessages);
+      setThreadMessages(cachedMessages, cachedThreadId);
     }
     if (typeof page.hasMore === 'boolean') setHasMoreMessages(page.hasMore);
-  }, [selectThreadId, setSessions]);
+  }, [selectThreadId, setSessions, setThreadMessages]);
 
   const getCachedPersonalAgentPage = useCallback((targetThreadId?: string | null) => {
     const threadCache = targetThreadId
@@ -2546,12 +2555,12 @@ export function InvestorAgentChatPage() {
     );
     const availableKeys = new Set(availableConnectors.map((connector) => connector.key));
     const rememberedKeys = connectorSelectionsByThreadRef.current.get(threadId);
-    const messageKeys = connectorKeysFromMessages(messages);
+    const messagesBelongToCurrentThread = messagesThreadIdRef.current === threadId;
+    const messageKeys = messagesBelongToCurrentThread ? connectorKeysFromMessages(messages) : null;
     const defaultKeys = availableConnectors
       .filter((connector) => connector.enabledByDefault)
       .map((connector) => connector.key);
-    const nextKeys = (rememberedKeys || messageKeys || defaultKeys).filter((key) => availableKeys.has(key));
-    connectorSelectionsByThreadRef.current.set(threadId, nextKeys);
+    const nextKeys = (rememberedKeys ?? messageKeys ?? defaultKeys).filter((key) => availableKeys.has(key));
     setSelectedConnectorKeys((current) => sameStringSelection(current, nextKeys) ? current : nextKeys);
   }, [connectors, connectorsLoading, messages, threadId]);
 
@@ -2580,20 +2589,21 @@ export function InvestorAgentChatPage() {
       options: { closePlannerOnSuccess: boolean }
     ) => {
       const data = isRecord(run.result) ? run.result : {};
+      const resultThreadId = typeof data.threadId === 'string' ? data.threadId : null;
       if (run.status === 'ERROR') {
         setError(run.error || (typeof data.error === 'string' ? data.error : 'Failed to send message'));
-        setMessages(fallbackMessages);
+        setThreadMessages(fallbackMessages, resultThreadId || threadId);
         setPlannerTrace(normalizePlannerTrace(run.plannerTrace || data.plannerTrace));
         setPlannerSteps(normalizePlannerSteps(run.planner || data.planner));
         return;
       }
 
-      selectThreadId(typeof data.threadId === 'string' ? data.threadId : null);
+      selectThreadId(resultThreadId);
       const reply = typeof data.reply === 'string' ? data.reply : '';
       if (Array.isArray(data.messages)) {
-        setMessages(appendAssistantReplyIfMissing(data.messages as ChatMessage[], reply));
+        setThreadMessages(appendAssistantReplyIfMissing(data.messages as ChatMessage[], reply), resultThreadId);
       } else if (reply.trim()) {
-        setMessages(appendAssistantReplyIfMissing(fallbackMessages, reply));
+        setThreadMessages(appendAssistantReplyIfMissing(fallbackMessages, reply), resultThreadId || threadId);
       }
       if (data.briefing) {
         setBriefing(data.briefing as Briefing);
@@ -2604,7 +2614,7 @@ export function InvestorAgentChatPage() {
       applyAgentConfig(data.agentConfig as AgentConfig | null | undefined);
       if (options.closePlannerOnSuccess) setPlannerPanelOpen(false);
     },
-    [applyAgentConfig, selectThreadId]
+    [applyAgentConfig, selectThreadId, setThreadMessages, threadId]
   );
 
   const resumeExecutiveRun = useCallback(
@@ -2807,6 +2817,7 @@ export function InvestorAgentChatPage() {
         .filter(Boolean) as CodexStreamItem[];
 
       if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING' || activeRunStatus === 'QUEUED') && nextRunId) {
+        const statusThreadId = recoveredThreadId || requestedThreadId || threadId || null;
         activeRunIdRef.current = nextRunId;
         setActiveRunId(nextRunId);
         setSending(true);
@@ -2830,7 +2841,7 @@ export function InvestorAgentChatPage() {
               : null,
           };
         });
-        setMessages((currentMessages) => currentMessages.map((message) => (
+        setThreadMessages((currentMessages) => currentMessages.map((message) => (
           message.submission?.runId === nextRunId &&
           message.submission.status !== submissionStatus
             ? {
@@ -2841,7 +2852,7 @@ export function InvestorAgentChatPage() {
                 },
               }
             : message
-        )));
+        )), statusThreadId);
         if (liveStreamRunIdRef.current === nextRunId) return 'active';
         if (projected.length > 0) setCodexStreamItems(compactCodexStreamItems(projected));
         return 'active';
@@ -2874,7 +2885,7 @@ export function InvestorAgentChatPage() {
         const reply = typeof result.reply === 'string' ? result.reply : '';
         if (recoveredMessages.length > 0) {
           const nextMessages = appendAssistantReplyIfMissing(recoveredMessages, reply);
-          setMessages(nextMessages);
+          setThreadMessages(nextMessages, recoveredThreadId || requestedThreadId || threadId);
           cachePersonalAgentPage({
             threadId: recoveredThreadId || requestedThreadId || threadId,
             sessions,
@@ -2882,7 +2893,7 @@ export function InvestorAgentChatPage() {
             hasMore: hasMoreMessages,
           });
         } else if (reply.trim()) {
-          setMessages((prev) => {
+          setThreadMessages((prev) => {
             const nextMessages = appendAssistantReplyIfMissing(prev, reply);
             cachePersonalAgentPage({
               threadId: recoveredThreadId || requestedThreadId || threadId,
@@ -2891,7 +2902,7 @@ export function InvestorAgentChatPage() {
               hasMore: hasMoreMessages,
             });
             return nextMessages;
-          });
+          }, recoveredThreadId || requestedThreadId || threadId);
         }
         setError(null);
         return 'success';
@@ -2913,7 +2924,7 @@ export function InvestorAgentChatPage() {
 
         const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
         if (recoveredMessages.length > 0) {
-          setMessages(recoveredMessages);
+          setThreadMessages(recoveredMessages, recoveredThreadId || requestedThreadId || threadId);
           cachePersonalAgentPage({
             threadId: recoveredThreadId || requestedThreadId || threadId,
             sessions,
@@ -2940,7 +2951,7 @@ export function InvestorAgentChatPage() {
       }
       const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
       if (recoveredMessages.length > 0) {
-        setMessages(recoveredMessages);
+        setThreadMessages(recoveredMessages, recoveredThreadId || requestedThreadId || threadId);
         cachePersonalAgentPage({
           threadId: recoveredThreadId || requestedThreadId || threadId,
           sessions,
@@ -2953,7 +2964,7 @@ export function InvestorAgentChatPage() {
       // Status recovery is best-effort; the normal send flow still reports errors.
       return 'unavailable';
     }
-  }, [activeRunId, cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, messages, selectThreadId, sessions, setSessions, threadId]);
+  }, [activeRunId, cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, messages, selectThreadId, sessions, setSessions, setThreadMessages, threadId]);
 
   const resetPersonalAgentRunState = useCallback(() => {
     activeRunIdRef.current = null;
@@ -3025,7 +3036,7 @@ export function InvestorAgentChatPage() {
       if (!isCurrentLoad()) return;
       selectThreadId(requestedThreadId);
       messagesAutoFollowRef.current = true;
-      setMessages([]);
+      setThreadMessages([], requestedThreadId);
       setHasMoreMessages(false);
     }
     if (showBlockingLoading && isCurrentLoad()) setLoading(true);
@@ -3065,7 +3076,7 @@ export function InvestorAgentChatPage() {
         : sessionsRef.current;
       const loadedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
       messagesAutoFollowRef.current = true;
-      setMessages(loadedMessages);
+      setThreadMessages(loadedMessages, loadedThreadId);
       setHasMoreMessages(Boolean(data.hasMore));
       cachePersonalAgentPage({
         threadId: loadedThreadId,
@@ -3090,7 +3101,7 @@ export function InvestorAgentChatPage() {
         setRecoveringRunState(false);
       }
     }
-  }, [applyPersonalAgentCachedPage, cachePersonalAgentPage, getCachedPersonalAgentPage, handleSessionExpired, isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, selectThreadId, setSessions, showExecutiveControls]);
+  }, [applyPersonalAgentCachedPage, cachePersonalAgentPage, getCachedPersonalAgentPage, handleSessionExpired, isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, selectThreadId, setSessions, setThreadMessages, showExecutiveControls]);
 
   const loadData = useCallback(async (
     targetThreadId?: string | null,
@@ -3174,7 +3185,7 @@ export function InvestorAgentChatPage() {
       const nextSessions = Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : [];
       selectThreadId(createdThreadId);
       messagesAutoFollowRef.current = true;
-      setMessages([]);
+      setThreadMessages([], createdThreadId);
       setHasMoreMessages(false);
       setSessions(nextSessions);
       cachePersonalAgentPage({
@@ -3194,16 +3205,23 @@ export function InvestorAgentChatPage() {
       setCreatingSession(false);
       setRecoveringRunState(false);
     }
-  }, [cachePersonalAgentPage, creatingSession, handleSessionExpired, recoveringRunState, resetPersonalAgentRunState, selectThreadId, setSessions, startingRun]);
+  }, [cachePersonalAgentPage, creatingSession, handleSessionExpired, recoveringRunState, resetPersonalAgentRunState, selectThreadId, setSessions, setThreadMessages, startingRun]);
 
   const switchSession = useCallback(async (targetThreadId: string) => {
     if (!targetThreadId || targetThreadId === threadId || startingRun || recoveringRunState) return;
     selectedThreadIdRef.current = targetThreadId;
+    const availableKeys = new Set(
+      connectors
+        .filter((connector) => connector.connected && connector.conversationAvailable !== false)
+        .map((connector) => connector.key)
+    );
+    const rememberedKeys = connectorSelectionsByThreadRef.current.get(targetThreadId) || [];
+    setSelectedConnectorKeys(rememberedKeys.filter((key) => availableKeys.has(key)));
     setInput('');
     setAttachments([]);
     setOpenSessionMenuId(null);
     await loadData(targetThreadId, { showBlockingLoading: true });
-  }, [loadData, recoveringRunState, startingRun, threadId]);
+  }, [connectors, loadData, recoveringRunState, startingRun, threadId]);
 
   const handleSessionAction = useCallback(async (
     session: AgentSessionSummary,
@@ -3353,11 +3371,12 @@ export function InvestorAgentChatPage() {
       }
 
       const olderMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+      if (selectedThreadIdRef.current !== threadId) return;
       setHasMoreMessages(Boolean(data.hasMore));
       if (olderMessages.length === 0) return;
 
       suppressNextAutoScrollRef.current = true;
-      setMessages((currentMessages) => {
+      setThreadMessages((currentMessages) => {
         const existingIds = new Set(currentMessages.map((message) => message.id).filter(Boolean));
         const dedupedOlderMessages = olderMessages.filter((message) => !message.id || !existingIds.has(message.id));
         const nextMessages = [...dedupedOlderMessages, ...currentMessages];
@@ -3368,7 +3387,7 @@ export function InvestorAgentChatPage() {
           hasMore: Boolean(data.hasMore),
         });
         return nextMessages;
-      });
+      }, threadId);
 
       window.requestAnimationFrame(() => {
         const nextViewport = messagesViewportRef.current;
@@ -3381,7 +3400,7 @@ export function InvestorAgentChatPage() {
       loadingOlderMessagesRef.current = false;
       setLoadingOlderMessages(false);
     }
-  }, [cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, messages, sessions, threadId]);
+  }, [cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, messages, sessions, setThreadMessages, threadId]);
 
   const handleMessagesScroll = useCallback(() => {
     const viewport = messagesViewportRef.current;
@@ -3574,8 +3593,9 @@ export function InvestorAgentChatPage() {
   const syncLatestPersonalAgentMessages = useCallback(async (
     targetThreadId?: string | null
   ): Promise<ChatMessage[]> => {
+    const requestedThreadId = targetThreadId || null;
     const query = new URLSearchParams({ sessions: '1' });
-    if (targetThreadId) query.set('threadId', targetThreadId);
+    if (requestedThreadId) query.set('threadId', requestedThreadId);
     const res = await fetch(`/api/investor/personal-agent?${query.toString()}`, {
       cache: 'no-store',
       credentials: 'same-origin',
@@ -3586,6 +3606,8 @@ export function InvestorAgentChatPage() {
       return [];
     }
     const syncedThreadId = typeof data.threadId === 'string' ? data.threadId : '';
+    if (requestedThreadId && selectedThreadIdRef.current !== requestedThreadId) return [];
+    if (requestedThreadId && syncedThreadId && syncedThreadId !== requestedThreadId) return [];
     if (syncedThreadId) selectThreadId(syncedThreadId);
     const syncedSessions = Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : null;
     if (Array.isArray(data.sessions)) {
@@ -3595,15 +3617,16 @@ export function InvestorAgentChatPage() {
       setHasMoreMessages(data.hasMore);
     }
     const syncedMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
-    if (syncedMessages.length > 0) setMessages(syncedMessages);
+    const ownerThreadId = syncedThreadId || requestedThreadId || threadId || null;
+    if (syncedMessages.length > 0) setThreadMessages(syncedMessages, ownerThreadId);
     cachePersonalAgentPage({
-      threadId: syncedThreadId || targetThreadId || threadId || null,
+      threadId: ownerThreadId,
       sessions: syncedSessions || sessions,
       messages: syncedMessages.length > 0 ? syncedMessages : messages,
       hasMore: typeof data.hasMore === 'boolean' ? data.hasMore : hasMoreMessages,
     });
     return syncedMessages;
-  }, [cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, messages, selectThreadId, sessions, setSessions, threadId]);
+  }, [cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, messages, selectThreadId, sessions, setSessions, setThreadMessages, threadId]);
 
   const hasSyncedCurrentUserTurn = useCallback(async (
     expectedUserContent: string,
@@ -3766,7 +3789,7 @@ export function InvestorAgentChatPage() {
       },
     ];
     messagesAutoFollowRef.current = true;
-    setMessages(nextMessages);
+    setThreadMessages(nextMessages, requestThreadId);
     setInput('');
     setAttachments([]);
     setSending(true);
@@ -3841,7 +3864,7 @@ export function InvestorAgentChatPage() {
       if (!res.ok) {
         void loadBillingCapacity();
         if (res.status === 401) {
-          setMessages(nextMessages);
+          setThreadMessages(nextMessages, requestThreadId);
           setInput(content);
           setAttachments(requestAttachments);
           handleSessionExpired();
@@ -3850,7 +3873,7 @@ export function InvestorAgentChatPage() {
         const failure = typeof data.error === 'string' ? data.error : 'Failed to authorize task';
         setError(failure);
         if ([402, 409, 429, 503].includes(res.status)) {
-          setMessages(
+          setThreadMessages(
             Array.isArray(data.messages)
               ? data.messages
               : nextMessages.map((message, index) => (
@@ -3865,14 +3888,15 @@ export function InvestorAgentChatPage() {
                         },
                       }
                     : message
-                ))
+                )),
+            requestThreadId
           );
           setCodexStreamItems([]);
           setCompletedCodexActivity(null);
           setAssistantDraft('');
           return;
         }
-        setMessages(nextMessages);
+        setThreadMessages(nextMessages, requestThreadId);
         setInput(content);
         setAttachments(requestAttachments);
         return;
@@ -3882,7 +3906,7 @@ export function InvestorAgentChatPage() {
       const runId = typeof data.runId === 'string' ? data.runId : '';
       if (!runId) {
         setError('Failed to start background task: missing runId');
-        setMessages(nextMessages);
+        setThreadMessages(nextMessages, asyncThreadId);
         setInput(content);
         setAttachments(requestAttachments);
         return;
@@ -3896,9 +3920,7 @@ export function InvestorAgentChatPage() {
       const serverMessagesAfterStart = Array.isArray(data.messages) && data.messages.length >= nextMessages.length
         ? (data.messages as ChatMessage[])
         : nextMessages;
-      if (Array.isArray(data.messages) && data.messages.length >= nextMessages.length) {
-        setMessages(data.messages);
-      }
+      setThreadMessages(serverMessagesAfterStart, asyncThreadId);
       cachePersonalAgentPage({
         threadId: asyncThreadId,
         sessions: nextSessionsAfterStart,
@@ -3945,7 +3967,7 @@ export function InvestorAgentChatPage() {
       }
 
       setError(err instanceof Error ? `Network error: ${err.message}` : 'Network error. Please try again later.');
-      setMessages(nextMessages);
+      setThreadMessages(nextMessages, requestThreadId);
       setInput(content);
       setAttachments(requestAttachments);
       setCodexStreamItems([]);

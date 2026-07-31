@@ -255,7 +255,7 @@ export async function loadInvestorConnectors(
       label: connector.label,
       description: connector.description,
       connected,
-      enabledByDefault: connected,
+      enabledByDefault: false,
       conversationAvailable: true,
       connectionIds: [],
       accounts: [],
