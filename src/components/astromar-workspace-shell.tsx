@@ -33,8 +33,8 @@ type AstromarWorkspaceShellProps = {
 };
 
 const navItems = [
-  { key: 'home' as const, name: 'Home', href: '/dashboard', icon: Home },
   { key: 'discussion' as const, name: 'Discussion', href: '/investor/chat/100', icon: MessagesSquare },
+  { key: 'home' as const, name: 'Home', href: '/dashboard', icon: Home },
   { key: 'connectors' as const, name: 'Connectors', href: '/connectors', icon: Plug },
   { key: 'settings' as const, name: 'Settings', href: '/profile', icon: Settings },
 ];

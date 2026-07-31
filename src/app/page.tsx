@@ -17,7 +17,7 @@ export default async function Home() {
   const { userId } = await auth();
 
   if (userId) {
-    redirect("/dashboard");
+    redirect("/investor/chat/100");
   }
 
   return <AstromarLandingPage />;

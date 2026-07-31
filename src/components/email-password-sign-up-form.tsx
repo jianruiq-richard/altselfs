@@ -7,6 +7,8 @@ import { useSignUp } from "@clerk/nextjs/legacy";
 import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import styles from "./astromar-auth.module.css";
 
+const DEFAULT_AUTH_REDIRECT = "/investor/chat/100";
+
 type ClerkErrorDetail = {
   code?: string;
   longMessage?: string;
@@ -70,7 +72,7 @@ export function EmailPasswordSignUpForm() {
     await setActive?.({
       session: sessionId,
       navigate: async ({ decorateUrl }) => {
-        const destination = decorateUrl("/dashboard");
+        const destination = decorateUrl(DEFAULT_AUTH_REDIRECT);
         if (destination.startsWith("http")) {
           window.location.assign(destination);
           return;
@@ -188,7 +190,7 @@ export function EmailPasswordSignUpForm() {
       await signUp.authenticateWithRedirect({
         strategy: "oauth_google",
         redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/dashboard",
+        redirectUrlComplete: DEFAULT_AUTH_REDIRECT,
       });
     } catch (oauthError) {
       setError(getErrorMessage(oauthError, "Google sign-up could not be started. Please try again."));

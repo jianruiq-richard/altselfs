@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import Link from 'next/link';
-import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, LockKeyhole, MessageSquare, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
+import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, LockKeyhole, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -318,12 +318,25 @@ function sameStringSelection(left: string[], right: string[]) {
   return left.every((value) => rightValues.has(value));
 }
 
-const suggestedQuestions = [
-  'Find today\'s industry and technical updates related to OPC.',
-  'Help me analyze whether this product idea is worth pursuing.',
-  'What changes in AI agents are worth paying attention to today?',
-  'Help me turn a complex problem into an action plan.',
-  'Remember: I prefer conclusions, supporting rationale, and next-step recommendations.',
+const starterTemplates = [
+  {
+    eyebrow: 'Market pulse',
+    title: 'Scan my market',
+    prompt:
+      'Track today’s market and technical updates for my startup. Summarize what changed, why it matters, and what I should do next.',
+  },
+  {
+    eyebrow: 'Competition',
+    title: 'Analyze a competitor',
+    prompt:
+      'Analyze a competitor or product idea. Help me judge whether it is worth pursuing, where the opportunity is, and the main risks.',
+  },
+  {
+    eyebrow: 'Execution',
+    title: 'Build an action plan',
+    prompt:
+      'Turn my current business problem into an action plan. Break it into priorities, decisions, and next steps.',
+  },
 ];
 
 const plannerStatusLabel: Record<PlannerStepStatus, string> = {
@@ -3980,6 +3993,92 @@ export function InvestorAgentChatPage() {
   const capacityStatusText = billingCapacity
     ? `${billingCapacity.capacity.activeTaskCount}/${billingCapacity.subscription.concurrentTaskLimit} active · ${billingCapacity.account.availableCredits.toLocaleString('en-US')} credits available`
     : 'Task capacity unavailable';
+  const isEmptyConversation = messages.length === 0;
+  const showStarterSurface = !showBlockingConversationLoading && isEmptyConversation;
+  const starterTemplateDisabled = sending || startingRun || recoveringRunState || attachmentUploadBusy || !isExecutive;
+  const conversationFeedback = (
+    <>
+      {billingCapacityLoading || capacityBlocked ? (
+        <div className={`mx-auto mt-2 flex max-w-[820px] items-center gap-1.5 text-[10px] ${capacityBlocked ? 'text-amber-300' : 'text-zinc-600'}`}>
+          {billingCapacityLoading ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <CircleGauge className="h-3 w-3" />}
+          <span>{capacityStatusText}</span>
+        </div>
+      ) : null}
+      {connectorsError ? <p className="mx-auto mt-2 max-w-[820px] text-[10px] text-amber-300">{connectorsError}</p> : null}
+      {error ? <p className="mx-auto mt-2 max-w-[820px] text-[11px] text-red-300">{error}</p> : null}
+    </>
+  );
+  const renderComposer = (variant: 'starter' | 'dock') => (
+    <form
+      onSubmit={(event) => { event.preventDefault(); void handleSend(); }}
+      onDragEnter={handleAttachmentDragEnter}
+      onDragOver={handleAttachmentDragOver}
+      onDragLeave={handleAttachmentDragLeave}
+      onDrop={handleAttachmentDrop}
+      className={`relative mx-auto w-full max-w-[820px] overflow-hidden border bg-[linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025)),#111214] shadow-[0_20px_60px_rgba(0,0,0,.34),inset_0_1px_0_rgba(255,255,255,.06)] transition-[border-color,box-shadow,background-color] ${
+        variant === 'starter' ? 'rounded-[16px]' : 'rounded-[8px]'
+      } ${
+        attachmentDragActive
+          ? 'border-[#8eb3ff]/50 shadow-[0_20px_70px_rgba(0,0,0,.38),0_0_0_1px_rgba(142,179,255,.15),inset_0_1px_0_rgba(255,255,255,.08)]'
+          : 'border-white/[0.16]'
+      }`}
+    >
+      {attachmentDragActive ? (
+        <div className={`pointer-events-none absolute inset-0 z-20 grid place-items-center border border-[#8eb3ff]/25 bg-[#0b0d10]/85 backdrop-blur-sm ${variant === 'starter' ? 'rounded-[16px]' : 'rounded-[8px]'}`}>
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.06] px-3 py-2 text-xs font-semibold text-zinc-100 shadow-[0_18px_45px_rgba(0,0,0,.35)]">
+            <Paperclip className="h-4 w-4 text-[#8eb3ff]" />
+            Drop files to upload
+          </div>
+        </div>
+      ) : null}
+      <div className="astromar-scrollbar flex items-center gap-1.5 overflow-x-auto px-2.5 pt-2">
+        {connectedConnectors.map((connector) => {
+          const selected = selectedConnectorKeys.includes(connector.key);
+          return <button key={connector.key} type="button" onClick={() => toggleConnector(connector.key)} disabled={sending || recoveringRunState} className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[10px] ${selected ? 'border-[#8eb3ff]/25 bg-[#8eb3ff]/[0.07] text-[#dfe8ff]' : 'border-white/[0.09] text-zinc-600 hover:text-zinc-300'} disabled:opacity-50`}><i className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-[#8eb3ff]' : 'bg-zinc-600'}`} />{connector.label}</button>;
+        })}
+        <Link href="/connectors" className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/[0.09] text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors"><Plus className="h-3.5 w-3.5" /></Link>
+        {connectorsLoading ? <span className="px-2 text-[10px] text-zinc-600">Loading context...</span> : null}
+      </div>
+
+      {attachments.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+          {attachments.map((attachment) => (
+            <div key={attachment.id} className="flex max-w-full items-center gap-2 rounded-md border border-white/[0.09] bg-white/[0.04] px-2 py-1 text-[10px] text-zinc-400">
+              <span className="max-w-52 truncate">{attachment.name}</span><span className="text-zinc-600">{formatBytes(attachment.size)}</span>
+              {attachment.uploadStatus === 'uploaded' ? <CheckCircle2 className="h-3 w-3 text-[#46d19a]" /> : attachment.uploadStatus === 'error' ? <AlertCircle className="h-3 w-3 text-red-300" /> : <LoaderCircle className="h-3 w-3 animate-spin" />}
+              <button type="button" onClick={() => removeAttachment(attachment.id)} title="Remove attachment"><X className="h-3 w-3" /></button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <textarea
+        value={input}
+        onChange={(event) => setInput(event.target.value)}
+        placeholder={variant === 'starter' ? 'Ask Astromar to research, decide, or build a plan...' : 'Ask your AI cofounder anything...'}
+        rows={3}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            void handleSend();
+          }
+        }}
+        className={`block w-full resize-none bg-transparent px-4 py-3 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 ${variant === 'starter' ? 'h-[112px]' : 'h-[76px]'}`}
+      />
+      <div className="flex items-center justify-between gap-3 px-2.5 pb-2.5">
+        <div className="flex items-center gap-1">
+          <input ref={fileInputRef} type="file" multiple accept={attachmentAccept} className="hidden" onChange={(event) => handleFilesSelected(event.target.files)} />
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!canAttachFiles} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-50" title="Attach files"><Paperclip className="h-3.5 w-3.5" />Attach</button>
+          <span className="hidden items-center gap-1.5 rounded-md border border-white/[0.09] px-2 py-1.5 text-[10px] text-zinc-500 sm:inline-flex"><Check className="h-3.5 w-3.5" />Think</span>
+        </div>
+        {sending || recoveringRunState ? (
+          <button type="button" onClick={() => void stopPersonalAgentRun()} disabled={recoveringRunState || stoppingRun || !activeRunId} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-red-500/85 px-3 text-[11px] font-semibold text-white hover:bg-red-500 disabled:opacity-50"><Square className="h-3 w-3 fill-current" />{recoveringRunState ? 'Recovering' : stoppingRun ? 'Stopping' : 'Stop'}</button>
+        ) : (
+          <button type="submit" disabled={(!input.trim() && attachments.length === 0) || attachmentUploadBusy || attachmentUploadFailed || startingRun} className="grid h-8 w-8 place-items-center rounded-md border border-white bg-zinc-100 text-[#090909] hover:bg-white disabled:opacity-35" title="Send"><ArrowUp className="h-4 w-4" /></button>
+        )}
+      </div>
+    </form>
+  );
   const sessionSidebar = (
     <div className="min-w-0 max-w-full px-2.5 pb-5">
       <div className="mb-2 mt-5 flex items-center justify-between px-2 text-[10px] font-extrabold uppercase text-zinc-600">
@@ -4194,6 +4293,42 @@ export function InvestorAgentChatPage() {
           <div className="mx-auto w-full max-w-[820px]">
             {showBlockingConversationLoading ? (
               <div className="grid min-h-[50vh] place-items-center text-xs text-zinc-600"><span className="inline-flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" />Loading discussion...</span></div>
+            ) : showStarterSurface ? (
+              <div className="flex min-h-[calc(100dvh-170px)] items-start justify-center pb-12 pt-[clamp(28px,7vh,78px)] text-center">
+                <div className="w-full">
+                  <h1 className="text-3xl font-semibold tracking-[-0.04em] text-zinc-50 sm:text-4xl">
+                    What should we move forward?
+                  </h1>
+                  <div className="mt-8">
+                    {renderComposer('starter')}
+                  </div>
+                  <div className="mx-auto mt-5 flex max-w-[820px] items-center justify-between gap-3 text-left">
+                    <h2 className="text-[13px] font-semibold text-zinc-200">Suggested for you</h2>
+                  </div>
+                  <div className="mx-auto mt-4 grid max-w-[820px] gap-3 text-left md:grid-cols-3">
+                    {starterTemplates.map((template) => (
+                      <button
+                        key={template.title}
+                        type="button"
+                        onClick={() => void handleSend(template.prompt)}
+                        disabled={starterTemplateDisabled}
+                        className="group min-h-[128px] rounded-[14px] border border-white/[0.09] bg-white/[0.035] p-4 text-left transition hover:border-white/[0.16] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-600 group-hover:text-zinc-400">
+                          {template.eyebrow}
+                        </span>
+                        <strong className="mt-2 block text-[13px] font-semibold text-zinc-100">
+                          {template.title}
+                        </strong>
+                        <span className="mt-2 line-clamp-3 block text-[11px] leading-5 text-zinc-500 group-hover:text-zinc-400">
+                          {template.prompt}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {conversationFeedback}
+                </div>
+              </div>
             ) : (
               <div className="space-y-7">
                 {messages.length > 0 ? (
@@ -4255,82 +4390,17 @@ export function InvestorAgentChatPage() {
                 })}
                 <CodexStreamOutput items={codexStreamItems} active={sending} />
                 <StreamingAssistantMessage content={assistantDraft} />
-                {messages.length === 0 ? (
-                  <div className="grid min-h-[42vh] place-items-center text-center">
-                    <div><span className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-[8px] border border-white/15 bg-white/[0.035]"><MessageSquare className="h-4 w-4 text-zinc-500" /></span><h1 className="text-xl font-semibold text-zinc-100">What should we move forward?</h1><p className="mt-2 text-xs text-zinc-500">Start with a decision, question, or task.</p></div>
-                  </div>
-                ) : null}
               </div>
             )}
           </div>
         </main>
 
-        <div className="bg-[linear-gradient(180deg,rgba(9,10,10,0),#090a0a_20%)] px-3 pb-3 pt-2 sm:px-6 md:px-8 md:pb-5">
-          {messages.length === 0 ? (
-            <div className="astromar-scrollbar mx-auto mb-2 flex max-w-[820px] gap-1.5 overflow-x-auto">
-              {suggestedQuestions.map((question) => <button key={question} type="button" onClick={() => setInput(question)} disabled={sending} className="h-7 shrink-0 rounded-md border border-white/[0.09] px-2.5 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50">{question}</button>)}
-            </div>
-          ) : null}
-          <form
-            onSubmit={(event) => { event.preventDefault(); void handleSend(); }}
-            onDragEnter={handleAttachmentDragEnter}
-            onDragOver={handleAttachmentDragOver}
-            onDragLeave={handleAttachmentDragLeave}
-            onDrop={handleAttachmentDrop}
-            className={`relative mx-auto w-full max-w-[820px] overflow-hidden rounded-[8px] border bg-[linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025)),#111214] shadow-[0_20px_60px_rgba(0,0,0,.34),inset_0_1px_0_rgba(255,255,255,.06)] transition-[border-color,box-shadow,background-color] ${attachmentDragActive ? 'border-[#8eb3ff]/50 shadow-[0_20px_70px_rgba(0,0,0,.38),0_0_0_1px_rgba(142,179,255,.15),inset_0_1px_0_rgba(255,255,255,.08)]' : 'border-white/[0.16]'}`}
-          >
-            {attachmentDragActive ? (
-              <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[8px] border border-[#8eb3ff]/25 bg-[#0b0d10]/85 backdrop-blur-sm">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.06] px-3 py-2 text-xs font-semibold text-zinc-100 shadow-[0_18px_45px_rgba(0,0,0,.35)]">
-                  <Paperclip className="h-4 w-4 text-[#8eb3ff]" />
-                  Drop files to upload
-                </div>
-              </div>
-            ) : null}
-            <div className="astromar-scrollbar flex items-center gap-1.5 overflow-x-auto px-2.5 pt-2">
-              {connectedConnectors.map((connector) => {
-                const selected = selectedConnectorKeys.includes(connector.key);
-                return <button key={connector.key} type="button" onClick={() => toggleConnector(connector.key)} disabled={sending || recoveringRunState} className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[10px] ${selected ? 'border-[#8eb3ff]/25 bg-[#8eb3ff]/[0.07] text-[#dfe8ff]' : 'border-white/[0.09] text-zinc-600 hover:text-zinc-300'} disabled:opacity-50`}><i className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-[#8eb3ff]' : 'bg-zinc-600'}`} />{connector.label}</button>;
-              })}
-              <Link href="/connectors" className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/[0.09] text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors"><Plus className="h-3.5 w-3.5" /></Link>
-              {connectorsLoading ? <span className="px-2 text-[10px] text-zinc-600">Loading context...</span> : null}
-            </div>
-
-            {attachments.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-                {attachments.map((attachment) => (
-                  <div key={attachment.id} className="flex max-w-full items-center gap-2 rounded-md border border-white/[0.09] bg-white/[0.04] px-2 py-1 text-[10px] text-zinc-400">
-                    <span className="max-w-52 truncate">{attachment.name}</span><span className="text-zinc-600">{formatBytes(attachment.size)}</span>
-                    {attachment.uploadStatus === 'uploaded' ? <CheckCircle2 className="h-3 w-3 text-[#46d19a]" /> : attachment.uploadStatus === 'error' ? <AlertCircle className="h-3 w-3 text-red-300" /> : <LoaderCircle className="h-3 w-3 animate-spin" />}
-                    <button type="button" onClick={() => removeAttachment(attachment.id)} title="Remove attachment"><X className="h-3 w-3" /></button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask your AI cofounder anything..." rows={3} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} className="block h-[76px] w-full resize-none bg-transparent px-4 py-3 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-600" />
-            <div className="flex items-center justify-between gap-3 px-2.5 pb-2.5">
-              <div className="flex items-center gap-1">
-                <input ref={fileInputRef} type="file" multiple accept={attachmentAccept} className="hidden" onChange={(event) => handleFilesSelected(event.target.files)} />
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!canAttachFiles} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-50" title="Attach files"><Paperclip className="h-3.5 w-3.5" />Attach</button>
-                <span className="hidden items-center gap-1.5 rounded-md border border-white/[0.09] px-2 py-1.5 text-[10px] text-zinc-500 sm:inline-flex"><Check className="h-3.5 w-3.5" />Think</span>
-              </div>
-              {sending || recoveringRunState ? (
-                <button type="button" onClick={() => void stopPersonalAgentRun()} disabled={recoveringRunState || stoppingRun || !activeRunId} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-red-500/85 px-3 text-[11px] font-semibold text-white hover:bg-red-500 disabled:opacity-50"><Square className="h-3 w-3 fill-current" />{recoveringRunState ? 'Recovering' : stoppingRun ? 'Stopping' : 'Stop'}</button>
-              ) : (
-                <button type="submit" disabled={(!input.trim() && attachments.length === 0) || attachmentUploadBusy || attachmentUploadFailed || startingRun} className="grid h-8 w-8 place-items-center rounded-md border border-white bg-zinc-100 text-[#090909] hover:bg-white disabled:opacity-35" title="Send"><ArrowUp className="h-4 w-4" /></button>
-              )}
-            </div>
-          </form>
-          {billingCapacityLoading || capacityBlocked ? (
-            <div className={`mx-auto mt-2 flex max-w-[820px] items-center gap-1.5 text-[10px] ${capacityBlocked ? 'text-amber-300' : 'text-zinc-600'}`}>
-              {billingCapacityLoading ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <CircleGauge className="h-3 w-3" />}
-              <span>{capacityStatusText}</span>
-            </div>
-          ) : null}
-          {connectorsError ? <p className="mx-auto mt-2 max-w-[820px] text-[10px] text-amber-300">{connectorsError}</p> : null}
-          {error ? <p className="mx-auto mt-2 max-w-[820px] text-[11px] text-red-300">{error}</p> : null}
-        </div>
+        {showStarterSurface ? null : (
+          <div className="bg-[linear-gradient(180deg,rgba(9,10,10,0),#090a0a_20%)] px-3 pb-3 pt-2 sm:px-6 md:px-8 md:pb-5">
+            {renderComposer('dock')}
+            {conversationFeedback}
+          </div>
+        )}
       </div>
     </>
   );

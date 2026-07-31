@@ -104,7 +104,7 @@ export function AstromarLandingPage() {
             <Link className={styles.button} href="/sign-in?method=email">
               Sign in
             </Link>
-            <Link className={classes("button", "buttonPrimary")} href="/sign-in?method=email&redirect_url=/dashboard">
+            <Link className={classes("button", "buttonPrimary")} href="/sign-in?method=email&redirect_url=/investor/chat/100">
               Get Started
             </Link>
           </div>
@@ -346,7 +346,7 @@ export function AstromarLandingPage() {
             </p>
             <Link
               className={classes("button", "buttonPrimary")}
-              href="/sign-in?method=email&redirect_url=/dashboard"
+              href="/sign-in?method=email&redirect_url=/investor/chat/100"
             >
               Get Started
               <ArrowRight aria-hidden="true" size={16} strokeWidth={2} />
@@ -354,7 +354,7 @@ export function AstromarLandingPage() {
           </div>
         </div>
         <BillingPlanGrid
-          getStartedHref="/sign-in?method=email&redirect_url=/dashboard"
+          getStartedHref="/sign-in?method=email&redirect_url=/investor/chat/100"
           showIntro={false}
           variant="public"
         />

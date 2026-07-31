@@ -7,6 +7,8 @@ import { PhonePasswordAuthForm } from "@/components/phone-code-auth-form";
 import { clerkAuthAppearance } from "@/lib/clerk-auth-appearance";
 import { isOauthBlockedEmbeddedBrowser } from "@/lib/oauth-browser";
 
+const DEFAULT_AUTH_REDIRECT = "/investor/chat/100";
+
 export const metadata: Metadata = {
   title: "Sign in | Astromar",
   description: "Sign in to Astromar, your AI cofounder.",
@@ -20,16 +22,16 @@ function buildFallbackUrl(path: string, headersList: Headers): string {
 }
 
 function normalizeRedirectPath(value: unknown): string {
-  if (typeof value !== "string") return "/dashboard";
+  if (typeof value !== "string") return DEFAULT_AUTH_REDIRECT;
   const path = value.trim();
-  if (!path || !path.startsWith("/") || path.startsWith("//")) return "/dashboard";
-  if (path.startsWith("/sign-in") || path.startsWith("/sign-up")) return "/dashboard";
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return DEFAULT_AUTH_REDIRECT;
+  if (path.startsWith("/sign-in") || path.startsWith("/sign-up")) return DEFAULT_AUTH_REDIRECT;
   return path;
 }
 
 function buildMethodHref(method: "phone" | "email", redirectTarget: string) {
   const params = new URLSearchParams({ method });
-  if (redirectTarget !== "/dashboard") params.set("redirect_url", redirectTarget);
+  if (redirectTarget !== DEFAULT_AUTH_REDIRECT) params.set("redirect_url", redirectTarget);
   return `/sign-in?${params.toString()}`;
 }
 

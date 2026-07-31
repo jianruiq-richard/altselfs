@@ -3,7 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { BillingPlanGrid } from '@/components/billing-plan-grid';
 import styles from './astromar-landing-page.module.css';
 
-const signInHref = '/sign-in?method=email&redirect_url=/dashboard';
+const signInHref = '/sign-in?method=email&redirect_url=/investor/chat/100';
 
 function classes(...names: string[]) {
   return names.map((name) => styles[name]).filter(Boolean).join(' ');

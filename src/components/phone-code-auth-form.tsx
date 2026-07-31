@@ -6,6 +6,8 @@ import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 import { ArrowRight } from "lucide-react";
 import styles from "./astromar-auth.module.css";
 
+const DEFAULT_AUTH_REDIRECT = "/investor/chat/100";
+
 type PhonePasswordAuthFormProps = {
   mode: "sign-in" | "sign-up";
   redirectUrl?: string;
@@ -54,7 +56,7 @@ function getErrorMessage(error: unknown): string {
   return "Authentication failed. Please try again.";
 }
 
-export function PhonePasswordAuthForm({ mode, redirectUrl = "/dashboard" }: PhonePasswordAuthFormProps) {
+export function PhonePasswordAuthForm({ mode, redirectUrl = DEFAULT_AUTH_REDIRECT }: PhonePasswordAuthFormProps) {
   const router = useRouter();
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
