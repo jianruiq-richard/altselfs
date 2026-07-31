@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInvestorOrNull } from '@/lib/investor-auth';
-import { ensureThread } from '@/lib/agent-session';
+import { createThread, ensureThread } from '@/lib/agent-session';
 import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
 
 const PERSONAL_AGENT_TYPE = 'PERSONAL';
@@ -41,11 +41,18 @@ export async function POST(req: NextRequest) {
 
   let thread: Awaited<ReturnType<typeof ensureThread>>;
   try {
-    thread = await ensureThread({
-      investorId: investor.id,
-      agentType: PERSONAL_AGENT_TYPE,
-      threadId: typeof body.threadId === 'string' ? body.threadId.trim() || null : null,
-    });
+    const threadId = typeof body.threadId === 'string' ? body.threadId.trim() || null : null;
+    thread = body.createThread === true && !threadId
+      ? await createThread({
+          investorId: investor.id,
+          agentType: PERSONAL_AGENT_TYPE,
+          title: 'New discussion',
+        })
+      : await ensureThread({
+          investorId: investor.id,
+          agentType: PERSONAL_AGENT_TYPE,
+          threadId,
+        });
   } catch (error) {
     const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : 500;
     return NextResponse.json(

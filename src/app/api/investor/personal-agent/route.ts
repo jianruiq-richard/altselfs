@@ -92,6 +92,7 @@ type ConnectorScope = {
 
 type ParsedPostBody = {
   threadId?: string | null;
+  createThread?: boolean;
   messages: ClientMessage[];
   userMessage: string;
   displayUserMessage: string;
@@ -374,6 +375,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       messages?: unknown;
       hermesModel?: unknown;
       clientRequestId?: unknown;
+      createThread?: unknown;
       connectorScope?: unknown;
       uploadedArtifacts?: unknown;
     };
@@ -384,6 +386,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     const userMessage = explicitMessage || latestUserMessage(messages) || (uploadedArtifacts.length > 0 ? 'Please analyze the attached files.' : '');
     return {
       threadId: body.threadId || null,
+      createThread: body.createThread === true,
       messages: userMessage ? [{ role: 'user', content: userMessage }] : messages,
       userMessage,
       displayUserMessage: displayMessage || userMessage,
@@ -430,6 +433,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
 
   return {
     threadId: getStringFormValue(form.get('threadId')) || null,
+    createThread: getStringFormValue(form.get('createThread')) === 'true',
     messages: [{ role: 'user', content: userMessage }],
     userMessage,
     displayUserMessage,
@@ -1007,11 +1011,17 @@ export async function POST(req: NextRequest) {
 
   let thread: Awaited<ReturnType<typeof ensureThread>>;
   try {
-    thread = await ensureThread({
-      investorId: investor.id,
-      agentType: PERSONAL_AGENT_TYPE,
-      threadId: parsedBody.threadId || null,
-    });
+    thread = parsedBody.createThread && !parsedBody.threadId
+      ? await createThread({
+          investorId: investor.id,
+          agentType: PERSONAL_AGENT_TYPE,
+          title: 'New discussion',
+        })
+      : await ensureThread({
+          investorId: investor.id,
+          agentType: PERSONAL_AGENT_TYPE,
+          threadId: parsedBody.threadId || null,
+        });
   } catch (error) {
     const status = isRecord(error) && typeof error.status === 'number' ? error.status : 500;
     return NextResponse.json(

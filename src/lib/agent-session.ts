@@ -20,7 +20,14 @@ function isPlaceholderThreadTitle(title?: string | null) {
 
 export async function getLatestThreadWithMessages(investorId: string, agentType: AgentType) {
   const thread = await prisma.agentThread.findFirst({
-    where: { investorId, agentType, status: ACTIVE_THREAD_STATUS },
+    where: {
+      investorId,
+      agentType,
+      status: ACTIVE_THREAD_STATUS,
+      messages: {
+        some: { role: { in: ['USER', 'ASSISTANT'] } },
+      },
+    },
     orderBy: { updatedAt: 'desc' },
     include: {
       _count: {
@@ -47,7 +54,15 @@ export async function listAgentThreads(
   status: AgentThreadStatus = ACTIVE_THREAD_STATUS
 ) {
   const threads = await prisma.agentThread.findMany({
-    where: { investorId, agentType, status },
+    where: {
+      investorId,
+      agentType,
+      status,
+      OR: [
+        { messages: { some: { role: { in: ['USER', 'ASSISTANT'] } } } },
+        { title: { notIn: PLACEHOLDER_THREAD_TITLES } },
+      ],
+    },
     orderBy: { updatedAt: 'desc' },
     take: Math.min(Math.max(limit, 1), 100),
     include: {
@@ -62,17 +77,19 @@ export async function listAgentThreads(
     },
   });
 
-  return threads.map((thread) => ({
-    id: thread.id,
-    status: thread.status as AgentThreadStatus,
-    title: isPlaceholderThreadTitle(thread.title)
-      ? summarizeThreadTitle(thread.messages[0]?.content || '')
-      : thread.title,
-    createdAt: thread.createdAt.toISOString(),
-    updatedAt: thread.updatedAt.toISOString(),
-    messageCount: thread._count.messages,
-    preview: thread.messages[0]?.content || '',
-  }));
+  return threads
+    .filter((thread) => thread._count.messages > 0 || !isPlaceholderThreadTitle(thread.title))
+    .map((thread) => ({
+      id: thread.id,
+      status: thread.status as AgentThreadStatus,
+      title: isPlaceholderThreadTitle(thread.title)
+        ? summarizeThreadTitle(thread.messages[0]?.content || '')
+        : thread.title,
+      createdAt: thread.createdAt.toISOString(),
+      updatedAt: thread.updatedAt.toISOString(),
+      messageCount: thread._count.messages,
+      preview: thread.messages[0]?.content || '',
+    }));
 }
 
 export async function createThread(params: {
