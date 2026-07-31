@@ -118,14 +118,14 @@ const CONNECTOR_LOGOS: Record<string, {
   tileClassName?: string;
 }> = {
   gmail: {
-    src: 'https://www.gstatic.com/images/branding/productlogos/gmail_2026/v2/web/192px.svg',
+    src: '/connector-logos/gmail.svg',
     alt: 'Gmail logo',
     width: 192,
     height: 192,
     imageClassName: 'h-7 w-7 object-contain',
   },
   feishu: {
-    src: 'https://p16-hera-overseas.larksuitecdn.com/tos-mya-i-lojyj5t9n9/9b87226605154fb7b8141a9c94de22e9.png~tplv-lojyj5t9n9-origin.image',
+    src: '/connector-logos/lark.png',
     alt: 'Lark logo',
     width: 700,
     height: 700,
@@ -147,7 +147,7 @@ const CONNECTOR_LOGOS: Record<string, {
     imageClassName: 'h-7 w-9 object-contain',
   },
   domain_metrics_check: {
-    src: 'https://rapidapi-prod-apis.s3.amazonaws.com/7ca418fd-def1-4908-b0ed-448614b747eb.png',
+    src: '/connector-logos/domain-metrics-check.png',
     alt: 'Domain Metrics Check logo',
     width: 175,
     height: 175,
@@ -228,6 +228,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
   const [feishuPackages, setFeishuPackages] = useState<string[]>(DEFAULT_FEISHU_PACKAGES);
   const [feishuFlow, setFeishuFlow] = useState<FeishuFlowState>({ phase: 'idle' });
   const loadStartedRef = useRef(false);
+  const connectorLoadSeqRef = useRef(0);
   const pollRef = useRef<number | null>(null);
   const oauthBaselineRef = useRef({ key: '', accountCount: 0, requireNewAccount: false });
 
@@ -243,9 +244,11 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
   }, []);
 
   const loadConnectors = useCallback(async (options: { showLoading?: boolean; force?: boolean } = {}) => {
+    const loadSeq = connectorLoadSeqRef.current += 1;
+    const isCurrentLoad = () => connectorLoadSeqRef.current === loadSeq;
     const showLoading = options.showLoading ?? false;
-    if (showLoading) setLoading(true);
-    setError(null);
+    if (showLoading && isCurrentLoad()) setLoading(true);
+    if (isCurrentLoad()) setError(null);
     try {
       const data = await fetchWorkspaceJson<{ connectors?: ConnectorItem[] }>(
         WORKSPACE_CACHE_KEYS.connectors,
@@ -254,14 +257,15 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
         { force: options.force ?? true, ttlMs: 45_000 },
       );
       const next = supportedConnectors(Array.isArray(data.connectors) ? data.connectors : []);
+      if (!isCurrentLoad()) return null;
       setConnectors(next);
       setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, { ...data, connectors: next });
       return next;
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load connectors');
+      if (isCurrentLoad()) setError(loadError instanceof Error ? loadError.message : 'Failed to load connectors');
       return null;
     } finally {
-      if (showLoading) setLoading(false);
+      if (showLoading && isCurrentLoad()) setLoading(false);
     }
   }, []);
 
@@ -271,7 +275,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
     if (initialData) {
       const next = { ...initialData, connectors: supportedConnectors(initialData.connectors || []) };
       setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, next);
-      void loadConnectors({ showLoading: false, force: true });
+      void loadConnectors({ showLoading: false, force: false });
       return;
     }
     const cached = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
@@ -279,7 +283,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
     if (supportedCached.length) {
       setConnectors(supportedCached);
       setLoading(false);
-      void loadConnectors({ showLoading: false, force: true });
+      void loadConnectors({ showLoading: false, force: false });
       return;
     }
     void loadConnectors({ showLoading: true, force: false });
@@ -922,6 +926,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
                             width={logo.width}
                             height={logo.height}
                             loading="lazy"
+                            unoptimized
                             className={logo.imageClassName}
                           />
                         ) : (

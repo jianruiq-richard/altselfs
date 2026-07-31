@@ -13,6 +13,8 @@ type JsonFetchOptions = {
 
 const DEFAULT_TTL_MS = 90_000;
 const workspaceCache = new Map<string, CacheEntry<unknown>>();
+let workspaceFetchSeq = 0;
+const latestWorkspaceFetchByKey = new Map<string, number>();
 
 function now() {
   return Date.now();
@@ -38,6 +40,8 @@ export function getWorkspaceCachedStale<T>(key: string): T | null {
 
 export function setWorkspaceCached<T>(key: string, value: T) {
   if (!browserReady()) return;
+  workspaceFetchSeq += 1;
+  latestWorkspaceFetchByKey.set(key, workspaceFetchSeq);
   workspaceCache.set(key, {
     value,
     updatedAt: now(),
@@ -46,6 +50,8 @@ export function setWorkspaceCached<T>(key: string, value: T) {
 
 export function deleteWorkspaceCached(key: string) {
   if (!browserReady()) return;
+  workspaceFetchSeq += 1;
+  latestWorkspaceFetchByKey.set(key, workspaceFetchSeq);
   workspaceCache.delete(key);
 }
 
@@ -66,6 +72,9 @@ export async function fetchWorkspaceJson<T>(
   }
   if (existing?.inflight && !options.force) return existing.inflight;
 
+  const requestSeq = workspaceFetchSeq += 1;
+  latestWorkspaceFetchByKey.set(key, requestSeq);
+
   const inflight = fetch(url, {
     cache: 'no-store',
     credentials: 'same-origin',
@@ -75,10 +84,12 @@ export async function fetchWorkspaceJson<T>(
     if (!response.ok) {
       throw new Error(typeof payload.error === 'string' ? payload.error : `HTTP ${response.status}`);
     }
-    workspaceCache.set(key, {
-      value: payload,
-      updatedAt: now(),
-    });
+    if (latestWorkspaceFetchByKey.get(key) === requestSeq) {
+      workspaceCache.set(key, {
+        value: payload,
+        updatedAt: now(),
+      });
+    }
     return payload;
   }).finally(() => {
     const latest = workspaceCache.get(key) as CacheEntry<T> | undefined;

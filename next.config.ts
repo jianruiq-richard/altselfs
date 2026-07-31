@@ -8,12 +8,18 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: projectRoot,
   },
-  images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: 'www.gstatic.com' },
-      { protocol: 'https', hostname: 'p16-hera-overseas.larksuitecdn.com' },
-      { protocol: 'https', hostname: 'rapidapi-prod-apis.s3.amazonaws.com' },
-    ],
+  async headers() {
+    return [
+      {
+        source: '/connector-logos/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
   },
   experimental: {
     proxyClientMaxBodySize: '50mb',

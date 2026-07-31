@@ -2288,6 +2288,7 @@ export function InvestorAgentChatPage() {
   const liveStreamRunIdRef = useRef<string | null>(null);
   const requestedStopRunIdRef = useRef<string | null>(null);
   const selectedThreadIdRef = useRef<string | null>(initialPersonalAgentCache?.threadId || null);
+  const threadLoadSeqRef = useRef(0);
   const sessionsRef = useRef<AgentSessionSummary[]>(initialSessions);
   const submissionInFlightRef = useRef(false);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
@@ -2468,7 +2469,7 @@ export function InvestorAgentChatPage() {
       WORKSPACE_CACHE_KEYS.connectors,
       '/api/investor/connectors',
       {},
-      { force: true, ttlMs: 45_000 },
+      { force: false, ttlMs: 45_000 },
     )
       .then((items) => {
         if (cancelled) return;
@@ -2715,6 +2716,9 @@ export function InvestorAgentChatPage() {
         return 'idle';
       }
       const recoveredThreadId = typeof data.threadId === 'string' ? data.threadId : '';
+      if (requestedThreadId && recoveredThreadId && recoveredThreadId !== requestedThreadId) {
+        return 'idle';
+      }
       if (recoveredThreadId) selectThreadId(recoveredThreadId);
       if (Array.isArray(data.sessions)) {
         setSessions(data.sessions as AgentSessionSummary[]);
@@ -2976,24 +2980,29 @@ export function InvestorAgentChatPage() {
 
   const loadThreadMessages = useCallback(async (
     targetThreadId?: string | null,
-    options?: { showBlockingLoading?: boolean }
+    options?: { showBlockingLoading?: boolean; loadSeq?: number }
   ) => {
     if (!isExecutive) return;
+    const loadSeq = options?.loadSeq ?? (threadLoadSeqRef.current += 1);
+    const isCurrentLoad = () => threadLoadSeqRef.current === loadSeq;
     const requestedThreadId = targetThreadId || null;
-    if (requestedThreadId) selectedThreadIdRef.current = requestedThreadId;
+    if (requestedThreadId && isCurrentLoad()) selectedThreadIdRef.current = requestedThreadId;
     let showBlockingLoading = options?.showBlockingLoading ?? true;
     const cached = getCachedPersonalAgentPage(requestedThreadId);
     if (cached) {
+      if (!isCurrentLoad()) return;
       applyPersonalAgentCachedPage(cached);
+      setLoading(false);
       showBlockingLoading = false;
     } else if (requestedThreadId) {
+      if (!isCurrentLoad()) return;
       selectThreadId(requestedThreadId);
       messagesAutoFollowRef.current = true;
       setMessages([]);
       setHasMoreMessages(false);
     }
-    if (showBlockingLoading) setLoading(true);
-    setError(null);
+    if (showBlockingLoading && isCurrentLoad()) setLoading(true);
+    if (isCurrentLoad()) setError(null);
     try {
       const query = new URLSearchParams();
       if (targetThreadId) query.set('threadId', targetThreadId);
@@ -3003,6 +3012,7 @@ export function InvestorAgentChatPage() {
         credentials: 'same-origin',
       });
       const data = await res.json();
+      if (!isCurrentLoad()) return;
       if (!res.ok) {
         if (res.status === 401) {
           handleSessionExpired();
@@ -3020,6 +3030,7 @@ export function InvestorAgentChatPage() {
       }
       resetPersonalAgentRunState();
       const loadedThreadId = typeof data.threadId === 'string' ? data.threadId : null;
+      if (requestedThreadId && loadedThreadId !== requestedThreadId) return;
       selectThreadId(loadedThreadId);
       if (Array.isArray(data.sessions)) setSessions(data.sessions as AgentSessionSummary[]);
       const nextSessions = Array.isArray(data.sessions)
@@ -3045,10 +3056,12 @@ export function InvestorAgentChatPage() {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
       }
     } catch {
-      setError('Network error. Please try again later.');
+      if (isCurrentLoad()) setError('Network error. Please try again later.');
     } finally {
-      if (showBlockingLoading) setLoading(false);
-      setRecoveringRunState(false);
+      if (isCurrentLoad()) {
+        if (showBlockingLoading) setLoading(false);
+        setRecoveringRunState(false);
+      }
     }
   }, [applyPersonalAgentCachedPage, cachePersonalAgentPage, getCachedPersonalAgentPage, handleSessionExpired, isExecutive, refreshPersonalAgentStatus, resetPersonalAgentRunState, resumeExecutiveRun, selectThreadId, setSessions, showExecutiveControls]);
 
@@ -3057,16 +3070,23 @@ export function InvestorAgentChatPage() {
     options?: { showBlockingLoading?: boolean }
   ) => {
     if (!isExecutive) return;
+    const loadSeq = threadLoadSeqRef.current += 1;
+    const isCurrentLoad = () => threadLoadSeqRef.current === loadSeq;
     const requestedThreadId = targetThreadId || null;
     const cached = getCachedPersonalAgentPage(requestedThreadId);
-    if (cached) applyPersonalAgentCachedPage(cached);
+    if (cached && isCurrentLoad()) {
+      applyPersonalAgentCachedPage(cached);
+      setLoading(false);
+    }
     const showBlockingLoading = options?.showBlockingLoading ?? !cached;
-    if (showBlockingLoading && !cached) setLoading(true);
+    if (showBlockingLoading && !cached && isCurrentLoad()) setLoading(true);
     const sessionsPayload = requestedThreadId
       ? { threadId: requestedThreadId, sessions: sessionsRef.current }
       : await loadSessions({ force: true });
+    if (!isCurrentLoad()) return;
     const threadToLoad = requestedThreadId || cached?.threadId || sessionsPayload.threadId || null;
     await loadThreadMessages(threadToLoad, {
+      loadSeq,
       showBlockingLoading,
     });
   }, [applyPersonalAgentCachedPage, getCachedPersonalAgentPage, isExecutive, loadSessions, loadThreadMessages]);
@@ -3101,7 +3121,9 @@ export function InvestorAgentChatPage() {
 
   const createNewSession = useCallback(async () => {
     if (creatingSession || startingRun || recoveringRunState) return;
+    threadLoadSeqRef.current += 1;
     selectedThreadIdRef.current = null;
+    setLoading(false);
     setCreatingSession(true);
     setError(null);
     try {
@@ -3670,6 +3692,8 @@ export function InvestorAgentChatPage() {
       submissionInFlightRef.current ||
       !isExecutive
     ) return;
+    threadLoadSeqRef.current += 1;
+    setLoading(false);
     const unfinishedAttachment = requestAttachments.find((attachment) => attachment.uploadStatus !== 'uploaded');
     if (unfinishedAttachment) {
       setError(
