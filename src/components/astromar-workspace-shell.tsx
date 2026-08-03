@@ -17,7 +17,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { productBrand } from '@/lib/brand';
-import { prefetchWorkspaceBootstrap, prefetchWorkspaceRouteData } from '@/lib/workspace-client-cache';
+import {
+  prefetchWorkspaceBootstrap,
+  prefetchWorkspaceRouteData,
+  resetWorkspaceClientCache,
+} from '@/lib/workspace-client-cache';
 
 type WorkspaceNavKey = 'home' | 'discussion' | 'connectors' | 'settings';
 type SidebarLocation = 'desktop' | 'mobile';
@@ -209,6 +213,7 @@ export function AstromarWorkspaceShell({
         <SignOutButton redirectUrl="/">
           <button
             type="button"
+            onClick={resetWorkspaceClientCache}
             className="mt-1.5 flex min-h-9 w-full items-center gap-2 rounded-[7px] px-2.5 text-left text-[11px] font-semibold text-zinc-400 hover:bg-red-400/[0.065] hover:text-red-300"
           >
             <LogOut className="h-3.5 w-3.5" />

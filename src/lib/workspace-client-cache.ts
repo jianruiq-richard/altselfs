@@ -15,6 +15,7 @@ const DEFAULT_TTL_MS = 90_000;
 const workspaceCache = new Map<string, CacheEntry<unknown>>();
 let workspaceFetchSeq = 0;
 const latestWorkspaceFetchByKey = new Map<string, number>();
+let activeWorkspaceUserId: string | null = null;
 
 function now() {
   return Date.now();
@@ -53,6 +54,29 @@ export function deleteWorkspaceCached(key: string) {
   workspaceFetchSeq += 1;
   latestWorkspaceFetchByKey.set(key, workspaceFetchSeq);
   workspaceCache.delete(key);
+}
+
+function clearWorkspaceCacheEntries() {
+  workspaceFetchSeq += 1;
+  workspaceCache.clear();
+  latestWorkspaceFetchByKey.clear();
+}
+
+export function resetWorkspaceClientCache() {
+  if (!browserReady()) return;
+  clearWorkspaceCacheEntries();
+  activeWorkspaceUserId = null;
+}
+
+export function clearWorkspacePersonalAgentCache() {
+  if (!browserReady()) return;
+  workspaceFetchSeq += 1;
+  for (const key of workspaceCache.keys()) {
+    if (key.startsWith('workspace:personal-agent:')) {
+      workspaceCache.delete(key);
+      latestWorkspaceFetchByKey.delete(key);
+    }
+  }
 }
 
 export async function fetchWorkspaceJson<T>(
@@ -146,8 +170,58 @@ export type WorkspaceBootstrapPayload = {
   warnings?: unknown;
 };
 
+export type WorkspacePersonalAgentPayload = {
+  threadId?: unknown;
+  sessions?: unknown;
+  messages?: unknown;
+  hasMore?: unknown;
+};
+
+function getBootstrapUserId(user: unknown) {
+  if (!user || typeof user !== 'object' || !('id' in user)) return null;
+  const id = (user as { id?: unknown }).id;
+  return typeof id === 'string' && id.trim() ? id.trim() : null;
+}
+
+function scopeWorkspaceCacheToUser(user: unknown) {
+  const userId = getBootstrapUserId(user);
+  if (!userId || activeWorkspaceUserId === userId) return;
+  clearWorkspaceCacheEntries();
+  activeWorkspaceUserId = userId;
+}
+
+export function applyWorkspacePersonalAgentPayload(payload: WorkspacePersonalAgentPayload) {
+  if (!browserReady() || !Array.isArray(payload.sessions)) return;
+
+  const sessions = payload.sessions;
+  const requestedThreadId = typeof payload.threadId === 'string' ? payload.threadId : null;
+  const threadId = requestedThreadId && sessions.some((session) => (
+    session && typeof session === 'object' && 'id' in session && session.id === requestedThreadId
+  ))
+    ? requestedThreadId
+    : null;
+
+  clearWorkspacePersonalAgentCache();
+  setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
+    threadId,
+    sessions,
+  });
+
+  const page = {
+    threadId,
+    sessions,
+    messages: Array.isArray(payload.messages) ? payload.messages : [],
+    hasMore: Boolean(payload.hasMore),
+  };
+  setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentDefault, page);
+  if (threadId) {
+    setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentThread(threadId), page);
+  }
+}
+
 export function applyWorkspaceBootstrapPayload(payload: WorkspaceBootstrapPayload) {
   if (!browserReady()) return;
+  scopeWorkspaceCacheToUser(payload.user);
   setWorkspaceCached(WORKSPACE_CACHE_KEYS.workspaceBootstrap, payload);
   if (payload.user) {
     setWorkspaceCached(WORKSPACE_CACHE_KEYS.userProfile, { user: payload.user });
@@ -157,10 +231,29 @@ export function applyWorkspaceBootstrapPayload(payload: WorkspaceBootstrapPayloa
     setWorkspaceCached(WORKSPACE_CACHE_KEYS.billingOverview, payload.billingCapacity);
   }
   if (payload.personalAgent && Array.isArray(payload.personalAgent.sessions)) {
-    setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
-      threadId: typeof payload.personalAgent.threadId === 'string' ? payload.personalAgent.threadId : null,
-      sessions: payload.personalAgent.sessions,
-    });
+    const sessions = payload.personalAgent.sessions;
+    const requestedThreadId = typeof payload.personalAgent.threadId === 'string'
+      ? payload.personalAgent.threadId
+      : null;
+    const threadId = requestedThreadId && sessions.some((session) => (
+      session && typeof session === 'object' && 'id' in session && session.id === requestedThreadId
+    ))
+      ? requestedThreadId
+      : null;
+
+    if (sessions.length === 0) {
+      applyWorkspacePersonalAgentPayload({
+        threadId: null,
+        sessions: [],
+        messages: [],
+        hasMore: false,
+      });
+    } else {
+      setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
+        threadId,
+        sessions,
+      });
+    }
   }
 }
 

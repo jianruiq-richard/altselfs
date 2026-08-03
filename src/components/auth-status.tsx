@@ -2,6 +2,7 @@
 
 import { SignOutButton } from '@clerk/nextjs';
 import Link from 'next/link';
+import { resetWorkspaceClientCache } from '@/lib/workspace-client-cache';
 
 type AuthStatusProps = {
   imageUrl: string;
@@ -29,6 +30,7 @@ export default function AuthStatus({ imageUrl, displayName, roleLabel }: AuthSta
       <SignOutButton redirectUrl="/">
         <button
           type="button"
+          onClick={resetWorkspaceClientCache}
           className="text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-md px-2 py-1"
         >
           Sign out

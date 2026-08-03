@@ -16,8 +16,10 @@ import {
   type BillingCapacityData,
 } from '@/components/billing-capacity-popover';
 import {
+  applyWorkspacePersonalAgentPayload,
   fetchWorkspaceJson,
   getWorkspaceCachedStale,
+  resetWorkspaceClientCache,
   setWorkspaceCached,
   WORKSPACE_CACHE_KEYS,
 } from '@/lib/workspace-client-cache';
@@ -2410,8 +2412,12 @@ export function InvestorAgentChatPage() {
     }
     sessionsRef.current = displayableSessions;
     setSessionsState(displayableSessions);
+    const selectedThreadId = selectedThreadIdRef.current;
+    const cachedThreadId = selectedThreadId && displayableSessions.some((session) => session.id === selectedThreadId)
+      ? selectedThreadId
+      : displayableSessions[0]?.id || null;
     setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentSessions, {
-      threadId: selectedThreadIdRef.current || displayableSessions[0]?.id || null,
+      threadId: cachedThreadId,
       sessions: displayableSessions,
     });
     return displayableSessions;
@@ -2431,6 +2437,7 @@ export function InvestorAgentChatPage() {
   }, []);
 
   const handleSessionExpired = useCallback(() => {
+    resetWorkspaceClientCache();
     setError(AUTH_EXPIRED_MESSAGE);
     router.replace(buildSignInRedirectUrl());
   }, [router]);
@@ -2439,10 +2446,11 @@ export function InvestorAgentChatPage() {
     const cachedSessions = getWorkspaceCachedStale<PersonalAgentSessionsPayload>(
       WORKSPACE_CACHE_KEYS.personalAgentSessions,
     );
-    const stableSessions = filterPersistedSessions(
-      firstNonEmptySessions(page.sessions, sessionsRef.current, cachedSessions?.sessions) ||
-      (Array.isArray(page.sessions) ? page.sessions : [])
-    );
+    const stableSessions = Array.isArray(page.sessions)
+      ? filterPersistedSessions(page.sessions)
+      : filterPersistedSessions(
+        firstNonEmptySessions(sessionsRef.current, cachedSessions?.sessions) || []
+      );
     const normalized: PersonalAgentCachedPage = {
       threadId: page.threadId || null,
       sessions: stableSessions,
@@ -2461,15 +2469,11 @@ export function InvestorAgentChatPage() {
 
   const applyPersonalAgentCachedPage = useCallback((page: PersonalAgentCachedPage) => {
     const cachedThreadId = typeof page.threadId === 'string' ? page.threadId : null;
-    if (cachedThreadId) selectThreadId(cachedThreadId);
-    if (sessionsRef.current.length === 0 && Array.isArray(page.sessions) && page.sessions.length > 0) {
-      setSessions(page.sessions);
-    }
+    selectThreadId(cachedThreadId);
+    if (Array.isArray(page.sessions)) setSessions(page.sessions, { allowEmpty: true });
     const cachedMessages = Array.isArray(page.messages) ? page.messages : [];
-    if (cachedMessages.length > 0 || cachedThreadId) {
-      messagesAutoFollowRef.current = true;
-      setThreadMessages(cachedMessages, cachedThreadId);
-    }
+    messagesAutoFollowRef.current = true;
+    setThreadMessages(cachedMessages, cachedThreadId);
     if (typeof page.hasMore === 'boolean') setHasMoreMessages(page.hasMore);
   }, [selectThreadId, setSessions, setThreadMessages]);
 
@@ -3104,7 +3108,7 @@ export function InvestorAgentChatPage() {
     if (!isExecutive) return { threadId: null, sessions: [] };
     const cached = getWorkspaceCachedStale<PersonalAgentSessionsPayload>(WORKSPACE_CACHE_KEYS.personalAgentSessions);
     if (Array.isArray(cached?.sessions)) {
-      setSessions(cached.sessions);
+      setSessions(cached.sessions, { allowEmpty: true });
     }
     try {
       const data = await fetchWorkspaceJson<PersonalAgentSessionsPayload>(
@@ -3115,9 +3119,23 @@ export function InvestorAgentChatPage() {
       );
       setError(null);
       const nextSessions = Array.isArray(data.sessions) ? data.sessions : [];
-      const appliedSessions = setSessions(nextSessions);
+      const appliedSessions = setSessions(nextSessions, { allowEmpty: true });
+      const responseThreadId = typeof data.threadId === 'string' && appliedSessions.some((session) => session.id === data.threadId)
+        ? data.threadId
+        : appliedSessions[0]?.id || null;
+      if (appliedSessions.length === 0) {
+        applyWorkspacePersonalAgentPayload({
+          threadId: null,
+          sessions: [],
+          messages: [],
+          hasMore: false,
+        });
+        selectThreadId(null);
+        setThreadMessages([], null);
+        setHasMoreMessages(false);
+      }
       return {
-        threadId: typeof data.threadId === 'string' ? data.threadId : appliedSessions[0]?.id || null,
+        threadId: responseThreadId,
         sessions: appliedSessions,
       };
     } catch (loadError) {
@@ -3131,7 +3149,7 @@ export function InvestorAgentChatPage() {
         sessions: sessionsRef.current,
       };
     }
-  }, [handleSessionExpired, isExecutive, setSessions]);
+  }, [handleSessionExpired, isExecutive, selectThreadId, setSessions, setThreadMessages]);
 
   const loadThreadMessages = useCallback(async (
     targetThreadId?: string | null,
@@ -3190,7 +3208,7 @@ export function InvestorAgentChatPage() {
       const loadedThreadId = typeof data.threadId === 'string' ? data.threadId : null;
       if (requestedThreadId && loadedThreadId !== requestedThreadId) return;
       selectThreadId(loadedThreadId);
-      if (Array.isArray(data.sessions)) setSessions(data.sessions as AgentSessionSummary[]);
+      if (Array.isArray(data.sessions)) setSessions(data.sessions as AgentSessionSummary[], { allowEmpty: true });
       const nextSessions = Array.isArray(data.sessions)
         ? (data.sessions as AgentSessionSummary[])
         : sessionsRef.current;
@@ -3246,7 +3264,7 @@ export function InvestorAgentChatPage() {
       ? { threadId: requestedThreadId, sessions: sessionsRef.current }
       : await loadSessions({ force: true, suppressErrors: options?.suppressErrors });
     if (!isCurrentLoad()) return;
-    const threadToLoad = requestedThreadId || cached?.threadId || sessionsPayload.threadId || null;
+    const threadToLoad = requestedThreadId || sessionsPayload.threadId || null;
     await loadThreadMessages(threadToLoad, {
       loadSeq,
       showBlockingLoading,

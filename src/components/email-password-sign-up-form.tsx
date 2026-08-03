@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useClerk } from "@clerk/nextjs";
 import { useSignUp } from "@clerk/nextjs/legacy";
 import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
@@ -62,6 +63,7 @@ export function EmailPasswordSignUpForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [showPasswordRules, setShowPasswordRules] = useState(false);
+  const [existingAccount, setExistingAccount] = useState(false);
 
   async function completeSignUp(sessionId: string | null) {
     if (!sessionId) {
@@ -88,6 +90,7 @@ export function EmailPasswordSignUpForm() {
 
     setError("");
     setShowPasswordRules(false);
+    setExistingAccount(false);
 
     if (!emailAddress.trim()) {
       setError("Enter your email address.");
@@ -121,7 +124,10 @@ export function EmailPasswordSignUpForm() {
       setError("Additional account information is required. Please try again or use Google.");
     } catch (submitError) {
       const detail = getFirstError(submitError);
-      if (isPasswordError(detail)) {
+      if (detail?.code === "form_identifier_exists") {
+        setExistingAccount(true);
+        setError("An account already exists with this email address.");
+      } else if (isPasswordError(detail)) {
         setShowPasswordRules(true);
         setError("");
       } else {
@@ -180,6 +186,7 @@ export function EmailPasswordSignUpForm() {
     setStep("credentials");
     setVerificationCode("");
     setError("");
+    setExistingAccount(false);
   }
 
   async function continueWithGoogle() {
@@ -311,6 +318,12 @@ export function EmailPasswordSignUpForm() {
         ) : null}
 
         {error ? <p className={styles.phoneError} role="alert">{error}</p> : null}
+
+        {existingAccount ? (
+          <Link className={styles.authTextButton} href="/sign-in?method=email">
+            Sign in instead
+          </Link>
+        ) : null}
 
         <div id="clerk-captcha" className={styles.clerkCaptcha} />
 

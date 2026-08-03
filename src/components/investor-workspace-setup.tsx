@@ -5,7 +5,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Loader2, RefreshCw } from 'lucide-react';
 import {
   applyWorkspaceBootstrapPayload,
+  applyWorkspacePersonalAgentPayload,
+  resetWorkspaceClientCache,
   type WorkspaceBootstrapPayload,
+  type WorkspacePersonalAgentPayload,
 } from '@/lib/workspace-client-cache';
 import { productBrand } from '@/lib/brand';
 
@@ -26,6 +29,7 @@ export function InvestorWorkspaceSetup() {
   const prepareWorkspace = useCallback(async () => {
     setStatus('preparing');
     setError('');
+    resetWorkspaceClientCache();
 
     try {
       const response = await fetch('/api/workspace/bootstrap', {
@@ -44,6 +48,46 @@ export function InvestorWorkspaceSetup() {
       }
 
       applyWorkspaceBootstrapPayload(payload);
+      const sessions = Array.isArray(payload.personalAgent?.sessions)
+        ? payload.personalAgent.sessions
+        : [];
+      const requestedThreadId = typeof payload.personalAgent?.threadId === 'string'
+        ? payload.personalAgent.threadId
+        : null;
+      const threadId = requestedThreadId && sessions.some((session) => (
+        session && typeof session === 'object' && 'id' in session && session.id === requestedThreadId
+      ))
+        ? requestedThreadId
+        : null;
+
+      if (threadId) {
+        const discussionResponse = await fetch(
+          `/api/investor/personal-agent?${new URLSearchParams({ threadId }).toString()}`,
+          {
+            cache: 'no-store',
+            credentials: 'same-origin',
+          },
+        );
+        const discussionPayload = (await discussionResponse.json().catch(() => ({}))) as WorkspacePersonalAgentPayload & {
+          error?: string;
+        };
+        if (!discussionResponse.ok) {
+          throw new Error(discussionPayload.error || `HTTP ${discussionResponse.status}`);
+        }
+        applyWorkspacePersonalAgentPayload({
+          ...discussionPayload,
+          threadId,
+          sessions,
+        });
+      } else {
+        applyWorkspacePersonalAgentPayload({
+          threadId: null,
+          sessions: [],
+          messages: [],
+          hasMore: false,
+        });
+      }
+
       setStatus('redirecting');
       router.replace(DISCUSSION_URL);
     } catch (setupError) {
