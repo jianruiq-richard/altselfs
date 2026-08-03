@@ -3099,7 +3099,7 @@ export function InvestorAgentChatPage() {
   }, []);
 
   const loadSessions = useCallback(async (
-    options: { force?: boolean } = {},
+    options: { force?: boolean; suppressErrors?: boolean } = {},
   ): Promise<PersonalAgentSessionsPayload> => {
     if (!isExecutive) return { threadId: null, sessions: [] };
     const cached = getWorkspaceCachedStale<PersonalAgentSessionsPayload>(WORKSPACE_CACHE_KEYS.personalAgentSessions);
@@ -3123,7 +3123,7 @@ export function InvestorAgentChatPage() {
     } catch (loadError) {
       if (loadError instanceof Error && loadError.message.includes('Unauthorized')) {
         handleSessionExpired();
-      } else if (sessionsRef.current.length === 0) {
+      } else if (!options.suppressErrors && sessionsRef.current.length === 0) {
         setError(loadError instanceof Error ? loadError.message : 'Failed to load discussions');
       }
       return {
@@ -3135,7 +3135,7 @@ export function InvestorAgentChatPage() {
 
   const loadThreadMessages = useCallback(async (
     targetThreadId?: string | null,
-    options?: { showBlockingLoading?: boolean; loadSeq?: number }
+    options?: { showBlockingLoading?: boolean; loadSeq?: number; suppressErrors?: boolean }
   ) => {
     if (!isExecutive) return;
     const loadSeq = options?.loadSeq ?? (threadLoadSeqRef.current += 1);
@@ -3176,7 +3176,7 @@ export function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
-        setError(data.error || 'Failed to load discussion');
+        if (!options?.suppressErrors) setError(data.error || 'Failed to load discussion');
         return;
       }
       if (
@@ -3215,7 +3215,7 @@ export function InvestorAgentChatPage() {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
       }
     } catch {
-      if (isCurrentLoad()) setError('Network error. Please try again later.');
+      if (isCurrentLoad() && !options?.suppressErrors) setError('Network error. Please try again later.');
     } finally {
       if (isCurrentLoad()) {
         if (showBlockingLoading) setLoading(false);
@@ -3226,7 +3226,7 @@ export function InvestorAgentChatPage() {
 
   const loadData = useCallback(async (
     targetThreadId?: string | null,
-    options?: { showBlockingLoading?: boolean }
+    options?: { showBlockingLoading?: boolean; suppressErrors?: boolean }
   ) => {
     if (!isExecutive) return;
     const loadSeq = threadLoadSeqRef.current += 1;
@@ -3244,12 +3244,13 @@ export function InvestorAgentChatPage() {
     if (showBlockingLoading && !cached && isCurrentLoad()) setLoading(true);
     const sessionsPayload = requestedThreadId
       ? { threadId: requestedThreadId, sessions: sessionsRef.current }
-      : await loadSessions({ force: true });
+      : await loadSessions({ force: true, suppressErrors: options?.suppressErrors });
     if (!isCurrentLoad()) return;
     const threadToLoad = requestedThreadId || cached?.threadId || sessionsPayload.threadId || null;
     await loadThreadMessages(threadToLoad, {
       loadSeq,
       showBlockingLoading,
+      suppressErrors: options?.suppressErrors,
     });
   }, [applyPersonalAgentCachedPage, getCachedPersonalAgentPage, isExecutive, loadSessions, loadThreadMessages]);
 
@@ -3264,7 +3265,13 @@ export function InvestorAgentChatPage() {
   useEffect(() => {
     if (initialLoadStartedRef.current) return;
     initialLoadStartedRef.current = true;
-    void loadData(null, { showBlockingLoading: true });
+    const hasBootstrappedSessions = Array.isArray(
+      getWorkspaceCachedStale<PersonalAgentSessionsPayload>(WORKSPACE_CACHE_KEYS.personalAgentSessions)?.sessions,
+    );
+    void loadData(null, {
+      showBlockingLoading: !hasBootstrappedSessions,
+      suppressErrors: hasBootstrappedSessions,
+    });
   }, [loadData]);
 
   useEffect(() => {
