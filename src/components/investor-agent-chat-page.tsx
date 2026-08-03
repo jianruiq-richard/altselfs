@@ -16,11 +16,9 @@ import {
   type BillingCapacityData,
 } from '@/components/billing-capacity-popover';
 import {
-  applyWorkspaceBootstrapPayload,
   fetchWorkspaceJson,
   getWorkspaceCachedStale,
   setWorkspaceCached,
-  type WorkspaceBootstrapPayload,
   WORKSPACE_CACHE_KEYS,
 } from '@/lib/workspace-client-cache';
 import {
@@ -2349,9 +2347,6 @@ export function InvestorAgentChatPage() {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentDragActive, setAttachmentDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [workspacePreparing, setWorkspacePreparing] = useState(
-    () => isExecutive && !initialPersonalAgentCache && initialSessions.length === 0,
-  );
   const [sending, setSending] = useState(false);
   const [startingRun, setStartingRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2528,7 +2523,7 @@ export function InvestorAgentChatPage() {
   const attachmentUploadBusy = attachments.some((attachment) => attachment.uploadStatus === 'queued' || attachment.uploadStatus === 'uploading');
   const attachmentUploadFailed = attachments.some((attachment) => attachment.uploadStatus === 'error');
   const canAttachFiles = isExecutive && !sending && !recoveringRunState && !attachmentUploadBusy;
-  const showBlockingConversationLoading = (workspacePreparing || loading) && messages.length === 0 && !sending;
+  const showBlockingConversationLoading = loading && messages.length === 0 && !sending;
 
   useEffect(() => {
     if (!sending) return;
@@ -3269,68 +3264,8 @@ export function InvestorAgentChatPage() {
   useEffect(() => {
     if (initialLoadStartedRef.current) return;
     initialLoadStartedRef.current = true;
-    let cancelled = false;
-
-    const bootstrapAndLoad = async () => {
-      if (!isExecutive) {
-        setWorkspacePreparing(false);
-        return;
-      }
-
-      const hasCachedPage = Boolean(getCachedPersonalAgentPage(null));
-      const needsBootstrap = sessionsRef.current.length === 0 && !hasCachedPage;
-      if (needsBootstrap) setWorkspacePreparing(true);
-
-      try {
-        if (needsBootstrap) {
-          const bootstrap = await fetchWorkspaceJson<WorkspaceBootstrapPayload>(
-            WORKSPACE_CACHE_KEYS.workspaceBootstrap,
-            '/api/workspace/bootstrap',
-            {},
-            { force: true, ttlMs: 30_000 },
-          );
-          if (cancelled) return;
-
-          applyWorkspaceBootstrapPayload(bootstrap);
-          if (bootstrap.billingCapacity) {
-            setBillingCapacity(bootstrap.billingCapacity as BillingCapacityData);
-            setBillingCapacityLoading(false);
-          }
-
-          const bootstrapSessions = Array.isArray(bootstrap.personalAgent?.sessions)
-            ? (bootstrap.personalAgent.sessions as AgentSessionSummary[])
-            : [];
-          if (bootstrapSessions.length > 0) setSessions(bootstrapSessions);
-
-          const bootstrapThreadId = typeof bootstrap.personalAgent?.threadId === 'string'
-            ? bootstrap.personalAgent.threadId
-            : bootstrapSessions[0]?.id || null;
-          if (bootstrapThreadId && !selectedThreadIdRef.current) {
-            selectThreadId(bootstrapThreadId);
-          }
-        }
-
-        if (!cancelled) await loadData(null, { showBlockingLoading: true });
-      } catch (bootstrapError) {
-        if (cancelled) return;
-        if (bootstrapError instanceof Error && (
-          bootstrapError.message.includes('Unauthorized') ||
-          bootstrapError.message.includes('HTTP 401')
-        )) {
-          handleSessionExpired();
-          return;
-        }
-        await loadData(null, { showBlockingLoading: true });
-      } finally {
-        if (!cancelled) setWorkspacePreparing(false);
-      }
-    };
-
-    void bootstrapAndLoad();
-    return () => {
-      cancelled = true;
-    };
-  }, [getCachedPersonalAgentPage, handleSessionExpired, isExecutive, loadData, selectThreadId, setSessions]);
+    void loadData(null, { showBlockingLoading: true });
+  }, [loadData]);
 
   useEffect(() => {
     void loadBillingCapacity({
@@ -4602,7 +4537,7 @@ export function InvestorAgentChatPage() {
               <div className="grid min-h-[50vh] place-items-center text-xs text-zinc-600">
                 <span className="inline-flex items-center gap-2">
                   <LoaderCircle className="h-4 w-4 animate-spin" />
-                  {workspacePreparing ? 'Preparing your workspace...' : 'Loading discussion...'}
+                  Loading discussion...
                 </span>
               </div>
             ) : showStarterSurface ? (
