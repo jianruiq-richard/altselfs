@@ -7,14 +7,19 @@ import {
   normalizeToolNameList,
 } from '../src/connector-tool-scope.js';
 import {
+  cancelActiveRun,
+  clearRunCancellation,
   getActiveRuntoolScope,
   registerActiveRun,
   unregisterActiveRun,
 } from '../src/run-control.js';
 
-function fakeChildProcess() {
+function fakeChildProcess(onKill?: (signal: string) => void) {
   return Object.assign(new EventEmitter(), {
-    kill: () => true,
+    kill: (signal?: NodeJS.Signals | number) => {
+      onKill?.(String(signal || 'SIGTERM'));
+      return true;
+    },
   }) as unknown as ChildProcess;
 }
 
@@ -61,6 +66,39 @@ test('active run connector tool allowlists are copied on write and read', () => 
     );
   } finally {
     unregisterActiveRun(runId);
+  }
+});
+
+test('active run cancellation sends SIGTERM once then escalates to SIGKILL', async () => {
+  const runId = 'run-cancel-escalation';
+  const signals: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = () => undefined;
+  registerActiveRun({
+    runId,
+    userId: 'user',
+    threadId: 'thread',
+    child: fakeChildProcess((signal) => signals.push(signal)),
+    cancelGraceMs: 1000,
+  });
+
+  try {
+    const first = cancelActiveRun(runId, { graceMs: 1000 });
+    assert.equal(first.cancelled, true);
+    assert.equal(first.alreadyRequested, false);
+    assert.deepEqual(signals, ['SIGTERM']);
+
+    const second = cancelActiveRun(runId, { graceMs: 1000 });
+    assert.equal(second.cancelled, true);
+    assert.equal(second.alreadyRequested, true);
+    assert.deepEqual(signals, ['SIGTERM']);
+
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']);
+  } finally {
+    console.warn = originalWarn;
+    unregisterActiveRun(runId);
+    clearRunCancellation(runId);
   }
 });
 

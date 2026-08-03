@@ -51,6 +51,7 @@ export class AgentTurnQueueWorker {
         `[agent-turn-worker] started workerId=${this.workerId}`,
         `pollMs=${this.config.turnQueuePollMs}`,
         `cancelPollMs=${this.config.turnQueueCancelPollMs}`,
+        `cancelGraceMs=${this.config.turnQueueCancelGraceMs}`,
         `max=${this.config.turnQueueMaxConcurrency}`,
         `perUser=${this.config.turnQueueMaxPerUser}`,
         `perThread=${this.config.turnQueueMaxPerThread}`,
@@ -128,9 +129,16 @@ export class AgentTurnQueueWorker {
         Array.from(this.running.keys()),
       );
       for (const runId of requestedRunIds) {
-        const result = cancelActiveRun(runId);
-        if (result.cancelled) {
-          console.log(`[agent-turn-worker] cancellation delivered run=${runId} workerId=${this.workerId}`);
+        const result = cancelActiveRun(runId, { graceMs: this.config.turnQueueCancelGraceMs });
+        if (result.cancelled && !result.alreadyRequested) {
+          console.log(
+            [
+              `[agent-turn-worker] cancellation delivered run=${runId}`,
+              `workerId=${this.workerId}`,
+              `target=${result.signalTarget}`,
+              `graceMs=${result.graceMs}`,
+            ].join(' ')
+          );
         }
       }
     } catch (error) {
@@ -147,7 +155,7 @@ export class AgentTurnQueueWorker {
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
-      cancelActiveRun(runId);
+      cancelActiveRun(runId, { graceMs: this.config.turnQueueCancelGraceMs });
       void persistAgentRunEvent(this.config, {
         runId,
         event: queueEvent('agent_context.queue_timeout_requested', {

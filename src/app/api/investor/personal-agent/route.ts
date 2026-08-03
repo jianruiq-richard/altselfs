@@ -1317,7 +1317,40 @@ export async function DELETE(req: NextRequest) {
         { status: 502 }
       );
     }
-    return NextResponse.json(result);
+    const stopStatus = typeof result.status === 'string' ? result.status.toUpperCase() : '';
+    if (threadId && result.accepted !== false && (stopStatus === 'CANCELLING' || stopStatus === 'RUNNING')) {
+      const submittedMessage = await prisma.agentMessage.findFirst({
+        where: {
+          threadId,
+          role: 'USER',
+          meta: {
+            path: ['submission', 'runId'],
+            equals: runId,
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      if (submittedMessage) {
+        const currentMeta = isRecord(submittedMessage.meta) ? submittedMessage.meta : {};
+        const currentSubmission = isRecord(currentMeta.submission) ? currentMeta.submission : {};
+        await mergeThreadMessageMeta({
+          messageId: submittedMessage.id,
+          meta: {
+            submission: {
+              ...currentSubmission,
+              status: 'CANCELLING',
+              runId,
+              code: null,
+              error: null,
+            },
+          },
+        }).catch(() => null);
+      }
+    }
+    return NextResponse.json({
+      ...result,
+      status: stopStatus || result.status || 'CANCELLING',
+    });
   } catch (error) {
     return NextResponse.json(
       { error: `Failed to stop Personal Agent run: ${error instanceof Error ? error.message : String(error)}` },

@@ -36,7 +36,7 @@ type ChatMessage = {
   artifacts?: ChatArtifact[];
   connectorScope?: ConnectorScopePayload;
   submission?: {
-    status: 'AUTHORIZING' | 'QUEUED' | 'RUNNING' | 'REJECTED';
+    status: 'AUTHORIZING' | 'QUEUED' | 'RUNNING' | 'CANCELLING' | 'REJECTED';
     runId?: string | null;
     code?: string | null;
     error?: string | null;
@@ -227,7 +227,7 @@ type CodexStreamItem = {
   plan?: HermesPlan;
 };
 
-type ActiveWorkRunStatus = 'AUTHORIZING' | 'QUEUED' | 'RUNNING';
+type ActiveWorkRunStatus = 'AUTHORIZING' | 'QUEUED' | 'RUNNING' | 'CANCELLING';
 
 type ActiveWorkTiming = {
   runId: string | null;
@@ -1498,6 +1498,13 @@ function getActiveWorkPresentation(
       detail: 'The current task is being stopped safely.',
     };
   }
+  if (status === 'CANCELLING') {
+    return {
+      phase: 'stopping',
+      title: 'Stopping',
+      detail: 'Stop requested. Waiting for the current task to shut down.',
+    };
+  }
   if (status === 'AUTHORIZING') {
     return {
       phase: 'authorizing',
@@ -2358,6 +2365,7 @@ export function InvestorAgentChatPage() {
   const [activeWorkNowMs, setActiveWorkNowMs] = useState(() => Date.now());
   const [activeWorkDisplay, setActiveWorkDisplay] = useState<ActiveWorkPresentation | null>(null);
   const [stoppingRun, setStoppingRun] = useState(false);
+  const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const [recoveringRunState, setRecoveringRunState] = useState(false);
   const [hermesModel, setHermesModel] = useState<HermesModelOption['value']>(DEFAULT_HERMES_MODEL);
   const [hermesModelMenuOpen, setHermesModelMenuOpen] = useState(false);
@@ -2765,7 +2773,7 @@ export function InvestorAgentChatPage() {
 
   const stopPersonalAgentRun = useCallback(async () => {
     const runId = activeRunIdRef.current || activeRunId;
-    if (!runId || stoppingRun) return;
+    if (!runId || stoppingRun || cancellingRunId === runId || activeWorkTiming?.status === 'CANCELLING') return;
     requestedStopRunIdRef.current = runId;
     setStoppingRun(true);
     setError(null);
@@ -2775,7 +2783,7 @@ export function InvestorAgentChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ runId, threadId }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; status?: string; accepted?: boolean };
       if (!res.ok) {
         if (res.status === 401) {
           handleSessionExpired();
@@ -2784,13 +2792,49 @@ export function InvestorAgentChatPage() {
         setError(typeof data.error === 'string' ? data.error : 'Failed to stop task');
         return;
       }
+      const stopStatus = typeof data.status === 'string' ? data.status.toUpperCase() : 'CANCELLING';
+      if (stopStatus === 'CANCELLED') {
+        activeRunIdRef.current = null;
+        liveStreamRunIdRef.current = null;
+        requestedStopRunIdRef.current = null;
+        setActiveRunId(null);
+        setCancellingRunId(null);
+        setSending(false);
+        setActiveWorkTiming(null);
+        setError('This run has been stopped.');
+        setCodexStreamItems([]);
+        return;
+      }
+      setCancellingRunId(runId);
+      activeRunIdRef.current = runId;
+      setActiveRunId(runId);
+      setSending(true);
+      setActiveWorkTiming((current) => ({
+        runId,
+        status: 'CANCELLING',
+        queuedAtMs: current?.queuedAtMs || Date.now(),
+        startedAtMs: current?.startedAtMs || current?.queuedAtMs || Date.now(),
+      }));
+      setThreadMessages((currentMessages) => currentMessages.map((message) => (
+        message.submission?.runId === runId
+          ? {
+              ...message,
+              submission: {
+                ...message.submission,
+                status: 'CANCELLING' as const,
+                code: null,
+                error: null,
+              },
+            }
+          : message
+      )), threadId);
       setCodexStreamItems((prev) => compactCodexStreamItems([
         ...prev,
         {
           id: `personal-agent-stopped-${Date.now()}`,
           title: 'Stop requested',
-          detail: 'The current task is being stopped',
-          status: 'completed' as const,
+          detail: 'Waiting for the current task to shut down',
+          status: 'running' as const,
           timestamp: new Date().toISOString(),
         },
       ]));
@@ -2799,7 +2843,7 @@ export function InvestorAgentChatPage() {
     } finally {
       setStoppingRun(false);
     }
-  }, [activeRunId, handleSessionExpired, stoppingRun, threadId]);
+  }, [activeRunId, activeWorkTiming?.status, cancellingRunId, handleSessionExpired, setThreadMessages, stoppingRun, threadId]);
 
   const refreshPersonalAgentStatus = useCallback(async (
     targetThreadId?: string | null
@@ -2863,18 +2907,27 @@ export function InvestorAgentChatPage() {
       const recentEvents = Array.isArray(data.recentEvents) ? data.recentEvents : [];
       const projected = projectStoredRunEvents(recentEvents, expectedEventRunId);
 
-      if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING' || activeRunStatus === 'QUEUED') && nextRunId) {
+      if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING' || activeRunStatus === 'QUEUED' || activeRunStatus === 'CANCELLING') && nextRunId) {
         const statusThreadId = recoveredThreadId || requestedThreadId || threadId || null;
         activeRunIdRef.current = nextRunId;
         setActiveRunId(nextRunId);
         setSending(true);
         const submissionStatus = activeRunStatus === 'RUNNING'
           ? 'RUNNING'
-          : activeRunStatus === 'QUEUED'
-            ? 'QUEUED'
-            : status === 'ACTIVE'
-              ? 'RUNNING'
-              : 'QUEUED';
+          : activeRunStatus === 'CANCELLING'
+            ? 'CANCELLING'
+            : activeRunStatus === 'QUEUED'
+              ? 'QUEUED'
+              : status === 'ACTIVE'
+                ? 'RUNNING'
+                : 'QUEUED';
+        setCancellingRunId((current) => (
+          submissionStatus === 'CANCELLING'
+            ? nextRunId
+            : current === nextRunId
+              ? null
+              : current
+        ));
         const queuedAtMs = runTimestampMs(activeRun, 'queued_at', 'created_at');
         const startedAtMs = runTimestampMs(activeRun, 'started_at');
         setActiveWorkTiming((current) => {
@@ -2883,7 +2936,7 @@ export function InvestorAgentChatPage() {
             runId: nextRunId,
             status: submissionStatus,
             queuedAtMs: queuedAtMs || (sameRun ? current?.queuedAtMs || Date.now() : Date.now()),
-            startedAtMs: submissionStatus === 'RUNNING'
+            startedAtMs: submissionStatus === 'RUNNING' || submissionStatus === 'CANCELLING'
               ? startedAtMs || (sameRun ? current?.startedAtMs || Date.now() : Date.now())
               : null,
           };
@@ -2920,7 +2973,9 @@ export function InvestorAgentChatPage() {
           : projectStoredRunEvents(recentEvents, latestTerminalRunId);
         activeRunIdRef.current = null;
         liveStreamRunIdRef.current = null;
+        requestedStopRunIdRef.current = null;
         setActiveRunId(null);
+        setCancellingRunId((current) => current === latestTerminalRunId ? null : current);
         setSending(false);
         setAssistantDraft('');
         setCodexStreamItems([]);
@@ -2964,7 +3019,9 @@ export function InvestorAgentChatPage() {
           : projectStoredRunEvents(recentEvents, latestTerminalRunId);
         activeRunIdRef.current = null;
         liveStreamRunIdRef.current = null;
+        requestedStopRunIdRef.current = null;
         setActiveRunId(null);
+        setCancellingRunId((current) => current === latestTerminalRunId ? null : current);
         setSending(false);
         setAssistantDraft('');
         setCodexStreamItems([]);
@@ -2997,7 +3054,9 @@ export function InvestorAgentChatPage() {
       if (activeRunIdRef.current === nextRunId || !nextRunId) {
         activeRunIdRef.current = null;
         liveStreamRunIdRef.current = null;
+        requestedStopRunIdRef.current = null;
         setActiveRunId(null);
+        setCancellingRunId(null);
         setSending(false);
       }
       const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
@@ -3021,6 +3080,7 @@ export function InvestorAgentChatPage() {
     activeRunIdRef.current = null;
     liveStreamRunIdRef.current = null;
     requestedStopRunIdRef.current = null;
+    setCancellingRunId(null);
     setActiveRunId(null);
     setSending(false);
     setActiveWorkTiming(null);
@@ -3736,7 +3796,7 @@ export function InvestorAgentChatPage() {
             ? activeRun.id
             : '';
 
-        if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING' || activeRunStatus === 'QUEUED') && nextRunId) {
+        if ((status === 'ACTIVE' || activeRunStatus === 'RUNNING' || activeRunStatus === 'QUEUED' || activeRunStatus === 'CANCELLING') && nextRunId) {
           if (!hasCurrentTurn && !knownRunId) return 'failed';
           const applied = await refreshPersonalAgentStatus(statusThreadId);
           if (applied !== 'active') return applied === 'success' || applied === 'terminal' ? 'recovered' : 'failed';
@@ -3857,6 +3917,7 @@ export function InvestorAgentChatPage() {
     liveStreamRunIdRef.current = null;
     setActiveRunId(null);
     requestedStopRunIdRef.current = null;
+    setCancellingRunId(null);
     let preserveRunStateAfterSend = false;
     const clientRequestId = createClientRequestId();
 
@@ -3990,6 +4051,7 @@ export function InvestorAgentChatPage() {
       activeRunIdRef.current = runId;
       liveStreamRunIdRef.current = null;
       setActiveRunId(runId);
+      setCancellingRunId(null);
       const acceptedStatus: ActiveWorkRunStatus =
         typeof data.status === 'string' && data.status.toUpperCase() === 'RUNNING'
           ? 'RUNNING'
@@ -4040,6 +4102,7 @@ export function InvestorAgentChatPage() {
         activeRunIdRef.current = null;
         liveStreamRunIdRef.current = null;
         setActiveRunId(null);
+        setCancellingRunId(null);
         setSending(false);
       }
       setStoppingRun(false);
@@ -4146,7 +4209,9 @@ export function InvestorAgentChatPage() {
     ? `Running for ${activeWorkDurationText}`
     : activeWorkStatus === 'QUEUED'
       ? `Queued for ${activeWorkDurationText}`
-      : `Submitting for ${activeWorkDurationText}`;
+      : activeWorkStatus === 'CANCELLING'
+        ? `Stopping for ${activeWorkDurationText}`
+        : `Submitting for ${activeWorkDurationText}`;
   const latestUserTaskTitle = activeWorkTextSummary(
     [...messages].reverse().find((message) => message.role === 'user')?.content,
     72,
@@ -4162,6 +4227,7 @@ export function InvestorAgentChatPage() {
   const isEmptyConversation = messages.length === 0;
   const showStarterSurface = !showBlockingConversationLoading && isEmptyConversation;
   const starterTemplateDisabled = sending || startingRun || recoveringRunState || attachmentUploadBusy || !isExecutive;
+  const stopRequestedForActiveRun = activeWorkStatus === 'CANCELLING' || Boolean(activeRunKey && cancellingRunId === activeRunKey);
   const conversationFeedback = (
     <>
       {billingCapacityLoading || capacityBlocked ? (
@@ -4238,7 +4304,7 @@ export function InvestorAgentChatPage() {
           <span className="hidden items-center gap-1.5 rounded-md border border-white/[0.09] px-2 py-1.5 text-[10px] text-zinc-500 sm:inline-flex"><Check className="h-3.5 w-3.5" />Think</span>
         </div>
         {sending || recoveringRunState ? (
-          <button type="button" onClick={() => void stopPersonalAgentRun()} disabled={recoveringRunState || stoppingRun || !activeRunId} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-red-500/85 px-3 text-[11px] font-semibold text-white hover:bg-red-500 disabled:opacity-50"><Square className="h-3 w-3 fill-current" />{recoveringRunState ? 'Recovering' : stoppingRun ? 'Stopping' : 'Stop'}</button>
+          <button type="button" onClick={() => void stopPersonalAgentRun()} disabled={recoveringRunState || stoppingRun || stopRequestedForActiveRun || !activeRunId} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-red-500/85 px-3 text-[11px] font-semibold text-white hover:bg-red-500 disabled:opacity-50"><Square className="h-3 w-3 fill-current" />{recoveringRunState ? 'Recovering' : stoppingRun || stopRequestedForActiveRun ? 'Stopping' : 'Stop'}</button>
         ) : (
           <button type="submit" disabled={(!input.trim() && attachments.length === 0) || attachmentUploadBusy || attachmentUploadFailed || startingRun} className="grid h-8 w-8 place-items-center rounded-md border border-white bg-zinc-100 text-[#090909] hover:bg-white disabled:opacity-35" title="Send"><ArrowUp className="h-4 w-4" /></button>
         )}
@@ -4337,7 +4403,7 @@ export function InvestorAgentChatPage() {
                 </h3>
                 <span className="inline-flex shrink-0 items-center gap-1.5 text-[9px] font-extrabold uppercase text-[#8eb3ff]">
                   <i className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#8eb3ff]" />
-                  {activeWorkStatus === 'AUTHORIZING' ? 'Starting' : activeWorkStatus === 'QUEUED' ? 'Queued' : 'Running'}
+                  {activeWorkStatus === 'AUTHORIZING' ? 'Starting' : activeWorkStatus === 'QUEUED' ? 'Queued' : activeWorkStatus === 'CANCELLING' ? 'Stopping' : 'Running'}
                 </span>
               </div>
               <div className="mt-3 border-t border-white/[0.07] pt-3">
@@ -4520,7 +4586,7 @@ export function InvestorAgentChatPage() {
                           <GeneratedArtifactPreviews artifacts={artifacts} inverted />
                           {message.submission ? (
                             <div className={`mt-2 flex flex-wrap items-center gap-2 border-t pt-2 text-[10px] leading-4 ${message.submission.status === 'REJECTED' ? 'border-red-300/15 text-red-200' : 'border-white/[0.08] text-zinc-500'}`}>
-                              {message.submission.status === 'AUTHORIZING' || message.submission.status === 'RUNNING'
+                              {message.submission.status === 'AUTHORIZING' || message.submission.status === 'RUNNING' || message.submission.status === 'CANCELLING'
                                 ? <LoaderCircle className="h-3 w-3 animate-spin" />
                                 : message.submission.status === 'QUEUED'
                                   ? <Clock3 className="h-3 w-3" />
@@ -4532,6 +4598,8 @@ export function InvestorAgentChatPage() {
                                     ? 'Queued'
                                     : message.submission.status === 'RUNNING'
                                       ? 'Running'
+                                      : message.submission.status === 'CANCELLING'
+                                        ? 'Stopping'
                                       : message.submission.error || 'Task rejected'}
                               </span>
                               {message.submission.status === 'REJECTED' ? (

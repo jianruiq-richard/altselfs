@@ -67,6 +67,7 @@ export type ServerConfig = {
   memoryReviewMaxTurns: number;
   turnQueuePollMs: number;
   turnQueueCancelPollMs: number;
+  turnQueueCancelGraceMs: number;
   turnQueueMaxConcurrency: number;
   turnQueueMaxPerUser: number;
   turnQueueMaxPerThread: number;
@@ -504,6 +505,7 @@ export function loadConfig(): ServerConfig {
     memoryReviewMaxTurns: readIntEnv('MEMORY_REVIEW_MAX_TURNS', 6),
     turnQueuePollMs: readIntEnv('AGENT_TURN_QUEUE_POLL_MS', 1000),
     turnQueueCancelPollMs: readIntEnv('AGENT_TURN_CANCEL_POLL_MS', 1500),
+    turnQueueCancelGraceMs: readIntEnv('AGENT_RUN_CANCEL_GRACE_MS', 5000),
     turnQueueMaxConcurrency: readIntEnv('AGENT_TURN_MAX_CONCURRENCY', 3),
     turnQueueMaxPerUser: readIntEnv('AGENT_TURN_MAX_PER_USER', 20),
     turnQueueMaxPerThread: readIntEnv('AGENT_TURN_MAX_PER_THREAD', 1),

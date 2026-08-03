@@ -15,6 +15,12 @@ type ActiveRun = {
   child: ChildProcess;
   startedAt: string;
   cancelledAt?: string;
+  sigtermSentAt?: string;
+  sigkillSentAt?: string;
+  lastSignal?: 'SIGTERM' | 'SIGKILL';
+  processGroupId?: number;
+  cancelGraceMs?: number;
+  killEscalationTimer?: ReturnType<typeof setTimeout>;
   competitorToolNames?: string[];
   personalDatatoolNames?: string[];
 };
@@ -27,6 +33,8 @@ export function registerActiveRun(input: {
   userId: string;
   threadId: string;
   child: ChildProcess;
+  killProcessGroup?: boolean;
+  cancelGraceMs?: number;
   competitorToolNames?: string[];
   personalDatatoolNames?: string[];
 }) {
@@ -34,14 +42,12 @@ export function registerActiveRun(input: {
     ...input,
     competitorToolNames: input.competitorToolNames ? [...input.competitorToolNames] : undefined,
     personalDatatoolNames: input.personalDatatoolNames ? [...input.personalDatatoolNames] : undefined,
+    processGroupId: input.killProcessGroup && typeof input.child.pid === 'number' ? input.child.pid : undefined,
+    cancelGraceMs: input.cancelGraceMs,
     startedAt: nowIso(),
   });
   if (cancelledRuns.has(input.runId)) {
-    try {
-      input.child.kill('SIGTERM');
-    } catch {
-      // The process may have already exited.
-    }
+    cancelActiveRun(input.runId, { graceMs: input.cancelGraceMs });
   }
 }
 
@@ -55,6 +61,11 @@ export function getActiveRuntoolScope(runId: string) {
 }
 
 export function unregisterActiveRun(runId: string) {
+  const active = activeRuns.get(runId);
+  if (active?.killEscalationTimer) {
+    clearTimeout(active.killEscalationTimer);
+    active.killEscalationTimer = undefined;
+  }
   activeRuns.delete(runId);
 }
 
@@ -62,18 +73,47 @@ export function clearRunCancellation(runId: string) {
   cancelledRuns.delete(runId);
 }
 
-export function cancelActiveRun(runId: string) {
-  const now = nowIso();
-  cancelledRuns.set(runId, now);
+export function cancelActiveRun(runId: string, options: { graceMs?: number } = {}) {
+  const cancellationRequestedAt = cancelledRuns.get(runId) || nowIso();
+  cancelledRuns.set(runId, cancellationRequestedAt);
   const active = activeRuns.get(runId);
   if (!active) {
-    return { cancelled: false, runId, alreadyFinished: true, cancelledAt: now };
+    return { cancelled: false, runId, alreadyFinished: true, cancelledAt: cancellationRequestedAt };
   }
-  active.cancelledAt = now;
-  try {
-    active.child.kill('SIGTERM');
-  } catch {
-    // The process may have exited between lookup and kill.
+  const alreadyRequested = Boolean(active.cancelledAt);
+  active.cancelledAt = active.cancelledAt || cancellationRequestedAt;
+  let signalTarget: 'process_group' | 'child' | 'none' = 'none';
+  let signalSent = false;
+  let signalError: string | undefined;
+
+  if (!active.sigtermSentAt) {
+    const signalResult = signalActiveRun(active, 'SIGTERM');
+    signalTarget = signalResult.target;
+    signalSent = signalResult.sent;
+    signalError = signalResult.error;
+    active.sigtermSentAt = nowIso();
+    active.lastSignal = 'SIGTERM';
+  }
+
+  const graceMs = normalizeCancelGraceMs(options.graceMs ?? active.cancelGraceMs);
+  if (!active.killEscalationTimer) {
+    active.killEscalationTimer = setTimeout(() => {
+      const stillActive = activeRuns.get(runId);
+      if (!stillActive || stillActive.sigkillSentAt) return;
+      const killResult = signalActiveRun(stillActive, 'SIGKILL');
+      stillActive.sigkillSentAt = nowIso();
+      stillActive.lastSignal = 'SIGKILL';
+      console.warn(
+        [
+          `[run-control] escalated cancellation run=${runId}`,
+          'signal=SIGKILL',
+          `target=${killResult.target}`,
+          `sent=${killResult.sent}`,
+          killResult.error ? `error=${killResult.error}` : '',
+        ].filter(Boolean).join(' ')
+      );
+    }, graceMs);
+    unrefTimer(active.killEscalationTimer);
   }
   return {
     cancelled: true,
@@ -81,7 +121,16 @@ export function cancelActiveRun(runId: string) {
     userId: active.userId,
     threadId: active.threadId,
     startedAt: active.startedAt,
-    cancelledAt: now,
+    cancelledAt: active.cancelledAt,
+    alreadyRequested,
+    signal: active.lastSignal || 'SIGTERM',
+    signalSent,
+    signalTarget,
+    signalError,
+    processGroupId: active.processGroupId || null,
+    graceMs,
+    sigtermSentAt: active.sigtermSentAt || null,
+    sigkillSentAt: active.sigkillSentAt || null,
   };
 }
 
@@ -108,5 +157,48 @@ export function listActiveRuns() {
     threadId: run.threadId,
     startedAt: run.startedAt,
     cancelledAt: run.cancelledAt || null,
+    sigtermSentAt: run.sigtermSentAt || null,
+    sigkillSentAt: run.sigkillSentAt || null,
+    lastSignal: run.lastSignal || null,
+    processGroupId: run.processGroupId || null,
   }));
+}
+
+function normalizeCancelGraceMs(value: number | undefined) {
+  return Math.min(Math.max(Math.floor(value || 5000), 1000), 30_000);
+}
+
+function signalActiveRun(active: ActiveRun, signal: 'SIGTERM' | 'SIGKILL') {
+  if (active.processGroupId) {
+    try {
+      process.kill(-active.processGroupId, signal);
+      return { sent: true, target: 'process_group' as const };
+    } catch (error) {
+      const groupError = error instanceof Error ? error.message : String(error);
+      try {
+        return { sent: active.child.kill(signal), target: 'child' as const, error: groupError };
+      } catch (childError) {
+        return {
+          sent: false,
+          target: 'process_group' as const,
+          error: `${groupError}; child fallback failed: ${childError instanceof Error ? childError.message : String(childError)}`,
+        };
+      }
+    }
+  }
+  try {
+    return { sent: active.child.kill(signal), target: 'child' as const };
+  } catch (error) {
+    return {
+      sent: false,
+      target: 'child' as const,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function unrefTimer(timer: ReturnType<typeof setTimeout>) {
+  if (typeof timer !== 'object' || timer === null) return;
+  const maybeTimer = timer as { unref?: () => void };
+  if (typeof maybeTimer.unref === 'function') maybeTimer.unref();
 }

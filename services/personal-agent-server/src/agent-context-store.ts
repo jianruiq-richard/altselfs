@@ -326,12 +326,12 @@ export async function requestAgentRunCancellation(
     [
       'update agent_context_runs',
       'set cancel_requested = true,',
-      "status = case when status in ('PENDING_AUTH', 'QUEUED') then 'CANCELLED' else status end,",
-      "error = case when status in ('PENDING_AUTH', 'QUEUED') then $4 else error end,",
+      "status = case when status in ('PENDING_AUTH', 'QUEUED') then 'CANCELLED' when status in ('RUNNING', 'CANCELLING') then 'CANCELLING' else status end,",
+      "error = case when status in ('PENDING_AUTH', 'QUEUED') then $4 when status in ('RUNNING', 'CANCELLING') then coalesce(error, $4) else error end,",
       "execution_request = case when status in ('PENDING_AUTH', 'QUEUED') then null else execution_request end,",
       "completed_at = case when status in ('PENDING_AUTH', 'QUEUED') then now() else completed_at end,",
       'updated_at = now()',
-      "where id = $1 and status in ('PENDING_AUTH', 'QUEUED', 'RUNNING')",
+      "where id = $1 and status in ('PENDING_AUTH', 'QUEUED', 'RUNNING', 'CANCELLING')",
       'and ($2::text is null or thread_id = $2)',
       'and ($3::text is null or investor_id = $3)',
       'returning id, status, thread_id as "threadId", investor_id as "investorId"',
@@ -386,7 +386,7 @@ export async function requestAgentRunCancellation(
     runId: input.runId,
     status,
     threadId: typeof row.threadId === 'string' ? row.threadId : input.threadId || null,
-    workerTerminationPending: status === 'RUNNING',
+    workerTerminationPending: status === 'RUNNING' || status === 'CANCELLING',
   };
 }
 
@@ -402,7 +402,7 @@ export async function listRequestedAgentRunCancellations(
       'select id',
       'from agent_context_runs',
       'where id = any($1::text[])',
-      "and status = 'RUNNING'",
+      "and status in ('RUNNING', 'CANCELLING')",
       'and cancel_requested = true',
     ].join(' '),
     [uniqueRunIds]
@@ -428,22 +428,22 @@ export async function claimNextQueuedAgentTurn(
       'and r.cancel_requested = false',
       "and pg_try_advisory_xact_lock(hashtext('altselfs_agent_turn_queue_claim'))",
       'and (r.next_attempt_at is null or r.next_attempt_at <= now())',
-      'and (select count(*) from agent_context_runs g where g.status = $2) < $3',
+      "and (select count(*) from agent_context_runs g where g.status in ('RUNNING', 'CANCELLING')) < $3",
       'and (',
       '  coalesce(r.model_provider, $11) <> $4',
-      '  or (select count(*) from agent_context_runs o where o.status = $2 and o.model_provider = $4) < $5',
+      "  or (select count(*) from agent_context_runs o where o.status in ('RUNNING', 'CANCELLING') and o.model_provider = $4) < $5",
       ')',
       'and (',
       '  coalesce(r.model_provider, $11) <> $6',
-      '  or (select count(*) from agent_context_runs o where o.status = $2 and o.model_provider = $6) < $7',
+      "  or (select count(*) from agent_context_runs o where o.status in ('RUNNING', 'CANCELLING') and o.model_provider = $6) < $7",
       ')',
       'and (',
       '  $8 <= 0',
-      '  or (select count(*) from agent_context_runs u where u.status = $2 and u.investor_id = r.investor_id) < $8',
+      "  or (select count(*) from agent_context_runs u where u.status in ('RUNNING', 'CANCELLING') and u.investor_id = r.investor_id) < $8",
       ')',
       'and (',
       '  $9 <= 0',
-      '  or (select count(*) from agent_context_runs t where t.status = $2 and t.thread_id = r.thread_id) < $9',
+      "  or (select count(*) from agent_context_runs t where t.status in ('RUNNING', 'CANCELLING') and t.thread_id = r.thread_id) < $9",
       ')',
       'and not exists (',
       '  select 1 from agent_context_runs e',
@@ -521,7 +521,7 @@ export async function expireStaleAgentTurns(
       "set status = 'TIMEOUT',",
       "error = coalesce(error, 'agent worker timeout'),",
       'execution_request = null, completed_at = now(), updated_at = now()',
-      "where status = 'RUNNING'",
+      "where status in ('RUNNING', 'CANCELLING')",
       'and (',
       '  timeout_at < now()',
       '  or (worker_heartbeat_at is not null and worker_heartbeat_at < now() - ($1::bigint * interval \'1 millisecond\'))',
@@ -873,7 +873,7 @@ export async function getAgentThreadRuntimeStatus(
   const sandbox = sandboxResult.rows[0] || null;
   const activeRunId = typeof sandbox?.active_run_id === 'string' ? sandbox.active_run_id : '';
   const requestedRun = requestedRunId ? runs.find((run) => run.id === requestedRunId) || null : null;
-  const queuedOrRunningRun = runs.find((run) => run.status === 'RUNNING' || run.status === 'QUEUED') || null;
+  const queuedOrRunningRun = runs.find((run) => run.status === 'RUNNING' || run.status === 'QUEUED' || run.status === 'CANCELLING') || null;
   const sandboxActiveRun = activeRunId
     ? runs.find((run) => run.id === activeRunId) || null
     : null;
@@ -1126,8 +1126,8 @@ export async function touchAgentRunHeartbeat(
   );
   if (input.runId) {
     await pool.query(
-      'update agent_context_runs set worker_heartbeat_at = now(), updated_at = now() where id = $1 and status = $2',
-      [input.runId, 'RUNNING']
+      "update agent_context_runs set worker_heartbeat_at = now(), updated_at = now() where id = $1 and status in ('RUNNING', 'CANCELLING')",
+      [input.runId]
     );
   }
 }
@@ -1142,7 +1142,7 @@ export async function persistAgentTurnCancelled(
       'update agent_context_runs',
       'set status = $2, error = $3, cancel_requested = true,',
       'execution_request = null, completed_at = now(), updated_at = now()',
-      "where id = $1 and status in ('PENDING_AUTH', 'QUEUED', 'RUNNING')",
+      "where id = $1 and status in ('PENDING_AUTH', 'QUEUED', 'RUNNING', 'CANCELLING')",
       'returning id',
     ].join(' '),
     [input.runId, 'CANCELLED', input.reason || 'cancelled by user']
@@ -1207,7 +1207,7 @@ export async function persistAgentTurnTimeout(
     [
       'update agent_context_runs',
       'set status = $2, error = $3, execution_request = null, completed_at = now(), updated_at = now()',
-      "where id = $1 and status = 'RUNNING'",
+      "where id = $1 and status in ('RUNNING', 'CANCELLING')",
       'returning id',
     ].join(' '),
     [input.runId, 'TIMEOUT', input.reason || 'agent run timed out']
@@ -1269,6 +1269,30 @@ export async function persistAgentTurnSuccess(
   }
 ) {
   const pool = await getRequiredContextPool(config);
+  const runState = await pool.query(
+    [
+      'select status, cancel_requested as "cancelRequested", error',
+      'from agent_context_runs',
+      'where id = $1',
+      'limit 1',
+    ].join(' '),
+    [input.runId]
+  );
+  const state = runState.rows[0] || {};
+  const runStatus = String(state.status || '');
+  const cancelRequested = state.cancelRequested === true || runStatus === 'CANCELLING';
+  if (cancelRequested) {
+    await persistAgentRunEvents(pool, input.runId, params.events, { startIndex: 0 });
+    await persistAgentTurnCancelled(config, {
+      runId: input.runId,
+      threadId: params.threadId,
+      investorId: input.investorId,
+      reason: typeof state.error === 'string' && state.error.trim() ? state.error.trim() : 'cancelled by user',
+    });
+    return;
+  }
+  if (runStatus !== 'RUNNING') return;
+
   const assistantMessageId = id('msg');
   await pool.query(
     [
@@ -1359,17 +1383,20 @@ export async function persistAgentTurnError(
   const transitioned = await pool.query(
     [
       'update agent_context_runs',
-      'set status = $2, error = $3, result = $4::jsonb, execution_request = null, completed_at = now(), updated_at = now()',
-      "where id = $1 and status in ('QUEUED', 'RUNNING')",
-      'returning id',
+      "set status = case when cancel_requested = true or status = 'CANCELLING' then 'CANCELLED' else $2 end,",
+      "error = case when cancel_requested = true or status = 'CANCELLING' then coalesce(error, 'cancelled by user') else $3 end,",
+      'result = $4::jsonb, execution_request = null, completed_at = now(), updated_at = now()',
+      "where id = $1 and status in ('QUEUED', 'RUNNING', 'CANCELLING')",
+      'returning id, status',
     ].join(' '),
     [input.runId, 'ERROR', params.error, stringifyJson(params.result ?? null)]
   );
   if (!transitioned.rows[0]) return;
+  const finalStatus = String(transitioned.rows[0].status || '');
   await enqueueAgentBillingEvent(pool, {
     runId: input.runId,
     action: 'RELEASE',
-    payload: { reason: params.error || 'agent_run_error' },
+    payload: { reason: finalStatus === 'CANCELLED' ? 'cancelled_by_user' : params.error || 'agent_run_error' },
   });
   await processAgentBillingOutbox(config, {
     workerId: `error-${process.pid}`,

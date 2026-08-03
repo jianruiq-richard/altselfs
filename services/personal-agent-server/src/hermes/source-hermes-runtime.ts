@@ -15,6 +15,7 @@ import type { MemoryReviewJobStore } from '../memory-review-queue.js';
 import { createPersonalDataDynamictools } from '../tools/personal-data.js';
 import { LocalProfileStore, type UserProfileStore } from '../profile-store.js';
 import {
+  cancelActiveRun,
   createRunCancelledError,
   isAgentRunCancelledError,
   isRunCancelled,
@@ -745,6 +746,7 @@ export class HermesSourceRuntime {
       };
       const child = spawn(this.config.uvBin, args, {
         cwd: this.config.hermesSourceRoot,
+        detached: true,
         env: {
           ...process.env,
           HERMES_HOME: paths.hermesHome,
@@ -800,6 +802,8 @@ export class HermesSourceRuntime {
         userId: paths.userId,
         threadId: paths.threadId,
         child,
+        killProcessGroup: true,
+        cancelGraceMs: this.config.turnQueueCancelGraceMs,
         competitorToolNames: paths.enabledCompetitortools,
         personalDatatoolNames: paths.personalDatatoolNames,
       });
@@ -815,7 +819,7 @@ export class HermesSourceRuntime {
           durationMs: Date.now() - spawnedAtMs,
           timeoutMs,
         });
-        child.kill('SIGTERM');
+        cancelActiveRun(paths.runId, { graceMs: this.config.turnQueueCancelGraceMs });
         reject(new Error(`Hermes source runtime timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
