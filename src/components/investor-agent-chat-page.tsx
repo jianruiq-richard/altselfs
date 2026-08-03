@@ -296,7 +296,11 @@ const AUTH_EXPIRED_MESSAGE = 'Your sign-in session expired. Please sign in again
 function buildSignInRedirectUrl() {
   if (typeof window === 'undefined') return '/sign-in';
   const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  const params = new URLSearchParams({ redirect_url: currentPath || '/investor/chat/100' });
+  const redirectTarget =
+    currentPath.startsWith('/sign-in') || currentPath.startsWith('/sign-up')
+      ? '/investor/chat/100'
+      : currentPath || '/investor/chat/100';
+  const params = new URLSearchParams({ redirect_url: redirectTarget });
   return `/sign-in?${params.toString()}`;
 }
 

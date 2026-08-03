@@ -92,22 +92,26 @@ async function ensureDefaultInvestorWorkspace(user: {
   email: string;
   phone: string | null;
 }) {
-  const hasAvatar = await prisma.avatar.findFirst({
-    where: { investorId: user.id },
-    select: { id: true },
-  });
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(849201, hashtext(${user.id}))`;
 
-  if (!hasAvatar) {
-    await prisma.avatar.create({
-      data: {
-        investorId: user.id,
-        name: defaultTwinName(user),
-        description: 'Default digital twin created during account setup.',
-        systemPrompt: DEFAULT_TWIN_PROMPT,
-        status: 'ACTIVE',
-      },
+    const hasAvatar = await tx.avatar.findFirst({
+      where: { investorId: user.id },
+      select: { id: true },
     });
-  }
+
+    if (!hasAvatar) {
+      await tx.avatar.create({
+        data: {
+          investorId: user.id,
+          name: defaultTwinName(user),
+          description: 'Default digital twin created during account setup.',
+          systemPrompt: DEFAULT_TWIN_PROMPT,
+          status: 'ACTIVE',
+        },
+      });
+    }
+  });
 
   await seedDefaultWechatSourcesForInvestor(user.id);
 }

@@ -43,7 +43,11 @@ const navItems = [
 function buildSignInRedirectUrl() {
   if (typeof window === 'undefined') return '/sign-in';
   const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  return `/sign-in?${new URLSearchParams({ redirect_url: currentPath || '/dashboard' }).toString()}`;
+  const redirectTarget =
+    currentPath.startsWith('/sign-in') || currentPath.startsWith('/sign-up')
+      ? '/dashboard'
+      : currentPath || '/dashboard';
+  return `/sign-in?${new URLSearchParams({ redirect_url: redirectTarget }).toString()}`;
 }
 
 function activeNavKey(pathname: string): WorkspaceNavKey | null {
