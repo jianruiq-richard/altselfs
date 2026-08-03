@@ -5,6 +5,12 @@ import path from 'node:path';
 import { loadConfig, type ServerConfig } from '../config.js';
 import { CodexJsonRpcClient } from '../codex/json-rpc-client.js';
 import { projectCodexNotification } from '../codex/event-projector.js';
+import {
+  CodexOpenAiAuthHealthError,
+  ensureCodexOpenAiAuthHealthy,
+  isCodexOpenAiAuthFailure,
+  markCodexOpenAiAuthUnhealthyFromError,
+} from '../codex/openai-auth-health.js';
 import { prepareTemporaryOpenAiAuth, type TemporaryOpenAiAuth } from '../codex/openai-auth-lock.js';
 import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-search.js';
 import {
@@ -281,7 +287,6 @@ async function runCodexAgentTool(argumentsValue: unknown) {
   const selectedModel = normalizeCodexModel(process.env.ALTSELFS_CODEX_MODEL?.trim() || config.codexModel);
   const modelSelection = resolveCodexModelSelection(config, selectedModel);
   const localEnvironmentDisabled = config.disableLocalEnvironmentForGeneral;
-  const dynamicTools = await buildDynamicTools(config, runtime, modelSelection);
   const requestedMode = toolArgs.mode || normalizeCodexDelegationMode(runtime.selectedAgentProfileId) || 'general';
   const developerInstructions = buildCodexDeveloperInstructions();
   const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
@@ -296,6 +301,12 @@ async function runCodexAgentTool(argumentsValue: unknown) {
   let resumed = false;
 
   try {
+    if (modelSelection.provider === 'openai') {
+      await ensureCodexOpenAiAuthHealthy(config, modelSelection, { reason: 'codex_mcp_tool' });
+    }
+
+    const dynamicTools = await buildDynamicTools(config, runtime, modelSelection);
+
     if (modelSelection.provider === 'openai') {
       openAiAuth = await prepareTemporaryOpenAiAuth({
         codexHome: runtime.codexHome,
@@ -473,6 +484,18 @@ async function runCodexAgentTool(argumentsValue: unknown) {
       lastCodexToolMode: requestedMode,
     });
     return reply;
+  } catch (error) {
+    if (
+      modelSelection.provider === 'openai' &&
+      !(error instanceof CodexOpenAiAuthHealthError) &&
+      isCodexOpenAiAuthFailure(error)
+    ) {
+      const health = await markCodexOpenAiAuthUnhealthyFromError(config, modelSelection, error, {
+        reason: 'codex_mcp_tool_error',
+      });
+      if (health) throw new CodexOpenAiAuthHealthError(health);
+    }
+    throw error;
   } finally {
     client?.close();
     if (openAiAuth) {

@@ -26,6 +26,12 @@ import {
   isPersonalDatatool,
   runPersonalDatatool,
 } from '../tools/personal-data.js';
+import {
+  CodexOpenAiAuthHealthError,
+  ensureCodexOpenAiAuthHealthy,
+  isCodexOpenAiAuthFailure,
+  markCodexOpenAiAuthUnhealthyFromError,
+} from './openai-auth-health.js';
 import { prepareTemporaryOpenAiAuth, type TemporaryOpenAiAuth } from './openai-auth-lock.js';
 import type { ChildAgentRunInput, ChildAgentRunResult, ChildAgentRuntime, AgentEvent } from '../types.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
@@ -71,6 +77,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
 
     try {
       if (modelSelection.provider === 'openai') {
+        await ensureCodexOpenAiAuthHealthy(this.config, modelSelection, { reason: 'codex_runtime' });
         codexOpenAiAuth = await prepareTemporaryOpenAiAuth({
           codexHome,
           sourcePath: this.config.codexOpenAiAuthJsonPath,
@@ -202,7 +209,18 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         raw: { codexThreadId },
       };
     } catch (error) {
-      const message = policyViolationMessage || (error instanceof Error ? error.message : String(error));
+      let effectiveError = error;
+      if (
+        modelSelection.provider === 'openai' &&
+        !(error instanceof CodexOpenAiAuthHealthError) &&
+        isCodexOpenAiAuthFailure(error)
+      ) {
+        const health = await markCodexOpenAiAuthUnhealthyFromError(this.config, modelSelection, error, {
+          reason: 'codex_runtime_error',
+        });
+        if (health) effectiveError = new CodexOpenAiAuthHealthError(health);
+      }
+      const message = policyViolationMessage || (effectiveError instanceof Error ? effectiveError.message : String(effectiveError));
       await emit({
         type: 'codex.error',
         timestamp: nowIso(),

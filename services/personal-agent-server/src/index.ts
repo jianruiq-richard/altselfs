@@ -1,6 +1,7 @@
 import { AgentRegistry } from './agent-registry.js';
 import { loadConfig } from './config.js';
 import { CodexAgentRuntime } from './codex/codex-agent-runtime.js';
+import { CodexOpenAiAuthHealthMonitor } from './codex/openai-auth-health-monitor.js';
 import { HermesRouter } from './hermes-router.js';
 import { createHttpServer } from './http-server.js';
 import { HermesSourceRuntime } from './hermes/source-hermes-runtime.js';
@@ -46,6 +47,8 @@ if (config.processRole === 'worker') {
 }
 
 if (config.processRole === 'worker' || config.processRole === 'all') {
+  const codexOpenAiAuthHealthMonitor = new CodexOpenAiAuthHealthMonitor(config);
+  codexOpenAiAuthHealthMonitor.start();
   const turnQueueWorker = new AgentTurnQueueWorker(agent, config);
   turnQueueWorker.start();
   const memoryReviewWorker = new MemoryReviewWorker(config, stores.memoryReviewJobStore, stores.userProfileStore);

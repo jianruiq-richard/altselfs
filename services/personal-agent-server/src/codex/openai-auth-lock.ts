@@ -36,13 +36,10 @@ export async function prepareTemporaryOpenAiAuth(input: {
 
   const sourcePath = path.resolve(input.sourcePath);
   const authPath = path.join(codexHome, 'auth.json');
-  const releaseAuthMountLock = await acquireDirectoryLock(path.join(codexHome, '.auth.json.lock'), {
-    waitTimeoutMs: input.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS,
-    staleLockMs: input.staleLockMs ?? DEFAULT_STALE_LOCK_MS,
-    pollMs: input.pollMs ?? DEFAULT_POLL_MS,
-  });
 
   let released = false;
+  let releaseSourceLifecycleLock: () => Promise<void> = async () => undefined;
+  let releaseAuthMountLock: () => Promise<void> = async () => undefined;
   let tempDir = '';
   let tempAuthPath = '';
   let initialAuthContent: Buffer | undefined;
@@ -61,6 +58,7 @@ export async function prepareTemporaryOpenAiAuth(input: {
               waitTimeoutMs: input.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS,
               staleLockMs: input.staleLockMs ?? DEFAULT_STALE_LOCK_MS,
               pollMs: input.pollMs ?? DEFAULT_POLL_MS,
+              sourceLockHeld: true,
             });
           }
         } catch (error) {
@@ -73,12 +71,26 @@ export async function prepareTemporaryOpenAiAuth(input: {
       try {
         if (tempDir) await fs.rm(tempDir, { recursive: true, force: true });
       } finally {
-        await releaseAuthMountLock();
+        try {
+          await releaseAuthMountLock();
+        } finally {
+          await releaseSourceLifecycleLock();
+        }
       }
     }
   };
 
   try {
+    releaseSourceLifecycleLock = await acquireDirectoryLock(`${sourcePath}.lock`, {
+      waitTimeoutMs: input.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS,
+      staleLockMs: input.staleLockMs ?? DEFAULT_STALE_LOCK_MS,
+      pollMs: input.pollMs ?? DEFAULT_POLL_MS,
+    });
+    releaseAuthMountLock = await acquireDirectoryLock(path.join(codexHome, '.auth.json.lock'), {
+      waitTimeoutMs: input.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS,
+      staleLockMs: input.staleLockMs ?? DEFAULT_STALE_LOCK_MS,
+      pollMs: input.pollMs ?? DEFAULT_POLL_MS,
+    });
     await fs.stat(sourcePath);
     const tempParent = input.tempRoot ? path.resolve(input.tempRoot) : path.join(codexHome, '.tmp-auth');
     await fs.mkdir(tempParent, { recursive: true });
@@ -237,6 +249,7 @@ async function syncTemporaryAuthBackToSource(input: {
   waitTimeoutMs: number;
   staleLockMs: number;
   pollMs: number;
+  sourceLockHeld?: boolean;
 }) {
   const tempContent = await fs.readFile(input.tempAuthPath).catch((error) => {
     if (isNodeError(error) && error.code === 'ENOENT') return undefined;
@@ -245,11 +258,13 @@ async function syncTemporaryAuthBackToSource(input: {
   if (!tempContent) return;
   if (Buffer.compare(tempContent, input.initialAuthContent) === 0) return;
 
-  const releaseSourceLock = await acquireDirectoryLock(`${input.sourcePath}.lock`, {
-    waitTimeoutMs: input.waitTimeoutMs,
-    staleLockMs: input.staleLockMs,
-    pollMs: input.pollMs,
-  });
+  const releaseSourceLock = input.sourceLockHeld
+    ? async () => undefined
+    : await acquireDirectoryLock(`${input.sourcePath}.lock`, {
+      waitTimeoutMs: input.waitTimeoutMs,
+      staleLockMs: input.staleLockMs,
+      pollMs: input.pollMs,
+    });
 
   try {
     const tempStat = await fs.stat(input.tempAuthPath).catch((error) => {
