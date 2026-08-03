@@ -427,6 +427,25 @@ export class HermesSourceRuntime {
       codexModel: codexModelSelection.model || this.config.codexModel || 'gpt-5.5',
       startedAtMs,
     });
+    const hermesUsageCalls = await readHermesUsageCallRecords(hermesUsageLogPath);
+    if (hermesUsageCalls.length > 0) {
+      await emit('hermes.llm.usage_summary', {
+        provider: hermesModelSelection.provider,
+        model: hermesModelSelection.model,
+        apiCallCount: hermesUsageCalls.length,
+        totalInputTokens: sumNumbers(hermesUsageCalls, 'inputTokens'),
+        totalOutputTokens: sumNumbers(hermesUsageCalls, 'outputTokens'),
+        totalCacheReadTokens: sumNumbers(hermesUsageCalls, 'cacheReadTokens'),
+        totalCacheWriteTokens: sumNumbers(hermesUsageCalls, 'cacheWriteTokens'),
+        totalReasoningTokens: sumNumbers(hermesUsageCalls, 'reasoningTokens'),
+        totalActualCostUsd: roundMoney(sumNumbers(hermesUsageCalls, 'actualCostUsd')),
+        totalEstimatedCostUsd: roundMoney(sumNumbers(hermesUsageCalls, 'estimatedCostUsd')),
+        totalDurationMs: sumNumbers(hermesUsageCalls, 'durationMs'),
+      });
+      for (const call of hermesUsageCalls) {
+        await emit('hermes.llm.usage_call', call);
+      }
+    }
     await emit('billing.usage_measured', {
       pricingVersion: usage.pricingVersion,
       totalCredits: usage.totalCredits,
@@ -931,6 +950,116 @@ function extractReply(stdout: string) {
 function tail(value: string, maxLines: number) {
   const lines = value.split(/\r?\n/);
   return lines.slice(Math.max(0, lines.length - maxLines)).join('\n');
+}
+
+type HermesUsageCallRecord = {
+  index: number;
+  schemaVersion: number;
+  provider: string;
+  model: string;
+  apiMode: string | null;
+  apiCallCount: number | null;
+  sessionApiCalls: number | null;
+  apiRequestId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number;
+  finishReason: string | null;
+  toolNames: string[];
+  messageCount: number | null;
+  approxInputTokens: number | null;
+  requestCharCount: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cacheWrite5mTokens: number;
+  cacheWrite1hTokens: number;
+  reasoningTokens: number;
+  estimatedCostUsd: number;
+  actualCostUsd: number;
+};
+
+async function readHermesUsageCallRecords(logPath: string): Promise<HermesUsageCallRecord[]> {
+  const text = await fs.readFile(logPath, 'utf8').catch(() => '');
+  const records: HermesUsageCallRecord[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const parsed = parseJsonLine(line);
+    if (!parsed) continue;
+    records.push(normalizeHermesUsageCallRecord(parsed, records.length + 1));
+  }
+  return records;
+}
+
+function normalizeHermesUsageCallRecord(
+  record: Record<string, unknown>,
+  index: number
+): HermesUsageCallRecord {
+  return {
+    index,
+    schemaVersion: integerValue(record.schema_version, 1),
+    provider: stringValue(record.provider) || 'unknown',
+    model: stringValue(record.model) || 'unknown',
+    apiMode: nullableStringValue(record.api_mode),
+    apiCallCount: nullableIntegerValue(record.api_call_count),
+    sessionApiCalls: nullableIntegerValue(record.session_api_calls),
+    apiRequestId: nullableStringValue(record.api_request_id),
+    startedAt: nullableStringValue(record.started_at),
+    finishedAt: nullableStringValue(record.finished_at),
+    durationMs: integerValue(record.duration_ms, 0),
+    finishReason: nullableStringValue(record.finish_reason),
+    toolNames: stringArrayValue(record.tool_names),
+    messageCount: nullableIntegerValue(record.message_count),
+    approxInputTokens: nullableIntegerValue(record.approx_input_tokens),
+    requestCharCount: nullableIntegerValue(record.request_char_count),
+    inputTokens: integerValue(record.input_tokens, 0),
+    outputTokens: integerValue(record.output_tokens, 0),
+    cacheReadTokens: integerValue(record.cache_read_tokens, 0),
+    cacheWriteTokens: integerValue(record.cache_write_tokens, 0),
+    cacheWrite5mTokens: integerValue(record.cache_write_5m_tokens, 0),
+    cacheWrite1hTokens: integerValue(record.cache_write_1h_tokens, 0),
+    reasoningTokens: integerValue(record.reasoning_tokens, 0),
+    estimatedCostUsd: nonNegativeNumber(record.estimated_cost_usd),
+    actualCostUsd: nonNegativeNumber(record.actual_cost_usd),
+  };
+}
+
+function sumNumbers<T extends Record<string, unknown>>(records: T[], key: keyof T) {
+  return records.reduce((total, record) => total + nonNegativeNumber(record[key]), 0);
+}
+
+function roundMoney(value: number) {
+  return Number(value.toFixed(10));
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
+function nullableStringValue(value: unknown) {
+  const text = stringValue(value);
+  return text ? text : null;
+}
+
+function integerValue(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function nullableIntegerValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : null;
+}
+
+function nonNegativeNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function stringArrayValue(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
 function yamlString(value: string) {

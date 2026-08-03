@@ -408,23 +408,123 @@ const usageLogAfter = `                    agent.session_cost_status = cost_resu
 
                     # Persist token counts to session DB for /insights.
 `;
+const usageLogAfterV2 = `                    agent.session_cost_status = cost_result.status
+                    agent.session_cost_source = cost_result.source
 
-if (conversationLoop.includes(usageLogAfter)) {
-  console.log("Hermes per-call usage and provider cost log patch already applied.");
+                    # Altselfs keeps per-call cache TTL buckets outside state.db.
+                    # Upstream state.db intentionally stores only aggregate cache
+                    # writes, which is insufficient for 5m/1h billing and per-call
+                    # latency observability.
+                    _altselfs_usage_log = os.environ.get("ALTSELFS_HERMES_USAGE_LOG_PATH", "")
+                    if _altselfs_usage_log:
+                        try:
+                            # OpenRouter includes the provider-billed amount on the
+                            # final usage object. Preserve it separately from Hermes'
+                            # local estimate so settlement can use the actual charge.
+                            _altselfs_actual_cost_usd = 0
+                            _altselfs_response_usage = (
+                                getattr(response, "usage", None)
+                                if (agent.provider or "").strip().lower().startswith("openrouter")
+                                else None
+                            )
+                            if isinstance(_altselfs_response_usage, dict):
+                                _altselfs_cost_value = _altselfs_response_usage.get("cost")
+                            else:
+                                _altselfs_cost_value = getattr(
+                                    _altselfs_response_usage, "cost", None
+                                )
+                            if _altselfs_cost_value is None:
+                                _altselfs_model_extra = getattr(
+                                    _altselfs_response_usage, "model_extra", None
+                                )
+                                if isinstance(_altselfs_model_extra, dict):
+                                    _altselfs_cost_value = _altselfs_model_extra.get("cost")
+                            if (
+                                _altselfs_cost_value is None
+                                and callable(getattr(_altselfs_response_usage, "model_dump", None))
+                            ):
+                                _altselfs_usage_dump = _altselfs_response_usage.model_dump()
+                                if isinstance(_altselfs_usage_dump, dict):
+                                    _altselfs_cost_value = _altselfs_usage_dump.get("cost")
+                            try:
+                                _altselfs_cost_float = float(_altselfs_cost_value or 0)
+                                if _altselfs_cost_float > 0:
+                                    _altselfs_actual_cost_usd = _altselfs_cost_float
+                            except (TypeError, ValueError):
+                                pass
+
+                            _altselfs_tool_names = []
+                            try:
+                                for _altselfs_tool_call in (getattr(assistant_message, "tool_calls", None) or []):
+                                    _altselfs_tool_name = None
+                                    if isinstance(_altselfs_tool_call, dict):
+                                        _altselfs_function = _altselfs_tool_call.get("function") or {}
+                                        if isinstance(_altselfs_function, dict):
+                                            _altselfs_tool_name = _altselfs_function.get("name")
+                                    else:
+                                        _altselfs_function = getattr(_altselfs_tool_call, "function", None)
+                                        _altselfs_tool_name = getattr(_altselfs_function, "name", None)
+                                    if _altselfs_tool_name:
+                                        _altselfs_tool_names.append(str(_altselfs_tool_name))
+                            except Exception:
+                                _altselfs_tool_names = []
+
+                            os.makedirs(os.path.dirname(_altselfs_usage_log), exist_ok=True)
+                            with open(_altselfs_usage_log, "a", encoding="utf-8") as usage_file:
+                                usage_file.write(json.dumps({
+                                    "schema_version": 2,
+                                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(api_start_time)),
+                                    "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(api_start_time + api_duration)),
+                                    "duration_ms": int(api_duration * 1000),
+                                    "api_call_count": api_call_count,
+                                    "session_api_calls": agent.session_api_calls,
+                                    "api_request_id": api_request_id,
+                                    "api_mode": agent.api_mode,
+                                    "finish_reason": finish_reason,
+                                    "tool_names": _altselfs_tool_names,
+                                    "message_count": len(api_messages),
+                                    "approx_input_tokens": approx_tokens,
+                                    "request_char_count": total_chars,
+                                    "model": agent.model,
+                                    "provider": agent.provider or "",
+                                    "input_tokens": canonical_usage.input_tokens,
+                                    "output_tokens": canonical_usage.output_tokens,
+                                    "cache_read_tokens": canonical_usage.cache_read_tokens,
+                                    "cache_write_tokens": canonical_usage.cache_write_tokens,
+                                    "cache_write_5m_tokens": canonical_usage.cache_write_5m_tokens,
+                                    "cache_write_1h_tokens": canonical_usage.cache_write_1h_tokens,
+                                    "reasoning_tokens": canonical_usage.reasoning_tokens,
+                                    "estimated_cost_usd": float(cost_result.amount_usd)
+                                    if cost_result.amount_usd is not None else 0,
+                                    "actual_cost_usd": _altselfs_actual_cost_usd,
+                                }, ensure_ascii=False) + "\\n")
+                        except Exception:
+                            logger.debug("Altselfs usage log write failed", exc_info=True)
+
+                    # Persist token counts to session DB for /insights.
+`;
+
+if (conversationLoop.includes(usageLogAfterV2)) {
+  console.log("Hermes detailed per-call usage log patch already applied.");
+  console.log(conversationLoopPath);
+} else if (conversationLoop.includes(usageLogAfter)) {
+  conversationLoop = conversationLoop.replace(usageLogAfter, usageLogAfterV2);
+  writeFileSync(conversationLoopPath, conversationLoop, "utf8");
+  console.log("Hermes per-call usage log patch upgraded with timing details.");
   console.log(conversationLoopPath);
 } else if (conversationLoop.includes(usageLogAfterV1)) {
-  conversationLoop = conversationLoop.replace(usageLogAfterV1, usageLogAfter);
+  conversationLoop = conversationLoop.replace(usageLogAfterV1, usageLogAfterV2);
   writeFileSync(conversationLoopPath, conversationLoop, "utf8");
-  console.log("Hermes per-call provider cost log patch upgraded.");
+  console.log("Hermes per-call provider cost log patch upgraded with timing details.");
   console.log(conversationLoopPath);
 } else if (!conversationLoop.includes(usageLogBefore)) {
   console.error("Could not find the Hermes per-call usage block to patch.");
   console.error(conversationLoopPath);
   process.exit(1);
 } else {
-  conversationLoop = conversationLoop.replace(usageLogBefore, usageLogAfter);
+  conversationLoop = conversationLoop.replace(usageLogBefore, usageLogAfterV2);
   writeFileSync(conversationLoopPath, conversationLoop, "utf8");
-  console.log("Hermes per-call usage and provider cost log patch applied.");
+  console.log("Hermes detailed per-call usage log patch applied.");
   console.log(conversationLoopPath);
 }
 
