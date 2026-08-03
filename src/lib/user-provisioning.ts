@@ -93,7 +93,7 @@ async function ensureDefaultInvestorWorkspace(user: {
   phone: string | null;
 }) {
   await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(849201, hashtext(${user.id}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(849201, hashtext(${user.id}))::text AS lock_acquired`;
 
     const hasAvatar = await tx.avatar.findFirst({
       where: { investorId: user.id },

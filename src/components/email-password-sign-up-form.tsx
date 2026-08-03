@@ -7,7 +7,7 @@ import { useSignUp } from "@clerk/nextjs/legacy";
 import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import styles from "./astromar-auth.module.css";
 
-const DEFAULT_AUTH_REDIRECT = "/investor/chat/100";
+const DEFAULT_AUTH_REDIRECT = "/dashboard/setup?role=investor";
 
 type ClerkErrorDetail = {
   code?: string;

@@ -6,7 +6,8 @@ import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 import { ArrowRight } from "lucide-react";
 import styles from "./astromar-auth.module.css";
 
-const DEFAULT_AUTH_REDIRECT = "/investor/chat/100";
+const DEFAULT_SIGN_IN_REDIRECT = "/investor/chat/100";
+const DEFAULT_SIGN_UP_REDIRECT = "/dashboard/setup?role=investor";
 
 type PhonePasswordAuthFormProps = {
   mode: "sign-in" | "sign-up";
@@ -56,7 +57,7 @@ function getErrorMessage(error: unknown): string {
   return "Authentication failed. Please try again.";
 }
 
-export function PhonePasswordAuthForm({ mode, redirectUrl = DEFAULT_AUTH_REDIRECT }: PhonePasswordAuthFormProps) {
+export function PhonePasswordAuthForm({ mode, redirectUrl }: PhonePasswordAuthFormProps) {
   const router = useRouter();
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
@@ -68,6 +69,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = DEFAULT_AUTH_REDIREC
   const [error, setError] = useState("");
 
   const isLoaded = isSignInLoaded && isSignUpLoaded;
+  const targetRedirectUrl = redirectUrl || (mode === "sign-up" ? DEFAULT_SIGN_UP_REDIRECT : DEFAULT_SIGN_IN_REDIRECT);
   const phoneDigits = localPhoneNumber.replace(/\D/g, "");
   const canSubmit =
     isLoaded &&
@@ -99,7 +101,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = DEFAULT_AUTH_REDIREC
 
         if (result.status === "complete" && result.createdSessionId) {
           await setSignInActive?.({ session: result.createdSessionId });
-          router.push(redirectUrl);
+          router.push(targetRedirectUrl);
           return;
         }
 
@@ -114,7 +116,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl = DEFAULT_AUTH_REDIREC
 
       if (result.status === "complete" && result.createdSessionId) {
         await setSignUpActive?.({ session: result.createdSessionId });
-        router.push(redirectUrl);
+        router.push(targetRedirectUrl);
         return;
       }
 
