@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { BillingPlanGrid } from '@/components/billing-plan-grid';
+import { productBrand } from '@/lib/brand';
 import styles from './astromar-landing-page.module.css';
 
 const signInHref = '/sign-in?method=email&redirect_url=/investor/chat/100';
@@ -14,10 +15,10 @@ export function PublicPricingPage() {
     <main className={styles.landing}>
       <nav className={styles.nav}>
         <div className={classes('container', 'navInner')}>
-          <Link className={styles.brand} href="/" aria-label="Astromar home">
+          <Link className={styles.brand} href="/" aria-label={`${productBrand.name} home`}>
             <span className={styles.brandMark} aria-hidden="true" />
-            <span className={styles.brandName}>Astromar</span>
-            <span className={styles.brandTagline}>Think with you. Act for you.</span>
+            <span className={styles.brandName}>{productBrand.name}</span>
+            <span className={styles.brandTagline}>{productBrand.tagline}</span>
           </Link>
 
           <div className={styles.navLinks} aria-label="Primary navigation">

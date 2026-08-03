@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from '@clerk/nextjs';
+import { productBrand } from '@/lib/brand';
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Altselfs - Decision OS",
-  description: "Altselfs connects AI teammates with your work context and personal decision preferences.",
+  title: `${productBrand.name} - AI Cofounder Workspace`,
+  description: `${productBrand.name} connects AI teammates with your work context and decision preferences.`,
 };
 
 export const viewport: Viewport = {

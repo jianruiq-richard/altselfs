@@ -2,6 +2,7 @@
 
 import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
 import { useHasSharedWorkspaceLayout } from '@/components/workspace-layout-client';
+import { productBrand } from '@/lib/brand';
 
 export function FigmaShell({
   homeHref = '/dashboard',
@@ -39,7 +40,7 @@ export function FigmaShell({
   if (hasSharedWorkspaceLayout) return content;
 
   return (
-    <AstromarWorkspaceShell mobileTitle={title || 'Astromar'} homeHref={homeHref}>
+    <AstromarWorkspaceShell mobileTitle={title || productBrand.name} homeHref={homeHref}>
       {content}
     </AstromarWorkspaceShell>
   );

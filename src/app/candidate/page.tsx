@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { FigmaShell } from '@/components/figma-shell';
+import { productBrand } from '@/lib/brand';
 
 export default async function CandidateDashboard() {
   const { userId } = await auth();
@@ -101,7 +102,7 @@ export default async function CandidateDashboard() {
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-slate-900">{chat.avatar.name}</h3>
-                    <p className="text-sm text-slate-500">By {chat.avatar.investor.name || 'Altselfs user'}</p>
+                    <p className="text-sm text-slate-500">By {chat.avatar.investor.name || `${productBrand.name} user`}</p>
                   </div>
                   <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Active</span>
                 </div>
@@ -138,7 +139,7 @@ export default async function CandidateDashboard() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">{avatar.name}</h3>
-                  <p className="text-sm text-slate-500">By {avatar.investor.name || 'Altselfs user'}</p>
+                  <p className="text-sm text-slate-500">By {avatar.investor.name || `${productBrand.name} user`}</p>
                 </div>
               </div>
 

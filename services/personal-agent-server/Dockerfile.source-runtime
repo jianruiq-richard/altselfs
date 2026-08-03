@@ -27,7 +27,7 @@ RUN mkdir -p /opt/altselfs/codex-bin \
     '  shift' \
     '  exec /opt/altselfs/codex-bin/codex-app-server "$@"' \
     'fi' \
-    'echo "This Altselfs Codex source wrapper only supports: codex app-server" >&2' \
+    'echo "This Minaco Codex source wrapper only supports: codex app-server" >&2' \
     'exit 64' \
     > /opt/altselfs/codex-bin/codex \
   && chmod +x /opt/altselfs/codex-bin/codex /opt/altselfs/codex-bin/codex-app-server

@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig, type ServerConfig } from '../config.js';
+import { PRODUCT_BRAND } from '../brand.js';
 import { CodexJsonRpcClient } from '../codex/json-rpc-client.js';
 import { projectCodexNotification } from '../codex/event-projector.js';
 import {
@@ -323,7 +324,7 @@ async function runCodexAgentTool(argumentsValue: unknown) {
     const activeClient = client;
     await activeClient.initialize({
       clientName: 'altselfs-codex-mcp',
-      clientTitle: 'Altselfs Codex MCP Tool',
+      clientTitle: `${PRODUCT_BRAND.name} Codex MCP Tool`,
       clientVersion: '0.1.0',
     });
 
@@ -705,7 +706,7 @@ function buildCodexTaskPrompt(
     'Do not include internal absolute paths, runtime homes, workspace roots, state/session files, database names, cloud hosts, IPs, credentials, environment variables, or backend implementation details in your return text.',
     'If you create or transform a file, report the filename and outcome only. The product will attach or link generated files automatically.',
     '',
-    `Altselfs thread: ${runtime.threadId}`,
+    `${PRODUCT_BRAND.name} discussion: ${runtime.threadId}`,
     `Delegation mode: ${mode}`,
     buildConnectorToolScopeInstruction(enabledConnectorToolNames),
     args.expectedReturn ? `Expected return: ${args.expectedReturn}` : '',

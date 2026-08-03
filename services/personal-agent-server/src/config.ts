@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { PRODUCT_BRAND } from './brand.js';
 
 export type ServerConfig = {
   port: number;
@@ -467,7 +468,7 @@ export function loadConfig(): ServerConfig {
     codexModelCatalog: readCodexModelCatalog(codexModel),
     openRouterBaseUrl: readEnv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
     openRouterApiKeyEnv,
-    openRouterAppTitle: readEnv('OPENROUTER_APP_TITLE', 'Altselfs Personal Agent Server'),
+    openRouterAppTitle: readEnv('OPENROUTER_APP_TITLE', PRODUCT_BRAND.appTitle),
     outboundProxyUrl: process.env.OUTBOUND_PROXY_URL?.trim() || undefined,
     outboundProxyBypassHosts: readCsvEnv('OUTBOUND_PROXY_BYPASS_HOSTS'),
     codexWebSearchMode: readWebSearchModeEnv('CODEX_WEB_SEARCH_MODE', 'live'),
@@ -552,7 +553,7 @@ export function loadConfig(): ServerConfig {
     creditsReservationTtlMinutes: readIntEnv('CREDITS_RESERVATION_TTL_MINUTES', 120),
     stripeSecretKey: process.env.STRIPE_SECRET_KEY?.trim() || undefined,
     stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET?.trim() || undefined,
-    stripeAppBaseUrl: readEnv('STRIPE_APP_BASE_URL', 'https://altselfs.com').replace(/\/$/, ''),
+    stripeAppBaseUrl: readEnv('STRIPE_APP_BASE_URL', PRODUCT_BRAND.appBaseUrl).replace(/\/$/, ''),
     stripePriceStarterMonthly: process.env.STRIPE_PRICE_STARTER_MONTHLY?.trim() || undefined,
     stripePriceProMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY?.trim() || undefined,
     stripePriceUltraMonthly: process.env.STRIPE_PRICE_ULTRA_MONTHLY?.trim() || undefined,
@@ -565,7 +566,7 @@ export function loadConfig(): ServerConfig {
     stripePriceCredits100000: process.env.STRIPE_PRICE_CREDITS_100000?.trim() || undefined,
     stripePortalConfigurationId: process.env.STRIPE_PORTAL_CONFIGURATION_ID?.trim() || undefined,
     stripeAutomaticTaxEnabled: readBoolEnv('STRIPE_AUTOMATIC_TAX_ENABLED', false),
-    stripeRefundContactEmail: readEnv('STRIPE_REFUND_CONTACT_EMAIL', 'contact@astromar.org'),
+    stripeRefundContactEmail: readEnv('STRIPE_REFUND_CONTACT_EMAIL', PRODUCT_BRAND.supportEmail),
     stripeRefundUsageLimitCredits: readIntEnv('STRIPE_REFUND_USAGE_LIMIT_CREDITS', 2_000),
     stripePaymentGraceDays: readIntEnv('STRIPE_PAYMENT_GRACE_DAYS', 3),
     hermesApiyiInputRate: readFloatEnv('HERMES_APIYI_INPUT_RATE', 3),

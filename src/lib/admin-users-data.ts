@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { productBrand } from '@/lib/brand';
 import { getBillingPlan } from '@/lib/billing-plans';
 import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
 import { prisma } from '@/lib/prisma';
@@ -314,7 +315,7 @@ export async function getAdminUserDetail(userId: string) {
     reservations: reservationPayload,
     payments: billing.detail?.payments ?? [],
     refundPolicy: billing.detail?.refundPolicy ?? {
-      contactEmail: 'contact@astromar.org',
+      contactEmail: productBrand.supportEmail,
       usageLimitCredits: 2_000,
       selfService: false,
     },

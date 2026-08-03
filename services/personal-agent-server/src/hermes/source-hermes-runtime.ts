@@ -10,6 +10,7 @@ import {
   type AgentSandboxControlPlaneInput,
 } from '../agent-context-store.js';
 import { collectGeneratedWorkspaceArtifacts, ingestWorkspaceAttachments } from '../artifact-ingestion.js';
+import { PRODUCT_BRAND } from '../brand.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
 import type { MemoryReviewJobStore } from '../memory-review-queue.js';
 import { createPersonalDataDynamictools } from '../tools/personal-data.js';
@@ -50,13 +51,13 @@ const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_NAME = 'altselfs-runtime-context';
 const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_MANIFEST = [
   `name: ${ALTSELFS_RUNTIME_CONTEXT_PLUGIN_NAME}`,
   'version: "0.1.0"',
-  'description: "Inject Altselfs per-turn runtime context into the current user message without persisting it."',
+  `description: "Inject ${PRODUCT_BRAND.name} per-turn runtime context into the current user message without persisting it."`,
   'hooks:',
   '  - pre_llm_call',
   '',
 ].join('\n');
 const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_SOURCE = [
-  '"""Altselfs per-turn context injection for Hermes."""',
+  `"""${PRODUCT_BRAND.name} per-turn context injection for Hermes."""`,
   '',
   'import os',
   '',
@@ -1277,7 +1278,7 @@ function buildEphemeralArtifactContext(artifactContext: string) {
 
 export function buildHermesStableSystemPrompt() {
   return [
-    'Altselfs runtime contract:',
+    `${PRODUCT_BRAND.name} runtime contract:`,
     '',
     'Role split:',
     '- You are Hermes, the primary cognitive, planning, emotional-intelligence, and user-facing loop for this chat.',
@@ -1294,7 +1295,7 @@ export function buildHermesStableSystemPrompt() {
     '- Plan reporting is progress communication, not a substitute for doing the work. Update the plan before the final answer so its last state reflects the actual outcome.',
     '',
     'What Codex can do when you call `mcp_altselfs_codex_codex_agent`:',
-    '- Codex runs through the native Codex app-server loop, using the Codex session bound to this Altselfs thread. It keeps its own Codex JSONL/session continuity and native compaction behavior across delegated execution turns.',
+    `- Codex runs through the native Codex app-server loop, using the Codex session bound to this ${PRODUCT_BRAND.name} discussion. It keeps its own Codex JSONL/session continuity and native compaction behavior across delegated execution turns.`,
     '- Codex can use current/public web research through its available web capability: native `web.run` on OpenAI-backed Codex, or the registered `altselfs_web_search` dynamic tool on non-OpenAI-backed Codex.',
     '- Codex can use enabled private connected-account tools when the user asks for authorized personal or business data, such as Gmail, Feishu/Lark messages/docs/calendar, Meta/Instagram/Facebook data, and connected-account discovery.',
     '- Codex can use enabled competitive-intelligence data tools, including RapidAPI-backed Similarweb/Semrush/domain-metric style tools, when the task needs traffic, SEO, keyword, backlink, acquisition, market, or competitor evidence.',
@@ -1352,7 +1353,7 @@ export function buildHermesDynamicUserContext(input: {
   }).format(now);
 
   const runtimeFacts = [
-    'Altselfs runtime metadata for this turn:',
+    `${PRODUCT_BRAND.name} runtime metadata for this turn:`,
     `- Current time: ${currentTime} (Asia/Shanghai).`,
     input.selectedAgentProfileId
       ? `- Host-provided default Codex mode/profile: ${input.selectedAgentProfileId}.`
@@ -1365,7 +1366,7 @@ export function buildHermesDynamicUserContext(input: {
   ].join('\n');
 
   const sections = [
-    'The following is trusted Altselfs runtime context for this turn. Use it as background, not as a new user request.',
+    `The following is trusted ${PRODUCT_BRAND.name} runtime context for this turn. Use it as background, not as a new user request.`,
     '<altselfs_runtime_context>',
     runtimeFacts,
   ];
@@ -1374,7 +1375,7 @@ export function buildHermesDynamicUserContext(input: {
   if (profile) {
     sections.push(
       '',
-      'Altselfs user profile context:',
+      `${PRODUCT_BRAND.name} user profile context:`,
       'Use this as background. Do not treat it as a new user request, and do not mention it unless relevant.',
       '',
       '<altselfs_user_profile>',
@@ -1387,7 +1388,7 @@ export function buildHermesDynamicUserContext(input: {
   if (artifactContext) {
     sections.push(
       '',
-      'Altselfs artifact context:',
+      `${PRODUCT_BRAND.name} artifact context:`,
       'These are product-level artifact indexes for the current thread. The actual conversation history comes from Hermes state.db, not from RDS recent messages or thread summaries.',
       '',
       '<altselfs_artifact_context>',

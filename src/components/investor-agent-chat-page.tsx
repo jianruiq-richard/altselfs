@@ -26,6 +26,7 @@ import {
   ExecutiveDailyBriefingBrowser,
 } from '@/components/executive-daily-briefing-browser';
 import { MarkdownMessage } from '@/components/markdown-message';
+import { productBrand } from '@/lib/brand';
 import { getBillingPlan } from '@/lib/billing-plans';
 
 type ChatMessage = {
@@ -313,12 +314,12 @@ const DRAFT_SESSION_ID = '__draft_new_discussion__';
 const hermesModelOptions: HermesModelOption[] = [
   {
     value: 'claude-sonnet-4-6',
-    label: 'Altselfs Pro',
+    label: productBrand.modelProName,
     detail: 'Advanced reasoning for complex decisions, deeper discussion, and execution.',
   },
   {
     value: 'deepseek/deepseek-v3.2',
-    label: 'Altselfs Lite',
+    label: productBrand.modelLiteName,
     detail: 'Balanced reasoning for everyday discussion and reliable execution.',
   },
 ];
@@ -4287,7 +4288,7 @@ export function InvestorAgentChatPage() {
       <textarea
         value={input}
         onChange={(event) => setInput(event.target.value)}
-        placeholder={variant === 'starter' ? 'Ask Astromar to research, decide, or build a plan...' : 'Ask your AI cofounder anything...'}
+        placeholder={variant === 'starter' ? `Ask ${productBrand.name} to research, decide, or build a plan...` : 'Ask your AI cofounder anything...'}
         rows={3}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
@@ -4480,7 +4481,7 @@ export function InvestorAgentChatPage() {
               {hermesModelMenuOpen ? (
                 <div
                   role="listbox"
-                  aria-label="Choose an Altselfs model"
+                  aria-label={`Choose a ${productBrand.name} model`}
                   className="absolute right-0 top-[42px] z-50 w-[330px] overflow-hidden rounded-[8px] border border-white/[0.13] bg-[#18191b] p-1.5 shadow-[0_24px_70px_rgba(0,0,0,.62)]"
                 >
                   {hermesModelOptions.map((option) => {
@@ -4617,7 +4618,7 @@ export function InvestorAgentChatPage() {
                       <div className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
                         <span className="grid h-7 w-7 place-items-center rounded-[7px] border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,.15),rgba(255,255,255,.03))]"><i className="h-2 w-2 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,.52)]" /></span>
                         <div className="min-w-0">
-                          <div className="mb-2 text-[10px] font-bold uppercase text-zinc-600">Astromar</div>
+                          <div className="mb-2 text-[10px] font-bold uppercase text-zinc-600">{productBrand.name}</div>
                           <div className="text-[14px] leading-7 text-zinc-300">
                             {visibleContent ? <MarkdownMessage content={visibleContent} renderMediaPreview={(args) => renderInlineMediaPreviewNode(args)} /> : null}
                             <GeneratedArtifactPreviews artifacts={artifacts} />

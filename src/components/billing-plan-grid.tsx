@@ -12,6 +12,7 @@ import {
   Telescope,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { productBrand } from '@/lib/brand';
 import {
   BILLING_PLANS,
   type BillingCycle,
@@ -259,7 +260,7 @@ function PlanCard({
         <PlanFeature icon={CircleGauge} text={`${plan.concurrentTasks} concurrent task${plan.concurrentTasks === 1 ? '' : 's'}`} />
         <PlanFeature
           icon={Check}
-          text={plan.modelTiers.includes('PRO') ? 'Altselfs Lite and Pro' : 'Altselfs Lite only'}
+          text={plan.modelTiers.includes('PRO') ? productBrand.modelLiteAndProLabel : productBrand.modelLiteOnlyLabel}
         />
         <PlanFeature icon={MessageCircle} text={`${estimate.discussions} discussions approximately`} />
         <PlanFeature icon={Search} text={`${estimate.researchTasks} research tasks approximately`} />

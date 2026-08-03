@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { ServerConfig } from './config.js';
+import { PRODUCT_BRAND } from './brand.js';
 import {
   BillingUnavailableError,
   getRequiredBillingPool,
@@ -123,7 +124,7 @@ export async function authorizeAgentRun(
       throw new CreditAdmissionError(
         403,
         'MODEL_NOT_INCLUDED',
-        'Altselfs Pro is available on Pro and Ultra plans.',
+        `${PRODUCT_BRAND.modelProName} is available on Pro and Ultra plans.`,
         {
           planKey: subscription.planKey,
           requestedModel: input.hermesModel || null,

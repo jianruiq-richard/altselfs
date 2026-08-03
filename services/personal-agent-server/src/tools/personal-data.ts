@@ -1,4 +1,5 @@
 import type { ServerConfig } from '../config.js';
+import { PRODUCT_BRAND } from '../brand.js';
 import { decryptCredentialPayload, isCredentialVaultConfigured } from '../credential-vault.js';
 import { externalFetch } from '../outbound-fetch.js';
 import {
@@ -121,7 +122,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
           properties: {
             query: { type: 'string', description: 'Gmail search query, e.g. newer_than:1d, from:alice@example.com, subject:(invoice).' },
             maxResults: { type: 'number', description: 'Max messages per account, default 10, capped at 20.' },
-            accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, searches all connected Gmail accounts.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id. If omitted, searches all connected Gmail accounts.` },
             accountEmail: { type: 'string', description: 'Optional Gmail email. If omitted, searches all connected Gmail accounts.' },
             includeSpamTrash: { type: 'boolean', description: 'Whether to include spam/trash. Default false.' },
           },
@@ -138,7 +139,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
           type: 'object',
           properties: {
             messageId: { type: 'string', description: 'Gmail message id.' },
-            accountId: { type: 'string', description: 'Altselfs connection id. Required when multiple Gmail accounts are connected.' },
+            accountId: { type: 'string', description: `${PRODUCT_BRAND.name} connection id. Required when multiple Gmail accounts are connected.` },
             accountEmail: { type: 'string', description: 'Gmail email. Alternative to accountId.' },
           },
           required: ['messageId'],
@@ -156,7 +157,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
           properties: {
             threadId: { type: 'string', description: 'Gmail thread id.' },
             maxMessages: { type: 'number', description: 'Max thread messages to return, default 10, capped at 20.' },
-            accountId: { type: 'string', description: 'Altselfs connection id. Required when multiple Gmail accounts are connected.' },
+            accountId: { type: 'string', description: `${PRODUCT_BRAND.name} connection id. Required when multiple Gmail accounts are connected.` },
             accountEmail: { type: 'string', description: 'Gmail email. Alternative to accountId.' },
           },
           required: ['threadId'],
@@ -182,7 +183,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
               description: 'Arguments after lark-cli, e.g. ["drive","+search","--as","user","--query","instruction","--json"], ["skills","read","lark-doc","references/lark-doc-fetch.md"], or ["api","GET","/open-apis/drive/v1/files"]. Do not include the lark-cli binary name.',
             },
             timeoutMs: { type: 'number', description: 'Optional timeout in milliseconds, default lark-cli timeout, capped at 120000.' },
-            accountId: { type: 'string', description: 'Optional Altselfs connection id. Required when multiple Feishu accounts are connected.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id. Required when multiple Feishu accounts are connected.` },
             accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
           },
           required: ['args'],
@@ -205,7 +206,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
             isAtMe: { type: 'boolean', description: 'Only messages that mention the authorized user.' },
             pageSize: { type: 'number', description: 'Page size, default 20, capped at 50.' },
             pageLimit: { type: 'number', description: 'Auto-pagination page limit, default 1, capped at 5.' },
-            accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, searches up to 3 connected Feishu accounts.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id. If omitted, searches up to 3 connected Feishu accounts.` },
             accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
           },
           additionalProperties: false,
@@ -226,7 +227,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
             hasChatted: { type: 'boolean', description: 'Restrict to users the authorized user has chatted with. Default true when query is provided.' },
             excludeExternalUsers: { type: 'boolean', description: 'Exclude external cross-tenant users.' },
             pageSize: { type: 'number', description: 'Rows per request, default 20, capped at 30.' },
-            accountId: { type: 'string', description: 'Optional Altselfs connection id.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id.` },
             accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
           },
           additionalProperties: false,
@@ -241,7 +242,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
         inputSchema: {
           type: 'object',
           properties: {
-            accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, uses the only connected Feishu account or the first few accounts.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id. If omitted, uses the only connected Feishu account or the first few accounts.` },
             accountEmail: { type: 'string', description: 'Optional Feishu account external id/email/open id. Alternative to accountId.' },
             pageSize: { type: 'number', description: 'Max chats to return, default 20, capped at 50.' },
             pageToken: { type: 'string', description: 'Optional Feishu pagination token.' },
@@ -266,7 +267,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
             sortType: { type: 'string', description: 'ByCreateTimeDesc or ByCreateTimeAsc. Default ByCreateTimeDesc.' },
             pageSize: { type: 'number', description: 'Max messages to return, default 20, capped at 50.' },
             pageToken: { type: 'string', description: 'Optional Feishu pagination token.' },
-            accountId: { type: 'string', description: 'Altselfs connection id. Required when multiple Feishu accounts are connected.' },
+            accountId: { type: 'string', description: `${PRODUCT_BRAND.name} connection id. Required when multiple Feishu accounts are connected.` },
             accountEmail: { type: 'string', description: 'Feishu account external id/email/open id. Alternative to accountId.' },
           },
           additionalProperties: false,
@@ -285,7 +286,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
             endTime: { type: 'string', description: 'Optional end time as Unix seconds, milliseconds, or ISO string. Default now.' },
             chatLimit: { type: 'number', description: 'Max chats to scan per account, default 10, capped at 30.' },
             maxMessagesPerChat: { type: 'number', description: 'Max messages per chat, default 10, capped at 30.' },
-            accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, scans up to 3 connected Feishu accounts.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id. If omitted, scans up to 3 connected Feishu accounts.` },
             accountEmail: { type: 'string', description: 'Optional Feishu account external id/email/open id. Alternative to accountId.' },
           },
           additionalProperties: false,
@@ -303,7 +304,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
             startTime: { type: 'string', description: 'Optional start time as ISO string, Unix seconds, or milliseconds. Default start of today.' },
             endTime: { type: 'string', description: 'Optional end time as ISO string, Unix seconds, or milliseconds. Default end of start day.' },
             calendarId: { type: 'string', description: 'Optional calendar id, default primary.' },
-            accountId: { type: 'string', description: 'Optional Altselfs connection id.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id.` },
             accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
           },
           additionalProperties: false,
@@ -331,7 +332,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
             createdSince: { type: 'string', description: 'Optional start of document-created time window, e.g. 7d, 1m, 2026-04-01, RFC3339, or Unix seconds.' },
             folderTokens: { type: 'string', description: 'Optional comma-separated folder tokens. Cannot be combined with spaceIds.' },
             spaceIds: { type: 'string', description: 'Optional comma-separated wiki space IDs. Cannot be combined with folderTokens.' },
-            accountId: { type: 'string', description: 'Optional Altselfs connection id.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id.` },
             accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
           },
           additionalProperties: false,
@@ -356,7 +357,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
             maxDepth: { type: 'number', description: 'Outline heading depth or subtree depth. Default chosen by lark-cli.' },
             contextBefore: { type: 'number', description: 'Sibling top-level blocks before scoped matches.' },
             contextAfter: { type: 'number', description: 'Sibling top-level blocks after scoped matches.' },
-            accountId: { type: 'string', description: 'Optional Altselfs connection id.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id.` },
             accountEmail: { type: 'string', description: 'Optional Feishu display name/external id. Alternative to accountId.' },
           },
           required: ['doc'],
@@ -376,7 +377,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
         inputSchema: {
           type: 'object',
           properties: {
-            accountId: { type: 'string', description: 'Optional Altselfs connection id. If omitted, lists all connected Meta accounts.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} connection id. If omitted, lists all connected Meta accounts.` },
             accountEmail: { type: 'string', description: 'Optional Meta account id/display name. Alternative to accountId.' },
           },
           additionalProperties: false,
@@ -391,7 +392,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
         inputSchema: {
           type: 'object',
           properties: {
-            accountId: { type: 'string', description: 'Optional Altselfs Meta connection id.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} Meta connection id.` },
             accountEmail: { type: 'string', description: 'Optional Meta display name/external id. Alternative to accountId.' },
             igUserId: { type: 'string', description: 'Optional Instagram professional user id.' },
             username: { type: 'string', description: 'Optional Instagram username.' },
@@ -410,7 +411,7 @@ export async function createPersonalDataDynamictools(config: ServerConfig, input
         inputSchema: {
           type: 'object',
           properties: {
-            accountId: { type: 'string', description: 'Optional Altselfs Meta connection id.' },
+            accountId: { type: 'string', description: `Optional ${PRODUCT_BRAND.name} Meta connection id.` },
             accountEmail: { type: 'string', description: 'Optional Meta display name/external id. Alternative to accountId.' },
             pageId: { type: 'string', description: 'Optional Facebook Page id.' },
             pageName: { type: 'string', description: 'Optional Facebook Page name substring.' },

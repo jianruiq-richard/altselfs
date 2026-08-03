@@ -1,5 +1,5 @@
 export type BillingPlanKey = 'FREE' | 'STARTER' | 'PRO' | 'SCALE';
-export type AltselfsModelTier = 'LITE' | 'PRO';
+export type AgentModelTier = 'LITE' | 'PRO';
 export type BillingCycle = 'monthly' | 'yearly';
 
 export type BillingPlan = {
@@ -9,7 +9,7 @@ export type BillingPlan = {
   monthlyCredits: number;
   concurrentTasks: number;
   scheduledTasks: number;
-  modelTiers: AltselfsModelTier[];
+  modelTiers: AgentModelTier[];
   description: string;
   highlighted?: boolean;
 };

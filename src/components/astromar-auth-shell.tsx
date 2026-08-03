@@ -8,6 +8,7 @@ import {
   Radar,
   ShieldCheck,
 } from "lucide-react";
+import { productBrand } from "@/lib/brand";
 import styles from "./astromar-auth.module.css";
 
 type AstromarAuthShellProps = {
@@ -20,12 +21,12 @@ type AstromarAuthShellProps = {
 
 function Brand() {
   return (
-    <Link className={styles.brandLockup} href="/" aria-label="Astromar home">
+    <Link className={styles.brandLockup} href="/" aria-label={`${productBrand.name} home`}>
       <span className={styles.brand}>
         <span className={styles.brandMark} aria-hidden="true" />
-        <span>Astromar</span>
+        <span>{productBrand.name}</span>
       </span>
-      <span className={styles.brandTagline}>Think with you. Act for you.</span>
+      <span className={styles.brandTagline}>{productBrand.tagline}</span>
     </Link>
   );
 }
@@ -57,7 +58,7 @@ function SignInPreview() {
             What changed overnight, and what should I do first?
           </div>
           <div className={styles.message}>
-            <small>Astromar</small>
+            <small>{productBrand.name}</small>
             Three signals matter. One creates a decision you should make before the team starts work.
           </div>
           <div className={styles.signalList}>
@@ -161,7 +162,7 @@ export function AstromarAuthShell({
       <header className={styles.topbar}>
         <Brand />
         <div className={styles.topAction}>
-          <span>{isSignIn ? "New to Astromar?" : "Already have an account?"}</span>
+          <span>{isSignIn ? `New to ${productBrand.name}?` : "Already have an account?"}</span>
           <Link href={isSignIn ? "/sign-up?method=email" : "/sign-in?method=email"}>
             {isSignIn ? "Create account" : "Sign in"}
           </Link>
@@ -194,7 +195,7 @@ export function AstromarAuthShell({
           </div>
         </section>
 
-        <aside className={styles.productSide} aria-label="Astromar product preview">
+        <aside className={styles.productSide} aria-label={`${productBrand.name} product preview`}>
           {isSignIn ? <SignInPreview /> : <SignUpPreview />}
         </aside>
       </div>

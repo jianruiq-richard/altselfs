@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import type { PoolClient } from 'pg';
 import type { ServerConfig } from './config.js';
+import { PRODUCT_BRAND } from './brand.js';
 import {
   getRequiredBillingPool,
   runSerializableBillingTransaction,
@@ -302,7 +303,7 @@ async function ensureStripeBillingManagementPortalConfiguration(config: ServerCo
     altselfsVersion: version,
   };
   const params = {
-    name: 'Altselfs billing management',
+    name: `${PRODUCT_BRAND.name} billing management`,
     default_return_url: `${config.stripeAppBaseUrl}/profile`,
     features,
     metadata,
@@ -376,7 +377,7 @@ async function ensureStripeUpgradePortalConfiguration(
     altselfsPlanKey: planKey,
     altselfsPriceId: priceId,
   };
-  const name = `Altselfs ${PLAN_CATALOG[planKey].name} upgrade confirmation`;
+  const name = `${PRODUCT_BRAND.name} ${PLAN_CATALOG[planKey].name} upgrade confirmation`;
 
   if (configurationId) {
     const configuration = await stripe.billingPortal.configurations.update(configurationId, {

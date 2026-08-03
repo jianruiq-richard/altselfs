@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { productBrand } from '@/lib/brand';
 import { requireOpsAdmin } from '@/lib/ops-auth';
 import { getOpsDashboardData, type OpsStatus } from '@/lib/ops-data';
 
@@ -16,7 +17,7 @@ export default async function OpsPage() {
       <div className="mx-auto max-w-7xl px-6 py-8">
         <header className="mb-8 flex flex-col gap-3 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Altselfs operations</p>
+            <p className="text-sm font-medium text-slate-500">{productBrand.name} operations</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-normal">Ops Dashboard</h1>
             <p className="mt-2 text-sm text-slate-500">Signed in as {admin.name} · Collected {formatDateTime(data.collectedAt)}</p>
           </div>

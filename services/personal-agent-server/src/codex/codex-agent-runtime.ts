@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { CodexJsonRpcClient } from './json-rpc-client.js';
 import { projectCodexNotification } from './event-projector.js';
+import { PRODUCT_BRAND } from '../brand.js';
 import { buildMemoryContext } from '../memory-store.js';
 import { isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-search.js';
@@ -474,7 +475,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       'Use registered sandbox execution tools only when deterministic computation, parsing, scraping, or small workspace file transformations are truly needed. Keep commands scoped to the provided workspace.',
       'Use private personal-data tools only when the delegated task asks for private-channel content such as Gmail, Feishu/Lark, calendar, docs, messages, or connected accounts.',
       'For competitive intelligence tasks, use enabled competitor-data tools when relevant; label third-party estimates as estimates and separate facts, assumptions, and inference.',
-      '- In Altselfs context, OPC usually means One Person Company / operator-owned company unless the user explicitly says OPC UA or industrial automation.',
+      `- In ${PRODUCT_BRAND.name} context, OPC usually means One Person Company / operator-owned company unless the user explicitly says OPC UA or industrial automation.`,
       'Never claim that you searched, read private accounts, used a platform, or called a tool unless the corresponding tool was actually called.',
     ].join('\n');
   }

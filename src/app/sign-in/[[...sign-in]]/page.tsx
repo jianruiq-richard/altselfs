@@ -4,19 +4,20 @@ import { headers } from "next/headers";
 import { AstromarAuthShell } from "@/components/astromar-auth-shell";
 import { EmbeddedBrowserAuthGuard } from "@/components/embedded-browser-auth-guard";
 import { PhonePasswordAuthForm } from "@/components/phone-code-auth-form";
+import { productBrand } from "@/lib/brand";
 import { clerkAuthAppearance } from "@/lib/clerk-auth-appearance";
 import { isOauthBlockedEmbeddedBrowser } from "@/lib/oauth-browser";
 
 const DEFAULT_AUTH_REDIRECT = "/investor/chat/100";
 
 export const metadata: Metadata = {
-  title: "Sign in | Astromar",
-  description: "Sign in to Astromar, your AI cofounder.",
+  title: `Sign in | ${productBrand.name}`,
+  description: `Sign in to ${productBrand.name}, your AI cofounder.`,
 };
 
 function buildFallbackUrl(path: string, headersList: Headers): string {
   const protocol = headersList.get("x-forwarded-proto") ?? "https";
-  const host = headersList.get("x-forwarded-host") ?? headersList.get("host") ?? "altselfs.com";
+  const host = headersList.get("x-forwarded-host") ?? headersList.get("host") ?? productBrand.domain;
 
   return `${protocol}://${host}${path}`;
 }

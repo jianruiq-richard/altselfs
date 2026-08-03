@@ -15,6 +15,7 @@ import { AstromarWorkspaceShell } from '@/components/astromar-workspace-shell';
 import { BillingPlanGrid, type BillingPlanCatalog } from '@/components/billing-plan-grid';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
 import { PublicPricingPage } from '@/components/public-pricing-page';
+import { productBrand } from '@/lib/brand';
 import { type BillingCycle, formatCredits } from '@/lib/billing-plans';
 
 type BillingSummary = {
@@ -292,7 +293,7 @@ export default function PricingPage() {
                 <span>
                   <strong className="text-xs text-zinc-200">Manual refund review</strong>
                   <p className="mt-1.5 text-[10px] leading-5 text-zinc-600">
-                    Contact {catalog?.refundPolicy.contactEmail || 'contact@astromar.org'}. For non-platform issues, a subscription invoice or Credit pack may be refunded when no more than {formatCredits(catalog?.refundPolicy.usageLimitCredits || 2_000)} Credits have been used from that Credit batch.
+                    Contact {catalog?.refundPolicy.contactEmail || productBrand.supportEmail}. For non-platform issues, a subscription invoice or Credit pack may be refunded when no more than {formatCredits(catalog?.refundPolicy.usageLimitCredits || 2_000)} Credits have been used from that Credit batch.
                   </p>
                 </span>
               </div>

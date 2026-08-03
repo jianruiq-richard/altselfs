@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { ServerConfig } from '../config.js';
+import { PRODUCT_BRAND } from '../brand.js';
 import { CodexJsonRpcClient } from './json-rpc-client.js';
 import { prepareTemporaryOpenAiAuth, type TemporaryOpenAiAuth } from './openai-auth-lock.js';
 
@@ -270,7 +271,7 @@ async function runCodexOpenAiAuthSmokeCheck(
 
     await activeClient.initialize({
       clientName: 'altselfs-codex-openai-auth-health',
-      clientTitle: 'Altselfs Codex OpenAI Auth Health',
+      clientTitle: `${PRODUCT_BRAND.name} Codex OpenAI Auth Health`,
       clientVersion: '0.1.0',
     });
 

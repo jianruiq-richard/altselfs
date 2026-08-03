@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { BillingPlanGrid } from "@/components/billing-plan-grid";
+import { productBrand } from "@/lib/brand";
 import styles from "./astromar-landing-page.module.css";
 
 const scenarios = [
@@ -8,19 +9,19 @@ const scenarios = [
     lead: "Know competitor moves.",
     decision: "Decide your action.",
     detail:
-      "Track competitor activity across all channels. Astromar shows you their playbook and suggests your counter-strategy.",
+      `Track competitor activity across all channels. ${productBrand.name} shows you their playbook and suggests your counter-strategy.`,
   },
   {
     lead: "Find who needs your product.",
     decision: "Decide your outreach.",
     detail:
-      "Your first 100 users are already out there. Astromar finds where they gather, what they care about, and how to reach them before anyone else does.",
+      `Your first 100 users are already out there. ${productBrand.name} finds where they gather, what they care about, and how to reach them before anyone else does.`,
   },
   {
     lead: "From idea to live.",
     decision: "Decide what ships first.",
     detail:
-      "Not a prototype. Not a demo. Astromar helps you break down any idea into a shippable first version — then tells you exactly what to build on day one.",
+      `Not a prototype. Not a demo. ${productBrand.name} helps you break down any idea into a shippable first version — then tells you exactly what to build on day one.`,
   },
 ] as const;
 
@@ -66,19 +67,19 @@ const useCases = [
     index: "01",
     title: "Know competitor moves. Decide your action.",
     copy:
-      "Track competitor activity across all channels. Astromar shows you their playbook and suggests your counter-strategy.",
+      `Track competitor activity across all channels. ${productBrand.name} shows you their playbook and suggests your counter-strategy.`,
   },
   {
     index: "02",
     title: "Find who needs your product. Decide your outreach.",
     copy:
-      "Your first 100 users are already out there. Astromar finds where they gather, what they care about, and how to reach them before anyone else does.",
+      `Your first 100 users are already out there. ${productBrand.name} finds where they gather, what they care about, and how to reach them before anyone else does.`,
   },
   {
     index: "03",
     title: "From idea to live. Decide what ships first.",
     copy:
-      "Not a prototype. Not a demo. Astromar helps you break down any idea into a shippable first version — then tells you exactly what to build on day one.",
+      `Not a prototype. Not a demo. ${productBrand.name} helps you break down any idea into a shippable first version — then tells you exactly what to build on day one.`,
   },
 ] as const;
 
@@ -91,10 +92,10 @@ export function AstromarLandingPage() {
     <main className={styles.landing}>
       <nav className={styles.nav}>
         <div className={classes("container", "navInner")}>
-          <Link className={styles.brand} href="/" aria-label="Astromar home">
+          <Link className={styles.brand} href="/" aria-label={`${productBrand.name} home`}>
             <span className={styles.brandMark} aria-hidden="true" />
-            <span className={styles.brandName}>Astromar</span>
-            <span className={styles.brandTagline}>Think with you. Act for you.</span>
+            <span className={styles.brandName}>{productBrand.name}</span>
+            <span className={styles.brandTagline}>{productBrand.tagline}</span>
           </Link>
 
           <div className={styles.navLinks} aria-label="Primary navigation">
@@ -168,18 +169,18 @@ export function AstromarLandingPage() {
           </div>
           <p className={styles.sectionCopy}>
             The first use case is concrete enough to be useful on day one, but the product behavior is broader:
-            Astromar turns any signal into a decision conversation.
+            {productBrand.name} turns any signal into a decision conversation.
           </p>
         </div>
 
-        <div className={styles.demoFrame} aria-label="Astromar decision room preview">
+        <div className={styles.demoFrame} aria-label={`${productBrand.name} decision room preview`}>
           <div className={styles.windowBar}>
             <div className={styles.windowDots} aria-hidden="true">
               <span />
               <span />
               <span />
             </div>
-            <div className={styles.windowTitle}>astromar://decision-room</div>
+            <div className={styles.windowTitle}>{productBrand.protocolScheme}://decision-room</div>
             <div className={styles.secureContext}>Secure context</div>
           </div>
 
@@ -190,12 +191,12 @@ export function AstromarLandingPage() {
                 What did Opus Clip do yesterday, and should we respond?
               </div>
               <div className={classes("message", "messageAgent")}>
-                <strong>Astromar</strong>
+                <strong>{productBrand.name}</strong>
                 Running cross-channel intelligence across traffic, search, social, and creator activity. I will
                 prioritize deltas that change your growth plan today.
               </div>
               <div className={classes("message", "messageAgent")}>
-                <strong>Astromar</strong>
+                <strong>{productBrand.name}</strong>
                 The real decision is not whether they posted. It is whether you compete on the same creator channel
                 or attack the use case they are ignoring.
               </div>
@@ -249,7 +250,7 @@ export function AstromarLandingPage() {
                   ))}
                 </ul>
                 <div className={styles.recommendation}>
-                  <b>Astromar recommendation:</b> do not copy their broad creator push yet. Test a narrower webinar
+                  <b>{productBrand.name} recommendation:</b> do not copy their broad creator push yet. Test a narrower webinar
                   repurposing wedge, then use response data to decide whether the channel is worth scaling.
                 </div>
               </div>
@@ -287,7 +288,7 @@ export function AstromarLandingPage() {
             <p className={styles.eyebrow}>How it thinks</p>
             <h2>It does not stop at the answer.</h2>
             <p>
-              A report gives facts. Astromar pushes the next question, challenges weak assumptions, and helps you
+              A report gives facts. {productBrand.name} pushes the next question, challenges weak assumptions, and helps you
               choose the move that matches your stage, constraints, and judgment.
             </p>
           </div>
@@ -298,7 +299,7 @@ export function AstromarLandingPage() {
               <p>Give me a quick competitor update.</p>
             </article>
             <article className={classes("turn", "turnAi")}>
-              <small>Astromar</small>
+              <small>{productBrand.name}</small>
               <p>Here is the update. More importantly, it creates a decision: defend the same segment or attack the overlooked one.</p>
             </article>
             <article className={styles.turn}>
@@ -306,7 +307,7 @@ export function AstromarLandingPage() {
               <p>What would you do if we only have one growth sprint this week?</p>
             </article>
             <article className={classes("turn", "turnAi")}>
-              <small>Astromar</small>
+              <small>{productBrand.name}</small>
               <p>
                 I would run the narrower creator test first. If activation beats your current baseline, then scale. If
                 not, the market signal was noise for your stage.
@@ -322,7 +323,7 @@ export function AstromarLandingPage() {
             <p className={styles.eyebrow}>Start now</p>
             <h2>Bring your startup context into one decision room.</h2>
             <p>
-              Start with a competitor, a product, or an idea. Astromar turns it into the next decision and the next
+              Start with a competitor, a product, or an idea. {productBrand.name} turns it into the next decision and the next
               action.
             </p>
           </div>
@@ -367,7 +368,7 @@ export function AstromarLandingPage() {
 
       <footer className={styles.footer}>
         <div className={classes("container", "footerInner")}>
-          <span>Astromar</span>
+          <span>{productBrand.name}</span>
           <span>Your AI cofounder</span>
           <span>Competitive intelligence, seed users, first version.</span>
         </div>

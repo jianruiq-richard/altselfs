@@ -1,4 +1,5 @@
 import type { ServerConfig } from '../config.js';
+import { PRODUCT_BRAND } from '../brand.js';
 import { isRecord } from '../util.js';
 
 export type WebSearchProvider = 'serpapi' | 'serper' | 'google_cse' | 'bing' | 'duckduckgo';
@@ -9,6 +10,8 @@ export type WebSearchResult = {
   snippet: string;
   publishedDate?: string;
 };
+
+const USER_AGENT_PRODUCT_NAME = PRODUCT_BRAND.name.replace(/[^a-z0-9]/gi, '') || 'Minaco';
 
 export function createWebSearchDynamictool() {
   return {
@@ -229,7 +232,7 @@ async function duckDuckGoHtmlSearch(query: string): Promise<WebSearchResult[]> {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'user-agent': 'AltselfsPersonalAgent/0.1',
+        'user-agent': `${USER_AGENT_PRODUCT_NAME}PersonalAgent/0.1`,
       },
     });
     if (!response.ok) throw new Error(`search request failed with HTTP ${response.status}`);

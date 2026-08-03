@@ -3,6 +3,7 @@
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
+import { productBrand } from '@/lib/brand';
 import { buildFallbackEmail } from '@/lib/user-identifier';
 
 export function CandidateSetupForm() {
@@ -69,7 +70,7 @@ export function CandidateSetupForm() {
         onSubmit={handleSubmit}
         className="w-full max-w-md rounded-lg border border-white/10 bg-[#121313] p-7 shadow-2xl shadow-black/30"
       >
-        <p className="text-xs font-semibold uppercase text-zinc-500">Altselfs</p>
+        <p className="text-xs font-semibold uppercase text-zinc-500">{productBrand.name}</p>
         <h1 className="mt-3 text-2xl font-semibold">Complete your profile</h1>
         <p className="mt-2 text-sm leading-6 text-zinc-400">
           Add the contact details required for candidate conversations.

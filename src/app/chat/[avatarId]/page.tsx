@@ -6,6 +6,7 @@ import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import { FigmaShell } from '@/components/figma-shell';
 import { MarkdownMessage } from '@/components/markdown-message';
+import { productBrand } from '@/lib/brand';
 
 interface Message {
   id: string;
@@ -150,7 +151,7 @@ export default function ChatPage() {
     <FigmaShell
       homeHref="/candidate"
       title={avatar.name}
-      subtitle={`By ${avatar.investor.name || 'Altselfs user'}`}
+      subtitle={`By ${avatar.investor.name || `${productBrand.name} user`}`}
       actions={
         <Link href="/candidate" className="text-sm text-blue-700 hover:underline">
           Back to twin gallery

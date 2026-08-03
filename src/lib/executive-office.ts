@@ -1,3 +1,5 @@
+import { productBrand } from '@/lib/brand';
+
 export type ExecutiveDepartmentOverview = {
   department: string;
   status: 'Healthy' | 'Setup needed' | 'Create a twin' | 'Follow-up needed';
@@ -85,7 +87,7 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
   const crossChannelInsight =
     connectedIntegrations.length > 0 || input.wechatSources.length > 0
       ? `A baseline information loop has been established around ${decisionTracks}. Current AI teammates will keep collecting signals from connected channels. Refine focus areas and exclusions to improve decision quality.`
-      : `Decision OS will consolidate information around ${decisionTracks}. No usable channels are connected yet; complete at least one external channel connection first.`;
+      : `${productBrand.name} will consolidate information around ${decisionTracks}. No usable channels are connected yet; complete at least one external channel connection first.`;
   const twinRecommendationInsight =
     input.wechatSources.length > 0
       ? 'External signal sources are available. Key people, product leads, and partnership opportunities can be explored further with a Personal Decision Twin.'
@@ -188,7 +190,7 @@ export function buildExecutiveDailyBriefing(input: BriefingInput): ExecutiveDail
       {
         category: 'Information Digest',
         content: crossChannelInsight,
-        source: 'Decision OS',
+        source: productBrand.name,
       },
       {
         category: 'Today To-Dos',
@@ -259,7 +261,7 @@ export function buildExecutiveAssistantReply(question: string, briefing: Executi
   return [
     `The briefing is ready: ${briefing.headline}`,
     'You can ask me to:',
-    '- Report Decision OS operating status',
+    `- Report ${productBrand.name} operating status`,
     '- List today priorities',
     '- Summarize cross-channel information changes',
     '- Recommend execution priorities',

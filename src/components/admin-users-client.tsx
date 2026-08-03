@@ -13,6 +13,7 @@ import {
   UserRound,
   WalletCards,
 } from 'lucide-react';
+import { productBrand } from '@/lib/brand';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 
 type AdminUserListItem = {
@@ -460,7 +461,7 @@ export function AdminUsersClient({ adminName }: { adminName: string }) {
       <div className="mx-auto max-w-[1800px] px-5 py-5">
         <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm text-slate-400">Altselfs operations</p>
+            <p className="text-sm text-slate-400">{productBrand.name} operations</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-normal">User Admin</h1>
             <p className="mt-2 text-sm text-slate-400">
               Signed in as {adminName}. Reads are on demand; no background jobs run from this page.

@@ -1,5 +1,6 @@
 import type { ServerConfig } from './config.js';
 import type { MemoryReviewJob } from './memory-review-queue.js';
+import { PRODUCT_BRAND } from './brand.js';
 
 export function renderProductizationPage(config: ServerConfig, jobs: MemoryReviewJob[]) {
   const rows = jobs
@@ -22,7 +23,7 @@ export function renderProductizationPage(config: ServerConfig, jobs: MemoryRevie
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Altselfs Personal Agent Status</title>
+  <title>${PRODUCT_BRAND.name} Personal Agent Status</title>
   <style>
     :root { color-scheme: light; --ink:#182030; --muted:#667085; --line:#d8dee8; --band:#f7f8fb; --ok:#087443; --warn:#a15c00; --err:#b42318; --blue:#155eef; }
     * { box-sizing: border-box; }
@@ -55,7 +56,7 @@ export function renderProductizationPage(config: ServerConfig, jobs: MemoryRevie
 </head>
 <body>
   <header>
-    <h1>Altselfs Personal Agent Status</h1>
+    <h1>${PRODUCT_BRAND.name} Personal Agent Status</h1>
     <p class="muted">Hermes owns long-term user profile and the outer personal loop. Codex General owns capability orchestration and tool execution. Runtime state is isolated by user and thread.</p>
   </header>
   <main>

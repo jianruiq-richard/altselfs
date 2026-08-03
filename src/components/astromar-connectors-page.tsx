@@ -17,6 +17,7 @@ import {
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InvestorConnectorsData } from '@/lib/investor-connectors-data';
+import { productBrand } from '@/lib/brand';
 import {
   fetchWorkspaceJson,
   getWorkspaceCachedStale,
@@ -623,7 +624,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
           </span>
         </div>
         <div className={`rounded-[8px] border p-3 ${stepClass('return')}`}>
-          <strong className="block text-[11px] text-zinc-100">3. Return to Astromar</strong>
+          <strong className="block text-[11px] text-zinc-100">3. Return to {productBrand.name}</strong>
           <span className="mt-1 block text-[10px] leading-relaxed text-zinc-500">
             Complete binding here after authorization.
           </span>

@@ -592,7 +592,7 @@ _ALTSELFS_READ_ARTIFACT_TOOL = {
     "name": "altselfs_read_artifact",
     "description": (
         "Read a user-uploaded artifact or parsed text file from the current "
-        "Altselfs workspace. Use this when the host context lists an artifact "
+        "Minaco workspace. Use this when the host context lists an artifact "
         "path and the user asks about the uploaded file. Only listed "
         "workspace uploads, artifacts, outputs, or external-memory files are allowed."
     ),
@@ -615,7 +615,7 @@ _ALTSELFS_SANDBOX_EXEC_TOOL = {
     "namespace": None,
     "name": "altselfs_sandbox_exec",
     "description": (
-        "Run a short Python or shell command in the current Altselfs sandbox "
+        "Run a short Python or shell command in the current Minaco sandbox "
         "workspace when deterministic computation, parsing, scraping, or file "
         "transformation is needed. The command runs in an isolated Docker "
         "container with limited CPU, memory, process count, timeout, and "
@@ -747,7 +747,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
             "properties": {
                 "query": {"type": "string", "description": "Gmail search query, e.g. newer_than:1d, from:alice@example.com, subject:(invoice)."},
                 "maxResults": {"type": "number", "description": "Max messages per account, default 10, capped at 20."},
-                "accountId": {"type": "string", "description": "Optional Altselfs connection id. If omitted, searches all connected Gmail accounts."},
+                "accountId": {"type": "string", "description": "Optional Minaco connection id. If omitted, searches all connected Gmail accounts."},
                 "accountEmail": {"type": "string", "description": "Optional Gmail email. If omitted, searches all connected Gmail accounts."},
                 "includeSpamTrash": {"type": "boolean", "description": "Whether to include spam/trash. Default false."},
             },
@@ -766,7 +766,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
             "type": "object",
             "properties": {
                 "messageId": {"type": "string", "description": "Gmail message id."},
-                "accountId": {"type": "string", "description": "Altselfs connection id. Required when multiple Gmail accounts are connected."},
+                "accountId": {"type": "string", "description": "Minaco connection id. Required when multiple Gmail accounts are connected."},
                 "accountEmail": {"type": "string", "description": "Gmail email. Alternative to accountId."},
             },
             "required": ["messageId"],
@@ -786,7 +786,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
             "properties": {
                 "threadId": {"type": "string", "description": "Gmail thread id."},
                 "maxMessages": {"type": "number", "description": "Max thread messages to return, default 10, capped at 20."},
-                "accountId": {"type": "string", "description": "Altselfs connection id. Required when multiple Gmail accounts are connected."},
+                "accountId": {"type": "string", "description": "Minaco connection id. Required when multiple Gmail accounts are connected."},
                 "accountEmail": {"type": "string", "description": "Gmail email. Alternative to accountId."},
             },
             "required": ["threadId"],
@@ -814,7 +814,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                     "description": "Arguments after lark-cli. Examples: drive +search --as user --query instruction --json; skills read lark-doc references/lark-doc-fetch.md; api GET /open-apis/drive/v1/files. Do not include the lark-cli binary name.",
                 },
                 "timeoutMs": {"type": "number", "description": "Optional timeout in milliseconds, default lark-cli timeout, capped at 120000."},
-                "accountId": {"type": "string", "description": "Optional Altselfs connection id. Required when multiple Feishu accounts are connected."},
+                "accountId": {"type": "string", "description": "Optional Minaco connection id. Required when multiple Feishu accounts are connected."},
                 "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
             },
             "required": ["args"],
@@ -833,7 +833,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "accountId": {"type": "string", "description": "Optional Altselfs connection id. If omitted, uses the only connected Feishu account or the first few accounts."},
+                "accountId": {"type": "string", "description": "Optional Minaco connection id. If omitted, uses the only connected Feishu account or the first few accounts."},
                 "accountEmail": {"type": "string", "description": "Optional Feishu account external id/email/open id. Alternative to accountId."},
                 "pageSize": {"type": "number", "description": "Max chats to return, default 20, capped at 50."},
                 "pageToken": {"type": "string", "description": "Optional Feishu pagination token."},
@@ -860,7 +860,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "sortType": {"type": "string", "description": "ByCreateTimeDesc or ByCreateTimeAsc. Default ByCreateTimeDesc."},
                 "pageSize": {"type": "number", "description": "Max messages to return, default 20, capped at 50."},
                 "pageToken": {"type": "string", "description": "Optional Feishu pagination token."},
-                "accountId": {"type": "string", "description": "Altselfs connection id. Required when multiple Feishu accounts are connected."},
+                "accountId": {"type": "string", "description": "Minaco connection id. Required when multiple Feishu accounts are connected."},
                 "accountEmail": {"type": "string", "description": "Feishu account external id/email/open id. Alternative to accountId."},
             },
             "required": ["containerId"],
@@ -884,7 +884,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "endTime": {"type": "string", "description": "Optional end time as Unix seconds, milliseconds, or ISO string. Default now."},
                 "chatLimit": {"type": "number", "description": "Max chats to scan per account, default 10, capped at 30."},
                 "maxMessagesPerChat": {"type": "number", "description": "Max messages per chat, default 10, capped at 30."},
-                "accountId": {"type": "string", "description": "Optional Altselfs connection id. If omitted, scans up to 3 connected Feishu accounts."},
+                "accountId": {"type": "string", "description": "Optional Minaco connection id. If omitted, scans up to 3 connected Feishu accounts."},
                 "accountEmail": {"type": "string", "description": "Optional Feishu account external id/email/open id. Alternative to accountId."},
             },
             "additionalProperties": False,
@@ -910,7 +910,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "isAtMe": {"type": "boolean", "description": "Only messages that mention the authorized user."},
                 "pageSize": {"type": "number", "description": "Page size, default 20, capped at 50."},
                 "pageLimit": {"type": "number", "description": "Auto-pagination page limit, default 1, capped at 5."},
-                "accountId": {"type": "string", "description": "Optional Altselfs connection id. If omitted, searches up to 3 connected Feishu accounts."},
+                "accountId": {"type": "string", "description": "Optional Minaco connection id. If omitted, searches up to 3 connected Feishu accounts."},
                 "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
             },
             "additionalProperties": False,
@@ -934,7 +934,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "hasChatted": {"type": "boolean", "description": "Restrict to users the authorized user has chatted with. Default true when query is provided."},
                 "excludeExternalUsers": {"type": "boolean", "description": "Exclude external cross-tenant users."},
                 "pageSize": {"type": "number", "description": "Rows per request, default 20, capped at 30."},
-                "accountId": {"type": "string", "description": "Optional Altselfs connection id."},
+                "accountId": {"type": "string", "description": "Optional Minaco connection id."},
                 "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
             },
             "additionalProperties": False,
@@ -954,7 +954,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "startTime": {"type": "string", "description": "Optional start time as ISO string, Unix seconds, or milliseconds. Default start of today."},
                 "endTime": {"type": "string", "description": "Optional end time as ISO string, Unix seconds, or milliseconds. Default end of start day."},
                 "calendarId": {"type": "string", "description": "Optional calendar id, default primary."},
-                "accountId": {"type": "string", "description": "Optional Altselfs connection id."},
+                "accountId": {"type": "string", "description": "Optional Minaco connection id."},
                 "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
             },
             "additionalProperties": False,
@@ -985,7 +985,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "createdSince": {"type": "string", "description": "Optional start of document-created time window, e.g. 7d, 1m, 2026-04-01, RFC3339, or Unix seconds."},
                 "folderTokens": {"type": "string", "description": "Optional comma-separated folder tokens. Cannot be combined with spaceIds."},
                 "spaceIds": {"type": "string", "description": "Optional comma-separated wiki space IDs. Cannot be combined with folderTokens."},
-                "accountId": {"type": "string", "description": "Optional Altselfs connection id."},
+                "accountId": {"type": "string", "description": "Optional Minaco connection id."},
                 "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
             },
             "additionalProperties": False,
@@ -1013,7 +1013,7 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
                 "maxDepth": {"type": "number", "description": "Outline heading depth or subtree depth. Default chosen by lark-cli."},
                 "contextBefore": {"type": "number", "description": "Sibling top-level blocks before scoped matches."},
                 "contextAfter": {"type": "number", "description": "Sibling top-level blocks after scoped matches."},
-                "accountId": {"type": "string", "description": "Optional Altselfs connection id."},
+                "accountId": {"type": "string", "description": "Optional Minaco connection id."},
                 "accountEmail": {"type": "string", "description": "Optional Feishu display name/external id. Alternative to accountId."},
             },
             "required": ["doc"],
@@ -1521,14 +1521,14 @@ const dynamictoolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
                 result = _call_altselfs_tool_bridge(params.get("arguments") or {})
             self._client.respond(rid, result)
         except Exception as exc:
-            logger.exception("Altselfs dynamic tool failed")
+            logger.exception("Minaco dynamic tool failed")
             self._client.respond(
                 rid,
                 {
                     "contentItems": [
                         {
                             "type": "inputText",
-                            "text": f"Altselfs dynamic tool failed: {exc}",
+                            "text": f"Minaco dynamic tool failed: {exc}",
                         }
                     ],
                     "success": False,

@@ -15,12 +15,12 @@ import {
 test('Hermes stable system prompt excludes all per-turn runtime context', () => {
   const stablePrompt = buildHermesStableSystemPrompt();
 
-  assert.match(stablePrompt, /Altselfs runtime contract:/);
+  assert.match(stablePrompt, /Minaco runtime contract:/);
   assert.match(stablePrompt, /Role split:/);
   assert.match(stablePrompt, /mcp_altselfs_codex_update_plan/);
   assert.match(stablePrompt, /Do not impose an artificial step count or tool-call count/);
   assert.doesNotMatch(stablePrompt, /Current time:/);
-  assert.doesNotMatch(stablePrompt, /Altselfs runtime metadata for this turn:/);
+  assert.doesNotMatch(stablePrompt, /Minaco runtime metadata for this turn:/);
   assert.doesNotMatch(stablePrompt, /<altselfs_user_profile>/);
   assert.doesNotMatch(stablePrompt, /<altselfs_artifact_context>/);
 });

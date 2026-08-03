@@ -1,4 +1,5 @@
 import { buildMemoryContext } from './memory-store.js';
+import { PRODUCT_BRAND } from './brand.js';
 import { isRecord } from './util.js';
 import type { ServerConfig } from './config.js';
 import type { AgentProfile, MemorySnapshot, RouterDecision } from './types.js';
@@ -31,7 +32,7 @@ export class HermesRouter {
       {
         role: 'system',
         content: [
-          'You are the Hermes main-agent router for Altselfs.',
+          `You are the Hermes main-agent router for ${PRODUCT_BRAND.name}.`,
           'Your job is only to choose whether the main agent should answer directly or delegate this turn to one registered agent profile.',
           'Use the agent profiles exactly as provided. Do not invent agent ids.',
           'Return only valid JSON with this shape:',

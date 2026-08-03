@@ -16,6 +16,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { productBrand } from '@/lib/brand';
 import { prefetchWorkspaceBootstrap, prefetchWorkspaceRouteData } from '@/lib/workspace-client-cache';
 
 type WorkspaceNavKey = 'home' | 'discussion' | 'connectors' | 'settings';
@@ -126,7 +127,7 @@ export function AstromarWorkspaceShell({
           <span className="grid h-8 w-8 place-items-center rounded-[7px] border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.025))] shadow-[inset_0_1px_0_rgba(255,255,255,.16)]">
             <span className="h-2.5 w-2.5 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,.62)]" />
           </span>
-          <span className="text-[15px]">Astromar</span>
+          <span className="text-[15px]">{productBrand.name}</span>
         </Link>
         <button
           type="button"

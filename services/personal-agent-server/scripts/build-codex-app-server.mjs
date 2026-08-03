@@ -111,7 +111,7 @@ writeFileSync(
     "  shift",
     `  exec "${appServerBin}" "$@"`,
     "fi",
-    'echo "This lightweight Altselfs Codex wrapper only supports: codex app-server" >&2',
+    'echo "This lightweight Minaco Codex wrapper only supports: codex app-server" >&2',
     "exit 64",
     "",
   ].join("\n"),

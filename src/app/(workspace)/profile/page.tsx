@@ -20,6 +20,7 @@ import {
 import Link from 'next/link';
 import { BillingCapacityPopover, type BillingCapacityData } from '@/components/billing-capacity-popover';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
+import { productBrand } from '@/lib/brand';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 import { displayEmail } from '@/lib/user-identifier';
 import {
@@ -225,7 +226,7 @@ function billingSummaryFromCapacity(capacity: BillingCapacityData): BillingSumma
     recentUsage: [],
     recentPayments: [],
     refundPolicy: {
-      contactEmail: 'support@altselfs.com',
+      contactEmail: productBrand.supportEmail,
       usageLimitCredits: 1_000,
       selfService: false,
     },
@@ -626,7 +627,7 @@ export default function ProfilePage() {
     }
   };
 
-  const displayName = profile?.nickname || profile?.name || 'Astromar user';
+  const displayName = profile?.nickname || profile?.name || `${productBrand.name} user`;
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] md:grid-rows-[64px_minmax(0,1fr)]">
@@ -689,7 +690,7 @@ export default function ProfilePage() {
                       <section className="mb-7 border-b border-white/[0.09] pb-8">
                         <div className="mb-4">
                           <h2 className="text-sm font-semibold text-zinc-100">Profile</h2>
-                          <p className="mt-1 text-[11px] text-zinc-600">Your identity and contact details inside Astromar.</p>
+                          <p className="mt-1 text-[11px] text-zinc-600">Your identity and contact details inside {productBrand.name}.</p>
                         </div>
 
                         <div className="mb-5 grid grid-cols-[52px_minmax(0,1fr)] items-center gap-3.5 py-2">

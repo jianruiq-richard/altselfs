@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import readline from 'node:readline';
+import { PRODUCT_BRAND } from '../brand.js';
 
 type PendingRequest = {
   method: string;
@@ -62,7 +63,7 @@ export class CodexJsonRpcClient extends EventEmitter {
       {
         clientInfo: {
           name: params?.clientName || 'altselfs',
-          title: params?.clientTitle || 'Altselfs Personal Agent',
+          title: params?.clientTitle || `${PRODUCT_BRAND.name} Personal Agent`,
           version: params?.clientVersion || '0.1.0',
         },
         capabilities: { experimentalApi: true },

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { PRODUCT_BRAND } from './brand.js';
 import type { ServerConfig } from './config.js';
 import {
   getAgentContextArtifactsByIds,
@@ -906,7 +907,7 @@ export async function callOpenRouterFileParser(
       headers: {
         authorization: `Bearer ${process.env[config.openRouterApiKeyEnv]}`,
         'content-type': 'application/json',
-        'HTTP-Referer': process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_APP_URL || 'https://www.altselfs.com',
+        'HTTP-Referer': process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_APP_URL || PRODUCT_BRAND.appBaseUrl,
         'X-Title': config.openRouterAppTitle,
         'X-OpenRouter-Title': config.openRouterAppTitle,
       },

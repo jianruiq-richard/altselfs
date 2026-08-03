@@ -6,6 +6,7 @@ import {
   Cpu,
   Sparkles,
 } from 'lucide-react';
+import { productBrand } from '@/lib/brand';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 
 type PlanSubscription = {
@@ -48,8 +49,8 @@ export function BillingPlanOverview({
     ? '1,000 once'
     : `${formatCredits(subscription.monthlyCredits || plan.monthlyCredits)} per period`;
   const modelBenefit = plan.modelTiers.includes('PRO')
-    ? 'Altselfs Lite and Pro'
-    : 'Altselfs Lite';
+    ? productBrand.modelLiteAndProLabel
+    : productBrand.modelLiteName;
 
   return (
     <section className="overflow-hidden rounded-[8px] border border-white/[0.1] bg-white/[0.025]">
