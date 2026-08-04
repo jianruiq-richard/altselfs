@@ -355,14 +355,14 @@ const starterTemplates: StarterTemplate[] = [
     title: "I have a competitor. Help me map everything they've done to grow.",
     description: '',
     prompt: "I have a competitor. Help me map everything they've done to grow.",
-    connectorKeys: ['similarweb', 'semrush'],
+    connectorKeys: ['similarweb_api1', 'semrush13'],
   },
   {
     eyebrow: 'Seed users',
     title: 'I have a product. Help me find my first users.',
     description: '',
     prompt: 'I have a product. Help me find my first users.',
-    connectorKeys: ['similarweb', 'semrush'],
+    connectorKeys: ['similarweb_api1', 'semrush13'],
   },
   {
     eyebrow: 'Ship first',
@@ -2623,15 +2623,26 @@ export function InvestorAgentChatPage() {
     enabledConnectorKeys: activeConnectors.map((connector) => connector.key),
     enabledConnectionIds: activeConnectors.flatMap((connector) => connector.connectionIds || []),
   }), [activeConnectors]);
-  const connectorScopeForKeys = useCallback((keys?: string[]): ConnectorScopePayload => {
-    const requestedKeys = Array.from(new Set((keys || []).map((key) => key.trim()).filter(Boolean)));
-    if (requestedKeys.length === 0) return connectorScope;
+  const connectorScopeForKeys = useCallback((keys?: string[], connectorItems: ConnectorItem[] = connectors): ConnectorScopePayload => {
+    if (!keys) return connectorScope;
+    const requestedKeys = Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean)));
+    if (requestedKeys.length === 0) {
+      return {
+        enabledConnectorKeys: [],
+        enabledConnectionIds: [],
+      };
+    }
     const requested = new Set(requestedKeys);
-    const scopedConnectors = connectors.filter(
+    const scopedConnectors = connectorItems.filter(
       (connector) => connector.connected && connector.conversationAvailable !== false && requested.has(connector.key)
     );
     const nextKeys = scopedConnectors.map((connector) => connector.key);
-    if (nextKeys.length === 0) return connectorScope;
+    if (nextKeys.length === 0) {
+      return {
+        enabledConnectorKeys: [],
+        enabledConnectionIds: [],
+      };
+    }
     if (threadId) connectorSelectionsByThreadRef.current.set(threadId, nextKeys);
     setSelectedConnectorKeys((current) => sameStringSelection(current, nextKeys) ? current : nextKeys);
     return {
@@ -2639,6 +2650,61 @@ export function InvestorAgentChatPage() {
       enabledConnectionIds: scopedConnectors.flatMap((connector) => connector.connectionIds || []),
     };
   }, [connectorScope, connectors, threadId]);
+
+  const ensureTemplateConnectorKeys = useCallback(async (keys?: string[]) => {
+    if (!keys) return { connectorKeys: undefined as string[] | undefined, connectors };
+    const requestedKeys = Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean)));
+    if (requestedKeys.length === 0) return { connectorKeys: [] as string[], connectors };
+
+    let nextConnectors = connectors;
+    if (nextConnectors.length === 0) {
+      const data = await fetchWorkspaceJson<{ connectors?: ConnectorItem[] }>(
+        WORKSPACE_CACHE_KEYS.connectors,
+        '/api/investor/connectors',
+        {},
+        { force: true, ttlMs: 0 },
+      );
+      nextConnectors = Array.isArray(data.connectors) ? data.connectors : [];
+      setConnectors(nextConnectors);
+    }
+
+    const enabledKeys: string[] = [];
+    let changed = false;
+    for (const key of requestedKeys) {
+      const connector = nextConnectors.find((item) => item.key === key);
+      if (!connector || connector.conversationAvailable === false) continue;
+      if (connector.connected) {
+        enabledKeys.push(connector.key);
+        continue;
+      }
+      if (connector.type !== 'data_source' || connector.platformConfigured === false) continue;
+
+      const res = await fetch(`/api/investor/competitive-data-source/${encodeURIComponent(connector.key)}`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : `Failed to enable ${connector.label}`);
+      }
+
+      const updatedAt = new Date().toISOString();
+      nextConnectors = nextConnectors.map((item) => (
+        item.key === connector.key
+          ? { ...item, connected: true, enabledByDefault: false, updatedAt }
+          : item
+      ));
+      changed = true;
+      enabledKeys.push(connector.key);
+    }
+
+    if (changed) {
+      setConnectors(nextConnectors);
+      setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, { connectors: nextConnectors });
+    }
+
+    return { connectorKeys: enabledKeys, connectors: nextConnectors };
+  }, [connectors]);
 
   useEffect(() => {
     if (!threadId || connectorsLoading || connectors.length === 0) return;
@@ -3903,7 +3969,16 @@ export function InvestorAgentChatPage() {
     const attachmentThreadId = requestAttachments.find((attachment) => attachment.threadId)?.threadId || null;
     const requestThreadId = threadId || attachmentThreadId;
     const shouldCreateThread = !requestThreadId;
-    const requestConnectorScope = connectorScopeForKeys(options?.connectorKeys);
+    let requestConnectorScope: ConnectorScopePayload;
+    try {
+      const ensured = await ensureTemplateConnectorKeys(options?.connectorKeys);
+      requestConnectorScope = connectorScopeForKeys(ensured.connectorKeys, ensured.connectors);
+    } catch (connectorError) {
+      submissionInFlightRef.current = false;
+      setStartingRun(false);
+      setError(connectorError instanceof Error ? connectorError.message : 'Failed to enable the recommended connectors.');
+      return;
+    }
 
     const attachmentList = formatAttachmentList(requestAttachments);
     const displayContent = [
