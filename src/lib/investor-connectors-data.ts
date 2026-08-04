@@ -183,7 +183,6 @@ export async function loadInvestorConnectors(
     connectorRowsPromise,
   ]);
   const integrationMap = new Map(integrations.map((integration) => [integration.provider, integration]));
-  const rapidApiConfigured = Boolean(process.env.RAPIDAPI_KEY?.trim());
 
   const personal: ConnectorItem[] = PERSONAL_CONNECTORS.map((connector) => {
     const accounts = personalAccounts.filter((account) => account.provider === connector.key && account.status === 'connected');
@@ -259,7 +258,7 @@ export async function loadInvestorConnectors(
       conversationAvailable: true,
       connectionIds: [],
       accounts: [],
-      platformConfigured: rapidApiConfigured,
+      platformConfigured: true,
       updatedAt: integration?.updatedAt.toISOString() || null,
       manageHref: '/investor/info-ops?assistant=semrush',
     };

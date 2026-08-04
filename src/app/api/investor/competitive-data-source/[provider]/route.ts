@@ -39,10 +39,6 @@ const COMPETITIVE_DATA_SOURCES: Record<CompetitiveDataSourceProvider, {
   },
 };
 
-function hasRapidApiKey() {
-  return Boolean(process.env.RAPIDAPI_KEY?.trim());
-}
-
 function toProvider(value: string): CompetitiveDataSourceProvider | null {
   return Object.hasOwn(COMPETITIVE_DATA_SOURCES, value) ? (value as CompetitiveDataSourceProvider) : null;
 }
@@ -58,7 +54,7 @@ function toPayload(
     status: integration?.status || 'DISABLED',
     accountName: integration?.accountName || `${config.label} teammate`,
     updatedAt: integration?.updatedAt?.toISOString() || null,
-    platformConfigured: hasRapidApiKey(),
+    platformConfigured: true,
   };
 }
 

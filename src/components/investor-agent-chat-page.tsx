@@ -2677,7 +2677,7 @@ export function InvestorAgentChatPage() {
         enabledKeys.push(connector.key);
         continue;
       }
-      if (connector.type !== 'data_source' || connector.platformConfigured === false) continue;
+      if (connector.type !== 'data_source') continue;
 
       const res = await fetch(`/api/investor/competitive-data-source/${encodeURIComponent(connector.key)}`, {
         method: 'PUT',
@@ -2691,7 +2691,7 @@ export function InvestorAgentChatPage() {
       const updatedAt = new Date().toISOString();
       nextConnectors = nextConnectors.map((item) => (
         item.key === connector.key
-          ? { ...item, connected: true, enabledByDefault: false, updatedAt }
+          ? { ...item, connected: true, enabledByDefault: false, platformConfigured: true, updatedAt }
           : item
       ));
       changed = true;
