@@ -1,20 +1,24 @@
 const transparent = 'rgba(0,0,0,0)';
-const inputBackground = 'rgba(255,255,255,0.045)';
-const line = 'rgba(255,255,255,0.11)';
+const inputBackground = 'rgba(255,250,240,0.045)';
+const line = 'rgba(255,250,240,0.11)';
+const warm = '#f2c36b';
+const warmSoft = '#f8dfaa';
+const warmText = '#fffaf0';
+const onWarm = '#100e0c';
 
 export const clerkAuthAppearance = {
   variables: {
-    colorPrimary: '#f7f7f5',
-    colorPrimaryForeground: '#090909',
-    colorForeground: '#f7f7f5',
-    colorMutedForeground: 'rgba(255,255,255,0.56)',
+    colorPrimary: warm,
+    colorPrimaryForeground: onWarm,
+    colorForeground: warmText,
+    colorMutedForeground: 'rgba(255,250,240,0.58)',
     colorBackground: transparent,
     colorInput: inputBackground,
-    colorInputForeground: '#ffffff',
-    colorMuted: 'rgba(255,255,255,0.055)',
-    colorNeutral: '#ffffff',
+    colorInputForeground: warmText,
+    colorMuted: 'rgba(255,250,240,0.055)',
+    colorNeutral: warmText,
     colorBorder: line,
-    colorRing: 'rgba(255,255,255,0.24)',
+    colorRing: 'rgba(242,195,107,0.28)',
     colorShadow: '#000000',
     borderRadius: '8px',
     spacing: '0.85rem',
@@ -43,24 +47,25 @@ export const clerkAuthAppearance = {
     },
     socialButtonsBlockButton: {
       minHeight: '44px',
-      border: '1px solid rgba(255,255,255,0.18)',
+      border: '1px solid rgba(255,250,240,0.18)',
       borderRadius: '8px',
-      background: 'rgba(255,255,255,0.07)',
+      background: 'rgba(255,250,240,0.07)',
       boxShadow: 'none',
-      color: '#ffffff',
+      color: warmText,
       '&:hover, &:focus': {
-        background: 'rgba(255,255,255,0.10)',
+        borderColor: 'rgba(242,195,107,0.34)',
+        background: 'rgba(242,195,107,0.10)',
       },
     },
     socialButtonsBlockButtonText: {
-      color: '#ffffff',
+      color: warmText,
       fontWeight: 650,
     },
     dividerLine: {
       background: line,
     },
     dividerText: {
-      color: 'rgba(255,255,255,0.40)',
+      color: 'rgba(255,250,240,0.42)',
       fontSize: '12px',
     },
     otpCodeField: {
@@ -87,22 +92,22 @@ export const clerkAuthAppearance = {
       padding: 0,
       borderWidth: '1px',
       borderStyle: 'solid',
-      borderColor: 'rgba(255,255,255,0.28)',
+      borderColor: 'rgba(255,250,240,0.28)',
       borderRadius: '8px',
-      backgroundColor: 'rgba(255,255,255,0.075)',
+      backgroundColor: 'rgba(255,250,240,0.075)',
       boxShadow: 'none',
-      color: '#ffffff',
+      color: warmText,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       fontSize: '18px',
       fontWeight: 700,
       textAlign: 'center',
       '&:focus, &[data-focus="true"], &[data-focus-within="true"]': {
-        borderColor: 'rgba(255,255,255,0.42)',
-        boxShadow: '0 0 0 3px rgba(255,255,255,0.06)',
+        borderColor: 'rgba(242,195,107,0.46)',
+        boxShadow: '0 0 0 3px rgba(242,195,107,0.08)',
       },
     },
     formFieldLabel: {
-      color: 'rgba(255,255,255,0.76)',
+      color: 'rgba(255,250,240,0.76)',
       fontSize: '13px',
       fontWeight: 650,
     },
@@ -112,41 +117,41 @@ export const clerkAuthAppearance = {
       borderRadius: '8px',
       background: inputBackground,
       boxShadow: 'none',
-      color: '#ffffff',
+      color: warmText,
       '&:focus': {
-        borderColor: 'rgba(255,255,255,0.32)',
-        boxShadow: '0 0 0 3px rgba(255,255,255,0.055)',
+        borderColor: 'rgba(242,195,107,0.42)',
+        boxShadow: '0 0 0 3px rgba(242,195,107,0.08)',
       },
     },
     formButtonPrimary: {
       minHeight: '44px',
-      border: '1px solid #ffffff',
+      border: '1px solid rgba(242,195,107,0.72)',
       borderRadius: '8px',
-      background: '#ffffff',
-      boxShadow: '0 14px 38px rgba(255,255,255,0.10)',
-      color: '#090909',
+      background: `linear-gradient(180deg, ${warmSoft}, ${warm})`,
+      boxShadow: '0 14px 38px rgba(242,195,107,0.14)',
+      color: onWarm,
       fontSize: '14px',
       fontWeight: 750,
       textTransform: 'none',
       '&:hover, &:focus, &:active': {
-        background: '#f2f3f4',
+        background: `linear-gradient(180deg, #ffe8b7, ${warm})`,
       },
     },
     formFieldAction: {
-      color: 'rgba(255,255,255,0.65)',
+      color: 'rgba(255,250,240,0.65)',
     },
     formResendCodeLink: {
-      color: 'rgba(255,255,255,0.75)',
+      color: 'rgba(255,250,240,0.75)',
     },
     identityPreview: {
       border: `1px solid ${line}`,
       background: inputBackground,
     },
     identityPreviewText: {
-      color: '#ffffff',
+      color: warmText,
     },
     identityPreviewEditButton: {
-      color: 'rgba(255,255,255,0.65)',
+      color: 'rgba(255,250,240,0.65)',
     },
     footer: {
       display: 'none',

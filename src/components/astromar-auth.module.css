@@ -1,14 +1,14 @@
 .authPage {
-  --auth-bg: #080909;
+  --auth-bg: #090909;
   --auth-panel: #111213;
-  --auth-line: rgba(255, 255, 255, 0.11);
-  --auth-line-strong: rgba(255, 255, 255, 0.18);
-  --auth-text: #f7f7f5;
-  --auth-muted: rgba(255, 255, 255, 0.62);
-  --auth-subtle: rgba(255, 255, 255, 0.4);
-  --auth-green: #45d39b;
-  --auth-blue: #79a8ff;
-  --auth-amber: #f2bf5b;
+  --auth-line: rgba(255, 250, 240, 0.11);
+  --auth-line-strong: rgba(255, 250, 240, 0.2);
+  --auth-text: #fffaf0;
+  --auth-muted: rgba(255, 250, 240, 0.64);
+  --auth-subtle: rgba(255, 250, 240, 0.42);
+  --auth-green: #78c889;
+  --auth-blue: #f2c36b;
+  --auth-amber: #f2c36b;
   position: relative;
   isolation: isolate;
   min-height: 100svh;
@@ -24,8 +24,8 @@
   z-index: -1;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(255, 250, 240, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 250, 240, 0.03) 1px, transparent 1px);
   background-size: 64px 64px;
   content: "";
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.78), transparent 82%);
@@ -83,7 +83,7 @@
 .brandTagline {
   padding-left: 14px;
   border-left: 1px solid var(--auth-line-strong);
-  background: linear-gradient(105deg, #ffffff 0%, #d7dbe1 52%, #ffffff 100%);
+  background: linear-gradient(105deg, #fffaf0 0%, #f2c36b 52%, #fff4d8 100%);
   background-clip: text;
   color: transparent;
   font-family: "Avenir Next", "Helvetica Neue", sans-serif;
@@ -100,7 +100,7 @@
 
 .topAction a {
   margin-left: 7px;
-  color: white;
+  color: var(--auth-text);
   font-weight: 700;
 }
 
@@ -116,7 +116,7 @@
   min-width: 0;
   padding: 106px 48px 48px;
   border-right: 1px solid var(--auth-line);
-  background: rgba(8, 9, 9, 0.82);
+  background: rgba(9, 9, 9, 0.84);
 }
 
 .authWrap {
@@ -157,7 +157,7 @@
   padding: 4px;
   border: 1px solid var(--auth-line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(255, 250, 240, 0.035);
 }
 
 .modeTab,
@@ -172,9 +172,9 @@
 }
 
 .modeTabActive {
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  color: white !important;
+  background: rgba(242, 195, 107, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 250, 240, 0.09);
+  color: var(--auth-text) !important;
 }
 
 .authContent {
@@ -190,14 +190,15 @@
   overflow: hidden;
   padding: 112px 56px 56px;
   background:
-    radial-gradient(circle at 62% 22%, rgba(255, 255, 255, 0.08), transparent 26rem),
+    radial-gradient(circle at 62% 22%, rgba(242, 195, 107, 0.1), transparent 26rem),
+    radial-gradient(circle at 24% 18%, rgba(232, 111, 97, 0.055), transparent 24rem),
     rgba(11, 12, 13, 0.7);
 }
 
 .productSide::before {
   position: absolute;
   inset: 9% 7%;
-  border: 1px solid rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 250, 240, 0.055);
   border-radius: 50%;
   content: "";
   pointer-events: none;
@@ -249,7 +250,7 @@
   height: 7px;
   border-radius: 50%;
   background: var(--auth-green);
-  box-shadow: 0 0 13px rgba(69, 211, 155, 0.66);
+  box-shadow: 0 0 13px rgba(120, 200, 137, 0.66);
   content: "";
 }
 
@@ -259,7 +260,7 @@
   border: 1px solid var(--auth-line-strong);
   border-radius: 8px;
   background: rgba(15, 16, 18, 0.9);
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 250, 240, 0.08);
 }
 
 .roomBar,
@@ -283,7 +284,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 250, 240, 0.18);
 }
 
 .roomBody {
@@ -297,16 +298,16 @@
   padding: 13px 14px;
   border: 1px solid var(--auth-line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
-  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 250, 240, 0.045);
+  color: rgba(255, 250, 240, 0.78);
   font-size: 13px;
   line-height: 1.55;
 }
 
 .messageYou {
   justify-self: end;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: rgba(255, 250, 240, 0.1);
+  color: var(--auth-text);
 }
 
 .message small {
@@ -336,8 +337,8 @@
   padding: 0 12px;
   border: 1px solid var(--auth-line);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.035);
-  color: rgba(255, 255, 255, 0.74);
+  background: rgba(255, 250, 240, 0.035);
+  color: rgba(255, 250, 240, 0.74);
   font-size: 12px;
 }
 
@@ -346,21 +347,21 @@
   height: 7px;
   border-radius: 50%;
   background: var(--auth-blue);
-  box-shadow: 0 0 12px rgba(121, 168, 255, 0.5);
+  box-shadow: 0 0 12px rgba(242, 195, 107, 0.5);
 }
 
 .signal:nth-child(2) i {
   background: var(--auth-amber);
-  box-shadow: 0 0 12px rgba(242, 191, 91, 0.5);
+  box-shadow: 0 0 12px rgba(242, 195, 107, 0.5);
 }
 
 .signal:nth-child(3) i {
   background: var(--auth-green);
-  box-shadow: 0 0 12px rgba(69, 211, 155, 0.5);
+  box-shadow: 0 0 12px rgba(120, 200, 137, 0.5);
 }
 
 .signal b {
-  color: white;
+  color: var(--auth-text);
 }
 
 .signal > span:last-child {
@@ -406,7 +407,7 @@
 }
 
 .setupBar strong {
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 250, 240, 0.82);
 }
 
 .setupList {
@@ -434,7 +435,7 @@
   height: 36px;
   border: 1px solid var(--auth-line);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 250, 240, 0.055);
   color: var(--auth-blue);
 }
 
@@ -472,8 +473,8 @@
 }
 
 .stepStatusReady {
-  border-color: rgba(69, 211, 155, 0.24);
-  background: rgba(69, 211, 155, 0.08);
+  border-color: rgba(120, 200, 137, 0.24);
+  background: rgba(120, 200, 137, 0.08);
   color: var(--auth-green);
 }
 
@@ -511,14 +512,15 @@
   min-height: 48px;
   border: 1px solid var(--auth-line-strong);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: white;
+  background: rgba(255, 250, 240, 0.07);
+  color: var(--auth-text);
   font-size: 14px;
   font-weight: 700;
 }
 
 .googleButton:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(242, 195, 107, 0.34);
+  background: rgba(242, 195, 107, 0.1);
 }
 
 .googleButton:disabled {
@@ -527,7 +529,7 @@
 }
 
 .googleMark {
-  color: #78a8ff;
+  color: var(--auth-blue);
   font-size: 18px;
   font-weight: 850;
 }
@@ -572,8 +574,8 @@
 }
 
 .passwordVisibilityButton:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: white;
+  background: rgba(242, 195, 107, 0.08);
+  color: var(--auth-text);
 }
 
 .passwordRules {
@@ -581,7 +583,7 @@
   border: 1px solid rgba(255, 139, 130, 0.34);
   border-radius: 8px;
   background: rgba(255, 86, 78, 0.08);
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(255, 250, 240, 0.76);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -610,7 +612,7 @@
 }
 
 .verificationIntro strong {
-  color: white;
+  color: var(--auth-text);
 }
 
 .authBackButton,
@@ -637,7 +639,7 @@
 
 .authBackButton:hover:not(:disabled),
 .authTextButton:hover:not(:disabled) {
-  color: white;
+  color: var(--auth-text);
 }
 
 .authBackButton:disabled,
@@ -656,7 +658,7 @@
 }
 
 .phoneField label {
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(255, 250, 240, 0.76);
   font-size: 13px;
   font-weight: 650;
 }
@@ -674,8 +676,8 @@
   border: 1px solid var(--auth-line);
   border-radius: 8px;
   outline: 0;
-  background: rgba(255, 255, 255, 0.045);
-  color: white;
+  background: rgba(255, 250, 240, 0.045);
+  color: var(--auth-text);
   transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
@@ -685,23 +687,23 @@
 
 .phoneSelect {
   padding: 0 10px;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 250, 240, 0.82);
 }
 
 .phoneSelect option {
-  background: #171719;
-  color: white;
+  background: #171410;
+  color: var(--auth-text);
 }
 
 .phoneInput::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 250, 240, 0.34);
 }
 
 .phoneInput:focus,
 .phoneSelect:focus {
-  border-color: rgba(255, 255, 255, 0.32);
-  background: rgba(255, 255, 255, 0.065);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.055);
+  border-color: rgba(242, 195, 107, 0.42);
+  background: rgba(255, 250, 240, 0.065);
+  box-shadow: 0 0 0 3px rgba(242, 195, 107, 0.08);
 }
 
 .phoneInput:disabled,
@@ -723,17 +725,17 @@
   justify-content: center;
   gap: 8px;
   min-height: 48px;
-  border: 1px solid white;
+  border: 1px solid rgba(242, 195, 107, 0.72);
   border-radius: 8px;
-  background: white;
-  color: #090909;
+  background: linear-gradient(180deg, #f8dfaa, #f2c36b);
+  color: #100e0c;
   font-size: 14px;
   font-weight: 780;
-  box-shadow: 0 14px 38px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 14px 38px rgba(242, 195, 107, 0.14);
 }
 
 .phoneSubmit:hover:not(:disabled) {
-  background: #f2f3f4;
+  background: linear-gradient(180deg, #ffe8b7, #f2c36b);
 }
 
 .phoneSubmit:disabled {
