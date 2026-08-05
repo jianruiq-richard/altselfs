@@ -16,6 +16,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { productBrand } from '@/lib/brand';
 import {
   prefetchWorkspaceBootstrap,
@@ -132,9 +133,7 @@ export function AstromarWorkspaceShell({
     <div className="flex h-full min-h-0 flex-col bg-[#0c0d0e] text-zinc-100">
       <div className="flex h-16 shrink-0 items-center justify-between px-4">
         <Link href={homeHref} className="inline-flex items-center gap-2.5 font-semibold text-zinc-50">
-          <span className="grid h-8 w-8 place-items-center rounded-[7px] border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.025))] shadow-[inset_0_1px_0_rgba(255,255,255,.16)]">
-            <span className="h-2.5 w-2.5 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,.62)]" />
-          </span>
+          <MinacoBrandMark className="block h-8 w-8 shrink-0 overflow-hidden rounded-[8px]" imageClassName="h-full w-full object-contain" />
           <span className="text-[15px]">{productBrand.name}</span>
         </Link>
         <button

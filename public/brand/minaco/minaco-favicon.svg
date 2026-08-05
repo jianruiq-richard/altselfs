@@ -1,0 +1,26 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Minaco favicon</title>
+  <desc id="desc">A simplified Minaco favicon with two warm starlights.</desc>
+  <defs>
+    <path id="star" d="M0 -58C6 -25 18 -9 50 0C18 9 6 25 0 58C-6 25 -18 9 -50 0C-18 -9 -6 -25 0 -58Z"/>
+    <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(32 31) rotate(90) scale(36)">
+      <stop stop-color="#21180F"/>
+      <stop offset="0.62" stop-color="#100E0C"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <radialGradient id="main-fill" cx="42%" cy="42%" r="72%">
+      <stop offset="0" stop-color="#FFF7EA"/>
+      <stop offset="0.34" stop-color="#FFD778"/>
+      <stop offset="0.72" stop-color="#F4B64A"/>
+      <stop offset="1" stop-color="#D08A4F"/>
+    </radialGradient>
+    <radialGradient id="small-fill" cx="42%" cy="42%" r="72%">
+      <stop offset="0" stop-color="#FFF0D7"/>
+      <stop offset="0.48" stop-color="#E86F61"/>
+      <stop offset="1" stop-color="#BF5947"/>
+    </radialGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
+  <use href="#star" transform="translate(28 36) scale(0.22)" fill="url(#main-fill)"/>
+  <use href="#star" transform="translate(44 27) scale(0.1)" fill="url(#small-fill)"/>
+</svg>

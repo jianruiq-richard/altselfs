@@ -1,0 +1,40 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Minaco app icon</title>
+  <desc id="desc">A rounded-square Minaco app icon with two warm starlights on a deep night background.</desc>
+  <defs>
+    <path id="star" d="M0 -58C6 -25 18 -9 50 0C18 9 6 25 0 58C-6 25 -18 9 -50 0C-18 -9 -6 -25 0 -58Z"/>
+    <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 498) rotate(90) scale(560)">
+      <stop stop-color="#21180F"/>
+      <stop offset="0.58" stop-color="#100E0C"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <linearGradient id="edge" x1="154" y1="126" x2="870" y2="898" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF7EA" stop-opacity="0.34"/>
+      <stop offset="0.45" stop-color="#F4B64A" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#E86F61" stop-opacity="0.3"/>
+    </linearGradient>
+    <radialGradient id="main-fill" cx="42%" cy="42%" r="72%">
+      <stop offset="0" stop-color="#FFF7EA"/>
+      <stop offset="0.34" stop-color="#FFD778"/>
+      <stop offset="0.72" stop-color="#F4B64A"/>
+      <stop offset="1" stop-color="#D08A4F"/>
+    </radialGradient>
+    <radialGradient id="small-fill" cx="42%" cy="42%" r="72%">
+      <stop offset="0" stop-color="#FFF0D7"/>
+      <stop offset="0.48" stop-color="#E86F61"/>
+      <stop offset="1" stop-color="#BF5947"/>
+    </radialGradient>
+    <filter id="main-glow" x="154" y="244" width="616" height="616" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="46"/>
+    </filter>
+    <filter id="small-glow" x="480" y="236" width="354" height="354" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+  </defs>
+  <rect x="84" y="84" width="856" height="856" rx="214" fill="url(#bg)"/>
+  <rect x="90" y="90" width="844" height="844" rx="208" stroke="url(#edge)" stroke-width="12"/>
+  <use href="#star" transform="translate(428 528) scale(3.75)" fill="#F4B64A" opacity="0.3" filter="url(#main-glow)"/>
+  <use href="#star" transform="translate(698 378) scale(1.699)" fill="#E86F61" opacity="0.28" filter="url(#small-glow)"/>
+  <use href="#star" transform="translate(428 528) scale(3.75)" fill="url(#main-fill)"/>
+  <use href="#star" transform="translate(698 378) scale(1.699)" fill="url(#small-fill)"/>
+</svg>

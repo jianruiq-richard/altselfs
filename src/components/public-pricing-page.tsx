@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { BillingPlanGrid } from '@/components/billing-plan-grid';
+import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { productBrand } from '@/lib/brand';
 import styles from './astromar-landing-page.module.css';
 
@@ -16,7 +17,7 @@ export function PublicPricingPage() {
       <nav className={styles.nav}>
         <div className={classes('container', 'navInner')}>
           <Link className={styles.brand} href="/" aria-label={`${productBrand.name} home`}>
-            <span className={styles.brandMark} aria-hidden="true" />
+            <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandMarkImage} />
             <span className={styles.brandName}>{productBrand.name}</span>
             <span className={styles.brandTagline}>{productBrand.tagline}</span>
           </Link>

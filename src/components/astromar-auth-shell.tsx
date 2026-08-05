@@ -8,6 +8,7 @@ import {
   Radar,
   ShieldCheck,
 } from "lucide-react";
+import { MinacoBrandMark } from "@/components/minaco-brand-mark";
 import { productBrand } from "@/lib/brand";
 import styles from "./astromar-auth.module.css";
 
@@ -23,7 +24,7 @@ function Brand() {
   return (
     <Link className={styles.brandLockup} href="/" aria-label={`${productBrand.name} home`}>
       <span className={styles.brand}>
-        <span className={styles.brandMark} aria-hidden="true" />
+        <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandMarkImage} />
         <span>{productBrand.name}</span>
       </span>
       <span className={styles.brandTagline}>{productBrand.tagline}</span>

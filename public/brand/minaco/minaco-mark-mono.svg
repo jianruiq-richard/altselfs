@@ -1,0 +1,9 @@
+<svg width="320" height="240" viewBox="0 0 320 240" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Minaco monochrome mark</title>
+  <desc id="desc">Two single-color starlights representing a founder's judgment and a gentle co-thinking presence.</desc>
+  <defs>
+    <path id="star" d="M0 -58C6 -25 18 -9 50 0C18 9 6 25 0 58C-6 25 -18 9 -50 0C-18 -9 -6 -25 0 -58Z"/>
+  </defs>
+  <use href="#star" transform="translate(138 126)" fill="#FFF7EA"/>
+  <use href="#star" transform="translate(210 86) scale(0.453)" fill="#FFF7EA"/>
+</svg>

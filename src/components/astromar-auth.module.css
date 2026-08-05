@@ -65,23 +65,18 @@
 }
 
 .brandMark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--auth-line-strong);
   border-radius: 7px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.03));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  overflow: hidden;
 }
 
-.brandMark::after {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.78);
-  content: "";
+.brandMarkImage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .brandTagline {

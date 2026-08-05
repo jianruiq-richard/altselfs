@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { mkdir, appendFile } from 'fs/promises';
 import path from 'path';
+import { productBrand } from '@/lib/brand';
 
 // Initialize OpenRouter client
 const openai = new OpenAI({
@@ -9,7 +10,7 @@ const openai = new OpenAI({
   defaultHeaders: {
     "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
     // Header values must be ASCII/latin1-safe in Node runtime.
-    "X-Title": "AltSelfs Platform",
+    "X-Title": `${productBrand.name} Platform`,
   }
 });
 
