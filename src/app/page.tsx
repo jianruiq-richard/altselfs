@@ -7,7 +7,7 @@ import { productBrand } from "@/lib/brand";
 export const metadata: Metadata = {
   title: `${productBrand.name} | Your AI cofounder`,
   description:
-    `${productBrand.name} helps founders track competitor moves, find seed users, and turn ideas into shippable first versions with an AI cofounder.`,
+    `${productBrand.name} is an AI cofounder workspace that helps founders analyze startup context, connected work data, and market signals to make clearer decisions.`,
 };
 
 export const viewport: Viewport = {

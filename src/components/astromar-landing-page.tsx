@@ -26,7 +26,7 @@ const scenarios = [
   },
 ] as const;
 
-const contextSources = ["Gmail", "Slack", "Notion", "YouTube", "TikTok", "X", "Search"];
+const contextSources = ["Google Workspace", "Gmail", "Slack", "Notion", "YouTube", "TikTok", "X", "Search"];
 
 const activity = [
   {
@@ -144,7 +144,7 @@ export function AstromarLandingPage() {
 
       <section className={classes("container", "hero")}>
         <p className={styles.heroPositioning}>
-          Your AI cofounder, built to think with you, not just work for you.
+          {productBrand.name} is your AI cofounder, built to think with you, not just work for you.
         </p>
 
         <div className={styles.heroCarousel} aria-label="Founder decision scenarios">
@@ -186,6 +186,12 @@ export function AstromarLandingPage() {
             <span key={source}>{source}</span>
           ))}
         </div>
+
+        <p className={styles.heroDataUse}>
+          {productBrand.name} helps founders analyze startup context, connected work data, and market signals. When you
+          connect Google Workspace or Gmail, {productBrand.name} uses only the data you authorize to summarize context,
+          draft replies, create decision briefs, and perform actions you request.
+        </p>
       </section>
 
       <section className={classes("container", "section")} id="demo">
@@ -196,7 +202,8 @@ export function AstromarLandingPage() {
           </div>
           <p className={styles.sectionCopy}>
             The first use case is concrete enough to be useful on day one, but the product behavior is broader:
-            {productBrand.name} turns any signal into a decision conversation.
+            {productBrand.name} turns any signal, file, inbox thread, or connected work context into a decision
+            conversation.
           </p>
         </div>
 
@@ -350,8 +357,8 @@ export function AstromarLandingPage() {
             <p className={styles.eyebrow}>Start now</p>
             <h2>Bring your startup context into one decision room.</h2>
             <p>
-              Start with a competitor, a product, or an idea. {productBrand.name} turns it into the next decision and the next
-              action.
+              Connect the context you choose, including Google Workspace or Gmail, so {productBrand.name} can summarize
+              relevant work, draft replies, generate decision briefs, and perform actions you request.
             </p>
           </div>
           <div className={styles.ctaActions}>
@@ -400,7 +407,7 @@ export function AstromarLandingPage() {
               <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandMarkImage} />
               <span className={styles.brandName}>{productBrand.name}</span>
             </Link>
-            <p>Your AI cofounder for competitive intelligence, seed users, and first versions.</p>
+            <p>Your AI cofounder workspace for startup context, connected work data, and founder decisions.</p>
           </div>
 
           <div className={styles.footerGrid}>
