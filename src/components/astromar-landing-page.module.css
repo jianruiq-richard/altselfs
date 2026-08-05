@@ -72,17 +72,18 @@
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   font-weight: 760;
+  line-height: 1;
 }
 
 .brandMark {
   position: relative;
   display: block;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
-  border-radius: 7px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
@@ -954,8 +955,8 @@
   }
 
   .brandMark {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
   }
 
   .headline {

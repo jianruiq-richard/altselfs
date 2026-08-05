@@ -21,6 +21,6 @@
     </radialGradient>
   </defs>
   <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
-  <use href="#star" transform="translate(28 36) scale(0.22)" fill="url(#main-fill)"/>
-  <use href="#star" transform="translate(44 27) scale(0.1)" fill="url(#small-fill)"/>
+  <use href="#star" transform="translate(27.5 34.5) scale(0.31)" fill="url(#main-fill)"/>
+  <use href="#star" transform="translate(45 24.5) scale(0.142)" fill="url(#small-fill)"/>
 </svg>

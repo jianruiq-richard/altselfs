@@ -60,15 +60,16 @@
 }
 
 .brand {
-  gap: 10px;
+  gap: 7px;
   font-weight: 750;
+  line-height: 1;
 }
 
 .brandMark {
   display: block;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   overflow: hidden;
 }
 

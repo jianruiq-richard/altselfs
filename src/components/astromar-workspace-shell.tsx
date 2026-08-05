@@ -132,8 +132,8 @@ export function AstromarWorkspaceShell({
   const sidebar = (location: SidebarLocation) => (
     <div className="flex h-full min-h-0 flex-col bg-[#0c0d0e] text-zinc-100">
       <div className="flex h-16 shrink-0 items-center justify-between px-4">
-        <Link href={homeHref} className="inline-flex items-center gap-2.5 font-semibold text-zinc-50">
-          <MinacoBrandMark className="block h-8 w-8 shrink-0 overflow-hidden rounded-[8px]" imageClassName="h-full w-full object-contain" />
+        <Link href={homeHref} className="inline-flex items-center gap-2 font-semibold leading-none text-zinc-50">
+          <MinacoBrandMark className="block h-9 w-9 shrink-0 overflow-hidden rounded-[9px]" imageClassName="h-full w-full object-contain" />
           <span className="text-[15px]">{productBrand.name}</span>
         </Link>
         <button
