@@ -1,8 +1,9 @@
 'use client';
 
-import { ArrowRight, CircleGauge, LoaderCircle, Sparkles } from 'lucide-react';
+import { ArrowRight, CircleGauge, LoaderCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { MinacoCreditsIcon } from '@/components/minaco-credits-icon';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 import {
   fetchWorkspaceJson,
@@ -164,12 +165,12 @@ export function BillingCapacityPopover({
             } ${
               capacityBlocked
                 ? 'border-amber-300/20 bg-amber-300/[0.06] text-amber-200'
-                : 'border-[#8eb3ff]/20 bg-[#8eb3ff]/[0.065] text-[#9dbbff]'
+                : 'border-[#f2c36b]/20 bg-[#f2c36b]/[0.065] text-[#f9d997]'
             }`}
           >
             {isLoading
               ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-              : <Sparkles className="h-3.5 w-3.5" />}
+              : <MinacoCreditsIcon className="h-4 w-4" />}
           </span>
           <span className="grid min-w-0">
             <strong className={`${rail ? 'text-[13px]' : 'text-[11px]'} truncate tabular-nums text-zinc-100`}>
@@ -217,7 +218,7 @@ export function BillingCapacityPopover({
 
           <div className="grid gap-0 px-4">
             <div className="grid min-h-[66px] grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-white/[0.08]">
-              <Sparkles className="h-4 w-4 text-[#9dbbff]" />
+              <MinacoCreditsIcon className="h-[18px] w-[18px]" />
               <span className="grid min-w-0">
                 <strong className="text-[11px] text-zinc-200">Credits</strong>
                 <span className="mt-0.5 truncate text-[9px] text-zinc-600">

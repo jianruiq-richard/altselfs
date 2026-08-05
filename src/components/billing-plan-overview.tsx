@@ -4,8 +4,8 @@ import {
   Check,
   CircleGauge,
   Cpu,
-  Sparkles,
 } from 'lucide-react';
+import { MinacoCreditsIcon } from '@/components/minaco-credits-icon';
 import { productBrand } from '@/lib/brand';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 
@@ -56,8 +56,8 @@ export function BillingPlanOverview({
     <section className="overflow-hidden rounded-[8px] border border-white/[0.1] bg-white/[0.025]">
       <div className="grid gap-5 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center lg:px-6">
         <div className="flex min-w-0 items-center gap-3.5">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[8px] border border-[#8eb3ff]/20 bg-[#8eb3ff]/[0.07] text-[#8eb3ff]">
-            <Sparkles className="h-5 w-5" />
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[8px] border border-[#f2c36b]/20 bg-[#f2c36b]/[0.07]">
+            <MinacoCreditsIcon className="h-7 w-7" />
           </span>
           <span className="grid min-w-0">
             <span className="text-[9px] font-extrabold uppercase text-zinc-600">Current plan</span>
@@ -89,13 +89,13 @@ export function BillingPlanOverview({
 
       <div className="grid border-t border-white/[0.09] sm:grid-cols-2 xl:grid-cols-4">
         <PlanBenefit
-          icon={Sparkles}
+          icon={<MinacoCreditsIcon className="mt-0.5 h-[18px] w-[18px]" />}
           label="Included Credits"
           value={creditBenefit}
           detail={subscription.planKey === 'FREE' ? 'Welcome grant' : 'Added each billing cycle'}
         />
         <PlanBenefit
-          icon={CircleGauge}
+          icon={<CircleGauge className="mt-0.5 h-4 w-4 text-zinc-600" />}
           label="Concurrent tasks"
           value={`${concurrentTaskLimit}`}
           detail={capacity
@@ -103,13 +103,13 @@ export function BillingPlanOverview({
             : 'Maximum active tasks'}
         />
         <PlanBenefit
-          icon={Cpu}
+          icon={<Cpu className="mt-0.5 h-4 w-4 text-zinc-600" />}
           label="Model access"
           value={modelBenefit}
           detail={plan.modelTiers.includes('PRO') ? 'Use either agent tier' : 'Standard agent tier'}
         />
         <PlanBenefit
-          icon={CalendarDays}
+          icon={<CalendarDays className="mt-0.5 h-4 w-4 text-zinc-600" />}
           label="Plan validity"
           value={period.value}
           detail={period.detail}
@@ -128,19 +128,19 @@ export function BillingPlanOverview({
 }
 
 function PlanBenefit({
-  icon: Icon,
+  icon,
   label,
   value,
   detail,
 }: {
-  icon: typeof Sparkles;
+  icon: ReactNode;
   label: string;
   value: string;
   detail: string;
 }) {
   return (
     <div className="grid min-h-[102px] grid-cols-[28px_minmax(0,1fr)] content-center gap-3 border-b border-white/[0.09] px-5 py-4 last:border-b-0 sm:[&:nth-child(odd)]:border-r xl:border-b-0 xl:border-r xl:last:border-r-0 lg:px-6">
-      <Icon className="mt-0.5 h-4 w-4 text-zinc-600" />
+      {icon}
       <span className="grid min-w-0">
         <span className="text-[9px] text-zinc-600">{label}</span>
         <strong className="mt-1 truncate text-[12px] text-zinc-200">{value}</strong>

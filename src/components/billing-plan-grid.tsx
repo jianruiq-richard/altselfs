@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
   Check,
@@ -8,10 +9,9 @@ import {
   LoaderCircle,
   MessageCircle,
   Search,
-  Sparkles,
   Telescope,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { MinacoCreditsIcon } from '@/components/minaco-credits-icon';
 import { productBrand } from '@/lib/brand';
 import {
   BILLING_PLANS,
@@ -252,19 +252,19 @@ function PlanCard({
 
       <div className="mt-6 grid content-start gap-3 border-t border-white/[0.09] pt-5">
         <PlanFeature
-          icon={Sparkles}
+          icon={<MinacoCreditsIcon className="h-4 w-4 shrink-0" />}
           text={plan.key === 'FREE'
             ? `${formatCredits(includedCredits)} welcome Credits, once`
             : `${formatCredits(includedCredits)} Credits ${billingCycle === 'yearly' ? 'each yearly billing period' : 'each billing period'}`}
         />
-        <PlanFeature icon={CircleGauge} text={`${plan.concurrentTasks} concurrent task${plan.concurrentTasks === 1 ? '' : 's'}`} />
+        <PlanFeature icon={<CircleGauge className="h-3.5 w-3.5 shrink-0 text-zinc-600" />} text={`${plan.concurrentTasks} concurrent task${plan.concurrentTasks === 1 ? '' : 's'}`} />
         <PlanFeature
-          icon={Check}
+          icon={<Check className="h-3.5 w-3.5 shrink-0 text-zinc-600" />}
           text={plan.modelTiers.includes('PRO') ? productBrand.modelLiteAndProLabel : productBrand.modelLiteOnlyLabel}
         />
-        <PlanFeature icon={MessageCircle} text={`${estimate.discussions} discussions approximately`} />
-        <PlanFeature icon={Search} text={`${estimate.researchTasks} research tasks approximately`} />
-        <PlanFeature icon={Telescope} text={`${estimate.deepTasks} deep tasks approximately`} />
+        <PlanFeature icon={<MessageCircle className="h-3.5 w-3.5 shrink-0 text-zinc-600" />} text={`${estimate.discussions} discussions approximately`} />
+        <PlanFeature icon={<Search className="h-3.5 w-3.5 shrink-0 text-zinc-600" />} text={`${estimate.researchTasks} research tasks approximately`} />
+        <PlanFeature icon={<Telescope className="h-3.5 w-3.5 shrink-0 text-zinc-600" />} text={`${estimate.deepTasks} deep tasks approximately`} />
       </div>
 
       {variant === 'public' ? (
@@ -368,15 +368,15 @@ function formatBillingCycleLabel(value: BillingCycle) {
 }
 
 function PlanFeature({
-  icon: Icon,
+  icon,
   text,
 }: {
-  icon: LucideIcon;
+  icon: ReactNode;
   text: string;
 }) {
   return (
     <span className="flex items-center gap-2.5 text-[11px] text-zinc-400">
-      <Icon className="h-3.5 w-3.5 shrink-0 text-zinc-600" />
+      {icon}
       {text}
     </span>
   );

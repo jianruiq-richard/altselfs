@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Archive,
   ArrowRight,
@@ -13,13 +13,13 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
-  Sparkles,
   Trash2,
   UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
 import { BillingCapacityPopover, type BillingCapacityData } from '@/components/billing-capacity-popover';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
+import { MinacoCreditsIcon } from '@/components/minaco-credits-icon';
 import { productBrand } from '@/lib/brand';
 import { formatCredits, getBillingPlan } from '@/lib/billing-plans';
 import { displayEmail } from '@/lib/user-identifier';
@@ -848,19 +848,19 @@ export default function ProfilePage() {
                               ? `${formatCredits(Math.abs(billing.account.balanceCredits))} credits outstanding`
                               : 'credits ready to use'
                           }
-                          icon={Sparkles}
+                          icon={<MinacoCreditsIcon className="h-[18px] w-[18px]" />}
                         />
                         <UsageMetric
                           label="Reserved"
                           value={formatCredits(billing.account.reservedCredits)}
                           detail="held by active tasks"
-                          icon={CircleGauge}
+                          icon={<CircleGauge className="h-3.5 w-3.5" />}
                         />
                         <UsageMetric
                           label="Lifetime usage"
                           value={formatCredits(billing.account.lifetimeSpentCredits)}
                           detail="credits billed"
-                          icon={CreditCard}
+                          icon={<CreditCard className="h-3.5 w-3.5" />}
                         />
                       </section>
 
@@ -1151,18 +1151,18 @@ function UsageMetric({
   label,
   value,
   detail,
-  icon: Icon,
+  icon,
 }: {
   label: string;
   value: string;
   detail: string;
-  icon: typeof CreditCard;
+  icon: ReactNode;
 }) {
   return (
     <div className="grid min-h-[112px] content-between rounded-[8px] border border-white/[0.09] bg-white/[0.025] p-4">
       <span className="flex items-center justify-between gap-4 text-[10px] text-zinc-600">
         {label}
-        <Icon className="h-3.5 w-3.5" />
+        {icon}
       </span>
       <span className="grid">
         <strong className="text-[20px] text-zinc-100">{value}</strong>
