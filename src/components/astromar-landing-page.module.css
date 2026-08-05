@@ -723,17 +723,68 @@
 }
 
 .footer {
-  padding-block: 34px;
+  padding-block: 44px 28px;
   border-top: 1px solid var(--line);
   color: var(--subtle);
   font-size: 13px;
 }
 
 .footerInner {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 560px);
+  gap: 52px;
+}
+
+.footerBrand {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.footerBrand p {
+  max-width: 360px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.62;
+}
+
+.footerGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 34px;
+}
+
+.footerColumn {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.footerColumn h3 {
+  margin: 0 0 3px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.footerColumn a {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  transition: color 180ms ease;
+}
+
+.footerColumn a:hover {
+  color: #ffffff;
+}
+
+.footerBottom {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 18px;
+  gap: 14px;
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
 }
 
 @keyframes shimmer {
@@ -799,6 +850,11 @@
 
   .pricingIntro {
     max-width: none;
+  }
+
+  .footerInner {
+    grid-template-columns: 1fr;
+    gap: 34px;
   }
 
   .chatPane {
@@ -888,6 +944,15 @@
   .conversationCopy h2,
   .ctaBand h2 {
     font-size: 34px;
+  }
+
+  .footerGrid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .footerBottom {
+    display: grid;
   }
 
   .windowBar {

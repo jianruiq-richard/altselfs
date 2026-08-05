@@ -84,6 +84,32 @@ const useCases = [
   },
 ] as const;
 
+const footerSections = [
+  {
+    title: "Product",
+    links: [
+      { label: "Pricing", href: "/pricing" },
+      { label: "Use cases", href: "#cases" },
+      { label: "How it thinks", href: "#conversation" },
+    ],
+  },
+  {
+    title: "Account",
+    links: [
+      { label: "Sign in", href: "/sign-in?method=email" },
+      { label: "Get started", href: "/sign-up?method=email" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { label: "Terms of Service", href: "/terms" },
+      { label: "Privacy Policy", href: "/privacy" },
+      { label: "Contact", href: `mailto:${productBrand.supportEmail}` },
+    ],
+  },
+] as const;
+
 function classes(...names: string[]) {
   return names.map((name) => styles[name]).filter(Boolean).join(" ");
 }
@@ -369,9 +395,31 @@ export function AstromarLandingPage() {
 
       <footer className={styles.footer}>
         <div className={classes("container", "footerInner")}>
-          <span>{productBrand.name}</span>
-          <span>Your AI cofounder</span>
-          <span>Competitive intelligence, seed users, first version.</span>
+          <div className={styles.footerBrand}>
+            <Link className={styles.brand} href="/" aria-label={`${productBrand.name} home`}>
+              <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandMarkImage} />
+              <span className={styles.brandName}>{productBrand.name}</span>
+            </Link>
+            <p>Your AI cofounder for competitive intelligence, seed users, and first versions.</p>
+          </div>
+
+          <div className={styles.footerGrid}>
+            {footerSections.map((section) => (
+              <div className={styles.footerColumn} key={section.title}>
+                <h3>{section.title}</h3>
+                {section.links.map((link) => (
+                  <Link href={link.href} key={link.href}>
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className={classes("container", "footerBottom")}>
+          <span>{productBrand.tagline}</span>
+          <span>© 2026 {productBrand.name}</span>
         </div>
       </footer>
     </main>
