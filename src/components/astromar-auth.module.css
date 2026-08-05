@@ -529,9 +529,10 @@
 }
 
 .googleMark {
-  color: var(--auth-blue);
-  font-size: 18px;
-  font-weight: 850;
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
 }
 
 .authDivider {
