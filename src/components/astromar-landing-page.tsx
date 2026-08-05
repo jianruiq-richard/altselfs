@@ -7,19 +7,19 @@ import styles from "./astromar-landing-page.module.css";
 
 const scenarios = [
   {
-    lead: "Know competitor moves.",
+    lead: `${productBrand.name} tracks competitor moves.`,
     decision: "Decide your action.",
     detail:
       `Track competitor activity across all channels. ${productBrand.name} shows you their playbook and suggests your counter-strategy.`,
   },
   {
-    lead: "Find who needs your product.",
+    lead: `${productBrand.name} finds who needs your product.`,
     decision: "Decide your outreach.",
     detail:
       `Your first 100 users are already out there. ${productBrand.name} finds where they gather, what they care about, and how to reach them before anyone else does.`,
   },
   {
-    lead: "From idea to live.",
+    lead: `${productBrand.name} turns ideas into live products.`,
     decision: "Decide what ships first.",
     detail:
       `Not a prototype. Not a demo. ${productBrand.name} helps you break down any idea into a shippable first version — then tells you exactly what to build on day one.`,
@@ -186,12 +186,6 @@ export function AstromarLandingPage() {
             <span key={source}>{source}</span>
           ))}
         </div>
-
-        <p className={styles.heroDataUse}>
-          {productBrand.name} helps founders analyze startup context, connected work data, and market signals. When you
-          connect Google Workspace or Gmail, {productBrand.name} uses only the data you authorize to summarize context,
-          draft replies, create decision briefs, and perform actions you request.
-        </p>
       </section>
 
       <section className={classes("container", "section")} id="demo">
