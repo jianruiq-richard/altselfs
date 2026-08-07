@@ -7,22 +7,22 @@ import styles from "./astromar-landing-page.module.css";
 
 const scenarios = [
   {
+    lead: `${productBrand.name} sizes up your competitor.`,
+    decision: "Decide your strategy.",
+    detail:
+      "Users, revenue, growth trajectory — the numbers on any competitor, pulled in seconds.",
+  },
+  {
     lead: `${productBrand.name} tracks competitor moves.`,
     decision: "Decide your action.",
     detail:
-      `Track competitor activity across all channels. ${productBrand.name} shows you their playbook and suggests your counter-strategy.`,
+      "KOC drops, paid campaigns, channel shifts — what they did yesterday and what it means for today.",
   },
   {
     lead: `${productBrand.name} finds who needs your product.`,
     decision: "Decide your outreach.",
     detail:
       `Your first 100 users are already out there. ${productBrand.name} finds where they gather, what they care about, and how to reach them before anyone else does.`,
-  },
-  {
-    lead: `${productBrand.name} turns ideas into live products.`,
-    decision: "Decide what ships first.",
-    detail:
-      `Not a prototype. Not a demo. ${productBrand.name} helps you break down any idea into a shippable first version — then tells you exactly what to build on day one.`,
   },
 ] as const;
 
@@ -66,21 +66,21 @@ const activity = [
 const useCases = [
   {
     index: "01",
-    title: "Know competitor moves. Decide your action.",
+    title: `${productBrand.name} sizes up your competitor. Decide your strategy.`,
     copy:
-      `Track competitor activity across all channels. ${productBrand.name} shows you their playbook and suggests your counter-strategy.`,
+      "Users, revenue, growth trajectory — the numbers on any competitor, pulled in seconds.",
   },
   {
     index: "02",
-    title: "Find who needs your product. Decide your outreach.",
+    title: `${productBrand.name} tracks competitor moves. Decide your action.`,
     copy:
-      `Your first 100 users are already out there. ${productBrand.name} finds where they gather, what they care about, and how to reach them before anyone else does.`,
+      "KOC drops, paid campaigns, channel shifts — what they did yesterday and what it means for today.",
   },
   {
     index: "03",
-    title: "From idea to live. Decide what ships first.",
+    title: "Find who needs your product. Decide your outreach.",
     copy:
-      `Not a prototype. Not a demo. ${productBrand.name} helps you break down any idea into a shippable first version — then tells you exactly what to build on day one.`,
+      `Your first 100 users are already out there. ${productBrand.name} finds where they gather, what they care about, and how to reach them before anyone else does.`,
   },
 ] as const;
 
