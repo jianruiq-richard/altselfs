@@ -395,20 +395,20 @@ async function runCodexAgentTool(argumentsValue: unknown) {
 
     const state = await readState(runtime.statePath);
     const previousThreadId = typeof state.codexSessionId === 'string' ? state.codexSessionId.trim() : '';
-    const previousDynamicToolNames = normalizeStringArray(state.codexDynamicToolNames);
-    const dynamicToolNamesChanged = previousThreadId && !sameStringSet(previousDynamicToolNames, dynamicTools.names);
+    const previousThreadDynamicToolNames = readStartedDynamicToolNames(state);
+    const dynamicToolNamesChanged = previousThreadId && !sameStringSet(previousThreadDynamicToolNames, dynamicTools.names);
     if (dynamicToolNamesChanged) {
       emitTiming('codex.mcp.session_reset', {
         reason: 'dynamic_tools_changed',
         previousCodexThreadId: previousThreadId,
-        previousDynamicToolNames,
+        previousDynamicToolNames: previousThreadDynamicToolNames,
         nextDynamicToolNames: dynamicTools.names,
       });
       await writeStatePatch(runtime.statePath, {
         previousCodexSessionId: previousThreadId,
         codexSessionResetAt: nowIso(),
         codexSessionResetReason: 'dynamic_tools_changed',
-        previousCodexDynamicToolNames: previousDynamicToolNames,
+        previousCodexDynamicToolNames: previousThreadDynamicToolNames,
         nextCodexDynamicToolNames: dynamicTools.names,
       });
     }
@@ -458,12 +458,14 @@ async function runCodexAgentTool(argumentsValue: unknown) {
       codexThreadId = extractThreadId(startedThread, 'thread/start');
     }
 
+    const threadStartedThisTurn = !resumed;
     await writeStatePatch(runtime.statePath, {
       codexSessionId: codexThreadId,
       codexSessionResumed: resumed,
       codexHome: runtime.codexHome,
       codexWorkspace: runtime.workspace,
       codexDynamicToolNames: dynamicTools.names,
+      ...(threadStartedThisTurn ? { codexStartedDynamicToolNames: dynamicTools.names } : {}),
       codexModel: modelSelection.model || null,
       codexModelProvider: modelSelection.provider || null,
       lastCodexToolCallAt: nowIso(),
@@ -855,6 +857,16 @@ function normalizeStringArray(value: unknown) {
   return value
     .map((item) => (typeof item === 'string' ? item.trim() : ''))
     .filter(Boolean);
+}
+
+function readStartedDynamicToolNames(state: Record<string, unknown>) {
+  if (Object.hasOwn(state, 'codexStartedDynamicToolNames')) {
+    return normalizeStringArray(state.codexStartedDynamicToolNames);
+  }
+  if (state.codexSessionResumed === true) {
+    return [];
+  }
+  return normalizeStringArray(state.codexDynamicToolNames);
 }
 
 function sameStringSet(left: string[], right: string[]) {
