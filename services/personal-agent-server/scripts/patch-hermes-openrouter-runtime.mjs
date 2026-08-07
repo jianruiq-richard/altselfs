@@ -640,6 +640,34 @@ _ALTSELFS_SANDBOX_EXEC_TOOL = {
 _ALTSELFS_COMPETITOR_TOOLS = [
     {
         "namespace": None,
+        "name": "altselfs_appark_app_intelligence",
+        "description": (
+            "Use Appark public app analytics for mobile app market intelligence. "
+            "Best for App Store and Google Play app search, app metadata, ratings, "
+            "cumulative downloads, in-app purchases, 30-day download and revenue estimates, "
+            "country split, and competitor app discovery."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "appName": {"type": "string", "description": "App name to search, for example MagicLight, Genspark, or CapCut."},
+                "appId": {"type": "string", "description": "App Store numeric ID or Google Play package, for example 6748646938 or com.magiclight.app."},
+                "platform": {
+                    "type": "string",
+                    "enum": ["auto", "ios", "app_store", "android", "google_play"],
+                    "description": "Optional platform filter. Use auto unless the user asks for iOS/App Store or Android/Google Play specifically.",
+                },
+                "country": {"type": "string", "description": "Two-letter country code for store-specific details. Defaults to us."},
+                "searchSize": {"type": "number", "description": "Number of search candidates to return, from 1 to 20. Defaults to 10."},
+                "includeDownloadRevenue": {"type": "boolean", "description": "Include Appark 30-day download/revenue estimates. Defaults to true."},
+                "includeCompetitors": {"type": "boolean", "description": "Include Appark competitor app candidates. Defaults to true."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
         "name": "altselfs_similarweb_api1",
         "description": (
             "Use RapidAPI similarweb-api1 visitsInfo for competitor traffic intelligence. "
@@ -1043,6 +1071,8 @@ _ALTSELFS_PERSONAL_DATA_TOOLS = [
 
 
 _ALTSELFS_COMPETITOR_TOOL_ALIASES = {
+    "appark": "altselfs_appark_app_intelligence",
+    "altselfs_appark_app_intelligence": "altselfs_appark_app_intelligence",
     "similarweb_api1": "altselfs_similarweb_api1",
     "similarweb-api1": "altselfs_similarweb_api1",
     "altselfs_similarweb_api1": "altselfs_similarweb_api1",
@@ -1496,6 +1526,7 @@ const dynamictoolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
                 "altselfs_semrush8",
                 "altselfs_ahrefs_url_research",
                 "altselfs_domain_metrics_check",
+                "altselfs_appark_app_intelligence",
             }
         )
         is_personal_data = (

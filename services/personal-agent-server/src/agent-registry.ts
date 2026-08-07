@@ -115,6 +115,7 @@ export function defaultAgentProfiles(): AgentProfile[] {
         'altselfs_semrush8_when_semrush8_employee_enabled',
         'altselfs_ahrefs_url_research_when_ahrefs_url_research_employee_enabled',
         'altselfs_domain_metrics_check_when_domain_metrics_check_employee_enabled',
+        'altselfs_appark_app_intelligence_when_appark_employee_enabled',
         'future_similarweb_google_youtube_x_facebook_sources_when_enabled',
       ],
       riskLevel: 'medium',

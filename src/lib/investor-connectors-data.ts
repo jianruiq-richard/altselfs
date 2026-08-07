@@ -103,6 +103,12 @@ const COMPETITIVE_CONNECTORS = [
     description: 'Domain authority checks across DA/PA, spam score, Trust Flow, Citation Flow, DR, backlinks, and referring domains.',
     dbProvider: 'DOMAIN_METRICS_CHECK',
   },
+  {
+    key: 'appark',
+    label: 'Appark',
+    description: 'Mobile app intelligence: App Store and Google Play search, app metadata, ratings, downloads, revenue estimates, country split, and competitors.',
+    dbProvider: 'APPARK',
+  },
 ] as const;
 
 const ENABLED_CONNECTOR_KEYS = new Set([
@@ -112,6 +118,7 @@ const ENABLED_CONNECTOR_KEYS = new Set([
   'semrush13',
   'ahrefs_url_research',
   'domain_metrics_check',
+  'appark',
 ]);
 
 function readString(value: unknown) {

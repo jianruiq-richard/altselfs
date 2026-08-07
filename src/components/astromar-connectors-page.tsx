@@ -65,6 +65,7 @@ const SUPPORTED_CONNECTOR_KEYS = new Set([
   'semrush13',
   'ahrefs_url_research',
   'domain_metrics_check',
+  'appark',
 ]);
 
 const categories: Array<{ key: ConnectorCategory; label: string }> = [
@@ -113,6 +114,11 @@ const CONNECTOR_PERMISSIONS: Record<string, Array<{ title: string; description: 
     { title: 'Authority snapshot', description: 'Check DA, PA, DR, Trust Flow, Citation Flow, and related authority signals.' },
     { title: 'Risk and quality signals', description: 'Use spam score and link-quality indicators to flag domains that need closer review.' },
     { title: 'Link footprint', description: 'Review backlink scale, referring domains, and source-diversity signals for domain diligence.' },
+  ],
+  appark: [
+    { title: 'Mobile app search', description: 'Find matching App Store and Google Play apps by name, app id, package, publisher, and market.' },
+    { title: 'App market metrics', description: 'Review ratings, installs, IAP pricing, version history, and Appark 30-day download and revenue estimates.' },
+    { title: 'Competitor discovery', description: 'Use Appark cluster and competitor signals to map adjacent mobile apps and market alternatives.' },
   ],
 };
 
@@ -178,6 +184,7 @@ function connectorIcon(connector: ConnectorItem): { Icon: LucideIcon; color: str
   if (connector.key.includes('semrush')) return { Icon: BarChart3, color: 'text-[#e9b85a]' };
   if (connector.key.includes('ahrefs')) return { Icon: Search, color: 'text-[#ff8b4a]' };
   if (connector.key.includes('domain')) return { Icon: Search, color: 'text-[#46d19a]' };
+  if (connector.key === 'appark') return { Icon: BarChart3, color: 'text-[#7fc7ff]' };
   return { Icon: Plus, color: 'text-zinc-400' };
 }
 

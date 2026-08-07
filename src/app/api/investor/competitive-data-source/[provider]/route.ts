@@ -7,7 +7,8 @@ type CompetitiveDataSourceProvider =
   | 'semrush13'
   | 'semrush8'
   | 'ahrefs_url_research'
-  | 'domain_metrics_check';
+  | 'domain_metrics_check'
+  | 'appark';
 
 type RouteParams = {
   params: Promise<{ provider: string }>;
@@ -42,6 +43,11 @@ const COMPETITIVE_DATA_SOURCES: Record<CompetitiveDataSourceProvider, {
     dbProvider: 'DOMAIN_METRICS_CHECK',
     label: 'Domain Metrics Check',
     scope: 'moz,majestic,ahrefs_style_metrics,authority,backlinks,referring_domains',
+  },
+  appark: {
+    dbProvider: 'APPARK',
+    label: 'Appark',
+    scope: 'mobile_app_search,app_metadata,ratings,downloads,revenue_estimates,country_split,competitors',
   },
 };
 

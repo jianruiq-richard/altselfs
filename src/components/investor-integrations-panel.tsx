@@ -13,7 +13,8 @@ type ProviderKey =
   | 'semrush13'
   | 'semrush8'
   | 'ahrefs_url_research'
-  | 'domain_metrics_check';
+  | 'domain_metrics_check'
+  | 'appark';
 
 type PersonalProviderKey = 'gmail' | 'feishu' | 'meta';
 
@@ -58,6 +59,7 @@ const COMPETITIVE_DATA_SOURCE_PROVIDERS = [
   'semrush8',
   'ahrefs_url_research',
   'domain_metrics_check',
+  'appark',
 ] as const satisfies readonly ProviderKey[];
 
 const COMPETITIVE_DATA_SOURCE_SET = new Set<ProviderKey>(COMPETITIVE_DATA_SOURCE_PROVIDERS);
@@ -82,6 +84,7 @@ const providerLabels: Record<ProviderKey, string> = {
   semrush8: 'Semrush8',
   ahrefs_url_research: 'Ahrefs URL Research',
   domain_metrics_check: 'Domain Metrics Check',
+  appark: 'Appark',
 };
 
 function providerLabel(provider: ProviderKey) {
@@ -94,6 +97,7 @@ const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_
   semrush8: 'URL-level SEO traffic, keywords, backlinks, and ranking insights.',
   ahrefs_url_research: 'URL-level authority, backlink, referring-domain, organic keyword, and traffic proxy metrics.',
   domain_metrics_check: 'Moz, Majestic, Ahrefs, DA, DR, spam score, and link authority metrics.',
+  appark: 'App Store and Google Play search, app metadata, ratings, downloads, revenue estimates, and competitor apps.',
 };
 
 const competitiveDataSourceScopes: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
@@ -102,6 +106,7 @@ const competitiveDataSourceScopes: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVID
   semrush8: 'URL rank, keyword, traffic, backlink, and competitor visibility analysis.',
   ahrefs_url_research: 'URL authority, backlinks, referring domains, organic keywords, and organic traffic estimates.',
   domain_metrics_check: 'DA/PA, Spam Score, Trust Flow, Citation Flow, DR, backlinks, and authority checks.',
+  appark: 'Mobile app discovery, store metadata, 30-day download and revenue estimates, country split, and competitors.',
 };
 
 const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
@@ -114,6 +119,7 @@ const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
   semrush8: value,
   ahrefs_url_research: value,
   domain_metrics_check: value,
+  appark: value,
 });
 
 function isCompetitiveDataSource(provider: ProviderKey): provider is (typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number] {
@@ -227,6 +233,7 @@ export default function InvestorIntegrationsPanel({
     semrush8: [],
     ahrefs_url_research: [],
     domain_metrics_check: [],
+    appark: [],
   });
   const [assistantThreadIds, setAssistantThreadIds] = useState<Record<ProviderKey, string | null>>({
     gmail: null,
@@ -238,6 +245,7 @@ export default function InvestorIntegrationsPanel({
     semrush8: null,
     ahrefs_url_research: null,
     domain_metrics_check: null,
+    appark: null,
   });
   const [coachOpen, setCoachOpen] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));
   const [coachLoaded, setCoachLoaded] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));

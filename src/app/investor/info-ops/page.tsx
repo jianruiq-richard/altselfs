@@ -85,6 +85,7 @@ export default async function InfoOpsPage({
     semrush8: 'SEMRUSH8',
     ahrefs_url_research: 'AHREFS_URL_RESEARCH',
     domain_metrics_check: 'DOMAIN_METRICS_CHECK',
+    appark: 'APPARK',
   } as const;
 
   const rapidApiConfigured = Boolean(process.env.RAPIDAPI_KEY?.trim());
@@ -100,7 +101,7 @@ export default async function InfoOpsPage({
       updatedAt: integration?.updatedAt.toISOString() || null,
       latestSummary: latest?.summary || null,
       latestSummaryAt: latest?.createdAt.toISOString() || null,
-      platformConfigured: isCompetitiveDataSource(provider) ? rapidApiConfigured : undefined,
+      platformConfigured: provider === 'appark' ? true : isCompetitiveDataSource(provider) ? rapidApiConfigured : undefined,
     };
   });
 
@@ -111,6 +112,7 @@ export default async function InfoOpsPage({
     wechat: 'Add WeChat sources, then use the WeChat Assistant.',
     xiaohongshu: 'Connect Xiaohongshu, then use the Xiaohongshu Assistant.',
     semrush: 'Connect competitive data sources for AI teammate tools.',
+    appark: 'Connect Appark for mobile app market data and competitor discovery.',
   };
 
   return (
@@ -144,5 +146,6 @@ function isCompetitiveDataSource(provider: string) {
     || provider === 'semrush13'
     || provider === 'semrush8'
     || provider === 'ahrefs_url_research'
-    || provider === 'domain_metrics_check';
+    || provider === 'domain_metrics_check'
+    || provider === 'appark';
 }

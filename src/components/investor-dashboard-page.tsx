@@ -16,6 +16,7 @@ const providerLabels: Record<string, string> = {
   SEMRUSH8: 'Semrush',
   AHREFS_URL_RESEARCH: 'Ahrefs',
   DOMAIN_METRICS_CHECK: 'Domain metrics',
+  APPARK: 'Appark',
 };
 
 function readableThreadTitle(title: string | null) {

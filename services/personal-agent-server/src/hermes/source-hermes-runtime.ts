@@ -1206,6 +1206,7 @@ const COMPETITOR_INFO_SOURCE_TO_TOOL: Record<string, string> = {
   semrush8: 'altselfs_semrush8',
   ahrefs_url_research: 'altselfs_ahrefs_url_research',
   domain_metrics_check: 'altselfs_domain_metrics_check',
+  appark: 'altselfs_appark_app_intelligence',
 };
 
 function getEnabledCompetitortoolNames(metadata: Record<string, unknown> | undefined, enabledConnectorKeys?: string[]) {

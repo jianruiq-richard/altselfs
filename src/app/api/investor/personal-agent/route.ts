@@ -495,6 +495,7 @@ const COMPETITOR_DATA_TOOL_NAMES = new Set([
   'altselfs_semrush8',
   'altselfs_ahrefs_url_research',
   'altselfs_domain_metrics_check',
+  'altselfs_appark_app_intelligence',
 ]);
 
 function extractCompetitorDatatoolAudit(event: unknown): CompetitorDatatoolAudit | null {
@@ -701,6 +702,7 @@ async function getEnabledInfoSources(investorId: string) {
     SEMRUSH8: 'semrush8',
     AHREFS_URL_RESEARCH: 'ahrefs_url_research',
     DOMAIN_METRICS_CHECK: 'domain_metrics_check',
+    APPARK: 'appark',
   };
   const integrations = await prisma.investorIntegration.findMany({
     where: {
