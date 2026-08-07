@@ -83,6 +83,7 @@ export default async function InfoOpsPage({
     similarweb_api1: 'SIMILARWEB_API1',
     semrush13: 'SEMRUSH13',
     semrush8: 'SEMRUSH8',
+    ahrefs_url_research: 'AHREFS_URL_RESEARCH',
     domain_metrics_check: 'DOMAIN_METRICS_CHECK',
   } as const;
 
@@ -142,5 +143,6 @@ function isCompetitiveDataSource(provider: string) {
   return provider === 'similarweb_api1'
     || provider === 'semrush13'
     || provider === 'semrush8'
+    || provider === 'ahrefs_url_research'
     || provider === 'domain_metrics_check';
 }

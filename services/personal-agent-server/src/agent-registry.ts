@@ -88,7 +88,7 @@ export function defaultAgentProfiles(): AgentProfile[] {
       capabilities: [
         'Identify direct competitors, indirect competitors, SEO/PPC competitors, and channel competitors',
         'Organize evidence around users, traffic, revenue, growth rate, and acquisition motion',
-        'Prioritize enabled information-source teammates such as Similarweb API1, Semrush13, Semrush8, Domain Metrics Check, and future Google, YouTube, X/Twitter, and Facebook sources',
+        'Prioritize enabled information-source teammates such as Similarweb API1, Semrush13, Semrush8, Ahrefs URL Research, Domain Metrics Check, and future Google, YouTube, X/Twitter, and Facebook sources',
         'Separate observable facts, third-party estimates, proxy metrics, and inferred assumptions',
         'Label competitive-intelligence conclusions with sources, confidence, limitations, and missing data sources',
       ],
@@ -113,6 +113,7 @@ export function defaultAgentProfiles(): AgentProfile[] {
         'altselfs_similarweb_api1_when_similarweb_api1_employee_enabled',
         'altselfs_semrush13_when_semrush13_employee_enabled',
         'altselfs_semrush8_when_semrush8_employee_enabled',
+        'altselfs_ahrefs_url_research_when_ahrefs_url_research_employee_enabled',
         'altselfs_domain_metrics_check_when_domain_metrics_check_employee_enabled',
         'future_similarweb_google_youtube_x_facebook_sources_when_enabled',
       ],

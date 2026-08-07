@@ -355,14 +355,14 @@ const starterTemplates: StarterTemplate[] = [
     title: "I have a competitor. Help me map everything they've done to grow.",
     description: '',
     prompt: "I have a competitor. Help me map everything they've done to grow.",
-    connectorKeys: ['similarweb_api1', 'semrush13'],
+    connectorKeys: ['similarweb_api1', 'semrush13', 'ahrefs_url_research'],
   },
   {
     eyebrow: 'Seed users',
     title: 'I have a product. Help me find my first users.',
     description: '',
     prompt: 'I have a product. Help me find my first users.',
-    connectorKeys: ['similarweb_api1', 'semrush13'],
+    connectorKeys: ['similarweb_api1', 'semrush13', 'ahrefs_url_research'],
   },
   {
     eyebrow: 'Ship first',

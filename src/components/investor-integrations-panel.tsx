@@ -12,6 +12,7 @@ type ProviderKey =
   | 'similarweb_api1'
   | 'semrush13'
   | 'semrush8'
+  | 'ahrefs_url_research'
   | 'domain_metrics_check';
 
 type PersonalProviderKey = 'gmail' | 'feishu' | 'meta';
@@ -55,6 +56,7 @@ const COMPETITIVE_DATA_SOURCE_PROVIDERS = [
   'similarweb_api1',
   'semrush13',
   'semrush8',
+  'ahrefs_url_research',
   'domain_metrics_check',
 ] as const satisfies readonly ProviderKey[];
 
@@ -78,6 +80,7 @@ const providerLabels: Record<ProviderKey, string> = {
   similarweb_api1: 'Similarweb API1',
   semrush13: 'Semrush13',
   semrush8: 'Semrush8',
+  ahrefs_url_research: 'Ahrefs URL Research',
   domain_metrics_check: 'Domain Metrics Check',
 };
 
@@ -89,6 +92,7 @@ const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_
   similarweb_api1: 'Traffic, rankings, audience, referral, and engagement insights from Similarweb-style APIs.',
   semrush13: 'Domain overview, SEO traffic, keyword, backlink, and authority metrics.',
   semrush8: 'URL-level SEO traffic, keywords, backlinks, and ranking insights.',
+  ahrefs_url_research: 'URL-level authority, backlink, referring-domain, organic keyword, and traffic proxy metrics.',
   domain_metrics_check: 'Moz, Majestic, Ahrefs, DA, DR, spam score, and link authority metrics.',
 };
 
@@ -96,6 +100,7 @@ const competitiveDataSourceScopes: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVID
   similarweb_api1: 'Website traffic, country distribution, audience behavior, referrals, and engagement signals.',
   semrush13: 'Domain and keyword intelligence, backlink data, authority metrics, and AI traffic signals when available.',
   semrush8: 'URL rank, keyword, traffic, backlink, and competitor visibility analysis.',
+  ahrefs_url_research: 'URL authority, backlinks, referring domains, organic keywords, and organic traffic estimates.',
   domain_metrics_check: 'DA/PA, Spam Score, Trust Flow, Citation Flow, DR, backlinks, and authority checks.',
 };
 
@@ -107,6 +112,7 @@ const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
   similarweb_api1: value,
   semrush13: value,
   semrush8: value,
+  ahrefs_url_research: value,
   domain_metrics_check: value,
 });
 
@@ -219,6 +225,7 @@ export default function InvestorIntegrationsPanel({
     similarweb_api1: [],
     semrush13: [],
     semrush8: [],
+    ahrefs_url_research: [],
     domain_metrics_check: [],
   });
   const [assistantThreadIds, setAssistantThreadIds] = useState<Record<ProviderKey, string | null>>({
@@ -229,6 +236,7 @@ export default function InvestorIntegrationsPanel({
     similarweb_api1: null,
     semrush13: null,
     semrush8: null,
+    ahrefs_url_research: null,
     domain_metrics_check: null,
   });
   const [coachOpen, setCoachOpen] = useState<Record<ProviderKey, boolean>>(() => recordForProviders(false));

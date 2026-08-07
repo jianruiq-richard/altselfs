@@ -92,6 +92,12 @@ const COMPETITIVE_CONNECTORS = [
     dbProvider: 'SEMRUSH8',
   },
   {
+    key: 'ahrefs_url_research',
+    label: 'Ahrefs URL Research',
+    description: 'URL-level SEO metrics: authority, backlinks, referring domains, organic keywords, traffic proxy, and link footprint signals.',
+    dbProvider: 'AHREFS_URL_RESEARCH',
+  },
+  {
     key: 'domain_metrics_check',
     label: 'Domain Metrics Check',
     description: 'Domain authority checks across DA/PA, spam score, Trust Flow, Citation Flow, DR, backlinks, and referring domains.',
@@ -104,6 +110,7 @@ const ENABLED_CONNECTOR_KEYS = new Set([
   'feishu',
   'similarweb_api1',
   'semrush13',
+  'ahrefs_url_research',
   'domain_metrics_check',
 ]);
 

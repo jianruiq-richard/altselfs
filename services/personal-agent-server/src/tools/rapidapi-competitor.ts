@@ -88,6 +88,37 @@ const TOOLS: RapidApitoolSpec[] = [
     },
   },
   {
+    provider: 'ahrefs_url_research',
+    source: 'ahrefs-url-research',
+    host: 'ahrefs-url-research.p.rapidapi.com',
+    name: 'altselfs_ahrefs_url_research',
+    description:
+      'Use RapidAPI Ahrefs URL Research url-metrics for URL-level SEO intelligence. Best for authority, backlinks, referring domains, organic keywords, traffic proxy, and URL/domain link footprint checks when covered.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Target URL or domain, for example az8.art or az8.art/pricing. Protocol is optional.' },
+        domain: { type: 'string', description: 'Target domain. Used when url is omitted.' },
+      },
+      additionalProperties: false,
+    },
+    run: async (args, config) => {
+      const targetUrl = normalizeAhrefsUrlMetricTarget(readString(args.url), readString(args.domain));
+      if (!targetUrl) return missingInput('url or domain');
+      const url = new URL('https://ahrefs-url-research.p.rapidapi.com/url-metrics');
+      url.searchParams.set('url', targetUrl);
+      return rapidApiJson({
+        config,
+        host: 'ahrefs-url-research.p.rapidapi.com',
+        url: url.toString(),
+        init: {
+          headers: { 'content-type': 'application/json' },
+        },
+        publicInput: { url: targetUrl },
+      });
+    },
+  },
+  {
     provider: 'domain_metrics_check',
     source: 'domain-metrics-check',
     host: 'domain-metrics-check.p.rapidapi.com',
@@ -359,6 +390,21 @@ function normalizeUrl(urlValue: string, domainValue: string) {
   if (urlValue) return /^https?:\/\//i.test(urlValue) ? urlValue : `https://${urlValue}`;
   const domain = normalizeDomain(domainValue);
   return domain ? `https://${domain}/` : '';
+}
+
+function normalizeAhrefsUrlMetricTarget(urlValue: string, domainValue: string) {
+  const raw = urlValue || domainValue;
+  if (!raw) return '';
+  if (!urlValue) return normalizeDomain(raw);
+  const cleaned = raw.replace(/^\/+/, '');
+  const withProtocol = /^https?:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`;
+  try {
+    const parsed = new URL(withProtocol);
+    const pathname = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, '');
+    return `${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`;
+  } catch {
+    return cleaned.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  }
 }
 
 function missingInput(name: string) {

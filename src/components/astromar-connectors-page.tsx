@@ -63,6 +63,7 @@ const SUPPORTED_CONNECTOR_KEYS = new Set([
   'feishu',
   'similarweb_api1',
   'semrush13',
+  'ahrefs_url_research',
   'domain_metrics_check',
 ]);
 
@@ -102,6 +103,11 @@ const CONNECTOR_PERMISSIONS: Record<string, Array<{ title: string; description: 
     { title: 'Domain and competitor view', description: 'Estimate domain traffic, visibility, market position, and competitor relationships.' },
     { title: 'Search intelligence', description: 'Review organic and paid keyword signals, ranking opportunities, and traffic value estimates.' },
     { title: 'Backlink and geography signals', description: 'Check backlink summaries, referring-domain context, and country or device distribution when available.' },
+  ],
+  ahrefs_url_research: [
+    { title: 'URL authority metrics', description: 'Check URL and domain authority-style SEO signals when the provider covers the target.' },
+    { title: 'Backlink footprint', description: 'Review backlink counts, referring domains, and link-growth proxy signals.' },
+    { title: 'Organic search signals', description: 'Use organic keyword and traffic estimates to support SEO diligence.' },
   ],
   domain_metrics_check: [
     { title: 'Authority snapshot', description: 'Check DA, PA, DR, Trust Flow, Citation Flow, and related authority signals.' },
@@ -170,6 +176,7 @@ function connectorIcon(connector: ConnectorItem): { Icon: LucideIcon; color: str
   if (connector.key === 'feishu') return { Icon: MessageSquare, color: 'text-[#8eb3ff]' };
   if (connector.key.includes('similarweb')) return { Icon: Gauge, color: 'text-[#8eb3ff]' };
   if (connector.key.includes('semrush')) return { Icon: BarChart3, color: 'text-[#e9b85a]' };
+  if (connector.key.includes('ahrefs')) return { Icon: Search, color: 'text-[#ff8b4a]' };
   if (connector.key.includes('domain')) return { Icon: Search, color: 'text-[#46d19a]' };
   return { Icon: Plus, color: 'text-zinc-400' };
 }

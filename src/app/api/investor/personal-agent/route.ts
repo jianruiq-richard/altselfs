@@ -493,6 +493,7 @@ const COMPETITOR_DATA_TOOL_NAMES = new Set([
   'altselfs_similarweb_api1',
   'altselfs_semrush13',
   'altselfs_semrush8',
+  'altselfs_ahrefs_url_research',
   'altselfs_domain_metrics_check',
 ]);
 
@@ -698,6 +699,7 @@ async function getEnabledInfoSources(investorId: string) {
     SIMILARWEB_API1: 'similarweb_api1',
     SEMRUSH13: 'semrush13',
     SEMRUSH8: 'semrush8',
+    AHREFS_URL_RESEARCH: 'ahrefs_url_research',
     DOMAIN_METRICS_CHECK: 'domain_metrics_check',
   };
   const integrations = await prisma.investorIntegration.findMany({

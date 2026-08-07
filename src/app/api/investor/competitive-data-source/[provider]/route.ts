@@ -6,6 +6,7 @@ type CompetitiveDataSourceProvider =
   | 'similarweb_api1'
   | 'semrush13'
   | 'semrush8'
+  | 'ahrefs_url_research'
   | 'domain_metrics_check';
 
 type RouteParams = {
@@ -31,6 +32,11 @@ const COMPETITIVE_DATA_SOURCES: Record<CompetitiveDataSourceProvider, {
     dbProvider: 'SEMRUSH8',
     label: 'Semrush8',
     scope: 'seo_rank,keywords,traffic,cost,links,url_traffic',
+  },
+  ahrefs_url_research: {
+    dbProvider: 'AHREFS_URL_RESEARCH',
+    label: 'Ahrefs URL Research',
+    scope: 'url_metrics,authority,backlinks,referring_domains,organic_keywords,organic_traffic',
   },
   domain_metrics_check: {
     dbProvider: 'DOMAIN_METRICS_CHECK',

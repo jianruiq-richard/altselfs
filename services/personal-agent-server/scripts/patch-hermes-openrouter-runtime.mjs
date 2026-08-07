@@ -695,6 +695,24 @@ _ALTSELFS_COMPETITOR_TOOLS = [
     },
     {
         "namespace": None,
+        "name": "altselfs_ahrefs_url_research",
+        "description": (
+            "Use RapidAPI Ahrefs URL Research url-metrics for URL-level SEO intelligence. "
+            "Best for authority, backlinks, referring domains, organic keywords, traffic "
+            "proxy, and URL/domain link footprint checks when covered."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Target URL or domain, for example az8.art or az8.art/pricing. Protocol is optional."},
+                "domain": {"type": "string", "description": "Target domain. Used when url is omitted."},
+            },
+            "additionalProperties": False,
+        },
+        "deferLoading": False,
+    },
+    {
+        "namespace": None,
         "name": "altselfs_domain_metrics_check",
         "description": (
             "Use RapidAPI Domain Metrics Check for SEO authority and backlink summary. "
@@ -1032,6 +1050,9 @@ _ALTSELFS_COMPETITOR_TOOL_ALIASES = {
     "altselfs_semrush13": "altselfs_semrush13",
     "semrush8": "altselfs_semrush8",
     "altselfs_semrush8": "altselfs_semrush8",
+    "ahrefs_url_research": "altselfs_ahrefs_url_research",
+    "ahrefs-url-research": "altselfs_ahrefs_url_research",
+    "altselfs_ahrefs_url_research": "altselfs_ahrefs_url_research",
     "domain_metrics_check": "altselfs_domain_metrics_check",
     "domain-metrics-check": "altselfs_domain_metrics_check",
     "altselfs_domain_metrics_check": "altselfs_domain_metrics_check",
@@ -1473,6 +1494,7 @@ const dynamictoolMethod = `    def _handle_dynamic_tool_call(self, rid: Any, par
                 "altselfs_similarweb_api1",
                 "altselfs_semrush13",
                 "altselfs_semrush8",
+                "altselfs_ahrefs_url_research",
                 "altselfs_domain_metrics_check",
             }
         )

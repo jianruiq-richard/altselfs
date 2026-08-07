@@ -14,6 +14,7 @@ const providerLabels: Record<string, string> = {
   SIMILARWEB_API1: 'Similarweb',
   SEMRUSH13: 'Semrush',
   SEMRUSH8: 'Semrush',
+  AHREFS_URL_RESEARCH: 'Ahrefs',
   DOMAIN_METRICS_CHECK: 'Domain metrics',
 };
 
