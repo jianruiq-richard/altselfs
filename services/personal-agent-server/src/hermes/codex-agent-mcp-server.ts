@@ -395,7 +395,24 @@ async function runCodexAgentTool(argumentsValue: unknown) {
 
     const state = await readState(runtime.statePath);
     const previousThreadId = typeof state.codexSessionId === 'string' ? state.codexSessionId.trim() : '';
-    if (previousThreadId) {
+    const previousDynamicToolNames = normalizeStringArray(state.codexDynamicToolNames);
+    const dynamicToolNamesChanged = previousThreadId && !sameStringSet(previousDynamicToolNames, dynamicTools.names);
+    if (dynamicToolNamesChanged) {
+      emitTiming('codex.mcp.session_reset', {
+        reason: 'dynamic_tools_changed',
+        previousCodexThreadId: previousThreadId,
+        previousDynamicToolNames,
+        nextDynamicToolNames: dynamicTools.names,
+      });
+      await writeStatePatch(runtime.statePath, {
+        previousCodexSessionId: previousThreadId,
+        codexSessionResetAt: nowIso(),
+        codexSessionResetReason: 'dynamic_tools_changed',
+        previousCodexDynamicToolNames: previousDynamicToolNames,
+        nextCodexDynamicToolNames: dynamicTools.names,
+      });
+    }
+    if (previousThreadId && !dynamicToolNamesChanged) {
       try {
         const resumedThread = await activeClient.request(
           'thread/resume',
@@ -831,6 +848,19 @@ function emitTiming(event: string, payload: Record<string, unknown>) {
 
 function readDynamicToolName(tool: unknown) {
   return isRecord(tool) && typeof tool.name === 'string' ? tool.name : '';
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+}
+
+function sameStringSet(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const rightValues = new Set(right);
+  return left.every((value) => rightValues.has(value));
 }
 
 function parseConnectorScope(value?: string): ConnectorScope {
