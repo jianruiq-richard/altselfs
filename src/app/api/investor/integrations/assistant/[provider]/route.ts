@@ -16,7 +16,6 @@ import {
   providerToDb,
   refreshGoogleAccessToken,
   searchGmailMessages,
-  sendGmailMessage,
 } from '@/lib/integrations';
 
 type ClientMessage = {
@@ -29,7 +28,6 @@ type GmailPlanAction =
   | 'list_unread'
   | 'search_messages'
   | 'read_message'
-  | 'send_email'
   | 'snapshot_answer'
   | 'clarify';
 
@@ -40,11 +38,6 @@ type GmailPlan = {
     maxResults?: number;
     query?: string;
     messageId?: string;
-    to?: string;
-    cc?: string;
-    bcc?: string;
-    subject?: string;
-    body?: string;
   };
 };
 
@@ -116,7 +109,6 @@ function safeParsePlan(raw: string): GmailPlan {
       'list_unread',
       'search_messages',
       'read_message',
-      'send_email',
       'snapshot_answer',
       'clarify',
     ]);
@@ -286,30 +278,25 @@ function buildRealtimePlannerPrompt(conversation: ClientMessage[], customPrompt?
     '2) list_unread: list unread messages, optionally constrained by a query',
     '3) search_messages: search messages with a Gmail query',
     '4) read_message: read one message by messageId',
-    '5) send_email: send an email',
-    '6) snapshot_answer: answer from current context without a tool call',
-    '7) clarify: ask a clarifying question',
+    '5) snapshot_answer: answer from current context without a tool call',
+    '6) clarify: ask a clarifying question',
     '',
     'JSON schema:',
     '{',
-    '  "action": "list_recent|list_unread|search_messages|read_message|send_email|snapshot_answer|clarify",',
+    '  "action": "list_recent|list_unread|search_messages|read_message|snapshot_answer|clarify",',
     '  "reason": "why this action is appropriate",',
     '  "args": {',
     '    "maxResults": 1-20,',
     '    "query": "Gmail search query",',
-    '    "messageId": "Gmail message ID",',
-    '    "to": "recipient email",',
-    '    "cc": "optional cc email",',
-    '    "bcc": "optional bcc email",',
-    '    "subject": "email subject",',
-    '    "body": "email body"',
+    '    "messageId": "Gmail message ID"',
     '  }',
     '}',
     '',
     'Rules:',
     '- If the user refers to a specific email, use read_message when you have a messageId.',
     '- If the user asks for matching emails, use search_messages.',
-    '- If the user asks you to send or draft-and-send an email with all required fields, use send_email.',
+    '- If the user asks you to write a reply, read the relevant message and return a draft reply in Minaco.',
+    '- Do not send, modify, archive, delete, or label Gmail messages.',
     '- Use clarify when required fields or intent are missing.',
     '',
   ];
@@ -344,8 +331,7 @@ async function buildRealtimeFinalReply(input: {
         '1) Be concise and specific.',
         '2) When listing emails, include messageId when the user may need to read or reference a message.',
         '3) When summarizing, separate Summary, Action Items, and Draft Reply when useful.',
-        '4) If an email was sent, include the sent message ID.',
-        '5) Do not claim tool results you did not receive.',
+        '4) Do not claim tool results you did not receive.',
         input.customPrompt?.trim() ? `Custom coaching:\n${input.customPrompt.trim()}` : '',
       ].join('\n'),
     },
@@ -494,22 +480,6 @@ async function executeGmailPlan(accessToken: string, plan: GmailPlan) {
       }
       const item = await getGmailMessageById(accessToken, messageId);
       return { action: plan.action, item };
-    }
-    case 'send_email': {
-      const to = String(args.to || '').trim();
-      const subject = String(args.subject || '').trim();
-      const body = String(args.body || '').trim();
-      if (!to || !subject || !body) {
-        return { action: 'clarify', error: 'Please provide the recipient, subject, and body before sending email.' };
-      }
-      const sent = await sendGmailMessage(accessToken, {
-        to,
-        cc: typeof args.cc === 'string' ? args.cc : undefined,
-        bcc: typeof args.bcc === 'string' ? args.bcc : undefined,
-        subject,
-        body,
-      });
-      return { action: plan.action, sent };
     }
     case 'snapshot_answer':
       return { action: plan.action, note: 'planner chose no-tool answer' };

@@ -141,42 +141,21 @@ export function getOAuthRedirectUri(provider: IntegrationProvider, origin: strin
   return process.env[envName] || `${origin}/api/investor/integrations/callback/${provider}`;
 }
 
-export function buildGoogleAuthUrl(origin: string, state: string): string {
-  const redirectUri = getOAuthRedirectUri('gmail', origin);
-  const clientId = getEnv('GOOGLE_CLIENT_ID');
-  const scope = [
-    'openid',
-    'email',
-    'profile',
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.send',
-  ].join(' ');
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: 'code',
-    scope,
-    access_type: 'offline',
-    prompt: 'consent',
-    state,
-  });
-  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-}
+const GOOGLE_GMAIL_READONLY_SCOPES = [
+  'openid',
+  'email',
+  'profile',
+  'https://www.googleapis.com/auth/gmail.readonly',
+].join(' ');
 
 export function buildGoogleReadonlyAuthUrl(origin: string, state: string): string {
   const redirectUri = `${origin}/api/investor/personal-data/gmail/callback`;
   const clientId = getEnv('GOOGLE_CLIENT_ID');
-  const scope = [
-    'openid',
-    'email',
-    'profile',
-    'https://www.googleapis.com/auth/gmail.readonly',
-  ].join(' ');
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope,
+    scope: GOOGLE_GMAIL_READONLY_SCOPES,
     access_type: 'offline',
     prompt: 'consent',
     state,
@@ -500,22 +479,6 @@ async function gmailFetch<T>(accessToken: string, path: string): Promise<T> {
   return data as T;
 }
 
-async function gmailFetchText(accessToken: string, path: string, init?: RequestInit): Promise<string> {
-  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...(init?.headers || {}),
-    },
-    cache: 'no-store',
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`Gmail API failed (${path}): ${text}`);
-  }
-  return text;
-}
-
 function headerValue(headers: GmailHeader[] | undefined, key: string) {
   return headers?.find((h) => h.name.toLowerCase() === key.toLowerCase())?.value || '';
 }
@@ -649,63 +612,6 @@ export async function getGmailMessageById(accessToken: string, messageId: string
   }
   const full = await gmailFetch<GmailMessageFull>(accessToken, `messages/${cleanId}?format=full`);
   return digestGmailMessage(full);
-}
-
-function toBase64Url(input: string) {
-  return Buffer.from(input, 'utf-8')
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
-}
-
-function encodeMimeHeader(value: string) {
-  const encoded = Buffer.from(value, 'utf-8').toString('base64');
-  return `=?UTF-8?B?${encoded}?=`;
-}
-
-export async function sendGmailMessage(
-  accessToken: string,
-  payload: {
-    to: string;
-    subject: string;
-    body: string;
-    cc?: string;
-    bcc?: string;
-  }
-) {
-  const to = payload.to.trim();
-  const subject = payload.subject.trim();
-  const body = payload.body.trim();
-
-  if (!to || !subject || !body) {
-    throw new Error('to, subject and body are required');
-  }
-
-  const lines = [
-    `To: ${to}`,
-    payload.cc?.trim() ? `Cc: ${payload.cc.trim()}` : null,
-    payload.bcc?.trim() ? `Bcc: ${payload.bcc.trim()}` : null,
-    `Subject: ${encodeMimeHeader(subject)}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset="UTF-8"',
-    '',
-    body,
-  ].filter(Boolean) as string[];
-
-  const raw = toBase64Url(lines.join('\r\n'));
-  const responseText = await gmailFetchText(accessToken, 'messages/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-    body: JSON.stringify({ raw }),
-  });
-
-  const sent = JSON.parse(responseText) as { id?: string; threadId?: string; labelIds?: string[] };
-  return {
-    id: sent.id || '',
-    threadId: sent.threadId || null,
-    labelIds: sent.labelIds || [],
-  };
 }
 
 async function fetchAllGmailMessages(accessToken: string) {

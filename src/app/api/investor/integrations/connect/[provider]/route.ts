@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { getInvestorOrNull } from '@/lib/investor-auth';
-import { buildFeishuAuthUrl, buildGoogleAuthUrl, parseProvider } from '@/lib/integrations';
+import { buildFeishuAuthUrl, parseProvider } from '@/lib/integrations';
 
 export async function GET(
   req: NextRequest,
@@ -18,9 +18,13 @@ export async function GET(
     return NextResponse.json({ error: 'Unsupported provider' }, { status: 400 });
   }
 
+  if (provider === 'gmail') {
+    return NextResponse.redirect(new URL('/api/investor/personal-data/gmail/connect', req.url));
+  }
+
   const state = randomUUID();
   const origin = req.nextUrl.origin;
-  const authUrl = provider === 'gmail' ? buildGoogleAuthUrl(origin, state) : buildFeishuAuthUrl(origin, state);
+  const authUrl = buildFeishuAuthUrl(origin, state);
 
   const res = NextResponse.redirect(authUrl);
   res.cookies.set(`oauth_state_${provider}`, state, {
