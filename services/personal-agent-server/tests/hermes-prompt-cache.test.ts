@@ -19,6 +19,8 @@ test('Hermes stable system prompt excludes all per-turn runtime context', () => 
   assert.match(stablePrompt, /Role split:/);
   assert.match(stablePrompt, /mcp_altselfs_codex_update_plan/);
   assert.match(stablePrompt, /Do not impose an artificial step count or tool-call count/);
+  assert.match(stablePrompt, /Connector authorization guidance:/);
+  assert.match(stablePrompt, /connect or enable it in Connectors/);
   assert.doesNotMatch(stablePrompt, /Current time:/);
   assert.doesNotMatch(stablePrompt, /Minaco runtime metadata for this turn:/);
   assert.doesNotMatch(stablePrompt, /<altselfs_user_profile>/);
@@ -31,6 +33,8 @@ test('Hermes dynamic context contains time, mode, tools, profile, and artifacts'
       artifactContext: '<artifacts>quarterly-report.pdf</artifacts>',
       renderedProfile: '- Prefers concise answers',
       selectedAgentProfileId: 'competitive_intelligence',
+      enabledConnectorKeys: ['feishu', 'similarweb_api1'],
+      availablePersonalConnectorKeys: ['feishu'],
       enabledInfoSources: ['similarweb_api1'],
       enabledCompetitortools: ['altselfs_similarweb_api1'],
       personalDatatoolNames: ['altselfs_gmail_search'],
@@ -42,6 +46,8 @@ test('Hermes dynamic context contains time, mode, tools, profile, and artifacts'
 
   assert.match(dynamicContext, /Current time:/);
   assert.match(dynamicContext, /competitive_intelligence/);
+  assert.match(dynamicContext, /Enabled connector keys selected for this turn: feishu, similarweb_api1/);
+  assert.match(dynamicContext, /Connected private personal-data connector keys available to this user: feishu/);
   assert.match(dynamicContext, /similarweb_api1/);
   assert.match(dynamicContext, /altselfs_similarweb_api1/);
   assert.match(dynamicContext, /altselfs_gmail_search/);

@@ -106,6 +106,7 @@ test('Codex receives an explicit none instruction when connector tools are disab
   const instruction = buildConnectorToolScopeInstruction([]);
   assert.match(instruction, /for this turn: none/);
   assert.match(instruction, /older resumed Codex session/);
+  assert.match(instruction, /report the missing connector requirement to Hermes/);
 });
 
 test('bridge connector scope treats a missing or empty list as no enabled tools', () => {

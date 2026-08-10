@@ -13,6 +13,7 @@ import { collectGeneratedWorkspaceArtifacts, ingestWorkspaceAttachments } from '
 import { PRODUCT_BRAND } from '../brand.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
 import type { MemoryReviewJobStore } from '../memory-review-queue.js';
+import { listPersonalConnections } from '../personal-data-store.js';
 import { createPersonalDataDynamictools } from '../tools/personal-data.js';
 import { LocalProfileStore, type UserProfileStore } from '../profile-store.js';
 import {
@@ -219,6 +220,7 @@ export class HermesSourceRuntime {
     const connectorScope = getConnectorScope(request.metadata);
     const enabledInfoSources = getEnabledInfoSourceNames(request.metadata, connectorScope.enabledConnectorKeys);
     const enabledCompetitortools = getEnabledCompetitortoolNames(request.metadata, connectorScope.enabledConnectorKeys);
+    const availablePersonalConnectorKeys = await getAvailablePersonalConnectorKeys(this.config, investorId, request.userId);
     const personalDatatoolNames = await getPersonalDatatoolNames(this.config, investorId, request.userId, connectorScope);
     const profileLoadStartedAtMs = Date.now();
     const profileSnapshot = await this.profileStore.getSnapshot(request.userId);
@@ -230,6 +232,8 @@ export class HermesSourceRuntime {
       artifactContext: ephemeralArtifactContext,
       renderedProfile: combinedProfile,
       selectedAgentProfileId,
+      enabledConnectorKeys: connectorScope.enabledConnectorKeys,
+      availablePersonalConnectorKeys,
       enabledInfoSources,
       enabledCompetitortools,
       personalDatatoolNames,
@@ -1253,6 +1257,23 @@ function normalizeOptionalStringArray(value: unknown, lowercase: boolean) {
   ));
 }
 
+async function getAvailablePersonalConnectorKeys(
+  config: ServerConfig,
+  investorId: string,
+  userId?: string
+) {
+  try {
+    const connections = await listPersonalConnections(config, { investorId, userId });
+    return Array.from(new Set(
+      connections
+        .map((connection) => connection.provider.trim().toLowerCase())
+        .filter((provider) => provider === 'gmail' || provider === 'feishu' || provider === 'meta')
+    ));
+  } catch {
+    return [];
+  }
+}
+
 async function getPersonalDatatoolNames(
   config: ServerConfig,
   investorId: string,
@@ -1305,6 +1326,11 @@ export function buildHermesStableSystemPrompt() {
     '- Codex can work with this thread workspace and artifacts only through the files/tools made available to its Codex session. Hermes-only conversational context is not automatically visible to Codex.',
     '- When the user needs a generated file, ask Codex to write the final deliverable under `outputs/` in the thread workspace. Files written there are uploaded back to the product and linked in the final chat response after the run.',
     '',
+    'Connector authorization guidance:',
+    '- If a user task needs private connected-account data and the required connector is not available for this turn, clearly say which connector is needed and ask the user to connect or enable it in Connectors before retrying.',
+    '- Distinguish between not connected, connected but disabled for this discussion, authorization expired, and document/account permission denied. Do not claim a connector was used unless a tool actually ran.',
+    '- Offer upload, paste, or share-link fallbacks only after the relevant connector action is stated.',
+    '',
     'User-facing privacy and infrastructure boundary:',
     '- Do not reveal internal infrastructure, deployment, storage, database, credential, container, server, IP, hostname, environment-variable, source-code, or backend filesystem details to the user.',
     '- Treat absolute paths such as Hermes/Codex home, workspace root, uploads, artifacts, outputs, logs, cache, state.db, JSONL/session files, and backend project paths as execution-only metadata.',
@@ -1342,6 +1368,8 @@ export function buildHermesDynamicUserContext(input: {
   artifactContext: string;
   renderedProfile: string;
   selectedAgentProfileId?: string;
+  enabledConnectorKeys?: string[];
+  availablePersonalConnectorKeys?: string[];
   enabledInfoSources?: string[];
   enabledCompetitortools?: string[];
   personalDatatoolNames?: string[];
@@ -1362,6 +1390,8 @@ export function buildHermesDynamicUserContext(input: {
       : '- No host-provided default Codex mode/profile was selected.',
     `- Codex provider: ${input.codexModelProvider || 'openrouter'}.`,
     `- Sandboxed deterministic execution available to Codex: ${input.sandboxExecEnabled ? 'yes' : 'no'}.`,
+    `- Enabled connector keys selected for this turn: ${input.enabledConnectorKeys?.length ? input.enabledConnectorKeys.join(', ') : 'none'}.`,
+    `- Connected private personal-data connector keys available to this user: ${input.availablePersonalConnectorKeys?.length ? input.availablePersonalConnectorKeys.join(', ') : 'none'}.`,
     `- Enabled public/competitive info sources: ${input.enabledInfoSources?.length ? input.enabledInfoSources.join(', ') : 'none declared'}.`,
     `- Enabled competitive Codex tools: ${input.enabledCompetitortools?.length ? input.enabledCompetitortools.join(', ') : 'none'}.`,
     `- Enabled private personal-data Codex tools: ${input.personalDatatoolNames?.length ? input.personalDatatoolNames.join(', ') : 'none'}.`,
