@@ -43,11 +43,11 @@ function defaultMobileTitle(pathname: string) {
   if (pathname.startsWith('/investor/chat')) return 'Discussion';
   if (pathname.startsWith('/connectors')) return 'Connectors';
   if (pathname.startsWith('/profile')) return 'Settings';
-  return 'Home';
+  return 'Workspace';
 }
 
 function routeHasRightRail(pathname: string) {
-  return pathname === '/dashboard' || pathname.startsWith('/investor/chat');
+  return pathname.startsWith('/investor/chat');
 }
 
 function WorkspaceNavigationObserver() {

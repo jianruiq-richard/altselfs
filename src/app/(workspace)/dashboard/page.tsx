@@ -1,3 +1,5 @@
-import InvestorDashboardPage from '@/components/investor-dashboard-page';
+import { redirect } from 'next/navigation';
 
-export default InvestorDashboardPage;
+export default function DashboardPage() {
+  redirect('/investor/chat/100');
+}

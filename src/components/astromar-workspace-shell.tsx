@@ -3,7 +3,6 @@
 import { SignOutButton, useUser } from '@clerk/nextjs';
 import {
   ChevronRight,
-  Home,
   LogOut,
   Menu,
   MessagesSquare,
@@ -24,7 +23,7 @@ import {
   resetWorkspaceClientCache,
 } from '@/lib/workspace-client-cache';
 
-type WorkspaceNavKey = 'home' | 'discussion' | 'connectors' | 'settings';
+type WorkspaceNavKey = 'discussion' | 'connectors' | 'settings';
 type SidebarLocation = 'desktop' | 'mobile';
 
 type AstromarWorkspaceShellProps = {
@@ -38,9 +37,10 @@ type AstromarWorkspaceShellProps = {
   homeHref?: string;
 };
 
+const DEFAULT_WORKSPACE_ENTRY_HREF = '/investor/chat/100';
+
 const navItems = [
-  { key: 'discussion' as const, name: 'Discussion', href: '/investor/chat/100', icon: MessagesSquare },
-  { key: 'home' as const, name: 'Home', href: '/dashboard', icon: Home },
+  { key: 'discussion' as const, name: 'Discussion', href: DEFAULT_WORKSPACE_ENTRY_HREF, icon: MessagesSquare },
   { key: 'connectors' as const, name: 'Connectors', href: '/connectors', icon: Plug },
   { key: 'settings' as const, name: 'Settings', href: '/profile', icon: Settings },
 ];
@@ -49,9 +49,9 @@ function buildSignInRedirectUrl() {
   if (typeof window === 'undefined') return '/sign-in';
   const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   const redirectTarget =
-    currentPath.startsWith('/sign-in') || currentPath.startsWith('/sign-up')
-      ? '/dashboard'
-      : currentPath || '/dashboard';
+    currentPath.startsWith('/sign-in') || currentPath.startsWith('/sign-up') || currentPath === '/dashboard'
+      ? DEFAULT_WORKSPACE_ENTRY_HREF
+      : currentPath || DEFAULT_WORKSPACE_ENTRY_HREF;
   return `/sign-in?${new URLSearchParams({ redirect_url: redirectTarget }).toString()}`;
 }
 
@@ -60,7 +60,7 @@ function activeNavKey(pathname: string): WorkspaceNavKey | null {
   if (pathname.startsWith('/connectors')) return 'connectors';
   if (pathname.startsWith('/pricing')) return null;
   if (pathname.startsWith('/profile')) return 'settings';
-  return 'home';
+  return null;
 }
 
 export function AstromarWorkspaceShell({
@@ -71,7 +71,7 @@ export function AstromarWorkspaceShell({
   onNewDiscussion,
   newDiscussionBusy = false,
   newDiscussionDisabled = false,
-  homeHref = '/dashboard',
+  homeHref = DEFAULT_WORKSPACE_ENTRY_HREF,
 }: AstromarWorkspaceShellProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -178,9 +178,9 @@ export function AstromarWorkspaceShell({
           return (
             <Link
               key={item.key}
-              href={item.key === 'home' ? homeHref : item.href}
-              onPointerEnter={() => handleNavigationIntent(item.key === 'home' ? homeHref : item.href)}
-              onFocus={() => handleNavigationIntent(item.key === 'home' ? homeHref : item.href)}
+              href={item.href}
+              onPointerEnter={() => handleNavigationIntent(item.href)}
+              onFocus={() => handleNavigationIntent(item.href)}
               onClick={() => setMobileSidebarOpen(false)}
               className={`flex min-h-[38px] items-center gap-2.5 rounded-[7px] px-3 text-[13px] transition-colors ${
                 active ? 'bg-white/[0.085] text-white' : 'text-zinc-400 hover:bg-white/[0.045] hover:text-white'
