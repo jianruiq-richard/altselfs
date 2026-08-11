@@ -1,0 +1,2421 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Minaco Homepage Below-Fold Copy Preview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: #090909;
+      }
+
+      .landing {
+        --page-bg: #090909;
+        --panel: rgba(18, 18, 20, 0.78);
+        --panel-strong: rgba(26, 24, 21, 0.92);
+        --line: rgba(255, 250, 240, 0.11);
+        --line-strong: rgba(255, 250, 240, 0.2);
+        --text: #fffaf0;
+        --muted: rgba(255, 250, 240, 0.68);
+        --subtle: rgba(255, 250, 240, 0.46);
+        --green: #78c889;
+        --blue: #f2c36b;
+        --amber: #f2c36b;
+        --coral: #e86f61;
+        --shadow: 0 28px 90px rgba(0, 0, 0, 0.48);
+        --radius: 8px;
+        --max: 1180px;
+        position: relative;
+        isolation: isolate;
+        min-height: 100vh;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% -12%, rgba(242, 195, 107, 0.13), transparent 31rem),
+          radial-gradient(circle at 12% 32%, rgba(232, 111, 97, 0.055), transparent 25rem),
+          radial-gradient(circle at 86% 14%, rgba(248, 223, 170, 0.06), transparent 23rem),
+          var(--page-bg);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+
+      .landing::before {
+        position: fixed;
+        z-index: -1;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 250, 240, 0.032) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 250, 240, 0.032) 1px, transparent 1px);
+        background-size: 64px 64px;
+        content: "";
+        mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.68), transparent 72%);
+        pointer-events: none;
+      }
+
+      .landing a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      button,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        color: inherit;
+      }
+
+      .container {
+        width: min(var(--max), calc(100% - 40px));
+        margin-inline: auto;
+      }
+
+      .nav {
+        position: sticky;
+        z-index: 20;
+        top: 0;
+        border-bottom: 1px solid rgba(255, 250, 240, 0.08);
+        background: rgba(9, 9, 9, 0.76);
+        backdrop-filter: blur(20px);
+      }
+
+      .navInner {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        min-height: 72px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-weight: 760;
+        line-height: 1;
+      }
+
+      .brandMark {
+        position: relative;
+        display: block;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 auto;
+        overflow: hidden;
+        border-radius: 8px;
+      }
+
+      .brandMarkImage {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      .brandName {
+        white-space: nowrap;
+      }
+
+      .brandTagline {
+        position: relative;
+        margin-left: 10px;
+        padding-left: 20px;
+        background: linear-gradient(105deg, #fffaf0 0%, #f2c36b 52%, #fff4d8 100%);
+        background-clip: text;
+        color: transparent;
+        font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+        font-size: 13px;
+        font-style: italic;
+        font-weight: 600;
+        white-space: nowrap;
+        -webkit-background-clip: text;
+      }
+
+      .brandTagline::before {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 1px;
+        height: 16px;
+        background: linear-gradient(to bottom, transparent, rgba(242, 195, 107, 0.5), transparent);
+        content: "";
+        transform: translateY(-50%);
+      }
+
+      .navLinks {
+        position: absolute;
+        left: 50%;
+        display: flex;
+        align-items: center;
+        gap: 26px;
+        color: var(--muted);
+        font-size: 14px;
+        white-space: nowrap;
+        transform: translateX(-50%);
+      }
+
+      .navLinks a {
+        transition: color 180ms ease;
+      }
+
+      .navLinks a:hover {
+        color: var(--text);
+      }
+
+      .authActions,
+      .heroActions,
+      .ctaActions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 0 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 250, 240, 0.06);
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 700;
+        white-space: nowrap;
+        transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+      }
+
+      .button:hover {
+        border-color: rgba(242, 195, 107, 0.32);
+        background: rgba(242, 195, 107, 0.09);
+        transform: translateY(-1px);
+      }
+
+      .buttonPrimary {
+        border-color: rgba(242, 195, 107, 0.72);
+        background: linear-gradient(180deg, #f8dfaa, #f2c36b);
+        color: #100e0c !important;
+        box-shadow: 0 14px 42px rgba(242, 195, 107, 0.15);
+      }
+
+      .buttonPrimary:hover {
+        background: linear-gradient(180deg, #ffe8b7, #f2c36b);
+        box-shadow: 0 20px 58px rgba(242, 195, 107, 0.2);
+      }
+
+      .buttonLarge {
+        min-height: 52px;
+        padding: 0 22px;
+      }
+
+      .hero {
+        padding: 50px 0 48px;
+        text-align: center;
+      }
+
+      .heroPositioning {
+        width: max-content;
+        max-width: 100%;
+        margin: 0 auto 26px;
+        background: linear-gradient(105deg, #fffaf0 0%, #f2c36b 52%, #fff4d8 100%);
+        background-clip: text;
+        color: transparent;
+        font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+        font-size: 21px;
+        font-style: italic;
+        font-weight: 500;
+        line-height: 1.35;
+        white-space: nowrap;
+        -webkit-background-clip: text;
+      }
+
+      .heroCarousel,
+      .copyCarousel {
+        overflow: hidden;
+      }
+
+      .heroCarousel {
+        max-width: 1040px;
+        margin-inline: auto;
+      }
+
+      .scenarioTrack,
+      .copyTrack {
+        display: flex;
+        width: 300%;
+        animation: slideScenarios 18s ease-in-out infinite;
+        will-change: transform;
+      }
+
+      .scenario,
+      .heroCopy {
+        flex: 0 0 33.333333%;
+      }
+
+      .scenario {
+        padding-inline: 10px;
+      }
+
+      .headline {
+        max-width: 980px;
+        margin: 0 auto;
+        font-size: 86px;
+        font-weight: 840;
+        line-height: 0.96;
+        text-wrap: balance;
+      }
+
+      .headline span {
+        background: linear-gradient(105deg, #fffaf0 0%, #fff6df 30%, #f2c36b 47%, #ffe5ad 59%, #c8944d 70%, #fffaf0 88%);
+        background-size: 220% auto;
+        background-clip: text;
+        color: transparent;
+        animation: shimmer 7s ease-in-out infinite;
+        -webkit-background-clip: text;
+      }
+
+      .copyCarousel {
+        max-width: 790px;
+        margin: 22px auto 0;
+      }
+
+      .heroCopy {
+        margin: 0;
+        padding-inline: 8px;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.58;
+        text-wrap: balance;
+      }
+
+      .heroActions {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 30px;
+      }
+
+      .contextRow {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 18px;
+        color: var(--subtle);
+        font-size: 13px;
+      }
+
+      .contextRow span {
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 250, 240, 0.045);
+      }
+
+      .section {
+        padding-block: 72px;
+        scroll-margin-top: 80px;
+      }
+
+      .sectionHeading {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+        align-items: end;
+        gap: 28px;
+        margin-bottom: 26px;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--blue);
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .sectionHeading h2,
+      .conversationCopy h2,
+      .ctaBand h2 {
+        margin: 0;
+        font-size: 48px;
+        font-weight: 780;
+        line-height: 1.04;
+        text-wrap: balance;
+      }
+
+      .sectionCopy,
+      .pricingIntro p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.62;
+      }
+
+      .sectionCopy {
+        max-width: 440px;
+      }
+
+      .demoFrame {
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        background: linear-gradient(180deg, rgba(242, 195, 107, 0.075), rgba(255, 250, 240, 0.03)), rgba(10, 10, 10, 0.92);
+        box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 250, 240, 0.12);
+        text-align: left;
+      }
+
+      .windowBar {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        min-height: 44px;
+        padding-inline: 16px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 250, 240, 0.035);
+        color: var(--subtle);
+        font-size: 13px;
+      }
+
+      .windowDots {
+        display: flex;
+        gap: 7px;
+      }
+
+      .windowDots span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: rgba(255, 250, 240, 0.18);
+      }
+
+      .windowDots span:nth-child(1) {
+        background: #ff5f57;
+      }
+
+      .windowDots span:nth-child(2) {
+        background: #ffbd2e;
+      }
+
+      .windowDots span:nth-child(3) {
+        background: #28c840;
+      }
+
+      .windowTitle {
+        text-align: center;
+      }
+
+      .secureContext {
+        justify-self: end;
+      }
+
+      .workspacePreview {
+        display: grid;
+        grid-template-columns: 224px minmax(0, 1fr) 286px;
+        min-height: 690px;
+        background: #090a0a;
+      }
+
+      .workspaceSidebar,
+      .workspaceRail {
+        min-width: 0;
+        background: #0c0d0e;
+      }
+
+      .workspaceSidebar {
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--line);
+      }
+
+      .workspaceBrand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-height: 64px;
+        padding-inline: 16px;
+        font-size: 15px;
+        font-weight: 760;
+      }
+
+      .workspaceBrand .brandMark {
+        width: 30px;
+        height: 30px;
+      }
+
+      .newDiscussion {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 44px;
+        margin: 0 12px 12px;
+        border: 1px solid rgba(255, 250, 240, 0.78);
+        border-radius: 7px;
+        background: #f2f2f0;
+        color: #0b0b0b;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .workspaceNav {
+        display: grid;
+        gap: 2px;
+        padding: 0 10px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .workspaceNav span {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 38px;
+        padding: 0 10px;
+        border-radius: 7px;
+        color: var(--subtle);
+        font-size: 13px;
+      }
+
+      .workspaceNav span.isActive {
+        background: rgba(255, 250, 240, 0.085);
+        color: var(--text);
+      }
+
+      .navIcon {
+        display: grid;
+        width: 16px;
+        height: 16px;
+        place-items: center;
+        border: 1px solid currentColor;
+        border-radius: 4px;
+        color: currentColor;
+        opacity: 0.78;
+      }
+
+      .navIcon::before {
+        width: 6px;
+        height: 6px;
+        border-radius: 2px;
+        background: currentColor;
+        content: "";
+        opacity: 0.7;
+      }
+
+      .discussionList {
+        min-height: 0;
+        padding: 18px 10px;
+        overflow: hidden;
+      }
+
+      .discussionHeading {
+        display: flex;
+        justify-content: space-between;
+        padding: 0 10px 8px;
+        color: rgba(255, 250, 240, 0.34);
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .discussionRow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        padding: 9px 10px;
+        border-radius: 7px;
+        color: rgba(255, 250, 240, 0.48);
+        font-size: 12px;
+      }
+
+      .discussionRow strong,
+      .discussionRow small {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .discussionRow strong {
+        display: block;
+        color: inherit;
+        font-size: 12px;
+      }
+
+      .discussionRow small {
+        display: block;
+        margin-top: 2px;
+        color: rgba(255, 250, 240, 0.32);
+        font-size: 10px;
+      }
+
+      .discussionRow.isActive {
+        background: rgba(255, 250, 240, 0.075);
+        color: var(--text);
+      }
+
+      .workspaceUser {
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr);
+        gap: 10px;
+        margin-top: auto;
+        padding: 12px;
+        border-top: 1px solid var(--line);
+      }
+
+      .avatar {
+        display: grid;
+        width: 38px;
+        height: 38px;
+        place-items: center;
+        border-radius: 7px;
+        background: #d9dce1;
+        color: #161616;
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .workspaceUser strong,
+      .workspaceUser span {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .workspaceUser strong {
+        color: var(--text);
+        font-size: 12px;
+      }
+
+      .workspaceUser span {
+        color: rgba(255, 250, 240, 0.34);
+        font-size: 10px;
+      }
+
+      .workspaceMain {
+        display: grid;
+        grid-template-rows: 64px minmax(0, 1fr) auto;
+        min-width: 0;
+      }
+
+      .workspaceHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-width: 0;
+        padding-inline: 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .workspaceHeader strong,
+      .workspaceHeader span {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .workspaceHeader strong {
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .workspaceHeader span {
+        margin-top: 2px;
+        color: rgba(255, 250, 240, 0.34);
+        font-size: 10px;
+      }
+
+      .modelSelect {
+        flex: 0 0 auto;
+        padding: 8px 11px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #111214;
+        color: rgba(255, 250, 240, 0.68);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .thread {
+        min-height: 0;
+        padding: 24px 26px;
+        overflow: auto;
+      }
+
+      .threadDay {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+        color: rgba(255, 250, 240, 0.28);
+        font-size: 9px;
+        text-transform: uppercase;
+      }
+
+      .threadDay::before,
+      .threadDay::after {
+        flex: 1;
+        height: 1px;
+        background: var(--line);
+        content: "";
+      }
+
+      .message {
+        max-width: 82%;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        color: rgba(255, 250, 240, 0.84);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .messageUser {
+        margin: 0 0 22px auto;
+        border-radius: 8px 8px 2px 8px;
+        background: rgba(255, 250, 240, 0.075);
+        color: var(--text);
+      }
+
+      .submissionState {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 250, 240, 0.08);
+        color: rgba(255, 250, 240, 0.42);
+        font-size: 10px;
+      }
+
+      .spinner {
+        width: 11px;
+        height: 11px;
+        border: 2px solid rgba(255, 250, 240, 0.16);
+        border-top-color: var(--blue);
+        border-radius: 50%;
+        animation: spin 900ms linear infinite;
+      }
+
+      .assistantBlock {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        gap: 13px;
+      }
+
+      .assistantMark {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 1px solid rgba(255, 250, 240, 0.15);
+        border-radius: 7px;
+        background: linear-gradient(145deg, rgba(255, 250, 240, 0.15), rgba(255, 250, 240, 0.03));
+      }
+
+      .assistantMark i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--blue);
+        box-shadow: 0 0 13px rgba(242, 195, 107, 0.65);
+      }
+
+      .assistantLabel {
+        margin-bottom: 8px;
+        color: rgba(255, 250, 240, 0.36);
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .assistantIntro {
+        margin: 0 0 14px;
+        color: rgba(255, 250, 240, 0.72);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .activityPanel {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #1f1f1f;
+        box-shadow: 0 26px 90px rgba(0, 0, 0, 0.32);
+      }
+
+      .activityHead {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 15px 16px;
+      }
+
+      .activityPulse {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border: 1px solid rgba(242, 195, 107, 0.22);
+        border-radius: 8px;
+        background: rgba(242, 195, 107, 0.08);
+      }
+
+      .activityPulse i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--blue);
+        box-shadow: 0 0 22px rgba(242, 195, 107, 0.72);
+        animation: pulse 1.35s ease-in-out infinite;
+      }
+
+      .activityHead strong {
+        display: block;
+        color: var(--text);
+        font-size: 14px;
+      }
+
+      .activityHead span {
+        display: block;
+        margin-top: 2px;
+        color: rgba(255, 250, 240, 0.46);
+        font-size: 12px;
+      }
+
+      .activityList {
+        display: grid;
+        gap: 0;
+        margin: 0;
+        padding: 0 16px 16px 32px;
+        list-style: none;
+      }
+
+      .activityItem {
+        position: relative;
+        display: none;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        padding: 12px 0 12px 18px;
+        border-left: 1px solid rgba(255, 250, 240, 0.1);
+      }
+
+      .activityItem.isVisible {
+        display: grid;
+        animation: rise 260ms ease both;
+      }
+
+      .activityItem::before {
+        position: absolute;
+        top: 17px;
+        left: -5px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: rgba(255, 250, 240, 0.34);
+        box-shadow: 0 0 0 3px #1f1f1f;
+        content: "";
+      }
+
+      .activityItem.isRunning::before {
+        background: var(--blue);
+        box-shadow: 0 0 0 3px #1f1f1f, 0 0 16px rgba(242, 195, 107, 0.62);
+      }
+
+      .activityItem.isComplete::before {
+        background: var(--green);
+        box-shadow: 0 0 0 3px #1f1f1f, 0 0 12px rgba(120, 200, 137, 0.52);
+      }
+
+      .activityItem strong {
+        display: block;
+        color: rgba(255, 250, 240, 0.86);
+        font-size: 12px;
+      }
+
+      .activityItem p {
+        margin: 4px 0 0;
+        color: rgba(255, 250, 240, 0.5);
+        font-size: 11px;
+        line-height: 1.48;
+      }
+
+      .activityBadge {
+        align-self: start;
+        padding: 2px 7px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: rgba(255, 250, 240, 0.44);
+        font-size: 9px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .answerCard {
+        display: none;
+        margin-top: 14px;
+        padding: 16px;
+        border: 1px solid rgba(242, 195, 107, 0.24);
+        border-radius: 8px;
+        background: rgba(242, 195, 107, 0.08);
+        animation: rise 300ms ease both;
+      }
+
+      .answerCard.isVisible {
+        display: block;
+      }
+
+      .answerCard small {
+        display: block;
+        margin-bottom: 7px;
+        color: var(--blue);
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .answerCard h3 {
+        margin: 0 0 8px;
+        color: var(--text);
+        font-size: 16px;
+        line-height: 1.35;
+      }
+
+      .answerCard p {
+        margin: 0;
+        color: rgba(255, 250, 240, 0.74);
+        font-size: 12px;
+        line-height: 1.58;
+      }
+
+      .composer {
+        margin: 0 22px 20px;
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: linear-gradient(180deg, rgba(255, 250, 240, 0.055), rgba(255, 250, 240, 0.025)), #111214;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 250, 240, 0.06);
+      }
+
+      .composerConnectors {
+        display: flex;
+        gap: 6px;
+        padding: 9px 10px 0;
+        overflow: hidden;
+      }
+
+      .composerChip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 27px;
+        padding: 0 8px;
+        border: 1px solid rgba(242, 195, 107, 0.23);
+        border-radius: 6px;
+        background: rgba(242, 195, 107, 0.07);
+        color: rgba(255, 250, 240, 0.82);
+        font-size: 10px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .composerChip i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--blue);
+      }
+
+      .composerText {
+        min-height: 78px;
+        padding: 12px 14px;
+        color: rgba(255, 250, 240, 0.42);
+        font-size: 13px;
+      }
+
+      .composerActions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 0 10px 10px;
+      }
+
+      .miniButton {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 9px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: rgba(255, 250, 240, 0.44);
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .sendButton {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        border: 1px solid var(--text);
+        border-radius: 6px;
+        background: #f2f2f0;
+        color: #090909;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .workspaceRail {
+        display: grid;
+        grid-template-rows: 64px minmax(0, 1fr);
+        border-left: 1px solid var(--line);
+      }
+
+      .capacityStrip {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: center;
+        gap: 10px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .capacityStrip strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .capacityStrip span {
+        display: block;
+        color: rgba(255, 250, 240, 0.34);
+        font-size: 9px;
+      }
+
+      .railBody {
+        min-height: 0;
+        padding: 18px 16px;
+        overflow: auto;
+      }
+
+      .railSection {
+        margin-bottom: 26px;
+      }
+
+      .railHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .railHeader h3 {
+        margin: 0;
+        color: rgba(255, 250, 240, 0.78);
+        font-size: 13px;
+      }
+
+      .railHeader span {
+        color: rgba(255, 250, 240, 0.34);
+        font-size: 10px;
+      }
+
+      .activeWorkCard {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: rgba(255, 250, 240, 0.027);
+      }
+
+      .activeWorkTop {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .activeWorkTop strong {
+        color: var(--text);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .runningPill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--blue);
+        font-size: 9px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .runningPill i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--blue);
+        animation: pulse 1.35s ease-in-out infinite;
+      }
+
+      .activeWorkCard p {
+        margin: 11px 0 0;
+        padding-top: 11px;
+        border-top: 1px solid rgba(255, 250, 240, 0.07);
+        color: rgba(255, 250, 240, 0.46);
+        font-size: 10px;
+        line-height: 1.5;
+      }
+
+      .workTimer {
+        margin-top: 12px;
+        color: rgba(255, 250, 240, 0.54);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .connectorList {
+        display: grid;
+        gap: 4px;
+      }
+
+      .connectorRow {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) 30px;
+        align-items: center;
+        gap: 9px;
+        min-height: 54px;
+        padding: 0 7px;
+        border-radius: 7px;
+      }
+
+      .connectorRow:hover {
+        background: rgba(255, 250, 240, 0.025);
+      }
+
+      .connectorIcon {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: rgba(255, 250, 240, 0.5);
+      }
+
+      .connectorIcon::before {
+        width: 10px;
+        height: 10px;
+        border: 1px solid currentColor;
+        border-radius: 3px;
+        content: "";
+      }
+
+      .connectorRow strong,
+      .connectorRow span:not(.connectorIcon):not(.toggle) {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .connectorRow strong {
+        color: rgba(255, 250, 240, 0.82);
+        font-size: 12px;
+      }
+
+      .connectorRow span:not(.connectorIcon):not(.toggle) {
+        margin-top: 2px;
+        color: rgba(255, 250, 240, 0.34);
+        font-size: 10px;
+      }
+
+      .toggle {
+        position: relative;
+        width: 30px;
+        height: 18px;
+        border: 1px solid rgba(242, 195, 107, 0.25);
+        border-radius: 999px;
+        background: rgba(242, 195, 107, 0.1);
+      }
+
+      .toggle::after {
+        position: absolute;
+        top: 3px;
+        left: 15px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--blue);
+        content: "";
+      }
+
+      .railFootnote {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+        color: rgba(255, 250, 240, 0.34);
+        font-size: 10px;
+        line-height: 1.45;
+      }
+
+      .scenarioTabs {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .scenarioTab {
+        min-height: 96px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 250, 240, 0.045);
+        color: var(--muted);
+        cursor: pointer;
+        text-align: left;
+        transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+      }
+
+      .scenarioTab:hover,
+      .scenarioTab.isActive {
+        border-color: rgba(242, 195, 107, 0.34);
+        background: rgba(242, 195, 107, 0.08);
+        color: var(--text);
+      }
+
+      .scenarioTab span {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--blue);
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .scenarioTab strong {
+        display: block;
+        font-size: 14px;
+        line-height: 1.35;
+      }
+
+      .featureGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .feature {
+        min-height: 250px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: inset 0 1px 0 rgba(255, 250, 240, 0.08);
+      }
+
+      .featureIndex {
+        margin-bottom: 42px;
+        color: var(--subtle);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .feature h3 {
+        margin: 0 0 10px;
+        font-size: 19px;
+      }
+
+      .feature p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.62;
+      }
+
+      .benefitGrid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--line);
+      }
+
+      .benefit {
+        min-height: 280px;
+        padding: 22px;
+        background: rgba(18, 18, 20, 0.78);
+      }
+
+      .benefit span {
+        display: block;
+        margin-bottom: 40px;
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .benefit h3 {
+        margin: 0 0 11px;
+        font-size: 19px;
+        line-height: 1.32;
+      }
+
+      .benefit p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.62;
+      }
+
+      .conversationGrid {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.25fr);
+        gap: 60px;
+        align-items: center;
+      }
+
+      .conversationCopy > p:last-child {
+        max-width: 480px;
+        margin: 20px 0 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .dialogStack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .turn {
+        width: min(88%, 620px);
+        padding: 17px 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 250, 240, 0.055);
+      }
+
+      .turnAi {
+        justify-self: end;
+        border-color: rgba(242, 195, 107, 0.22);
+        background: rgba(242, 195, 107, 0.08);
+      }
+
+      .turn small {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--subtle);
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .turnAi small {
+        color: var(--blue);
+      }
+
+      .turn p {
+        margin: 0;
+        color: rgba(255, 250, 240, 0.84);
+        line-height: 1.55;
+      }
+
+      .ctaBand {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 28px;
+        padding: 48px;
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        background: linear-gradient(135deg, rgba(242, 195, 107, 0.12), rgba(255, 250, 240, 0.03)), rgba(16, 16, 18, 0.92);
+        box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 250, 240, 0.1);
+      }
+
+      .ctaBand p:not(.eyebrow) {
+        max-width: 620px;
+        margin: 16px 0 0;
+        color: var(--muted);
+        line-height: 1.62;
+      }
+
+      .ctaActions {
+        justify-content: flex-end;
+      }
+
+      .pricingIntro {
+        display: grid;
+        justify-items: start;
+        gap: 14px;
+        max-width: 460px;
+      }
+
+      .pricingList {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .pricingCard {
+        min-height: 170px;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+      }
+
+      .pricingCard small {
+        display: block;
+        margin-bottom: 18px;
+        color: var(--subtle);
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .pricingCard strong {
+        display: block;
+        color: var(--text);
+        font-size: 17px;
+      }
+
+      .pricingCard p {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.58;
+      }
+
+      .footer {
+        padding-block: 44px 28px;
+        border-top: 1px solid var(--line);
+        color: var(--subtle);
+        font-size: 13px;
+      }
+
+      .footerInner {
+        display: grid;
+        grid-template-columns: minmax(240px, 1fr) minmax(0, 560px);
+        gap: 52px;
+      }
+
+      .footerBrand {
+        display: grid;
+        align-content: start;
+        gap: 18px;
+      }
+
+      .footerBrand p {
+        max-width: 360px;
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.62;
+      }
+
+      .footerGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 34px;
+      }
+
+      .footerColumn {
+        display: grid;
+        align-content: start;
+        gap: 10px;
+      }
+
+      .footerColumn h3 {
+        margin: 0 0 3px;
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .footerColumn a {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+        transition: color 180ms ease;
+      }
+
+      .footerColumn a:hover {
+        color: var(--text);
+      }
+
+      .footerBottom {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 14px;
+        margin-top: 34px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+      }
+
+      @keyframes shimmer {
+        0%,
+        100% {
+          background-position: 0 center;
+        }
+
+        50% {
+          background-position: 100% center;
+        }
+      }
+
+      @keyframes slideScenarios {
+        0%,
+        27% {
+          transform: translateX(0);
+        }
+
+        33%,
+        60% {
+          transform: translateX(-33.333333%);
+        }
+
+        66%,
+        93% {
+          transform: translateX(-66.666666%);
+        }
+
+        100% {
+          transform: translateX(0);
+        }
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.95;
+          transform: scale(1);
+        }
+
+        50% {
+          opacity: 0.58;
+          transform: scale(1.18);
+        }
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (max-width: 1100px) {
+        .headline {
+          font-size: 72px;
+        }
+
+        .sectionHeading h2,
+        .conversationCopy h2,
+        .ctaBand h2 {
+          font-size: 42px;
+        }
+
+        .workspacePreview {
+          grid-template-columns: 210px minmax(0, 1fr);
+        }
+
+        .workspaceRail {
+          display: none;
+        }
+
+        .benefitGrid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 940px) {
+        .brandTagline {
+          display: none;
+        }
+
+        .headline {
+          font-size: 64px;
+        }
+
+        .sectionHeading,
+        .conversationGrid,
+        .ctaBand {
+          grid-template-columns: 1fr;
+        }
+
+        .pricingIntro {
+          max-width: none;
+        }
+
+        .footerInner {
+          grid-template-columns: 1fr;
+          gap: 34px;
+        }
+
+        .featureGrid,
+        .pricingList {
+          grid-template-columns: 1fr;
+        }
+
+        .feature {
+          min-height: 0;
+        }
+
+        .featureIndex {
+          margin-bottom: 24px;
+        }
+
+        .ctaActions {
+          justify-content: flex-start;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .workspacePreview {
+          grid-template-columns: 1fr;
+          min-height: 0;
+        }
+
+        .workspaceSidebar {
+          display: none;
+        }
+
+        .scenarioTabs {
+          grid-template-columns: 1fr;
+        }
+
+        .thread {
+          max-height: 620px;
+          padding: 18px;
+        }
+
+        .composer {
+          margin-inline: 14px;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .container {
+          width: min(100% - 28px, var(--max));
+        }
+
+        .navInner {
+          min-height: 64px;
+        }
+
+        .navLinks {
+          display: none;
+        }
+
+        .authActions {
+          gap: 6px;
+        }
+
+        .authActions .button {
+          min-height: 38px;
+          padding-inline: 11px;
+          font-size: 12px;
+        }
+
+        .hero {
+          padding: 44px 0 42px;
+        }
+
+        .heroPositioning {
+          width: auto;
+          margin-bottom: 22px;
+          font-size: 15px;
+          white-space: normal;
+        }
+
+        .headline {
+          font-size: 46px;
+          line-height: 1;
+        }
+
+        .heroCopy {
+          font-size: 17px;
+        }
+
+        .heroActions .button {
+          width: 100%;
+        }
+
+        .contextRow {
+          display: none;
+        }
+
+        .section {
+          padding-block: 56px;
+        }
+
+        .sectionHeading {
+          gap: 18px;
+        }
+
+        .sectionHeading h2,
+        .conversationCopy h2,
+        .ctaBand h2 {
+          font-size: 34px;
+        }
+
+        .windowBar {
+          grid-template-columns: 1fr auto;
+        }
+
+        .windowTitle {
+          display: none;
+        }
+
+        .message {
+          max-width: 94%;
+        }
+
+        .activityItem {
+          grid-template-columns: 1fr;
+        }
+
+        .activityBadge {
+          justify-self: start;
+        }
+
+        .benefitGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .benefit {
+          min-height: 0;
+        }
+
+        .benefit span {
+          margin-bottom: 24px;
+        }
+
+        .footerGrid {
+          grid-template-columns: 1fr;
+          gap: 24px;
+        }
+
+        .footerBottom {
+          display: grid;
+        }
+
+        .ctaBand {
+          padding: 28px 20px;
+        }
+
+        .ctaActions {
+          display: grid;
+        }
+
+        .ctaActions .button {
+          width: 100%;
+        }
+      }
+
+      @media (max-width: 420px) {
+        .brandName {
+          font-size: 15px;
+        }
+
+        .brandMark {
+          width: 30px;
+          height: 30px;
+        }
+
+        .headline {
+          font-size: 38px;
+        }
+
+        .heroPositioning {
+          font-size: 14px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .landing *,
+        .landing *::before,
+        .landing *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 1ms !important;
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+        }
+
+        .scenarioTrack,
+        .copyTrack {
+          animation: none;
+          transform: none;
+        }
+
+        .headline span {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="landing">
+      <nav class="nav">
+        <div class="container navInner">
+          <a class="brand" href="#" aria-label="Minaco home">
+            <span class="brandMark" aria-hidden="true">
+              <img class="brandMarkImage" src="../public/brand/minaco/minaco-favicon.svg" alt="" />
+            </span>
+            <span class="brandName">Minaco</span>
+            <span class="brandTagline">Think with you. Act for you.</span>
+          </a>
+
+          <div class="navLinks" aria-label="Primary navigation">
+            <a href="#pricing">Pricing</a>
+            <a href="#cases">Use cases</a>
+            <a href="#conversation">How it thinks</a>
+          </div>
+
+          <div class="authActions" aria-label="Account actions">
+            <a class="button" href="#">Sign in</a>
+            <a class="button buttonPrimary" href="#">Get Started</a>
+          </div>
+        </div>
+      </nav>
+
+      <section class="container hero">
+        <p class="heroPositioning">Minaco is your AI cofounder, built to think with you, not just work for you.</p>
+
+        <div class="heroCarousel" aria-label="Founder decision scenarios">
+          <div class="scenarioTrack">
+            <div class="scenario">
+              <h1 class="headline">
+                <span>Minaco sizes up your competitor.</span><br />
+                Decide your strategy.
+              </h1>
+            </div>
+            <div class="scenario">
+              <h1 class="headline">
+                <span>Minaco tracks competitor moves.</span><br />
+                Decide your action.
+              </h1>
+            </div>
+            <div class="scenario">
+              <h1 class="headline">
+                <span>Minaco finds who needs your product.</span><br />
+                Decide your outreach.
+              </h1>
+            </div>
+          </div>
+        </div>
+
+        <div class="copyCarousel" aria-label="Scenario details">
+          <div class="copyTrack">
+            <p class="heroCopy">Users, revenue, growth trajectory - the numbers on any competitor, pulled in seconds.</p>
+            <p class="heroCopy">KOC drops, paid campaigns, channel shifts - what they did yesterday and what it means for today.</p>
+            <p class="heroCopy">Your first 100 users are already out there. Minaco finds where they gather, what they care about, and how to reach them before anyone else does.</p>
+          </div>
+        </div>
+
+        <div class="heroActions">
+          <a class="button buttonPrimary buttonLarge" href="#">Talk to your AI cofounder <span aria-hidden="true">-&gt;</span></a>
+          <a class="button buttonLarge" href="#conversation">See how it thinks</a>
+        </div>
+
+        <div class="contextRow" aria-label="Example connected context sources">
+          <span>Google Workspace</span>
+          <span>Gmail</span>
+          <span>Slack</span>
+          <span>Notion</span>
+          <span>YouTube</span>
+          <span>TikTok</span>
+          <span>X</span>
+          <span>Search</span>
+        </div>
+      </section>
+
+      <section class="container section" id="demo">
+        <div class="sectionHeading">
+          <div>
+            <p class="eyebrow">AI cofounder in the decision room</p>
+            <h2>Ask once. Watch the work. Decide with evidence.</h2>
+          </div>
+          <p class="sectionCopy">
+            Minaco behaves like a founder partner inside the product: it reads the selected context, runs the
+            investigation, exposes the work in progress, and returns with a decision you can act on.
+          </p>
+        </div>
+
+        <div class="scenarioTabs" role="tablist" aria-label="Decision preview scenarios">
+          <button class="scenarioTab isActive" type="button" data-scenario="0" role="tab" aria-selected="true">
+            <span>01 / Strategy</span>
+            <strong>Size a competitor before changing your roadmap.</strong>
+          </button>
+          <button class="scenarioTab" type="button" data-scenario="1" role="tab" aria-selected="false">
+            <span>02 / Response</span>
+            <strong>Track a competitor move without reacting to noise.</strong>
+          </button>
+          <button class="scenarioTab" type="button" data-scenario="2" role="tab" aria-selected="false">
+            <span>03 / Outreach</span>
+            <strong>Find first users from active demand signals.</strong>
+          </button>
+        </div>
+
+        <div class="demoFrame" aria-label="Minaco discussion workspace preview">
+          <div class="windowBar">
+            <div class="windowDots" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="windowTitle">minaco://discussion</div>
+            <div class="secureContext">Secure context</div>
+          </div>
+
+          <div class="workspacePreview">
+            <aside class="workspaceSidebar" aria-label="Workspace navigation">
+              <div class="workspaceBrand">
+                <span class="brandMark" aria-hidden="true">
+                  <img class="brandMarkImage" src="../public/brand/minaco/minaco-favicon.svg" alt="" />
+                </span>
+                <span>Minaco</span>
+              </div>
+              <button class="newDiscussion" type="button">+ New discussion</button>
+              <nav class="workspaceNav" aria-label="Workspace">
+                <span class="isActive"><i class="navIcon" aria-hidden="true"></i>Discussion</span>
+                <span><i class="navIcon" aria-hidden="true"></i>Home</span>
+                <span><i class="navIcon" aria-hidden="true"></i>Connectors</span>
+                <span><i class="navIcon" aria-hidden="true"></i>Settings</span>
+              </nav>
+              <div class="discussionList">
+                <div class="discussionHeading"><span>Discussions</span><span>3</span></div>
+                <div class="discussionRow isActive">
+                  <div>
+                    <strong id="sidebar-title">Lovable market size</strong>
+                    <small>Working - 3 messages</small>
+                  </div>
+                  <span aria-hidden="true">...</span>
+                </div>
+                <div class="discussionRow">
+                  <div>
+                    <strong>First 100 design partners</strong>
+                    <small>08/06 - 7 messages</small>
+                  </div>
+                </div>
+                <div class="discussionRow">
+                  <div>
+                    <strong>Q3 activation decision</strong>
+                    <small>08/03 - 11 messages</small>
+                  </div>
+                </div>
+              </div>
+              <div class="workspaceUser">
+                <span class="avatar">RJ</span>
+                <div>
+                  <strong>Founder</strong>
+                  <span>founder@company.ai</span>
+                </div>
+              </div>
+            </aside>
+
+            <section class="workspaceMain">
+              <header class="workspaceHeader">
+                <div>
+                  <strong id="workspace-title">How big is Lovable?</strong>
+                  <span>Think with you. Act for you.</span>
+                </div>
+                <div class="modelSelect">Minaco Pro v</div>
+              </header>
+
+              <div class="thread" id="thread">
+                <div class="threadDay">Today</div>
+                <div class="message messageUser">
+                  <div id="userPrompt">Size up Lovable: users, revenue, growth trajectory, and what its momentum should change in our strategy.</div>
+                  <div class="submissionState"><i class="spinner" aria-hidden="true"></i><span>Running</span></div>
+                </div>
+                <div class="assistantBlock">
+                  <span class="assistantMark" aria-hidden="true"><i></i></span>
+                  <div>
+                    <div class="assistantLabel">Minaco</div>
+                    <p class="assistantIntro" id="assistantIntro">
+                      I will separate confirmed facts from estimates, compare multiple market signals, and come back with the strategic implication.
+                    </p>
+                    <div class="activityPanel">
+                      <div class="activityHead">
+                        <span class="activityPulse" aria-hidden="true"><i></i></span>
+                        <div>
+                          <strong id="activityTitle">Using execution tools</strong>
+                          <span id="activityDetail">Reading context and collecting current market signals.</span>
+                        </div>
+                      </div>
+                      <ol class="activityList" id="activityList"></ol>
+                    </div>
+                    <article class="answerCard" id="answerCard">
+                      <small>Recommended move</small>
+                      <h3 id="answerTitle">Treat the growth as category validation, not a roadmap to copy.</h3>
+                      <p id="answerCopy">
+                        Lovable's momentum confirms demand for fast, conversational software creation. The better move is to own a narrower decision-to-execution wedge, deepen the context advantage, and avoid competing on broad feature volume.
+                      </p>
+                    </article>
+                  </div>
+                </div>
+              </div>
+
+              <div class="composer">
+                <div class="composerConnectors" id="composerConnectors">
+                  <span class="composerChip"><i aria-hidden="true"></i>Similarweb</span>
+                  <span class="composerChip"><i aria-hidden="true"></i>Semrush</span>
+                  <span class="composerChip"><i aria-hidden="true"></i>Web research</span>
+                </div>
+                <div class="composerText">Ask Minaco to research, decide, or build a plan...</div>
+                <div class="composerActions">
+                  <div>
+                    <button class="miniButton" type="button">Attach</button>
+                    <button class="miniButton" type="button">Think</button>
+                  </div>
+                  <button class="sendButton" type="button" id="runPreview" aria-label="Run preview">^</button>
+                </div>
+              </div>
+            </section>
+
+            <aside class="workspaceRail" aria-label="Discussion context">
+              <div class="capacityStrip">
+                <div>
+                  <strong>8,460</strong>
+                  <span>credits available</span>
+                </div>
+                <div>
+                  <strong>1 / 10</strong>
+                  <span>tasks active</span>
+                </div>
+              </div>
+              <div class="railBody">
+                <section class="railSection">
+                  <div class="railHeader">
+                    <h3>Active work</h3>
+                    <span>Running</span>
+                  </div>
+                  <div class="activeWorkCard">
+                    <div class="activeWorkTop">
+                      <strong id="workTitle">Sizing Lovable</strong>
+                      <span class="runningPill"><i aria-hidden="true"></i>Running</span>
+                    </div>
+                    <p id="workCopy">Comparing market signals and growth trajectory.</p>
+                    <div class="workTimer" id="workTimer">Running for 0s</div>
+                  </div>
+                </section>
+
+                <section class="railSection">
+                  <div class="railHeader">
+                    <h3>Connector context</h3>
+                    <span id="connectorCount">3/4 enabled</span>
+                  </div>
+                  <div class="connectorList" id="connectorList"></div>
+                </section>
+
+                <div class="railFootnote">
+                  <span aria-hidden="true">i</span>
+                  <span>Enabled sources are available to this discussion. Workspace memory keeps the thread across decisions.</span>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="container section" id="benefits">
+        <div class="sectionHeading">
+          <div>
+            <p class="eyebrow">Why an AI cofounder</p>
+            <h2>The benefit is not just speed. It is better founder judgment.</h2>
+          </div>
+          <p class="sectionCopy">
+            A generic AI assistant waits for instructions. Minaco holds the startup context, pushes the next question,
+            and turns scattered evidence into a decision path.
+          </p>
+        </div>
+
+        <div class="benefitGrid">
+          <article class="benefit">
+            <span>01</span>
+            <h3>Shared context that compounds.</h3>
+            <p>Minaco remembers your stage, constraints, product direction, prior tradeoffs, and connected work context, so every discussion starts closer to the real decision.</p>
+          </article>
+          <article class="benefit">
+            <span>02</span>
+            <h3>Better decisions before more work.</h3>
+            <p>It challenges weak assumptions, separates signal from noise, and tells you when the right move is to act, wait, ignore, or gather one more fact.</p>
+          </article>
+          <article class="benefit">
+            <span>03</span>
+            <h3>Execution you can inspect.</h3>
+            <p>When Minaco researches, queries a connector, or prepares an artifact, the activity is visible. You can see how the recommendation was formed.</p>
+          </article>
+          <article class="benefit">
+            <span>04</span>
+            <h3>Continuity across the founder loop.</h3>
+            <p>A competitor brief can shape positioning, positioning can shape first-user outreach, and outreach results can sharpen the next strategy decision.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="container section" id="cases">
+        <div class="sectionHeading">
+          <div>
+            <p class="eyebrow">Use cases</p>
+            <h2>Use Minaco where uncertainty is blocking the next move.</h2>
+          </div>
+          <p class="sectionCopy">
+            Each use case starts as a founder question and ends as a decision: what to believe, what to do next, and
+            what evidence should change your mind.
+          </p>
+        </div>
+
+        <div class="featureGrid">
+          <article class="feature">
+            <div class="featureIndex">01</div>
+            <h3>Size up your competitor. Decide your strategy.</h3>
+            <p>Minaco triangulates users, revenue signals, traffic, search demand, product direction, and growth trajectory, then explains whether the competitor is a threat, validation, or noise.</p>
+          </article>
+          <article class="feature">
+            <div class="featureIndex">02</div>
+            <h3>Track competitor moves. Decide your action.</h3>
+            <p>Minaco connects KOC drops, paid campaigns, channel shifts, launches, pricing changes, and messaging moves to the likely intent behind them, so you know whether to respond.</p>
+          </article>
+          <article class="feature">
+            <div class="featureIndex">03</div>
+            <h3>Find who needs your product. Decide your outreach.</h3>
+            <p>Minaco looks for communities, complaints, workflows, and buying signals that reveal urgent demand, then helps you pick the first cohort and the message that should lead.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="container section" id="conversation">
+        <div class="conversationGrid">
+          <div class="conversationCopy">
+            <p class="eyebrow">How it thinks</p>
+            <h2>It does not stop at the answer.</h2>
+            <p>
+              Minaco narrows the question, states the tradeoff, gathers evidence, and recommends the move that fits
+              your stage. The point is not to replace founder judgment. It is to make that judgment sharper.
+            </p>
+          </div>
+
+          <div class="dialogStack">
+            <article class="turn">
+              <small>Founder</small>
+              <p>Opus Clip is pushing team workflows this week. Should we respond?</p>
+            </article>
+            <article class="turn turnAi">
+              <small>Minaco</small>
+              <p>I would not react to the campaign alone. The decision is whether this threatens your wedge or validates a broader market shift. I will check traffic, search, creator posts, and landing-page changes.</p>
+            </article>
+            <article class="turn">
+              <small>Founder</small>
+              <p>Assume we only have one growth sprint. What would you do?</p>
+            </article>
+            <article class="turn turnAi">
+              <small>Minaco</small>
+              <p>Keep the product roadmap unchanged. Update the positioning test around workflow continuity, run it against a narrow founder segment, and scale only if activation beats your current baseline.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="container section" id="access">
+        <div class="ctaBand">
+          <div>
+            <p class="eyebrow">Start now</p>
+            <h2>Bring Minaco the decision you cannot settle alone.</h2>
+            <p>
+              Start with a competitor, a market signal, a first-user problem, or a product idea. Minaco will keep the
+              context, do the work, and help you choose the next move.
+            </p>
+          </div>
+          <div class="ctaActions">
+            <a class="button buttonPrimary buttonLarge" href="#">Talk to your AI cofounder <span aria-hidden="true">-&gt;</span></a>
+            <a class="button buttonLarge" href="#">Sign in</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="container section" id="pricing">
+        <div class="sectionHeading">
+          <div>
+            <p class="eyebrow">Pricing</p>
+            <h2>Plans for real agent work.</h2>
+          </div>
+          <div class="pricingIntro">
+            <p>
+              Credits measure the work Minaco performs across research, connected context, analysis, and execution.
+              Use it for one decision or keep it running as your always-on AI cofounder workspace.
+            </p>
+            <a class="button buttonPrimary" href="#">Get Started <span aria-hidden="true">-&gt;</span></a>
+          </div>
+        </div>
+
+        <div class="pricingList">
+          <article class="pricingCard">
+            <small>Explore</small>
+            <strong>Validate the next decision</strong>
+            <p>Use Minaco for competitor sizing, market checks, and the first concrete recommendation.</p>
+          </article>
+          <article class="pricingCard">
+            <small>Build</small>
+            <strong>Keep founder context live</strong>
+            <p>Run recurring discussions, connect selected work data, and turn insights into action plans.</p>
+          </article>
+          <article class="pricingCard">
+            <small>Scale</small>
+            <strong>Make the workspace operational</strong>
+            <p>Use higher-capacity agent work for deeper research, more artifacts, and more concurrent decisions.</p>
+          </article>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <div class="container footerInner">
+          <div class="footerBrand">
+            <a class="brand" href="#" aria-label="Minaco home">
+              <span class="brandMark" aria-hidden="true">
+                <img class="brandMarkImage" src="../public/brand/minaco/minaco-favicon.svg" alt="" />
+              </span>
+              <span class="brandName">Minaco</span>
+            </a>
+            <p>Your AI cofounder workspace for startup context, connected work data, and founder decisions.</p>
+          </div>
+
+          <div class="footerGrid">
+            <div class="footerColumn">
+              <h3>Product</h3>
+              <a href="#pricing">Pricing</a>
+              <a href="#cases">Use cases</a>
+              <a href="#conversation">How it thinks</a>
+            </div>
+            <div class="footerColumn">
+              <h3>Account</h3>
+              <a href="#">Sign in</a>
+              <a href="#">Get started</a>
+            </div>
+            <div class="footerColumn">
+              <h3>Company</h3>
+              <a href="#">Terms of Service</a>
+              <a href="#">Privacy Policy</a>
+              <a href="mailto:support@minaco.ai">Contact</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="container footerBottom">
+          <span>Think with you. Act for you.</span>
+          <span>&copy; 2026 Minaco</span>
+        </div>
+      </footer>
+    </main>
+
+    <script>
+      const scenarios = [
+        {
+          sidebarTitle: "Lovable market size",
+          workspaceTitle: "How big is Lovable?",
+          prompt: "Size up Lovable: users, revenue, growth trajectory, and what its momentum should change in our strategy.",
+          intro: "I will separate confirmed facts from estimates, compare multiple market signals, and come back with the strategic implication.",
+          activeTitle: "Sizing Lovable",
+          activeCopy: "Comparing market signals and growth trajectory.",
+          connectors: ["Similarweb", "Semrush", "Web research"],
+          steps: [
+            ["Load context", "Reading your prior positioning notes and the current product wedge.", "context"],
+            ["Search current sources", "Checking public company, funding, hiring, traffic, and product references.", "tool"],
+            ["Compare market signals", "Triangulating users, revenue signals, search demand, and growth trajectory.", "analysis"],
+            ["Pressure-test the decision", "Separating category validation from moves that would create feature parity.", "decision"]
+          ],
+          answerTitle: "Treat the growth as category validation, not a roadmap to copy.",
+          answerCopy: "Lovable's momentum confirms demand for fast, conversational software creation. The better move is to own a narrower decision-to-execution wedge, deepen the context advantage, and avoid competing on broad feature volume."
+        },
+        {
+          sidebarTitle: "Opus Clip growth moves",
+          workspaceTitle: "What changed at Opus Clip?",
+          prompt: "Track what Opus Clip changed this week across KOC content, paid campaigns, channels, and messaging. Should we respond?",
+          intro: "I will reconstruct the sequence of moves, identify the likely growth hypothesis behind them, and distinguish signal from routine campaign noise.",
+          activeTitle: "Tracking Opus Clip",
+          activeCopy: "Reconstructing recent campaigns and channel shifts.",
+          connectors: ["Semrush", "Web research", "YouTube", "TikTok"],
+          steps: [
+            ["Collect recent moves", "Scanning creator drops, paid search changes, launch notes, and messaging updates.", "research"],
+            ["Find the growth hypothesis", "Connecting timing, offer, and audience changes to their likely experiment.", "analysis"],
+            ["Check impact risk", "Deciding whether the move threatens your wedge or simply validates the market.", "decision"],
+            ["Draft response options", "Preparing a focused response, a watchlist, and a no-response rationale.", "execution"]
+          ],
+          answerTitle: "Do not mirror the campaign. Counter the positioning shift.",
+          answerCopy: "The meaningful signal is a move from generic clipping speed toward repeatable team distribution. Keep the roadmap focused, but update proof and outreach around workflow continuity before that message becomes category shorthand."
+        },
+        {
+          sidebarTitle: "First 100 founder users",
+          workspaceTitle: "Where are the first 100 users?",
+          prompt: "Find the first 100 users for a founder decision-support product. Where do they gather, what pain is urgent, and how should we reach them?",
+          intro: "I will look for active pain signals rather than broad founder audiences, then turn those signals into a practical outreach sequence.",
+          activeTitle: "Finding first users",
+          activeCopy: "Mapping urgent pain signals and reachable communities.",
+          connectors: ["Web research", "Gmail", "Notion"],
+          steps: [
+            ["Define the pain signature", "Narrowing to founders making repeated go-to-market decisions without a strategy or research team.", "analysis"],
+            ["Locate active demand", "Finding recent posts, communities, and public asks that show the problem is already painful.", "research"],
+            ["Prioritize the first cohort", "Ranking reachable founders by urgency, context fit, and likelihood of a useful conversation.", "decision"],
+            ["Prepare the outreach wedge", "Drafting the first message around a completed decision artifact instead of a generic AI pitch.", "execution"]
+          ],
+          answerTitle: "Start with founders already asking for a decision, not founders in general.",
+          answerCopy: "The first cohort should come from recent, specific requests for competitor analysis, positioning help, and early-user discovery. Lead with one completed decision artifact, then invite them into a continuing workspace."
+        }
+      ];
+
+      const scenarioButtons = Array.from(document.querySelectorAll(".scenarioTab"));
+      const activityList = document.getElementById("activityList");
+      const answerCard = document.getElementById("answerCard");
+      const runPreview = document.getElementById("runPreview");
+      const workTimer = document.getElementById("workTimer");
+      const thread = document.getElementById("thread");
+      let currentScenario = 0;
+      let runToken = 0;
+      let seconds = 0;
+      let timer = null;
+
+      function setText(id, value) {
+        const node = document.getElementById(id);
+        if (node) node.textContent = value;
+      }
+
+      function renderConnectors(items) {
+        const connectorList = document.getElementById("connectorList");
+        const composer = document.getElementById("composerConnectors");
+        if (!connectorList || !composer) return;
+        connectorList.innerHTML = "";
+        composer.innerHTML = "";
+        setText("connectorCount", items.length + "/4 enabled");
+        items.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "connectorRow";
+          row.innerHTML =
+            '<span class="connectorIcon" aria-hidden="true"></span>' +
+            '<span><strong>' + item + '</strong><span>Enabled for this discussion</span></span>' +
+            '<span class="toggle" aria-hidden="true"></span>';
+          connectorList.appendChild(row);
+
+          const chip = document.createElement("span");
+          chip.className = "composerChip";
+          chip.innerHTML = '<i aria-hidden="true"></i>' + item;
+          composer.appendChild(chip);
+        });
+      }
+
+      function buildActivityItems(steps, visibleCount) {
+        activityList.innerHTML = "";
+        steps.forEach((step, index) => {
+          const item = document.createElement("li");
+          const visible = index < visibleCount;
+          const running = index === visibleCount - 1 && visibleCount < steps.length;
+          item.className = "activityItem" + (visible ? " isVisible" : "") + (running ? " isRunning" : visible ? " isComplete" : "");
+          item.innerHTML =
+            '<div><strong>' + step[0] + '</strong><p>' + step[1] + '</p></div>' +
+            '<span class="activityBadge">' + step[2] + '</span>';
+          activityList.appendChild(item);
+        });
+      }
+
+      function startTimer() {
+        window.clearInterval(timer);
+        seconds = 0;
+        workTimer.textContent = "Running for 0s";
+        timer = window.setInterval(() => {
+          seconds += 1;
+          workTimer.textContent = "Running for " + seconds + "s";
+        }, 1000);
+      }
+
+      function runScenario() {
+        const token = ++runToken;
+        const data = scenarios[currentScenario];
+        answerCard.classList.remove("isVisible");
+        setText("activityTitle", "Using execution tools");
+        setText("activityDetail", "Reading context and collecting current market signals.");
+        buildActivityItems(data.steps, 1);
+        startTimer();
+
+        data.steps.forEach((_, index) => {
+          window.setTimeout(() => {
+            if (token !== runToken) return;
+            buildActivityItems(data.steps, Math.min(index + 2, data.steps.length));
+            if (index === data.steps.length - 1) {
+              setText("activityTitle", "Completed");
+              setText("activityDetail", "Recommendation generated from the current discussion context.");
+              answerCard.classList.add("isVisible");
+              window.clearInterval(timer);
+              workTimer.textContent = "Completed in " + Math.max(seconds, 4) + "s";
+            }
+            thread.scrollTop = thread.scrollHeight;
+          }, 700 + index * 850);
+        });
+      }
+
+      function applyScenario(index) {
+        currentScenario = index;
+        const data = scenarios[index];
+        scenarioButtons.forEach((button, buttonIndex) => {
+          const active = buttonIndex === index;
+          button.classList.toggle("isActive", active);
+          button.setAttribute("aria-selected", String(active));
+        });
+        setText("sidebar-title", data.sidebarTitle);
+        setText("workspace-title", data.workspaceTitle);
+        setText("userPrompt", data.prompt);
+        setText("assistantIntro", data.intro);
+        setText("workTitle", data.activeTitle);
+        setText("workCopy", data.activeCopy);
+        setText("answerTitle", data.answerTitle);
+        setText("answerCopy", data.answerCopy);
+        renderConnectors(data.connectors);
+        buildActivityItems(data.steps, 1);
+        runScenario();
+      }
+
+      scenarioButtons.forEach((button) => {
+        button.addEventListener("click", () => applyScenario(Number(button.dataset.scenario || "0")));
+      });
+
+      runPreview.addEventListener("click", runScenario);
+      applyScenario(0);
+    </script>
+  </body>
+</html>

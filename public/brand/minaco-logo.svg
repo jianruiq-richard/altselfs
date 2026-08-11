@@ -1,0 +1,47 @@
+<svg width="306" height="96" viewBox="0 0 306 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Minaco logo</title>
+  <desc id="desc">Minaco wordmark paired with a geometric M-shaped decision mark.</desc>
+  <defs>
+    <linearGradient id="logo-edge" x1="14" y1="12" x2="82" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7BA7FF"/>
+      <stop offset="0.48" stop-color="#58D68D"/>
+      <stop offset="0.74" stop-color="#FFC857"/>
+      <stop offset="1" stop-color="#FF735F"/>
+    </linearGradient>
+    <linearGradient id="logo-white" x1="24" y1="26" x2="72" y2="73" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.52" stop-color="#D8DDE6"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="logo-signal-left" x1="33" y1="21" x2="48" y2="42" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7BA7FF"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="logo-signal-right" x1="63" y1="21" x2="48" y2="42" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#58D68D"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="logo-action" x1="48" y1="43" x2="48" y2="68" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFC857"/>
+    </linearGradient>
+    <linearGradient id="wordmark-fill" x1="110" y1="30" x2="310" y2="74" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#DCE1E8"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <rect x="9" y="9" width="78" height="78" rx="18" fill="#090909"/>
+    <rect x="9.75" y="9.75" width="76.5" height="76.5" rx="17.25" stroke="url(#logo-edge)" stroke-opacity="0.88" stroke-width="1.5"/>
+    <path d="M26 69V31L48 53L70 31V69" stroke="url(#logo-white)" stroke-width="8" stroke-linejoin="miter" stroke-linecap="square"/>
+    <path d="M34 23L48 40" stroke="url(#logo-signal-left)" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M62 23L48 40" stroke="url(#logo-signal-right)" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M48 43V64" stroke="url(#logo-action)" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M40 61H56L48 72L40 61Z" fill="#FFC857"/>
+    <circle cx="34" cy="23" r="5.5" fill="#7BA7FF"/>
+    <circle cx="62" cy="23" r="5.5" fill="#58D68D"/>
+    <circle cx="48" cy="40" r="7.5" fill="#FFFFFF"/>
+  </g>
+  <text x="111" y="63" fill="url(#wordmark-fill)" font-family="Inter, Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="45" font-weight="760" letter-spacing="0">Minaco</text>
+</svg>
