@@ -30,6 +30,11 @@ import {
 import { MarkdownMessage } from '@/components/markdown-message';
 import { productBrand } from '@/lib/brand';
 import { getBillingPlan } from '@/lib/billing-plans';
+import {
+  analyticsWasReported,
+  markAnalyticsReported,
+  trackEvent,
+} from '@/lib/analytics/client';
 
 type ChatMessage = {
   id?: string;
@@ -2401,6 +2406,14 @@ export function InvestorAgentChatPage() {
   const connectorSelectionsByThreadRef = useRef<Map<string, string[]>>(new Map());
   const initialLoadStartedRef = useRef(false);
   const activeWorkDisplayRef = useRef<ActiveWorkPresentation | null>(null);
+  const runAnalyticsRef = useRef(new Map<string, {
+    isFirstMessage: boolean;
+    startedAtMs: number;
+    hasAttachment: boolean;
+    connectorCount: number;
+    promptSource: string;
+    modelTier: string;
+  }>());
 
   const setSessions = useCallback((
     nextSessions: AgentSessionSummary[],
@@ -3043,6 +3056,39 @@ export function InvestorAgentChatPage() {
         : '';
       if (latestTerminalRun && latestTerminalStatus === 'SUCCESS') {
         const latestTerminalRunId = typeof latestTerminalRun.id === 'string' ? latestTerminalRun.id : '';
+        const analyticsKey = `agent-run:${latestTerminalRunId}`;
+        const runAnalytics = runAnalyticsRef.current.get(latestTerminalRunId);
+        const observedRun = Boolean(runAnalytics) || statusRunId === latestTerminalRunId;
+        if (latestTerminalRunId && observedRun && !analyticsWasReported(analyticsKey)) {
+          const recoveredMessages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : [];
+          const recoveredSessions = Array.isArray(data.sessions)
+            ? (data.sessions as AgentSessionSummary[])
+            : sessions;
+          const userMessageCount = recoveredMessages.filter((message) => message.role === 'user').length;
+          const hasOtherConversation = recoveredSessions.some((session) => (
+            session.id !== (recoveredThreadId || requestedThreadId) && session.messageCount > 0
+          ));
+          const isFirstMessage = runAnalytics?.isFirstMessage ?? (userMessageCount === 1 && !hasOtherConversation);
+          const latencyMs = runAnalytics
+            ? Math.max(0, Date.now() - runAnalytics.startedAtMs)
+            : undefined;
+          trackEvent('agent_response_complete', {
+            is_first_message: isFirstMessage,
+            latency_ms: latencyMs,
+            has_attachment: runAnalytics?.hasAttachment,
+            connector_count: runAnalytics?.connectorCount,
+            prompt_source: runAnalytics?.promptSource,
+            model_tier: runAnalytics?.modelTier,
+          });
+          if (isFirstMessage) {
+            trackEvent('activation_complete', {
+              activation_type: 'first_ai_response',
+              first_response_latency_ms: latencyMs,
+            });
+          }
+          markAnalyticsReported(analyticsKey);
+          runAnalyticsRef.current.delete(latestTerminalRunId);
+        }
         const completedEvents = projected.length > 0
           ? projected
           : projectStoredRunEvents(recentEvents, latestTerminalRunId);
@@ -3089,6 +3135,21 @@ export function InvestorAgentChatPage() {
 
       if (latestTerminalRun && latestTerminalStatus) {
         const latestTerminalRunId = typeof latestTerminalRun.id === 'string' ? latestTerminalRun.id : '';
+        const analyticsKey = `agent-run:${latestTerminalRunId}`;
+        const runAnalytics = runAnalyticsRef.current.get(latestTerminalRunId);
+        const observedRun = Boolean(runAnalytics) || statusRunId === latestTerminalRunId;
+        if (latestTerminalRunId && observedRun && !analyticsWasReported(analyticsKey)) {
+          trackEvent('agent_run_error', {
+            error_stage: 'execution',
+            error_code: latestTerminalStatus.toLowerCase(),
+            status: latestTerminalStatus.toLowerCase(),
+            latency_ms: runAnalytics
+              ? Math.max(0, Date.now() - runAnalytics.startedAtMs)
+              : undefined,
+          });
+          markAnalyticsReported(analyticsKey);
+          runAnalyticsRef.current.delete(latestTerminalRunId);
+        }
         const completedEvents = projected.length > 0
           ? projected
           : projectStoredRunEvents(recentEvents, latestTerminalRunId);
@@ -3980,6 +4041,32 @@ export function InvestorAgentChatPage() {
       return;
     }
 
+    const isFirstMessage = (
+      !messages.some((message) => message.role === 'user') &&
+      !sessions.some((session) => session.messageCount > 0)
+    );
+    const promptSource = textFromSuggestion
+      ? 'suggestion'
+      : content
+        ? 'typed'
+        : 'attachment';
+    const messageAnalytics = {
+      isFirstMessage,
+      startedAtMs: Date.now(),
+      hasAttachment: hasAttachments,
+      connectorCount: requestConnectorScope.enabledConnectorKeys.length,
+      promptSource,
+      modelTier: effectiveHermesModel,
+    };
+    trackEvent('message_send_attempt', {
+      is_first_message: isFirstMessage,
+      is_new_thread: shouldCreateThread,
+      has_attachment: hasAttachments,
+      connector_count: messageAnalytics.connectorCount,
+      prompt_source: promptSource,
+      model_tier: effectiveHermesModel,
+    });
+
     const attachmentList = formatAttachmentList(requestAttachments);
     const displayContent = [
       content || 'Please analyze the attached files.',
@@ -4086,6 +4173,12 @@ export function InvestorAgentChatPage() {
           return;
         }
         const failure = typeof data.error === 'string' ? data.error : 'Failed to authorize task';
+        trackEvent('agent_run_error', {
+          error_stage: 'authorization',
+          error_code: typeof data.code === 'string' ? data.code.toLowerCase() : `http_${res.status}`,
+          status: 'rejected',
+          is_first_message: isFirstMessage,
+        });
         setError(failure);
         const rejectedThreadId = typeof data.threadId === 'string' ? data.threadId : requestThreadId;
         if (rejectedThreadId) {
@@ -4126,6 +4219,12 @@ export function InvestorAgentChatPage() {
       const asyncThreadId = typeof data.threadId === 'string' ? data.threadId : threadId;
       const runId = typeof data.runId === 'string' ? data.runId : '';
       if (!runId) {
+        trackEvent('agent_run_error', {
+          error_stage: 'task_start',
+          error_code: 'missing_run_id',
+          status: 'rejected',
+          is_first_message: isFirstMessage,
+        });
         setError('Failed to start background task: missing runId');
         if (asyncThreadId) {
           selectThreadId(asyncThreadId);
@@ -4156,6 +4255,15 @@ export function InvestorAgentChatPage() {
         hasMore: nextHasMoreAfterStart,
       });
       activeRunIdRef.current = runId;
+      runAnalyticsRef.current.set(runId, messageAnalytics);
+      trackEvent('message_sent', {
+        is_first_message: isFirstMessage,
+        is_new_thread: shouldCreateThread,
+        has_attachment: hasAttachments,
+        connector_count: messageAnalytics.connectorCount,
+        prompt_source: promptSource,
+        model_tier: effectiveHermesModel,
+      });
       liveStreamRunIdRef.current = null;
       setActiveRunId(runId);
       setCancellingRunId(null);
@@ -4195,6 +4303,12 @@ export function InvestorAgentChatPage() {
         return;
       }
 
+      trackEvent('agent_run_error', {
+        error_stage: 'network',
+        error_code: 'request_failed',
+        status: 'error',
+        is_first_message: isFirstMessage,
+      });
       setError(err instanceof Error ? `Network error: ${err.message}` : 'Network error. Please try again later.');
       setThreadMessages(nextMessages, requestThreadId);
       setInput(content);

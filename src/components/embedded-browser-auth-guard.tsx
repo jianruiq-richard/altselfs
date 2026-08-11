@@ -8,6 +8,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
+import { startAuthFlow } from '@/lib/analytics/client';
 import { isOauthBlockedEmbeddedBrowser } from '@/lib/oauth-browser';
 
 type EmbeddedBrowserAuthGuardProps = {
@@ -65,6 +66,11 @@ export function EmbeddedBrowserAuthGuard({
   const [copied, setCopied] = useState(false);
   const [isPromptOpen, setIsPromptOpen] = useState(false);
 
+  function recordClerkAuthStart(target: EventTarget | null) {
+    if (mode !== 'sign-in') return;
+    startAuthFlow('login', isGoogleOAuthTrigger(target) ? 'google_oauth' : 'clerk_ui');
+  }
+
   function blockGoogleOAuth(event: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) {
     if (!isBlocked || !isGoogleOAuthTrigger(event.target)) {
       return;
@@ -97,7 +103,16 @@ export function EmbeddedBrowserAuthGuard({
 
   return (
     <div
-      onClickCapture={blockGoogleOAuth}
+      onSubmitCapture={() => {
+        if (mode === 'sign-in') startAuthFlow('login', 'email_password');
+      }}
+      onClickCapture={(event) => {
+        const trigger = event.target instanceof Element
+          ? event.target.closest('button, a, [role="button"]')
+          : null;
+        if (trigger && isGoogleOAuthTrigger(trigger)) recordClerkAuthStart(trigger);
+        blockGoogleOAuth(event);
+      }}
       onKeyDownCapture={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           blockGoogleOAuth(event);

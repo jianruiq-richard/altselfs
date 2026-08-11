@@ -6,6 +6,11 @@ import Link from "next/link";
 import { useClerk } from "@clerk/nextjs";
 import { useSignUp } from "@clerk/nextjs/legacy";
 import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
+import {
+  completePendingAuthFlow,
+  startAuthFlow,
+  trackAuthError,
+} from "@/lib/analytics/client";
 import styles from "./astromar-auth.module.css";
 
 const DEFAULT_AUTH_REDIRECT = "/dashboard/setup?role=investor";
@@ -97,6 +102,7 @@ export function EmailPasswordSignUpForm() {
     await setActive?.({
       session: sessionId,
       navigate: async ({ decorateUrl }) => {
+        completePendingAuthFlow();
         const destination = decorateUrl(DEFAULT_AUTH_REDIRECT);
         if (destination.startsWith("http")) {
           window.location.assign(destination);
@@ -125,6 +131,7 @@ export function EmailPasswordSignUpForm() {
       return;
     }
 
+    startAuthFlow("sign_up", "email_password");
     setIsSubmitting(true);
 
     try {
@@ -156,6 +163,12 @@ export function EmailPasswordSignUpForm() {
       } else {
         setError(getErrorMessage(submitError, "We could not create your account. Please try again."));
       }
+      trackAuthError({
+        flow: "sign_up",
+        method: "email_password",
+        stage: "credentials",
+        errorCode: detail?.code,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -185,6 +198,12 @@ export function EmailPasswordSignUpForm() {
       setError("Email verification is not complete. Check the code and try again.");
     } catch (verificationError) {
       setError(getErrorMessage(verificationError, "The verification code is invalid or has expired."));
+      trackAuthError({
+        flow: "sign_up",
+        method: "email_password",
+        stage: "verification",
+        errorCode: getFirstError(verificationError)?.code,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -198,6 +217,12 @@ export function EmailPasswordSignUpForm() {
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
     } catch (resendError) {
       setError(getErrorMessage(resendError, "We could not resend the code. Please try again."));
+      trackAuthError({
+        flow: "sign_up",
+        method: "email_password",
+        stage: "verification_resend",
+        errorCode: getFirstError(resendError)?.code,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -215,6 +240,7 @@ export function EmailPasswordSignUpForm() {
   async function continueWithGoogle() {
     if (!isLoaded || !signUp || isSubmitting) return;
     setError("");
+    startAuthFlow("sign_up", "google_oauth");
     setIsSubmitting(true);
     try {
       await signUp.authenticateWithRedirect({
@@ -224,6 +250,12 @@ export function EmailPasswordSignUpForm() {
       });
     } catch (oauthError) {
       setError(getErrorMessage(oauthError, "Google sign-up could not be started. Please try again."));
+      trackAuthError({
+        flow: "sign_up",
+        method: "google_oauth",
+        stage: "oauth_start",
+        errorCode: getFirstError(oauthError)?.code,
+      });
       setIsSubmitting(false);
     }
   }

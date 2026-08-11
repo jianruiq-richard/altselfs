@@ -18,6 +18,7 @@ export async function POST(request: Request) {
         planKey: body.planKey,
         billingCycle: body.billingCycle,
         packKey: body.packKey,
+        analytics: body.analytics,
         requestId: randomUUID(),
       }),
     });

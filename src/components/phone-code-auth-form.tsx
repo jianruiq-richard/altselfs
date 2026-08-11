@@ -4,6 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 import { ArrowRight } from "lucide-react";
+import {
+  completePendingAuthFlow,
+  startAuthFlow,
+  trackAuthError,
+} from "@/lib/analytics/client";
 import styles from "./astromar-auth.module.css";
 
 const DEFAULT_SIGN_IN_REDIRECT = "/investor/chat/100";
@@ -57,6 +62,19 @@ function getErrorMessage(error: unknown): string {
   return "Authentication failed. Please try again.";
 }
 
+function getErrorCode(error: unknown): string | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "errors" in error &&
+    Array.isArray((error as { errors?: unknown[] }).errors)
+  ) {
+    const first = (error as { errors: Array<{ code?: string }> }).errors[0];
+    return first?.code || null;
+  }
+  return null;
+}
+
 export function PhonePasswordAuthForm({ mode, redirectUrl }: PhonePasswordAuthFormProps) {
   const router = useRouter();
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();
@@ -85,9 +103,16 @@ export function PhonePasswordAuthForm({ mode, redirectUrl }: PhonePasswordAuthFo
 
     if (mode === "sign-up" && password !== confirmPassword) {
       setError("Passwords do not match.");
+      trackAuthError({
+        flow: "sign_up",
+        method: "phone_password",
+        stage: "credentials",
+        errorCode: "password_mismatch",
+      });
       return;
     }
 
+    startAuthFlow(mode === "sign-up" ? "sign_up" : "login", "phone_password");
     setIsSubmitting(true);
     const normalizedPhone = buildE164Phone(countryCode, localPhoneNumber);
 
@@ -101,6 +126,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl }: PhonePasswordAuthFo
 
         if (result.status === "complete" && result.createdSessionId) {
           await setSignInActive?.({ session: result.createdSessionId });
+          completePendingAuthFlow();
           router.push(targetRedirectUrl);
           return;
         }
@@ -116,6 +142,7 @@ export function PhonePasswordAuthForm({ mode, redirectUrl }: PhonePasswordAuthFo
 
       if (result.status === "complete" && result.createdSessionId) {
         await setSignUpActive?.({ session: result.createdSessionId });
+        completePendingAuthFlow();
         router.push(targetRedirectUrl);
         return;
       }
@@ -128,6 +155,12 @@ export function PhonePasswordAuthForm({ mode, redirectUrl }: PhonePasswordAuthFo
       setError("Sign-up is not complete. Check your Clerk sign-up settings and try again.");
     } catch (submitError) {
       setError(getErrorMessage(submitError));
+      trackAuthError({
+        flow: mode === "sign-up" ? "sign_up" : "login",
+        method: "phone_password",
+        stage: "credentials",
+        errorCode: getErrorCode(submitError),
+      });
     } finally {
       setIsSubmitting(false);
     }

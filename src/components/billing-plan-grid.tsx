@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
@@ -12,6 +12,7 @@ import {
   Telescope,
 } from 'lucide-react';
 import { MinacoCreditsIcon } from '@/components/minaco-credits-icon';
+import { trackEvent } from '@/lib/analytics/client';
 import { productBrand } from '@/lib/brand';
 import {
   BILLING_PLANS,
@@ -71,12 +72,25 @@ export function BillingPlanGrid({
   const normalizedCurrentBillingCycle = normalizeBillingCycle(currentBillingCycle);
   const [billingCycle, setBillingCycle] = useBillingCycle(normalizedCurrentBillingCycle);
   const currentPlanIndex = BILLING_PLANS.findIndex((plan) => plan.key === normalizedCurrentPlanKey);
+  const lastPricingView = useRef('');
 
   useEffect(() => {
     if (variant === 'account' && normalizedCurrentBillingCycle) {
       setBillingCycle(normalizedCurrentBillingCycle);
     }
   }, [normalizedCurrentBillingCycle, setBillingCycle, variant]);
+
+  useEffect(() => {
+    const viewKey = `${variant}:${billingCycle}`;
+    if (lastPricingView.current === viewKey) return;
+    lastPricingView.current = viewKey;
+    trackEvent('view_item_list', {
+      item_list_id: 'pricing_plans',
+      item_list_name: variant === 'public' ? 'Public pricing plans' : 'Account pricing plans',
+      billing_cycle: billingCycle,
+      items: BILLING_PLANS.map((plan) => planAnalyticsItem(plan, billingCycle)),
+    });
+  }, [billingCycle, variant]);
 
   return (
     <section className={className} aria-label="Available plans">
@@ -270,6 +284,13 @@ function PlanCard({
       {variant === 'public' ? (
         <Link
           href={getStartedHref}
+          data-analytics-cta={`pricing_plan_${plan.key.toLowerCase()}`}
+          data-analytics-location="pricing_plan_card"
+          onClick={() => trackEvent('select_item', {
+            item_list_id: 'pricing_plans',
+            billing_cycle: billingCycle,
+            items: [planAnalyticsItem(plan, billingCycle)],
+          })}
           className="mt-6 inline-flex min-h-10 items-center justify-center rounded-[7px] border border-white/[0.12] bg-white px-3 text-[11px] font-bold !text-zinc-950 hover:bg-zinc-200"
         >
           Get Started
@@ -317,7 +338,14 @@ function PlanCard({
             billingAction !== null ||
             !paidPlanConfigured
           }
-          onClick={() => onChoosePlan?.(plan.key, billingCycle)}
+          onClick={() => {
+            trackEvent('select_item', {
+              item_list_id: 'pricing_plans',
+              billing_cycle: billingCycle,
+              items: [planAnalyticsItem(plan, billingCycle)],
+            });
+            onChoosePlan?.(plan.key, billingCycle);
+          }}
           className="mt-6 inline-flex min-h-10 items-center justify-center rounded-[7px] border border-white/[0.12] bg-white px-3 text-[11px] font-bold text-zinc-950 hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-white/[0.035] disabled:text-zinc-600"
         >
           {billingAction === planActionKey ? (
@@ -338,6 +366,17 @@ function PlanCard({
       )}
     </article>
   );
+}
+
+function planAnalyticsItem(plan: BillingPlan, billingCycle: BillingCycle) {
+  return {
+    item_id: `plan_${plan.key.toLowerCase()}_${billingCycle}`,
+    item_name: plan.name,
+    item_category: 'subscription',
+    item_variant: billingCycle,
+    price: getPlanBillingPriceUsd(plan, billingCycle),
+    quantity: 1,
+  };
 }
 
 function configuredPriceId(

@@ -132,10 +132,20 @@ export function AstromarLandingPage() {
           </div>
 
           <div className={styles.authActions} aria-label="Account actions">
-            <Link className={styles.button} href="/sign-in?method=email">
+            <Link
+              className={styles.button}
+              href="/sign-in?method=email"
+              data-analytics-cta="nav_sign_in"
+              data-analytics-location="landing_nav"
+            >
               Sign in
             </Link>
-            <Link className={classes("button", "buttonPrimary")} href="/sign-in?method=email&redirect_url=/investor/chat/100">
+            <Link
+              className={classes("button", "buttonPrimary")}
+              href="/sign-in?method=email&redirect_url=/investor/chat/100"
+              data-analytics-cta="nav_get_started"
+              data-analytics-location="landing_nav"
+            >
               Get Started
             </Link>
           </div>
@@ -172,11 +182,21 @@ export function AstromarLandingPage() {
         </div>
 
         <div className={styles.heroActions}>
-          <Link className={classes("button", "buttonPrimary", "buttonLarge")} href="/sign-up?method=email">
+          <Link
+            className={classes("button", "buttonPrimary", "buttonLarge")}
+            href="/sign-up?method=email"
+            data-analytics-cta="hero_talk_to_cofounder"
+            data-analytics-location="landing_hero"
+          >
             Talk to your AI cofounder
             <ArrowRight aria-hidden="true" size={18} strokeWidth={2} />
           </Link>
-          <a className={classes("button", "buttonLarge")} href="#conversation">
+          <a
+            className={classes("button", "buttonLarge")}
+            href="#conversation"
+            data-analytics-cta="hero_view_demo"
+            data-analytics-location="landing_hero"
+          >
             See how it thinks
           </a>
         </div>

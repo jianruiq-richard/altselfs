@@ -29,10 +29,20 @@ export function PublicPricingPage() {
           </div>
 
           <div className={styles.authActions} aria-label="Account actions">
-            <Link className={styles.button} href="/sign-in?method=email">
+            <Link
+              className={styles.button}
+              href="/sign-in?method=email"
+              data-analytics-cta="nav_sign_in"
+              data-analytics-location="pricing_nav"
+            >
               Sign in
             </Link>
-            <Link className={classes('button', 'buttonPrimary')} href={signInHref}>
+            <Link
+              className={classes('button', 'buttonPrimary')}
+              href={signInHref}
+              data-analytics-cta="nav_get_started"
+              data-analytics-location="pricing_nav"
+            >
               Get Started
             </Link>
           </div>
@@ -50,7 +60,12 @@ export function PublicPricingPage() {
               Credits measure actual agent work and never expire. Annual billing keeps the same workspace limits,
               grants the full year of Credits up front, and gives 20% off the equivalent monthly subscription.
             </p>
-            <Link className={classes('button', 'buttonPrimary')} href={signInHref}>
+            <Link
+              className={classes('button', 'buttonPrimary')}
+              href={signInHref}
+              data-analytics-cta="pricing_get_started"
+              data-analytics-location="pricing_header"
+            >
               Get Started
               <ArrowRight aria-hidden="true" size={16} strokeWidth={2} />
             </Link>

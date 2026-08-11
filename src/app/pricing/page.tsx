@@ -16,7 +16,17 @@ import { BillingPlanGrid, type BillingPlanCatalog } from '@/components/billing-p
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
 import { PublicPricingPage } from '@/components/public-pricing-page';
 import { productBrand } from '@/lib/brand';
-import { type BillingCycle, formatCredits } from '@/lib/billing-plans';
+import {
+  type BillingCycle,
+  formatCredits,
+  getBillingPlan,
+  getPlanBillingPriceUsd,
+} from '@/lib/billing-plans';
+import {
+  getAnalyticsSessionContext,
+  trackEvent,
+  type AnalyticsParams,
+} from '@/lib/analytics/client';
 
 type BillingSummary = {
   mode: 'observe' | 'enforce';
@@ -101,21 +111,34 @@ export default function PricingPage() {
     setBillingAction(actionKey);
     setActionMessage(null);
     try {
+      const analytics = await getAnalyticsSessionContext();
       const response = await fetch(path, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',
-        body: body ? JSON.stringify(body) : undefined,
+        body: body ? JSON.stringify({ ...body, analytics }) : undefined,
       });
       const data = (await response.json().catch(() => ({}))) as { url?: string; message?: string; error?: string };
       if (!response.ok) throw new Error(data.error || 'Billing action failed.');
       if (data.url) {
+        const checkout = billingCheckoutAnalytics(body, catalog, summary?.subscription.planKey);
+        if (checkout) trackEvent('begin_checkout', checkout);
         window.location.assign(data.url);
         return;
       }
       setActionMessage(data.message || 'Billing update submitted. Your account will refresh after payment confirmation.');
       await loadSummary();
     } catch (actionError) {
+      const checkout = billingCheckoutAnalytics(body, catalog, summary?.subscription.planKey);
+      if (checkout) {
+        trackEvent('checkout_error', {
+          purchase_type: checkout.purchase_type,
+          plan_key: checkout.plan_key,
+          billing_cycle: checkout.billing_cycle,
+          pack_key: checkout.pack_key,
+          error_code: 'checkout_request_failed',
+        });
+      }
       setActionMessage(actionError instanceof Error ? actionError.message : 'Billing action failed.');
     } finally {
       setBillingAction(null);
@@ -231,11 +254,23 @@ export default function PricingPage() {
                     <button
                       type="button"
                       disabled={billingAction !== null || !catalog?.configured || !pack.priceId}
-                      onClick={() => void runBillingAction(
-                        `pack:${packKey}`,
-                        '/api/billing/checkout',
-                        { purchaseKind: 'CREDIT_PACK', packKey },
-                      )}
+                      onClick={() => {
+                        trackEvent('select_item', {
+                          item_list_id: 'credit_packs',
+                          items: [{
+                            item_id: packKey.toLowerCase(),
+                            item_name: `${formatCredits(pack.credits)} Credits`,
+                            item_category: 'credit_pack',
+                            price: pack.amountCents / 100,
+                            quantity: 1,
+                          }],
+                        });
+                        void runBillingAction(
+                          `pack:${packKey}`,
+                          '/api/billing/checkout',
+                          { purchaseKind: 'CREDIT_PACK', packKey },
+                        );
+                      }}
                       className="mt-4 min-h-9 rounded-[7px] border border-white/[0.1] bg-white/[0.04] px-3 text-[10px] font-bold text-zinc-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:text-zinc-700"
                     >
                       {billingAction === `pack:${packKey}` ? 'Preparing...' : 'Buy Credits'}
@@ -307,6 +342,54 @@ export default function PricingPage() {
 
 function planActionKey(planKey: string, billingCycle: BillingCycle) {
   return `plan:${planKey}:${billingCycle}`;
+}
+
+function billingCheckoutAnalytics(
+  body: Record<string, unknown> | undefined,
+  catalog: BillingCatalog | null,
+  currentPlanKey: string | null | undefined,
+): AnalyticsParams | null {
+  if (!body) return null;
+  const purchaseKind = String(body.purchaseKind || '').toUpperCase();
+  if (purchaseKind === 'CREDIT_PACK') {
+    const packKey = String(body.packKey || '');
+    const pack = catalog?.packs?.[packKey];
+    if (!pack) return null;
+    return {
+      purchase_type: 'credit_pack',
+      pack_key: packKey.toLowerCase(),
+      currency: 'USD',
+      value: pack.amountCents / 100,
+      items: [{
+        item_id: packKey.toLowerCase(),
+        item_name: `${formatCredits(pack.credits)} Credits`,
+        item_category: 'credit_pack',
+        price: pack.amountCents / 100,
+        quantity: 1,
+      }],
+    };
+  }
+
+  const planKey = String(body.planKey || '').toUpperCase();
+  if (!planKey || planKey === 'FREE') return null;
+  const billingCycle: BillingCycle = body.billingCycle === 'yearly' ? 'yearly' : 'monthly';
+  const plan = getBillingPlan(planKey);
+  const price = getPlanBillingPriceUsd(plan, billingCycle);
+  return {
+    purchase_type: currentPlanKey && currentPlanKey !== 'FREE' ? 'subscription_upgrade' : 'subscription_new',
+    plan_key: plan.key.toLowerCase(),
+    billing_cycle: billingCycle,
+    currency: 'USD',
+    value: price,
+    items: [{
+      item_id: `plan_${plan.key.toLowerCase()}_${billingCycle}`,
+      item_name: plan.name,
+      item_category: 'subscription',
+      item_variant: billingCycle,
+      price,
+      quantity: 1,
+    }],
+  };
 }
 
 function PolicyRow({ number, title, text }: { number: string; title: string; text: string }) {

@@ -10,6 +10,7 @@ import {
   type WorkspaceBootstrapPayload,
   type WorkspacePersonalAgentPayload,
 } from '@/lib/workspace-client-cache';
+import { trackEvent } from '@/lib/analytics/client';
 import { productBrand } from '@/lib/brand';
 
 const DISCUSSION_URL = '/investor/chat/100';
@@ -88,9 +89,19 @@ export function InvestorWorkspaceSetup() {
         });
       }
 
+      trackEvent('workspace_setup_complete', {
+        setup_type: 'automatic',
+        restored_thread: Boolean(threadId),
+      });
       setStatus('redirecting');
       router.replace(DISCUSSION_URL);
     } catch (setupError) {
+      trackEvent('workspace_setup_error', {
+        setup_type: 'automatic',
+        error_code: setupError instanceof Error && /^HTTP \d+$/.test(setupError.message)
+          ? setupError.message.toLowerCase().replace(' ', '_')
+          : 'setup_failed',
+      });
       setStatus('failed');
       setError(getErrorMessage(setupError));
     }

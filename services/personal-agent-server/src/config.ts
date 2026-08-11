@@ -129,6 +129,8 @@ export type ServerConfig = {
   stripeRefundContactEmail: string;
   stripeRefundUsageLimitCredits: number;
   stripePaymentGraceDays: number;
+  ga4MeasurementId?: string;
+  ga4ApiSecret?: string;
   hermesApiyiInputRate: number;
   hermesApiyiOutputRate: number;
   hermesApiyiCacheReadRate: number;
@@ -569,6 +571,8 @@ export function loadConfig(): ServerConfig {
     stripeRefundContactEmail: readEnv('STRIPE_REFUND_CONTACT_EMAIL', PRODUCT_BRAND.supportEmail),
     stripeRefundUsageLimitCredits: readIntEnv('STRIPE_REFUND_USAGE_LIMIT_CREDITS', 2_000),
     stripePaymentGraceDays: readIntEnv('STRIPE_PAYMENT_GRACE_DAYS', 3),
+    ga4MeasurementId: process.env.GA4_MEASUREMENT_ID?.trim() || undefined,
+    ga4ApiSecret: process.env.GA4_API_SECRET?.trim() || undefined,
     hermesApiyiInputRate: readFloatEnv('HERMES_APIYI_INPUT_RATE', 3),
     hermesApiyiOutputRate: readFloatEnv('HERMES_APIYI_OUTPUT_RATE', 15),
     hermesApiyiCacheReadRate: readFloatEnv('HERMES_APIYI_CACHE_READ_RATE', 0.3),

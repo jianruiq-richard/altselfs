@@ -16,6 +16,7 @@ export async function POST(request: Request) {
         name: investor.name || investor.nickname,
         planKey: body.planKey,
         billingCycle: body.billingCycle,
+        analytics: body.analytics,
         requestId: randomUUID(),
       }),
     }));

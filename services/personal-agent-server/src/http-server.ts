@@ -183,6 +183,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
             planKey: body.planKey,
             billingCycle: body.billingCycle,
             packKey: body.packKey,
+            analytics: body.analytics,
             requestId: body.requestId,
           }));
         } catch (error) {
@@ -218,6 +219,7 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
             name: body.name,
             planKey: body.planKey,
             billingCycle: body.billingCycle,
+            analytics: body.analytics,
             requestId: body.requestId,
           }));
         } catch (error) {

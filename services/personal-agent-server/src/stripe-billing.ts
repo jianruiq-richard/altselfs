@@ -12,6 +12,12 @@ import {
   reverseRemainingCreditLot,
   type CreditLotSource,
 } from './credit-lots.js';
+import {
+  ga4ContextFromMetadata,
+  ga4ContextMetadata,
+  normalizeGa4ClientContext,
+  sendGa4Event,
+} from './google-analytics.js';
 import { id, isRecord } from './util.js';
 
 const PLAN_CATALOG = {
@@ -42,6 +48,7 @@ type PaymentRow = {
   creditsGranted: number;
   creditsReversed: number;
   amountTotalCents: number;
+  currency: string;
   providerPaymentIntentId: string | null;
   providerInvoiceId: string | null;
   providerChargeId: string | null;
@@ -120,6 +127,7 @@ export async function createStripeCheckout(
     planKey?: unknown;
     billingCycle?: unknown;
     packKey?: unknown;
+    analytics?: unknown;
     requestId?: unknown;
   },
 ) {
@@ -133,6 +141,8 @@ export async function createStripeCheckout(
     name: optionalString(input.name),
   });
   const requestId = optionalString(input.requestId) || id('stripe_checkout');
+  const analytics = normalizeGa4ClientContext(input.analytics);
+  const analyticsMetadata = ga4ContextMetadata(analytics);
   const common = {
     customer: customerId,
     client_reference_id: investorId,
@@ -157,12 +167,14 @@ export async function createStripeCheckout(
           purchaseKind: 'SUBSCRIPTION',
           planKey,
           billingCycle: selectedBillingCycle,
+          ...analyticsMetadata,
         },
         subscription_data: {
           metadata: {
             investorId,
             planKey,
             billingCycle: selectedBillingCycle,
+            ...analyticsMetadata,
           },
         },
       },
@@ -180,6 +192,7 @@ export async function createStripeCheckout(
       purchaseKind: 'CREDIT_PACK',
       packKey,
       credits: String(pack.credits),
+      ...analyticsMetadata,
     };
     const session = await stripe.checkout.sessions.create(
       {
@@ -411,6 +424,7 @@ export async function changeStripePlan(
     name?: unknown;
     planKey: unknown;
     billingCycle?: unknown;
+    analytics?: unknown;
     requestId?: unknown;
   },
 ) {
@@ -525,6 +539,7 @@ export async function changeStripePlan(
   const planKey = paidPlanKey(targetPlanKey);
   const priceId = priceIdForPlan(config, planKey, selectedBillingCycle);
   const requestId = optionalString(input.requestId) || id('upgrade');
+  const analyticsMetadata = ga4ContextMetadata(normalizeGa4ClientContext(input.analytics));
   const configurationId = await ensureStripeUpgradePortalConfiguration(
     config,
     stripe,
@@ -549,6 +564,7 @@ export async function changeStripePlan(
         previousBillingCycle: billingCycleForPriceId(config, stripeId(item.price)) || '',
         previousLatestInvoiceId: subscription.latestInvoiceId || '',
         previousPeriodEnd: subscription.currentPeriodEnd?.toISOString() || '',
+        ...analyticsMetadata,
       },
     },
     {
@@ -679,6 +695,9 @@ export async function refundStripePayment(
       usedSinceGrant: usage.usedSinceGrant,
     },
   });
+  if (!result.duplicate) {
+    await sendRefundAnalytics(config, payment, refund.amount);
+  }
   return { ...result, stripeRefundId: refund.id, usage };
 }
 
@@ -725,13 +744,14 @@ async function grantCreditPack(config: ServerConfig, session: Stripe.Checkout.Se
   const packKey = creditPackKey(session.metadata?.packKey);
   const pack = CREDIT_PACKS[packKey];
   const paymentIntentId = stripeId(session.payment_intent);
-  await runSerializableBillingTransaction(config, async (client) => {
+  const analyticsContext = ga4ContextFromMetadata(session.metadata);
+  const inserted = await runSerializableBillingTransaction(config, async (client) => {
     const account = await ensureBillingAccount(config, client, investorId);
     const existing = await client.query(
       'select id from credit_payments where "providerCheckoutSessionId" = $1',
       [session.id],
     );
-    if (existing.rows[0]) return;
+    if (existing.rows[0]) return false;
     const nextBalance = account.balanceCredits + pack.credits;
     const paymentId = id('credit_payment');
     await client.query(
@@ -755,7 +775,10 @@ async function grantCreditPack(config: ServerConfig, session: Stripe.Checkout.Se
         'stripe',
         session.id,
         paymentIntentId,
-        JSON.stringify({ stripeCustomerId: stripeId(session.customer) }),
+        JSON.stringify({
+          stripeCustomerId: stripeId(session.customer),
+          ...ga4ContextMetadata(analyticsContext),
+        }),
         investorId,
       ],
     );
@@ -779,7 +802,31 @@ async function grantCreditPack(config: ServerConfig, session: Stripe.Checkout.Se
       ].join(' '),
       [account.id, nextBalance, pack.credits],
     );
+    return true;
   });
+  if (inserted) {
+    const amount = numberValue(session.amount_total) / 100;
+    await sendGa4Event(config, {
+      name: 'purchase',
+      userId: investorId,
+      context: analyticsContext,
+      includeSession: true,
+      params: {
+        transaction_id: paymentIntentId || session.id,
+        currency: String(session.currency || 'usd').toUpperCase(),
+        value: amount,
+        purchase_type: 'credit_pack',
+        pack_key: packKey.toLowerCase(),
+        items: [{
+          item_id: packKey.toLowerCase(),
+          item_name: `${pack.credits.toLocaleString('en-US')} Credits`,
+          item_category: 'credit_pack',
+          price: amount,
+          quantity: 1,
+        }],
+      },
+    });
+  }
 }
 
 async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, invoice: Stripe.Invoice) {
@@ -805,8 +852,9 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
   const credits = subscriptionCreditsForPlan(planKey, selectedBillingCycle);
   const paymentSource = await invoicePaymentSource(stripe, invoice.id);
   const period = subscriptionPeriod(subscription);
+  const analyticsContext = ga4ContextFromMetadata(subscription.metadata);
 
-  await runSerializableBillingTransaction(config, async (client) => {
+  const inserted = await runSerializableBillingTransaction(config, async (client) => {
     const account = await ensureBillingAccount(config, client, investorId);
     const existing = await client.query(
       'select id from credit_payments where "providerInvoiceId" = $1',
@@ -814,7 +862,7 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
     );
     if (existing.rows[0]) {
       await upsertSubscriptionFromStripe(client, investorId, subscription, planKey, period, invoice.id);
-      return;
+      return false;
     }
     const paymentId = id('credit_payment');
     await client.query(
@@ -852,6 +900,7 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
           previousPeriodEnd: isUpgrade ? optionalString(subscription.metadata.previousPeriodEnd) : null,
           planChangeRequestId: isUpgrade ? optionalString(subscription.metadata.planChangeRequestId) : null,
           billingCycle: selectedBillingCycle,
+          ...ga4ContextMetadata(analyticsContext),
         }),
         investorId,
       ],
@@ -881,7 +930,38 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
       );
     }
     await upsertSubscriptionFromStripe(client, investorId, subscription, planKey, period, invoice.id);
+    return true;
   });
+  if (inserted) {
+    const amount = numberValue(invoice.total) / 100;
+    const purchaseType = isUpgrade
+      ? 'subscription_upgrade'
+      : billingReason === 'subscription_cycle'
+        ? 'subscription_renewal'
+        : 'subscription_new';
+    await sendGa4Event(config, {
+      name: 'purchase',
+      userId: investorId,
+      context: analyticsContext,
+      includeSession: purchaseType !== 'subscription_renewal',
+      params: {
+        transaction_id: invoice.id,
+        currency: String(invoice.currency || 'usd').toUpperCase(),
+        value: amount,
+        purchase_type: purchaseType,
+        plan_key: planKey.toLowerCase(),
+        billing_cycle: selectedBillingCycle,
+        items: [{
+          item_id: `plan_${planKey.toLowerCase()}_${selectedBillingCycle}`,
+          item_name: plan.name,
+          item_category: 'subscription',
+          item_variant: selectedBillingCycle,
+          price: amount,
+          quantity: 1,
+        }],
+      },
+    });
+  }
   if (isUpgrade) {
     await stripe.subscriptions.update(subscription.id, {
       metadata: {
@@ -1003,7 +1083,7 @@ async function handleExternalRefund(
   const payment = await findPaymentByStripeSource(config, paymentIntentId, chargeId);
   if (!payment) return null;
   await revertStripeSubscriptionAfterRefund(config, stripe, payment);
-  await reversePaymentCredits(config, {
+  const result = await reversePaymentCredits(config, {
     payment,
     reversalId: refundId || `charge-refund:${chargeId}`,
     status: 'REFUNDED',
@@ -1011,7 +1091,42 @@ async function handleExternalRefund(
     reason: 'Stripe refund',
     metadata: { source: 'stripe_webhook' },
   });
+  // Stripe also emits charge.refunded for the same operation. The refund event is
+  // the canonical analytics source, so one refund is not reported twice.
+  if (!result.duplicate && record.object === 'refund') {
+    await sendRefundAnalytics(config, payment, numberValue(record.amount_refunded ?? record.amount));
+  }
   return payment.investorId;
+}
+
+async function sendRefundAnalytics(config: ServerConfig, payment: PaymentRow, refundedAmountCents: number) {
+  const context = ga4ContextFromMetadata(payment.metadata);
+  const transactionId = payment.providerInvoiceId || payment.providerPaymentIntentId || payment.id;
+  const value = Math.max(0, refundedAmountCents) / 100;
+  const item = payment.kind === 'SUBSCRIPTION'
+    ? {
+        item_id: `plan_${String(payment.planKey || 'unknown').toLowerCase()}`,
+        item_name: PLAN_CATALOG[normalizePlanKey(payment.planKey)].name,
+        item_category: 'subscription',
+        quantity: 1,
+      }
+    : {
+        item_id: String(payment.packKey || 'credit_pack').toLowerCase(),
+        item_name: String(payment.packKey || 'Credit pack'),
+        item_category: 'credit_pack',
+        quantity: 1,
+      };
+  await sendGa4Event(config, {
+    name: 'refund',
+    userId: payment.investorId,
+    context,
+    params: {
+      transaction_id: transactionId,
+      currency: payment.currency.toUpperCase(),
+      value,
+      items: [item],
+    },
+  });
 }
 
 async function handleDispute(config: ServerConfig, dispute: Stripe.Dispute) {
@@ -1382,7 +1497,7 @@ async function loadPayment(config: ServerConfig, investorId: string, paymentId: 
   const result = await pool.query(
     [
       'select id, "investorId", kind, status, "planKey", "packKey", "creditsGranted", "creditsReversed",',
-      '"amountTotalCents", "providerPaymentIntentId", "providerInvoiceId", "providerChargeId",',
+      '"amountTotalCents", currency, "providerPaymentIntentId", "providerInvoiceId", "providerChargeId",',
       '"lifetimeSpentCreditsAtGrant", metadata from credit_payments where id = $1 and "investorId" = $2',
     ].join(' '),
     [paymentId, investorId],
@@ -1399,7 +1514,7 @@ async function findPaymentByStripeSource(
   const result = await pool.query(
     [
       'select id, "investorId", kind, status, "planKey", "packKey", "creditsGranted", "creditsReversed",',
-      '"amountTotalCents", "providerPaymentIntentId", "providerInvoiceId", "providerChargeId",',
+      '"amountTotalCents", currency, "providerPaymentIntentId", "providerInvoiceId", "providerChargeId",',
       '"lifetimeSpentCreditsAtGrant", metadata from credit_payments',
       'where ($1::text is not null and "providerPaymentIntentId" = $1)',
       'or ($2::text is not null and "providerChargeId" = $2)',
@@ -1785,6 +1900,7 @@ function paymentRow(row: Record<string, unknown>): PaymentRow {
     creditsGranted: numberValue(row.creditsGranted),
     creditsReversed: numberValue(row.creditsReversed),
     amountTotalCents: numberValue(row.amountTotalCents),
+    currency: String(row.currency || 'usd'),
     providerPaymentIntentId: optionalString(row.providerPaymentIntentId),
     providerInvoiceId: optionalString(row.providerInvoiceId),
     providerChargeId: optionalString(row.providerChargeId),
