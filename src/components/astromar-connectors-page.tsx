@@ -159,6 +159,27 @@ const CONNECTOR_LOGOS: Record<string, {
     height: 23,
     imageClassName: 'h-7 w-9 object-contain',
   },
+  ahrefs_url_research: {
+    src: '/connector-logos/ahrefs.png',
+    alt: 'Ahrefs logo',
+    width: 1020,
+    height: 640,
+    imageClassName: 'h-8 w-10 object-contain',
+  },
+  appark: {
+    src: '/connector-logos/appark-icon.png',
+    alt: 'Appark logo',
+    width: 48,
+    height: 48,
+    imageClassName: 'h-8 w-8 object-contain',
+  },
+  sensor_tower: {
+    src: '/connector-logos/sensor-tower-icon.png',
+    alt: 'Sensor Tower logo',
+    width: 48,
+    height: 48,
+    imageClassName: 'h-9 w-9 object-contain',
+  },
   domain_metrics_check: {
     src: '/connector-logos/domain-metrics-check.png',
     alt: 'Domain Metrics Check logo',

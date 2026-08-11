@@ -284,9 +284,9 @@ type ConnectorItem = {
 };
 
 type StarterTemplate = {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
   prompt: string;
   connectorKeys?: string[];
 };
@@ -356,25 +356,19 @@ function sameStringSelection(left: string[], right: string[]) {
 
 const starterTemplates: StarterTemplate[] = [
   {
-    eyebrow: 'Competitor intelligence',
-    title: "I have a competitor. Help me map everything they've done to grow.",
-    description: '',
-    prompt: "I have a competitor. Help me map everything they've done to grow.",
+    title: 'I have a competitor. Help me estimate their total user base, main countries, and six-month user and revenue growth.',
+    prompt: 'I have a competitor. Help me estimate their total user base, main countries, and six-month user and revenue growth.',
     connectorKeys: ['similarweb_api1', 'semrush13', 'ahrefs_url_research', 'appark'],
   },
   {
-    eyebrow: 'Seed users',
-    title: 'I have a product. Help me find my first users.',
-    description: '',
-    prompt: 'I have a product. Help me find my first users.',
+    title: "I have a competitor. Help me track last week's product updates, acquisition moves, and likely user and revenue impact.",
+    prompt: "I have a competitor. Help me track last week's product updates, acquisition moves, and likely user and revenue impact.",
     connectorKeys: ['similarweb_api1', 'semrush13', 'ahrefs_url_research', 'appark'],
   },
   {
-    eyebrow: 'Ship first',
-    title: 'I have an idea. Help me ship it.',
-    description: '',
-    prompt: 'I have an idea. Help me ship it.',
-    connectorKeys: [],
+    title: 'I have a product. Help me find my first 100 seed users.',
+    prompt: 'I have a product. Help me find my first 100 seed users.',
+    connectorKeys: ['similarweb_api1', 'semrush13', 'ahrefs_url_research', 'appark'],
   },
 ];
 
@@ -4775,10 +4769,12 @@ export function InvestorAgentChatPage() {
                         disabled={starterTemplateDisabled}
                         className="group flex min-h-[108px] flex-col items-start justify-start rounded-[14px] border border-white/[0.09] bg-white/[0.035] p-4 text-left transition hover:border-white/[0.16] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
                       >
-                        <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-600 group-hover:text-zinc-400">
-                          {template.eyebrow}
-                        </span>
-                        <strong className="mt-2 block text-[13px] font-semibold text-zinc-100">
+                        {template.eyebrow ? (
+                          <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-zinc-600 group-hover:text-zinc-400">
+                            {template.eyebrow}
+                          </span>
+                        ) : null}
+                        <strong className={`${template.eyebrow ? 'mt-2' : ''} block text-[13px] font-semibold leading-5 text-zinc-100`}>
                           {template.title}
                         </strong>
                         {template.description ? (
