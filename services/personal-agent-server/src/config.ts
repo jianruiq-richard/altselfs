@@ -54,6 +54,8 @@ export type ServerConfig = {
   disableLocalEnvironmentForGeneral: boolean;
   hermesSourceRuntimeEnabled: boolean;
   hermesSourceRoot: string;
+  hermesSkillsEnabled: boolean;
+  hermesExternalSkillsDirs: string[];
   uvBin: string;
   hermesHomeRoot: string;
   hermesWorkspaceRoot: string;
@@ -211,6 +213,38 @@ function readCsvEnv(key: string, fallback: string[] = []) {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function directoryContainsSkillManifest(root: string) {
+  const pending = [root];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return false;
+    }
+    if (entries.some((entry) => entry.isFile() && entry.name === 'SKILL.md')) return true;
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        pending.push(path.join(current, entry.name));
+      }
+    }
+  }
+  return false;
+}
+
+function validateHermesSkillsConfig(config: ServerConfig) {
+  if (!config.hermesSourceRuntimeEnabled || !config.hermesSkillsEnabled) return;
+  if (config.hermesExternalSkillsDirs.length === 0) {
+    throw new Error('HERMES_SKILLS_ENABLED requires HERMES_EXTERNAL_SKILLS_DIRS.');
+  }
+  for (const dir of config.hermesExternalSkillsDirs) {
+    if (!directoryContainsSkillManifest(dir)) {
+      throw new Error(`Hermes external skills directory has no readable SKILL.md: ${dir}`);
+    }
+  }
 }
 
 function readWebSearchModeEnv(key: string, fallback: 'live' | 'cached' | 'disabled') {
@@ -442,7 +476,7 @@ export function loadConfig(): ServerConfig {
     codexModel === 'gpt-5.5' ? 'openai' : hasOpenRouterKey ? 'openrouter' : undefined
   );
   const env = readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development');
-  return {
+  const config: ServerConfig = {
     port: readIntEnv('PORT', 8787),
     env,
     processRole: readProcessRoleEnv('AGENT_PROCESS_ROLE', 'all'),
@@ -494,6 +528,8 @@ export function loadConfig(): ServerConfig {
     disableLocalEnvironmentForGeneral: readBoolEnv('CODEX_GENERAL_DISABLE_LOCAL_ENVIRONMENT', true),
     hermesSourceRuntimeEnabled: readBoolEnv('HERMES_SOURCE_RUNTIME_ENABLED', false),
     hermesSourceRoot: path.resolve(readEnv('HERMES_SOURCE_ROOT', '/Users/richardjian/work/agent-sources/hermes-agent')),
+    hermesSkillsEnabled: readBoolEnv('HERMES_SKILLS_ENABLED', false),
+    hermesExternalSkillsDirs: readCsvEnv('HERMES_EXTERNAL_SKILLS_DIRS').map((dir) => path.resolve(dir)),
     uvBin: readEnv('UV_BIN', 'uv'),
     hermesHomeRoot: path.resolve(readEnv('HERMES_HOME_ROOT', '/tmp/altselfs-hermes-homes')),
     hermesWorkspaceRoot: path.resolve(readEnv('HERMES_WORKSPACE_ROOT', '/tmp/altselfs-hermes-workspaces')),
@@ -584,4 +620,6 @@ export function loadConfig(): ServerConfig {
     codexUsageOutputRate: readFloatEnv('CODEX_USAGE_OUTPUT_RATE', 750),
     codexUsageCreditMultiplier: readFloatEnv('CODEX_USAGE_CREDIT_MULTIPLIER', 7.5),
   };
+  validateHermesSkillsConfig(config);
+  return config;
 }

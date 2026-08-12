@@ -274,6 +274,8 @@ export class HermesSourceRuntime {
       codexModel: codexModelSelection.model || null,
       codexModelProvider: codexModelSelection.provider || null,
       selectedAgentProfileId: selectedAgentProfileId || null,
+      hermesSkillsEnabled: this.config.hermesSkillsEnabled,
+      hermesExternalSkillDirCount: this.config.hermesExternalSkillsDirs.length,
       enabledConnectorCount: connectorScope.enabledConnectorKeys.length,
       enabledInfoSourceCount: enabledInfoSources.length,
       enabledCompetitortoolCount: enabledCompetitortools.length,
@@ -300,7 +302,7 @@ export class HermesSourceRuntime {
       '--source',
       'tool',
       '--toolsets',
-      'altselfs_codex',
+      buildHermesToolsets(this.config),
       '--max-turns',
       String(this.config.hermesMaxTurns),
       '-q',
@@ -551,6 +553,7 @@ export class HermesSourceRuntime {
   ) {
     await prepareRuntimeDirectories(paths);
     await prepareHermesRuntimeContextPlugin(paths.hermesHome);
+    await prepareHermesSkillsHome(paths.hermesHome, this.config);
     const codexMcpServerPath = await resolveCodexMcpServerPath();
     const codexMcpEnvLines = buildCodexMcpEnvEntries(this.config, codexModelSelection)
       .map(([key, value]) => `      ${key}: ${yamlString(value)}`);
@@ -598,6 +601,8 @@ export class HermesSourceRuntime {
         '  user_profile_enabled: true',
         `  nudge_interval: ${this.config.memoryReviewMode === 'inline' ? this.config.hermesMemoryNudgeInterval : 0}`,
         '',
+        ...buildHermesSkillsYamlLines(this.config),
+        ...(this.config.hermesSkillsEnabled ? [''] : []),
         'plugins:',
         '  enabled:',
         `    - ${yamlString(ALTSELFS_RUNTIME_CONTEXT_PLUGIN_NAME)}`,
@@ -1331,6 +1336,11 @@ export function buildHermesStableSystemPrompt() {
     '- Distinguish between not connected, connected but disabled for this discussion, authorization expired, and document/account permission denied. Do not claim a connector was used unless a tool actually ran.',
     '- Offer upload, paste, or share-link fallbacks only after the relevant connector action is stated.',
     '',
+    'Expert Skill policy:',
+    '- Before answering, follow the native Hermes Skill catalog contract: scan the available Skills and load every relevant or partially relevant Skill with `skill_view`.',
+    '- Product expert Skills are centrally maintained and read-only in this runtime. Do not call `skill_manage` to create, patch, replace, or delete them; report missing or incorrect guidance so maintainers can update the versioned library.',
+    '- Treat filled expert rules and cases as maintained policy. Keep facts, rules, assumptions, calculations, and judgments distinct, and label missing knowledge instead of inventing a threshold.',
+    '',
     'User-facing privacy and infrastructure boundary:',
     '- Do not reveal internal infrastructure, deployment, storage, database, credential, container, server, IP, hostname, environment-variable, source-code, or backend filesystem details to the user.',
     '- Treat absolute paths such as Hermes/Codex home, workspace root, uploads, artifacts, outputs, logs, cache, state.db, JSONL/session files, and backend project paths as execution-only metadata.',
@@ -1438,6 +1448,48 @@ export function buildHermesPromptCachingYamlLines() {
     'prompt_caching:',
     `  cache_ttl: ${yamlString(HERMES_PROMPT_CACHE_TTL)}`,
   ];
+}
+
+export function buildHermesToolsets(
+  config: Pick<ServerConfig, 'hermesSkillsEnabled'>
+) {
+  return config.hermesSkillsEnabled
+    ? 'altselfs_codex,skills'
+    : 'altselfs_codex';
+}
+
+export function buildHermesSkillsYamlLines(
+  config: Pick<ServerConfig, 'hermesSkillsEnabled' | 'hermesExternalSkillsDirs'>
+) {
+  if (!config.hermesSkillsEnabled) return [];
+  return [
+    'skills:',
+    '  external_dirs:',
+    ...config.hermesExternalSkillsDirs.map((dir) => `    - ${yamlString(dir)}`),
+    '  write_approval: true',
+  ];
+}
+
+export async function prepareHermesSkillsHome(
+  hermesHome: string,
+  config: Pick<ServerConfig, 'hermesSkillsEnabled' | 'hermesExternalSkillsDirs'>
+) {
+  // Hermes installers and update flows honor this marker. Altselfs always opts
+  // per-user homes out of upstream bundled-skill seeding; product knowledge is
+  // supplied only through centrally versioned external directories.
+  await fs.writeFile(path.join(hermesHome, '.no-bundled-skills'), '', 'utf8');
+
+  if (!config.hermesSkillsEnabled) return;
+  if (config.hermesExternalSkillsDirs.length === 0) {
+    throw new Error('HERMES_SKILLS_ENABLED requires at least one HERMES_EXTERNAL_SKILLS_DIRS entry.');
+  }
+
+  await Promise.all(config.hermesExternalSkillsDirs.map(async (dir) => {
+    const stat = await fs.stat(dir).catch(() => null);
+    if (!stat?.isDirectory()) {
+      throw new Error(`Hermes external skills directory is unavailable: ${dir}`);
+    }
+  }));
 }
 
 export async function prepareHermesRuntimeContextPlugin(hermesHome: string) {

@@ -394,6 +394,35 @@ CODEX_BIN=/opt/altselfs/codex-bin/codex
 UV_BIN=/usr/local/bin/altselfs-hermes-run
 ```
 
+Hermes expert Skills are enabled in the source-runtime and ACR Compose paths
+through the native filesystem catalog:
+
+```text
+host:      /data/altselfs-expert-skills/current/skills
+container: /opt/altselfs/expert-skills (read-only)
+config:    skills.external_dirs + skills.write_approval
+tools:     native Hermes skills toolset
+```
+
+Before starting a new machine, publish a validated content release at the host
+path above. Per-user Hermes homes are marked `.no-bundled-skills`, so upstream
+bundled Skills are not seeded. The shared directory is physically read-only,
+and Hermes stages any `skill_manage` write behind its native approval gate;
+selection and loading remain native LLM function calls.
+See [`../../expert-skills/README.md`](../../expert-skills/README.md) for the
+three initial fill points, versioned release layout, activation, and rollback.
+
+After the pushed commit has finished building in ACR, the normal semi-automatic
+release command is:
+
+```bash
+ECS_SSH_TARGET=root@YOUR_ECS_HOST \
+bash ../../infra/aliyun/ecs/deploy-personal-agent-server-from-workspace.sh
+```
+
+This uploads the matching Skill tree and lets the ECS deployment script switch
+the shared mapping as part of the same container update.
+
 Long-running task timeout knobs:
 
 ```text

@@ -7,12 +7,15 @@ services:
     environment:
       HERMES_SOURCE_RUNTIME_ENABLED: "${HERMES_SOURCE_RUNTIME_ENABLED:-true}"
       HERMES_SOURCE_ROOT: /opt/altselfs/hermes-agent
+      HERMES_SKILLS_ENABLED: "${HERMES_SKILLS_ENABLED:-true}"
+      HERMES_EXTERNAL_SKILLS_DIRS: /opt/altselfs/expert-skills
       UV_BIN: /usr/local/bin/altselfs-hermes-run
       CODEX_BIN: /opt/altselfs/codex-bin/codex
     ports:
       - "${PERSONAL_AGENT_HOST_PORT:-8787}:8787"
     volumes:
       - /data/altselfs-agent:/data/altselfs-agent
+      - ${HERMES_EXPERT_SKILLS_HOST_DIR:-/data/altselfs-expert-skills/current/skills}:/opt/altselfs/expert-skills:ro
       - ${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}:${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}
     healthcheck:
       test:

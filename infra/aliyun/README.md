@@ -122,7 +122,27 @@ cd /opt/altselfs/personal-agent-server-docker
 bash deploy-personal-agent-server.sh
 ```
 
-The deploy script only pulls the ACR image and restarts the service. It does not rebuild images on ECS.
+The deployment remains intentionally semi-automatic. A push to `main` triggers
+the existing ACR build rule. After that build succeeds, run the workspace
+release helper from a clean, pushed checkout:
+
+```bash
+ECS_SSH_TARGET=root@YOUR_ECS_HOST \
+bash infra/aliyun/ecs/deploy-personal-agent-server-from-workspace.sh
+```
+
+The helper validates and packages `expert-skills/skills`, uploads it together
+with the Compose file and ECS deployment script, and invokes the remote deploy.
+The remote script then:
+
+1. installs an immutable `git-<commit>` Skill release;
+2. pulls the requested ACR image (`latest` by default);
+3. switches `/data/altselfs-expert-skills/current` to that release;
+4. force-recreates the container so Docker resolves the new read-only mount;
+5. waits for container health and restores the previous Skill/image pair on failure.
+
+The ECS host does not rebuild images. `IMAGE_TAG` can override `latest` when an
+immutable ACR tag is available.
 
 If `SANDBOX_EXEC_ENABLED=true`, also pull the sandbox runtime image on the ECS host:
 

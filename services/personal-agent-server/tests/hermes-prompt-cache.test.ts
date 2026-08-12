@@ -7,9 +7,12 @@ import {
   ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV,
   buildHermesDynamicUserContext,
   buildHermesPromptCachingYamlLines,
+  buildHermesSkillsYamlLines,
   buildHermesStableSystemPrompt,
+  buildHermesToolsets,
   HERMES_PROMPT_CACHE_TTL,
   prepareHermesRuntimeContextPlugin,
+  prepareHermesSkillsHome,
 } from '../src/hermes/source-hermes-runtime.js';
 
 test('Hermes stable system prompt excludes all per-turn runtime context', () => {
@@ -21,6 +24,7 @@ test('Hermes stable system prompt excludes all per-turn runtime context', () => 
   assert.match(stablePrompt, /Do not impose an artificial step count or tool-call count/);
   assert.match(stablePrompt, /Connector authorization guidance:/);
   assert.match(stablePrompt, /connect or enable it in Connectors/);
+  assert.match(stablePrompt, /Product expert Skills are centrally maintained and read-only/);
   assert.doesNotMatch(stablePrompt, /Current time:/);
   assert.doesNotMatch(stablePrompt, /Minaco runtime metadata for this turn:/);
   assert.doesNotMatch(stablePrompt, /<altselfs_user_profile>/);
@@ -63,6 +67,52 @@ test('Hermes prompt caching is configured for one hour', () => {
     'prompt_caching:',
     '  cache_ttl: "1h"',
   ]);
+});
+
+test('Hermes external skills use the native toolset with write approval', () => {
+  const enabled = {
+    hermesSkillsEnabled: true,
+    hermesExternalSkillsDirs: ['/opt/altselfs/expert-skills'],
+  };
+
+  assert.equal(buildHermesToolsets(enabled), 'altselfs_codex,skills');
+  assert.deepEqual(buildHermesSkillsYamlLines(enabled), [
+    'skills:',
+    '  external_dirs:',
+    '    - "/opt/altselfs/expert-skills"',
+    '  write_approval: true',
+  ]);
+  assert.equal(buildHermesToolsets({ hermesSkillsEnabled: false }), 'altselfs_codex');
+  assert.deepEqual(buildHermesSkillsYamlLines({
+    hermesSkillsEnabled: false,
+    hermesExternalSkillsDirs: [],
+  }), []);
+});
+
+test('Hermes homes opt out of bundled skills and require configured external directories', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'altselfs-hermes-skills-'));
+  const hermesHome = path.join(root, 'home');
+  const externalDir = path.join(root, 'external');
+  await Promise.all([
+    fs.mkdir(hermesHome, { recursive: true }),
+    fs.mkdir(externalDir, { recursive: true }),
+  ]);
+
+  await prepareHermesSkillsHome(hermesHome, {
+    hermesSkillsEnabled: true,
+    hermesExternalSkillsDirs: [externalDir],
+  });
+  assert.equal(await fs.readFile(path.join(hermesHome, '.no-bundled-skills'), 'utf8'), '');
+
+  await assert.rejects(
+    prepareHermesSkillsHome(hermesHome, {
+      hermesSkillsEnabled: true,
+      hermesExternalSkillsDirs: [path.join(root, 'missing')],
+    }),
+    /external skills directory is unavailable/
+  );
+
+  await fs.rm(root, { recursive: true, force: true });
 });
 
 test('generated Hermes plugin injects dynamic context through pre_llm_call', async () => {
