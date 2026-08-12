@@ -326,6 +326,7 @@ function inferMimeType(name: string, providedType: string) {
   if (lowerName.endsWith('.pdf')) return 'application/pdf';
   if (lowerName.endsWith('.doc')) return 'application/msword';
   if (lowerName.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (lowerName.endsWith('.html') || lowerName.endsWith('.htm')) return 'text/html; charset=utf-8';
   if (lowerName.endsWith('.png')) return 'image/png';
   if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'image/jpeg';
   if (lowerName.endsWith('.webp')) return 'image/webp';

@@ -30,6 +30,7 @@ import {
 import { MarkdownMessage } from '@/components/markdown-message';
 import { productBrand } from '@/lib/brand';
 import { getBillingPlan } from '@/lib/billing-plans';
+import { artifactDeliveryPath, isHtmlArtifact } from '@/lib/artifact-delivery';
 import {
   analyticsWasReported,
   markAnalyticsReported,
@@ -441,7 +442,7 @@ function formatBytes(bytes: number) {
 
 function inferArtifactMimeType(name: string, mimeType?: string | null) {
   const normalized = mimeType?.trim().toLowerCase();
-  if (normalized) return normalized;
+  if (normalized && normalized !== 'application/octet-stream') return normalized;
   const lowerName = name.toLowerCase();
   if (lowerName.endsWith('.png')) return 'image/png';
   if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'image/jpeg';
@@ -457,12 +458,13 @@ function inferArtifactMimeType(name: string, mimeType?: string | null) {
   if (lowerName.endsWith('.pdf')) return 'application/pdf';
   if (lowerName.endsWith('.csv')) return 'text/csv';
   if (lowerName.endsWith('.tsv')) return 'text/tab-separated-values';
+  if (lowerName.endsWith('.html') || lowerName.endsWith('.htm')) return 'text/html; charset=utf-8';
   if (lowerName.endsWith('.txt')) return 'text/plain';
   if (lowerName.endsWith('.md')) return 'text/markdown';
   if (lowerName.endsWith('.doc')) return 'application/msword';
   if (lowerName.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   if (lowerName.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  return '';
+  return normalized || '';
 }
 
 function isImageArtifact(artifact: ChatArtifact) {
@@ -492,6 +494,7 @@ function artifactTypeLabel(artifact: ChatArtifact) {
   if (mimeType.includes('wordprocessing') || mimeType === 'application/msword') return 'Document';
   if (mimeType === 'text/csv') return 'CSV';
   if (mimeType === 'text/markdown') return 'Markdown';
+  if (mimeType.startsWith('text/html')) return 'HTML report';
   if (mimeType.startsWith('text/')) return 'Text';
   return 'File';
 }
@@ -2089,6 +2092,9 @@ function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArt
   const sizeText = typeof artifact.sizeBytes === 'number' && artifact.sizeBytes > 0 ? formatBytes(artifact.sizeBytes) : '';
   const typeText = artifactTypeLabel(artifact);
   const mediaMimeType = inferArtifactMimeType(artifact.name, artifact.mimeType);
+  const html = isHtmlArtifact(artifact.name, artifact.mimeType);
+  const openPath = html ? artifactDeliveryPath(artifact.downloadPath, 'preview') : artifact.downloadPath;
+  const downloadPath = html ? artifactDeliveryPath(artifact.downloadPath, 'download') : artifact.downloadPath;
 
   return (
     <div className={`overflow-hidden rounded-xl border ${borderClass}`}>
@@ -2131,7 +2137,7 @@ function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArt
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <a
-            href={artifact.downloadPath}
+            href={openPath}
             target="_blank"
             rel="noreferrer"
             title={`Open ${artifact.name}`}
@@ -2141,7 +2147,7 @@ function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArt
             <ExternalLink className="h-4 w-4" />
           </a>
           <a
-            href={artifact.downloadPath}
+            href={downloadPath}
             download={artifact.name}
             title={`Download ${artifact.name}`}
             aria-label={`Download ${artifact.name}`}

@@ -3,7 +3,13 @@ import test from 'node:test';
 import {
   extractPdfTextStats,
   extractFileAnnotation,
+  inferMimeType,
 } from '../src/artifact-ingestion.js';
+
+test('generated HTML artifacts are uploaded with a browser-renderable MIME type', () => {
+  assert.equal(inferMimeType('report.html', ''), 'text/html; charset=utf-8');
+  assert.equal(inferMimeType('report.HTM', ''), 'text/html; charset=utf-8');
+});
 
 test('PDF text stats record extraction facts without a completeness verdict', () => {
   const stats = extractPdfTextStats({

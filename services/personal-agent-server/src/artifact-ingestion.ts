@@ -434,7 +434,7 @@ function extensionForMimeType(mimeType: string) {
   return '';
 }
 
-function inferMimeType(name: string, providedType: string) {
+export function inferMimeType(name: string, providedType: string) {
   const normalizedType = providedType.trim().toLowerCase();
   if (normalizedType) return normalizedType;
   const lowerName = name.toLowerCase();
@@ -444,6 +444,7 @@ function inferMimeType(name: string, providedType: string) {
   if (lowerName.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   if (lowerName.endsWith('.csv')) return 'text/csv';
   if (lowerName.endsWith('.tsv')) return 'text/tab-separated-values';
+  if (lowerName.endsWith('.html') || lowerName.endsWith('.htm')) return 'text/html; charset=utf-8';
   if (lowerName.endsWith('.txt')) return 'text/plain';
   if (lowerName.endsWith('.md')) return 'text/markdown';
   if (lowerName.endsWith('.png')) return 'image/png';
