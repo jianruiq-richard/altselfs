@@ -257,7 +257,7 @@ export function AstromarWorkspaceShell({
           >
             <Menu className="h-4 w-4" />
           </button>
-          <strong className="truncate text-sm text-zinc-100">{mobileTitle}</strong>
+          <strong data-clarity-mask="true" className="truncate text-sm text-zinc-100">{mobileTitle}</strong>
         </header>
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
       </section>

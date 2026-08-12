@@ -1,4 +1,4 @@
-# GA4 product analytics
+# Product analytics
 
 Minaco sends browser interaction events with `gtag.js` and confirms revenue/refunds from Stripe webhooks with GA4 Measurement Protocol. Message text, email addresses, phone numbers, Clerk IDs, Stripe customer IDs, and agent/run IDs are not sent to GA4.
 
@@ -45,3 +45,21 @@ Do not expose `GA4_API_SECRET` to the browser. With no Measurement ID, analytics
 5. Optionally link BigQuery before launch if raw event analysis and long-term retention are important.
 
 Keep event names and parameter meanings stable. Add a new parameter or increment the `schema_version` before changing an existing definition.
+
+## Microsoft Clarity session replay
+
+Create one Clarity project for the production domain, then configure the Next.js deployment with:
+
+```dotenv
+NEXT_PUBLIC_CLARITY_PROJECT_ID=your-project-id
+NEXT_PUBLIC_CLARITY_ANALYTICS_STORAGE=granted
+```
+
+With no valid project ID, Clarity is a no-op. Analytics storage defaults to `denied`; only set it to `granted` when the product's consent/privacy flow permits behavioral analytics and session replay. Advertising storage is always denied by the application.
+
+In **Clarity → Settings**:
+
+1. Enable Consent Mode and pass the visitor's decision through Consent V2. The current environment variable is a deployment-wide switch; replace it with a consent-management platform or per-visitor preference before serving jurisdictions that require opt-in consent.
+2. Keep masking set to **Balanced** or **Strict**. Minaco also explicitly masks discussion titles, chat transcripts, prompts, attachment names, and generated responses with `data-clarity-mask`.
+3. Verify installation by visiting the production site and checking for POST requests to `https://www.clarity.ms/collect`; recordings can then be found under **Recordings**.
+4. Optionally connect the Clarity project to the GA4 property under Clarity integrations so GA sessions can link to their corresponding recordings.

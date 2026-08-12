@@ -29,7 +29,7 @@ export default function PrivacyPolicyPage() {
       description={`${productBrand.name} is built as a private decision workspace. This Privacy Policy explains what data we collect, how we use it to provide AI cofounder features, how third-party AI and infrastructure providers fit in, and what choices users have.`}
       documentTitle={`${productBrand.name} Privacy Policy`}
       eyebrow="Legal"
-      lastUpdated="August 5, 2026"
+      lastUpdated="August 12, 2026"
       relatedHref="/terms"
       relatedLabel="Terms"
       title="Privacy Policy"
@@ -143,6 +143,9 @@ export default function PrivacyPolicyPage() {
         </p>
         <p>
           We may use analytics and monitoring tools to understand product usage, diagnose errors, and improve reliability. Where feasible, we limit analytics data to product and technical signals rather than the substance of your private workspace content.
+        </p>
+        <p>
+          We may also use privacy-masked session replay and interaction analytics to understand navigation, clicks, scrolling, and product usability. We configure these tools to mask form inputs and private discussion content, and we do not intentionally record passwords, payment card details, private prompts, message text, attachment names, or generated responses in session replay.
         </p>
       </section>
 

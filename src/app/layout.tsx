@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from '@clerk/nextjs';
 import { GoogleAnalytics } from '@/components/google-analytics';
 import { GoogleAnalyticsScripts } from '@/components/google-analytics-scripts';
+import { MicrosoftClarityScripts } from '@/components/microsoft-clarity-scripts';
 import { productBrand } from '@/lib/brand';
 import "./globals.css";
 
@@ -43,6 +44,7 @@ export default async function RootLayout({
       <html lang="en-US" className="h-full antialiased">
         <body className="min-h-full bg-[#090a0a]">
           <GoogleAnalyticsScripts />
+          <MicrosoftClarityScripts />
           {children}
           <GoogleAnalytics />
         </body>

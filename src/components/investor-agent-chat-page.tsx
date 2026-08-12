@@ -4457,6 +4457,7 @@ export function InvestorAgentChatPage() {
   );
   const renderComposer = (variant: 'starter' | 'dock') => (
     <form
+      data-clarity-mask="true"
       onSubmit={(event) => { event.preventDefault(); void handleSend(); }}
       onDragEnter={handleAttachmentDragEnter}
       onDragOver={handleAttachmentDragOver}
@@ -4541,6 +4542,7 @@ export function InvestorAgentChatPage() {
           return (
             <div
               key={session.id}
+              data-clarity-mask="true"
               data-session-menu-root="true"
               className={`group relative grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)_32px] items-center overflow-visible rounded-[7px] ${active ? 'bg-white/[0.075]' : 'hover:bg-white/[0.05]'}`}
             >
@@ -4676,7 +4678,7 @@ export function InvestorAgentChatPage() {
       <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] md:grid-rows-[64px_minmax(0,1fr)_auto]">
         <header className="hidden items-center justify-between gap-4 border-b border-white/[0.09] px-6 md:flex">
           <div className="min-w-0">
-            <strong className="block truncate text-[13px] text-zinc-100">{activeSession?.title || 'New discussion'}</strong>
+            <strong data-clarity-mask="true" className="block truncate text-[13px] text-zinc-100">{activeSession?.title || 'New discussion'}</strong>
             <span className="mt-0.5 block truncate text-[10px] text-zinc-600">Think with you. Act for you.</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -4789,7 +4791,7 @@ export function InvestorAgentChatPage() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-7">
+              <div data-clarity-mask="true" className="space-y-7">
                 {messages.length > 0 ? (
                   <div className="flex items-center gap-3 text-[9px] uppercase text-zinc-700"><i className="h-px flex-1 bg-white/[0.09]" /><span>Today</span><i className="h-px flex-1 bg-white/[0.09]" /></div>
                 ) : null}
