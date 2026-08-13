@@ -24,7 +24,7 @@ export class AgentTurnQueueWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
   private cancelTimer: ReturnType<typeof setInterval> | null = null;
   private running = new Map<string, RunningTurn>();
-  private draining = false;
+  private acceptingClaims = true;
   private ticking = false;
   private pollingCancellations = false;
 
@@ -33,19 +33,20 @@ export class AgentTurnQueueWorker {
     private config: ServerConfig
   ) {}
 
-  start() {
+  start(options: { acceptingClaims?: boolean } = {}) {
     if (!this.config.contextDatabaseUrl) {
       console.warn('[agent-turn-worker] disabled: AGENT_CONTEXT_DATABASE_URL is not configured');
       return;
     }
     if (this.timer) return;
+    this.acceptingClaims = options.acceptingClaims !== false;
     this.timer = setInterval(() => {
       void this.tick();
     }, this.config.turnQueuePollMs);
     this.cancelTimer = setInterval(() => {
       void this.pollCancellationRequests();
     }, this.config.turnQueueCancelPollMs);
-    void this.tick();
+    if (this.acceptingClaims) void this.tick();
     console.log(
       [
         `[agent-turn-worker] started workerId=${this.workerId}`,
@@ -66,11 +67,31 @@ export class AgentTurnQueueWorker {
     if (this.cancelTimer) clearInterval(this.cancelTimer);
     this.timer = null;
     this.cancelTimer = null;
-    this.draining = true;
+    this.acceptingClaims = false;
+  }
+
+  beginDrain() {
+    this.acceptingClaims = false;
+  }
+
+  activate() {
+    if (!this.timer) return;
+    this.acceptingClaims = true;
+    void this.tick();
+  }
+
+  deploymentStatus() {
+    return {
+      workerId: this.workerId,
+      acceptingClaims: this.acceptingClaims,
+      claimInProgress: this.ticking,
+      runningCount: this.running.size,
+      runningRunIds: Array.from(this.running.keys()),
+    };
   }
 
   private async tick() {
-    if (this.draining || this.ticking) return;
+    if (!this.acceptingClaims || this.ticking) return;
     this.ticking = true;
     try {
       await expireStaleAgentTurns(this.config, {
@@ -87,7 +108,7 @@ export class AgentTurnQueueWorker {
         console.warn(`[agent-turn-worker] billing reconciliation failed: ${error instanceof Error ? error.message : String(error)}`);
       });
 
-      while (!this.draining && this.running.size < this.config.turnQueueMaxConcurrency) {
+      while (this.acceptingClaims && this.running.size < this.config.turnQueueMaxConcurrency) {
         const claimed = await claimNextQueuedAgentTurn(this.config, {
           workerId: this.workerId,
           timeoutMs: this.config.turnQueueRunTimeoutMs,
@@ -121,7 +142,7 @@ export class AgentTurnQueueWorker {
   }
 
   private async pollCancellationRequests() {
-    if (this.draining || this.pollingCancellations || this.running.size === 0) return;
+    if (this.pollingCancellations || this.running.size === 0) return;
     this.pollingCancellations = true;
     try {
       const requestedRunIds = await listRequestedAgentRunCancellations(

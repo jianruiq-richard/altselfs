@@ -1,31 +1,76 @@
+x-agent-environment: &agent-environment
+  AGENT_PROCESS_ROLE: all
+  AGENT_DEPLOYMENT_INITIAL_STATE: active-color-file
+  AGENT_DEPLOYMENT_ACTIVE_COLOR_FILE: /run/altselfs-deployment/active-color
+  HERMES_SOURCE_RUNTIME_ENABLED: "${HERMES_SOURCE_RUNTIME_ENABLED:-true}"
+  HERMES_SOURCE_ROOT: /opt/altselfs/hermes-agent
+  HERMES_SKILLS_ENABLED: "${HERMES_SKILLS_ENABLED:-true}"
+  HERMES_EXTERNAL_SKILLS_DIRS: /opt/altselfs/expert-skills
+  UV_BIN: /usr/local/bin/altselfs-hermes-run
+  CODEX_BIN: /opt/altselfs/codex-bin/codex
+
+x-agent-healthcheck: &agent-healthcheck
+  test:
+    [
+      "CMD",
+      "node",
+      "-e",
+      "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+    ]
+  interval: 10s
+  timeout: 5s
+  retries: 6
+  start_period: 20s
+
 services:
-  personal-agent-server:
-    image: ${ALTSELFS_PERSONAL_AGENT_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server:latest}
+  personal-agent-gateway:
+    image: ${ALTSELFS_PERSONAL_AGENT_GATEWAY_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server:latest}
+    restart: unless-stopped
+    environment:
+      AGENT_PROCESS_ROLE: gateway
+      PORT: "8787"
+      AGENT_DEPLOYMENT_ACTIVE_COLOR_FILE: /run/altselfs-deployment/active-color
+      AGENT_BLUE_UPSTREAM: http://personal-agent-server-blue:8787
+      AGENT_GREEN_UPSTREAM: http://personal-agent-server-green:8787
+    ports:
+      - "${PERSONAL_AGENT_HOST_PORT:-8787}:8787"
+    volumes:
+      - ${AGENT_DEPLOYMENT_STATE_HOST_DIR:-/data/altselfs-agent-deployment}:/run/altselfs-deployment:ro
+    healthcheck: *agent-healthcheck
+    stop_grace_period: 15s
+
+  personal-agent-server-blue:
+    image: ${ALTSELFS_PERSONAL_AGENT_BLUE_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server:latest}
     restart: unless-stopped
     env_file:
       - .env.production
     environment:
-      HERMES_SOURCE_RUNTIME_ENABLED: "${HERMES_SOURCE_RUNTIME_ENABLED:-true}"
-      HERMES_SOURCE_ROOT: /opt/altselfs/hermes-agent
-      HERMES_SKILLS_ENABLED: "${HERMES_SKILLS_ENABLED:-true}"
-      HERMES_EXTERNAL_SKILLS_DIRS: /opt/altselfs/expert-skills
-      UV_BIN: /usr/local/bin/altselfs-hermes-run
-      CODEX_BIN: /opt/altselfs/codex-bin/codex
-    ports:
-      - "${PERSONAL_AGENT_HOST_PORT:-8787}:8787"
+      <<: *agent-environment
+      AGENT_DEPLOYMENT_COLOR: blue
+    expose:
+      - "8787"
     volumes:
       - /data/altselfs-agent:/data/altselfs-agent
-      - ${HERMES_EXPERT_SKILLS_HOST_DIR:-/data/altselfs-expert-skills/current/skills}:/opt/altselfs/expert-skills:ro
+      - ${HERMES_EXPERT_SKILLS_BLUE_HOST_DIR:-/data/altselfs-expert-skills/current/skills}:/opt/altselfs/expert-skills:ro
+      - ${AGENT_DEPLOYMENT_STATE_HOST_DIR:-/data/altselfs-agent-deployment}:/run/altselfs-deployment
       - ${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}:${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+    healthcheck: *agent-healthcheck
+    stop_grace_period: 2m
+
+  personal-agent-server-green:
+    image: ${ALTSELFS_PERSONAL_AGENT_GREEN_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server:latest}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      <<: *agent-environment
+      AGENT_DEPLOYMENT_COLOR: green
+    expose:
+      - "8787"
+    volumes:
+      - /data/altselfs-agent:/data/altselfs-agent
+      - ${HERMES_EXPERT_SKILLS_GREEN_HOST_DIR:-/data/altselfs-expert-skills/current/skills}:/opt/altselfs/expert-skills:ro
+      - ${AGENT_DEPLOYMENT_STATE_HOST_DIR:-/data/altselfs-agent-deployment}:/run/altselfs-deployment
+      - ${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}:${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}
+    healthcheck: *agent-healthcheck
+    stop_grace_period: 2m

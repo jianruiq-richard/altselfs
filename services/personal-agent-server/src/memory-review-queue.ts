@@ -251,6 +251,7 @@ export class FileMemoryReviewQueue implements MemoryReviewJobStore {
 export class MemoryReviewWorker {
   private timer: NodeJS.Timeout | null = null;
   private processing = false;
+  private acceptingJobs = true;
 
   constructor(
     private config: ServerConfig,
@@ -258,21 +259,40 @@ export class MemoryReviewWorker {
     private profileStore: UserProfileStore = new LocalProfileStore(config.profileStorePath)
   ) {}
 
-  start() {
+  start(options: { acceptingJobs?: boolean } = {}) {
     if (this.config.memoryReviewMode !== 'async') return;
+    this.acceptingJobs = options.acceptingJobs !== false;
     this.timer = setInterval(() => {
       void this.tick();
     }, this.config.memoryReviewPollMs);
-    void this.tick();
+    if (this.acceptingJobs) void this.tick();
   }
 
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.acceptingJobs = false;
+  }
+
+  beginDrain() {
+    this.acceptingJobs = false;
+  }
+
+  activate() {
+    if (!this.timer) return;
+    this.acceptingJobs = true;
+    void this.tick();
+  }
+
+  deploymentStatus() {
+    return {
+      acceptingJobs: this.acceptingJobs,
+      processing: this.processing,
+    };
   }
 
   private async tick() {
-    if (this.processing) return;
+    if (!this.acceptingJobs || this.processing) return;
     this.processing = true;
     try {
       const reviewJob = await this.queue.claimNext();
@@ -288,7 +308,7 @@ export class MemoryReviewWorker {
         }
       }
 
-      const billingJob = await this.queue.claimNextBilling();
+      const billingJob = this.acceptingJobs ? await this.queue.claimNextBilling() : null;
       if (billingJob?.usage) {
         try {
           const settled = await settleMemoryReviewCredits(this.config, {

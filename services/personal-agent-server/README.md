@@ -421,7 +421,24 @@ bash ../../infra/aliyun/ecs/deploy-personal-agent-server-from-workspace.sh
 ```
 
 This uploads the matching Skill tree and lets the ECS deployment script switch
-the shared mapping as part of the same container update.
+the shared mapping as part of the same blue-green release. The deployment keeps
+a stable gateway on the public port and alternates between `blue` and `green`
+agent containers:
+
+1. pull the new image and start the inactive color in standby;
+2. health-check it without allowing its Worker to claim tasks;
+3. drain new claims on the active color and atomically switch gateway traffic;
+4. activate the new Worker immediately, while the old Worker finishes only the
+   tasks it already owns;
+5. stop the old color after its turn queue, direct turns, and memory review work
+   are empty.
+
+The active color and each container's immutable Skill release survive process
+restarts. A failed pre-switch health check leaves the active deployment alone;
+a failed switch restores the old gateway color and reactivates the old Worker.
+The first release from the legacy single-container layout briefly replaces the
+public listener after a database-backed claim barrier has drained current tasks.
+Subsequent releases do not restart the public gateway.
 
 Long-running task timeout knobs:
 

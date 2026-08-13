@@ -88,7 +88,20 @@ type OpenRouterChatMessage = {
 
 const ASYNC_TURN_POLL_INTERVAL_MS = 3000;
 
-export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig, memoryReviewQueue?: MemoryReviewJobStore) {
+export type DeploymentControl = {
+  status: () => Record<string, unknown>;
+  beginDrain: () => void;
+  activate: () => void;
+  beginDirectTurn: () => boolean;
+  endDirectTurn: () => void;
+};
+
+export function createHttpServer(
+  agent: PersonalMainAgent,
+  config?: ServerConfig,
+  memoryReviewQueue?: MemoryReviewJobStore,
+  deploymentControl?: DeploymentControl,
+) {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -103,6 +116,26 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
           sandboxExecNetworkEnabled: config?.sandboxExecNetworkEnabled,
           artifactObjectStorageEnabled: config ? isArtifactObjectStorageConfigured(config) : false,
         });
+      }
+
+      if (url.pathname === '/internal/deployment/status') {
+        if (!deploymentControl || !isLoopbackRequest(req)) return json(res, 404, { error: 'Not found' });
+        if (req.method === 'GET') return json(res, 200, deploymentControl.status());
+        return json(res, 405, { error: 'Method not allowed' });
+      }
+
+      if (url.pathname === '/internal/deployment/drain') {
+        if (!deploymentControl || !isLoopbackRequest(req)) return json(res, 404, { error: 'Not found' });
+        if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
+        deploymentControl.beginDrain();
+        return json(res, 200, deploymentControl.status());
+      }
+
+      if (url.pathname === '/internal/deployment/activate') {
+        if (!deploymentControl || !isLoopbackRequest(req)) return json(res, 404, { error: 'Not found' });
+        if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
+        deploymentControl.activate();
+        return json(res, 200, deploymentControl.status());
       }
 
       if (req.method === 'GET' && url.pathname === '/productization') {
@@ -774,8 +807,14 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
         const body = await readJsonBody(req);
         if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
         const turnRequest = parseTurnStartRequest(body);
+        if (deploymentControl && !deploymentControl.beginDirectTurn()) {
+          return json(res, 503, {
+            error: 'This deployment is draining. Retry through the active deployment.',
+            code: 'DEPLOYMENT_DRAINING',
+          });
+        }
         if (url.searchParams.get('stream') === '1') {
-          return streamTurnStart(res, agent, turnRequest, config);
+          return streamTurnStart(res, agent, turnRequest, config, () => deploymentControl?.endDirectTurn());
         }
 
         let persisted: PersistedAgentTurnInput | null = null;
@@ -844,6 +883,8 @@ export function createHttpServer(agent: PersonalMainAgent, config?: ServerConfig
             ));
           }
           throw error;
+        } finally {
+          deploymentControl?.endDirectTurn();
         }
       }
 
@@ -1070,7 +1111,8 @@ function streamTurnStart(
     allowedAgents?: string[];
     metadata?: Record<string, unknown>;
   },
-  config?: ServerConfig
+  config?: ServerConfig,
+  onFinished?: () => void,
 ) {
   let closed = false;
   const write = (payload: unknown) => {
@@ -1202,6 +1244,7 @@ function streamTurnStart(
         },
       });
     } finally {
+      onFinished?.();
       if (runHeartbeat) clearInterval(runHeartbeat);
       clearInterval(heartbeat);
       if (!closed) {

@@ -137,9 +137,21 @@ The remote script then:
 
 1. installs an immutable `git-<commit>` Skill release;
 2. pulls the requested ACR image (`latest` by default);
-3. switches `/data/altselfs-expert-skills/current` to that release;
-4. force-recreates the container so Docker resolves the new read-only mount;
-5. waits for container health and restores the previous Skill/image pair on failure.
+3. starts the inactive blue/green container with that exact Skill directory in
+   standby and waits for health;
+4. stops the active Worker from claiming new tasks and atomically points the
+   stable gateway at the new color;
+5. activates the new Worker immediately, then waits for the old color's existing
+   work to drain before stopping it;
+6. updates `/data/altselfs-expert-skills/current` only after the new color is
+   active.
+
+Deployment state is stored at `/data/altselfs-agent-deployment/active-color`.
+The old color remains available for rollback until its existing work has
+finished. `DEPLOY_DRAIN_TIMEOUT_SECONDS` defaults to 90 minutes; if it expires,
+the new color remains active and the old draining container is deliberately left
+running instead of being killed. The next deployment waits for that inactive
+slot to become drain-safe before reusing it.
 
 The ECS host does not rebuild images. `IMAGE_TAG` can override `latest` when an
 immutable ACR tag is available.
