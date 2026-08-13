@@ -43,6 +43,7 @@ services/personal-agent-server/dist/
 
 /src/generated/prisma
 external_solutions/
+previews/
 
 # Database
 /prisma/dev.db
