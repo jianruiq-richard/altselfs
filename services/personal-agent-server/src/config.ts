@@ -504,7 +504,7 @@ export function loadConfig(): ServerConfig {
     codexModel,
     codexModelProvider,
     codexApiYiBaseUrl: readEnv('CODEX_APIYI_BASE_URL', 'https://vip.apiyi.com/v1'),
-    codexApiYiApiKeyEnv: readEnv('CODEX_APIYI_API_KEY_ENV', hermesApiKeyEnv),
+    codexApiYiApiKeyEnv: readEnv('CODEX_APIYI_API_KEY_ENV', 'CODEX_APIYI_API_KEY'),
     codexOpenAiAuthJsonPath: process.env.CODEX_OPENAI_AUTH_JSON_PATH?.trim() || undefined,
     codexOpenAiProxyUrl: process.env.CODEX_OPENAI_PROXY_URL?.trim() || undefined,
     codexOpenAiAuthHealthCheckEnabled: readBoolEnv('CODEX_OPENAI_AUTH_HEALTH_CHECK_ENABLED', true),

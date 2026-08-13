@@ -224,7 +224,7 @@ HERMES_BASE_URL=https://vip.apiyi.com/v1 \
 HERMES_API_KEY_ENV=APIYI_API_KEY \
 CODEX_MODEL_PROVIDER=apiyi \
 CODEX_APIYI_BASE_URL=https://vip.apiyi.com/v1 \
-CODEX_APIYI_API_KEY_ENV=APIYI_API_KEY \
+CODEX_APIYI_API_KEY_ENV=CODEX_APIYI_API_KEY \
 CODEX_MODEL=gpt-5.5 \
 CODEX_MODEL_CONTEXT_WINDOW=128000 \
 CODEX_MODEL_AUTO_COMPACT_TOKEN_LIMIT=64000 \
@@ -235,8 +235,11 @@ npx tsx services/personal-agent-server/src/index.ts
 ```
 
 `CODEX_MODEL_PROVIDER=apiyi` runs Codex against APIYi's Responses-compatible
-endpoint with `APIYI_API_KEY`. The existing ChatGPT login is retained: switch
-the value back to `openai` and restart to return to the OAuth-backed provider.
+endpoint. Set `APIYI_API_KEY` to the Hermes ClaudeCode-group credential and
+`CODEX_APIYI_API_KEY` to a separate credential whose group serves the selected
+GPT model (for example Default, CodexResponses, or CodexReverse). The existing
+ChatGPT login is retained: switch the provider back to `openai` and restart to
+return to the OAuth-backed provider.
 
 Codex model metadata can be supplied per model so OpenRouter model slugs still
 have explicit context and compaction limits even when Codex does not know the

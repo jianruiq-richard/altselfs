@@ -135,7 +135,7 @@ writable_roots = ["${workspace}"]
 [model_providers.apiyi]
 name = "APIYi"
 base_url = "${process.env.CODEX_APIYI_BASE_URL || "https://vip.apiyi.com/v1"}"
-env_key = "${process.env.CODEX_APIYI_API_KEY_ENV || "APIYI_API_KEY"}"
+env_key = "${process.env.CODEX_APIYI_API_KEY_ENV || "CODEX_APIYI_API_KEY"}"
 wire_api = "responses"
 requires_openai_auth = false
 `;
