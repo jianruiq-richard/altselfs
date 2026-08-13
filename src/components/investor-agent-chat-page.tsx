@@ -4511,12 +4511,6 @@ export function InvestorAgentChatPage() {
         onChange={(event) => setInput(event.target.value)}
         placeholder={variant === 'starter' ? `Ask ${productBrand.name} to research, decide, or build a plan...` : 'Ask your AI cofounder anything...'}
         rows={3}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            void handleSend();
-          }
-        }}
         className={`block w-full resize-none bg-transparent px-4 py-3 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 ${variant === 'starter' ? 'h-[112px]' : 'h-[76px]'}`}
       />
       <div className="flex items-center justify-between gap-3 px-2.5 pb-2.5">

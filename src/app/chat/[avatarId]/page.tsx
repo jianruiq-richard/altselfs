@@ -208,12 +208,6 @@ export default function ChatPage() {
               placeholder="Type your message..."
               className="min-h-[7rem] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-h-0 sm:py-2"
               rows={3}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage(e);
-                }
-              }}
             />
             <button
               type="submit"

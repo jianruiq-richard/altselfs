@@ -350,12 +350,6 @@ export function AstromarDashboardClient({
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  openDiscussion();
-                }
-              }}
               className="block h-[76px] w-full resize-none bg-transparent px-4 py-3 text-base text-zinc-100 outline-none placeholder:text-zinc-600"
               placeholder="What should we decide, research, or move forward?"
             />
