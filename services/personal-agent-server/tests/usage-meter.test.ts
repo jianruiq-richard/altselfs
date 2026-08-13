@@ -69,6 +69,92 @@ test('sums current-run Codex last-token usage from native JSONL events', async (
   });
 });
 
+test('keeps OpenAI Codex billing on the ChatGPT usage-credit rate card', async () => {
+  const startedAtMs = Date.now();
+  const codexHome = await createCodexHome(startedAtMs, [
+    tokenEvent(startedAtMs + 100, 1_000_000, 800_000, 100_000, 20_000),
+  ]);
+
+  const usage = await buildAgentRunUsage({
+    config: billingConfig(),
+    runId: 'run-openai-codex',
+    hermesHome: path.join(codexHome, 'missing-hermes-home'),
+    hermesSessionId: null,
+    hermesBefore: emptyHermesUsage(),
+    hermesModel: 'claude-sonnet-4-6',
+    hermesProvider: 'apiyi',
+    codexHome,
+    codexModel: 'gpt-5.5',
+    codexProvider: 'openai',
+    startedAtMs,
+  });
+
+  assert.equal(usage.codex.provider, 'openai');
+  assert.equal(usage.codex.billingBasis, 'chatgpt_usage_credits');
+  assert.equal(usage.codex.openAiUsageCredits, 110);
+  assert.equal(usage.codex.billedCostUsd, 0);
+  assert.equal(usage.codex.credits, 825);
+  assert.equal(usage.codex.pricing?.source, 'openai-chatgpt-rate-card');
+});
+
+test('prices APIYI Codex calls independently across the long-context boundary', async () => {
+  const startedAtMs = Date.now();
+  const codexHome = await createCodexHome(startedAtMs, [
+    tokenEvent(startedAtMs + 100, 278_528, 0, 0, 0),
+    tokenEvent(startedAtMs + 200, 278_529, 0, 0, 0),
+  ]);
+
+  const usage = await buildAgentRunUsage({
+    config: billingConfig(),
+    runId: 'run-apiyi-codex-boundary',
+    hermesHome: path.join(codexHome, 'missing-hermes-home'),
+    hermesSessionId: null,
+    hermesBefore: emptyHermesUsage(),
+    hermesModel: 'claude-sonnet-4-6',
+    hermesProvider: 'apiyi',
+    codexHome,
+    codexModel: 'gpt-5.5',
+    codexProvider: 'apiyi',
+    startedAtMs,
+  });
+
+  assert.equal(usage.codex.provider, 'apiyi');
+  assert.equal(usage.codex.billingBasis, 'provider_usd');
+  assert.equal(usage.codex.openAiUsageCredits, 0);
+  assert.equal(usage.codex.longContextModelCallCount, 1);
+  assert.ok(Math.abs(usage.codex.billedCostUsd - 4.17793) < 1e-12);
+  assert.equal(usage.codex.credits, 8_356);
+  assert.equal(usage.codex.pricing?.source, 'apiyi-tiered-rate-card');
+});
+
+test('does not treat aggregate APIYI Codex usage as one long-context call', async () => {
+  const startedAtMs = Date.now();
+  const codexHome = await createCodexHome(startedAtMs, [
+    tokenEvent(startedAtMs + 100, 150_000, 50_000, 5_000, 0),
+    tokenEvent(startedAtMs + 200, 150_000, 50_000, 5_000, 0),
+  ]);
+
+  const usage = await buildAgentRunUsage({
+    config: billingConfig(),
+    runId: 'run-apiyi-codex-short-calls',
+    hermesHome: path.join(codexHome, 'missing-hermes-home'),
+    hermesSessionId: null,
+    hermesBefore: emptyHermesUsage(),
+    hermesModel: 'claude-sonnet-4-6',
+    hermesProvider: 'apiyi',
+    codexHome,
+    codexModel: 'gpt-5.5',
+    codexProvider: 'apiyi',
+    startedAtMs,
+  });
+
+  assert.equal(usage.codex.inputTokens, 300_000);
+  assert.equal(usage.codex.modelCallCount, 2);
+  assert.equal(usage.codex.longContextModelCallCount, 0);
+  assert.ok(Math.abs(usage.codex.billedCostUsd - 1.35) < 1e-12);
+  assert.equal(usage.codex.credits, 2_700);
+});
+
 test('prices APIYI Claude usage locally when Hermes reports no provider cost', async () => {
   const root = await createHermesStateDb({
     inputTokens: 3,
@@ -257,7 +343,7 @@ test('uses OpenRouter per-call actual costs instead of the Hermes state estimate
     startedAtMs: Date.now(),
   });
 
-  assert.equal(usage.pricingVersion, '2026-07-v4');
+  assert.equal(usage.pricingVersion, '2026-08-v5');
   assert.equal(usage.hermes.costSource, 'provider_actual');
   assert.ok(Math.abs(usage.hermes.actualCostUsd - 0.00508) < 1e-12);
   assert.ok(Math.abs(usage.hermes.billedCostUsd - 0.00508) < 1e-12);
@@ -393,7 +479,26 @@ function billingConfig() {
     codexUsageCachedInputRate: 12.5,
     codexUsageOutputRate: 750,
     codexUsageCreditMultiplier: 7.5,
+    codexApiyiUncachedInputRate: 5,
+    codexApiyiCachedInputRate: 0.5,
+    codexApiyiOutputRate: 30,
+    codexApiyiLongContextThreshold: 278_528,
+    codexApiyiLongUncachedInputRate: 10,
+    codexApiyiLongCachedInputRate: 1,
+    codexApiyiLongOutputRate: 45,
   } as ServerConfig;
+}
+
+async function createCodexHome(startedAtMs: number, events: unknown[]) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'altselfs-priced-codex-'));
+  const sessionDir = path.join(root, 'sessions', '2026', '08', '13');
+  await fs.mkdir(sessionDir, { recursive: true });
+  await fs.writeFile(
+    path.join(sessionDir, 'rollout.jsonl'),
+    `${events.map(JSON.stringify).join('\n')}\n`,
+  );
+  await fs.utimes(sessionDir, new Date(startedAtMs), new Date(startedAtMs));
+  return root;
 }
 
 function tokenEvent(

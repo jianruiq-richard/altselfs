@@ -6,10 +6,11 @@ import type { ServerConfig } from './config.js';
 import { isRecord } from './util.js';
 
 const execFileAsync = promisify(execFile);
-export const AGENT_PRICING_VERSION = '2026-07-v4';
+export const AGENT_PRICING_VERSION = '2026-08-v5';
 
 type HermesCostSource = 'provider_actual' | 'provider_estimated' | 'local_pricing' | 'unavailable';
 type CacheWriteTierSource = 'provider_detail' | 'apiyi_channel_fallback_5m' | 'none';
+type CodexBillingBasis = 'chatgpt_usage_credits' | 'provider_usd' | 'none';
 
 type HermesPricingSnapshot = {
   source: 'apiyi-claude-sonnet-4-6';
@@ -19,6 +20,23 @@ type HermesPricingSnapshot = {
   cacheWrite5mUsdPerMillion: number;
   cacheWrite1hUsdPerMillion: number;
   multiplier: number;
+};
+
+type CodexPricingSnapshot = {
+  source: 'openai-chatgpt-rate-card' | 'legacy-chatgpt-rate-card';
+  uncachedInputCreditsPerMillion: number;
+  cachedInputCreditsPerMillion: number;
+  outputCreditsPerMillion: number;
+  creditMultiplier: number;
+} | {
+  source: 'apiyi-tiered-rate-card';
+  uncachedInputUsdPerMillion: number;
+  cachedInputUsdPerMillion: number;
+  outputUsdPerMillion: number;
+  longContextThreshold: number;
+  longUncachedInputUsdPerMillion: number;
+  longCachedInputUsdPerMillion: number;
+  longOutputUsdPerMillion: number;
 };
 
 export type HermesUsageSnapshot = {
@@ -62,6 +80,11 @@ export type AgentRunUsage = {
   };
   codex: CodexUsageSnapshot & {
     model: string;
+    provider: string;
+    billingBasis: CodexBillingBasis;
+    billedCostUsd: number;
+    longContextModelCallCount: number;
+    pricing: CodexPricingSnapshot | null;
     openAiUsageCredits: number;
     credits: number;
   };
@@ -136,8 +159,13 @@ export async function readHermesUsageSnapshot(
 }
 
 export async function readCodexUsageSince(codexHome: string, startedAtMs: number): Promise<CodexUsageSnapshot> {
+  return (await readCodexUsageDetailsSince(codexHome, startedAtMs)).usage;
+}
+
+async function readCodexUsageDetailsSince(codexHome: string, startedAtMs: number) {
   const files = await findRecentJsonlFiles(path.join(codexHome, 'sessions'), startedAtMs);
   const usage = { ...EMPTY_CODEX_USAGE };
+  const modelCalls: CodexUsageSnapshot[] = [];
 
   for (const file of files) {
     const text = await fs.readFile(file, 'utf8').catch(() => '');
@@ -157,6 +185,7 @@ export async function readCodexUsageSince(codexHome: string, startedAtMs: number
       const last = normalizeCodexUsage(payload.info.last_token_usage);
       if (last && hasUsage(last)) {
         addCodexUsage(usage, last);
+        modelCalls.push(last);
         usage.modelCallCount += 1;
         continue;
       }
@@ -164,13 +193,15 @@ export async function readCodexUsageSince(codexHome: string, startedAtMs: number
       const total = normalizeCodexUsage(payload.info.total_token_usage);
       if (!total) continue;
       if (previousTotal) {
-        addCodexUsage(usage, subtractCodexUsage(total, previousTotal));
+        const modelCall = subtractCodexUsage(total, previousTotal);
+        addCodexUsage(usage, modelCall);
+        modelCalls.push(modelCall);
         usage.modelCallCount += 1;
       }
       previousTotal = total;
     }
   }
-  return usage;
+  return { usage, modelCalls };
 }
 
 export async function buildAgentRunUsage(input: {
@@ -185,12 +216,13 @@ export async function buildAgentRunUsage(input: {
   hermesProvider: string;
   codexHome: string;
   codexModel: string;
+  codexProvider?: string;
   startedAtMs: number;
 }): Promise<AgentRunUsage> {
-  const [hermesAfter, detailedHermes, codex] = await Promise.all([
+  const [hermesAfter, detailedHermes, codexDetails] = await Promise.all([
     readHermesUsageSnapshot(input.hermesHome, input.hermesSessionId),
     readHermesUsageLog(input.hermesUsageLogPath),
-    readCodexUsageSince(input.codexHome, input.startedAtMs),
+    readCodexUsageDetailsSince(input.codexHome, input.startedAtMs),
   ]);
   const stateDelta = subtractHermesUsage(hermesAfter, input.hermesBefore);
   const hermes = detailedHermes.apiCallCount > 0
@@ -208,13 +240,13 @@ export async function buildAgentRunUsage(input: {
     input.hermesModel,
     input.hermesProvider,
   );
-  const uncachedInputTokens = Math.max(0, codex.inputTokens - codex.cachedInputTokens);
-  const openAiUsageCredits = (
-    (uncachedInputTokens / 1_000_000) * input.config.codexUsageUncachedInputRate +
-    (codex.cachedInputTokens / 1_000_000) * input.config.codexUsageCachedInputRate +
-    (codex.outputTokens / 1_000_000) * input.config.codexUsageOutputRate
+  const pricedCodex = priceCodexUsage(
+    input.config,
+    codexDetails.usage,
+    codexDetails.modelCalls,
+    input.codexModel,
+    input.codexProvider,
   );
-  const codexCredits = Math.ceil(openAiUsageCredits * input.config.codexUsageCreditMultiplier);
 
   return {
     version: 'v2',
@@ -223,15 +255,10 @@ export async function buildAgentRunUsage(input: {
     sourceRunId: input.runId,
     taskLabel: normalizeTaskLabel(input.taskLabel),
     hermes: pricedHermes,
-    codex: {
-      ...codex,
-      model: input.codexModel,
-      openAiUsageCredits,
-      credits: codexCredits,
-    },
+    codex: pricedCodex,
     totalCredits: Math.max(
       input.config.creditsMinimumRunCharge,
-      pricedHermes.credits + codexCredits,
+      pricedHermes.credits + pricedCodex.credits,
     ),
   };
 }
@@ -263,10 +290,104 @@ export function buildMemoryReviewUsage(input: {
     codex: {
       ...EMPTY_CODEX_USAGE,
       model: '',
+      provider: '',
+      billingBasis: 'none',
+      billedCostUsd: 0,
+      longContextModelCallCount: 0,
+      pricing: null,
       openAiUsageCredits: 0,
       credits: 0,
     },
     totalCredits: pricedHermes.credits,
+  };
+}
+
+function priceCodexUsage(
+  config: ServerConfig,
+  usage: CodexUsageSnapshot,
+  modelCalls: CodexUsageSnapshot[],
+  model: string,
+  provider: string | undefined,
+): AgentRunUsage['codex'] {
+  const normalizedProvider = provider?.trim().toLowerCase() || 'openai';
+  if (normalizedProvider === 'apiyi') {
+    const pricing: Extract<CodexPricingSnapshot, { source: 'apiyi-tiered-rate-card' }> = {
+      source: 'apiyi-tiered-rate-card',
+      uncachedInputUsdPerMillion: nonNegativeNumber(config.codexApiyiUncachedInputRate),
+      cachedInputUsdPerMillion: nonNegativeNumber(config.codexApiyiCachedInputRate),
+      outputUsdPerMillion: nonNegativeNumber(config.codexApiyiOutputRate),
+      longContextThreshold: Math.floor(nonNegativeNumber(config.codexApiyiLongContextThreshold)),
+      longUncachedInputUsdPerMillion: nonNegativeNumber(config.codexApiyiLongUncachedInputRate),
+      longCachedInputUsdPerMillion: nonNegativeNumber(config.codexApiyiLongCachedInputRate),
+      longOutputUsdPerMillion: nonNegativeNumber(config.codexApiyiLongOutputRate),
+    };
+    const effectiveCalls = modelCalls.length > 0
+      ? modelCalls
+      : hasUsage(usage) ? [usage] : [];
+    let billedCostUsd = 0;
+    let longContextModelCallCount = 0;
+    for (const call of effectiveCalls) {
+      const isLongContext = call.inputTokens > pricing.longContextThreshold;
+      if (isLongContext) longContextModelCallCount += 1;
+      const uncachedInputTokens = Math.max(0, call.inputTokens - call.cachedInputTokens);
+      billedCostUsd += (
+        uncachedInputTokens * (
+          isLongContext
+            ? pricing.longUncachedInputUsdPerMillion
+            : pricing.uncachedInputUsdPerMillion
+        ) +
+        call.cachedInputTokens * (
+          isLongContext
+            ? pricing.longCachedInputUsdPerMillion
+            : pricing.cachedInputUsdPerMillion
+        ) +
+        call.outputTokens * (
+          isLongContext
+            ? pricing.longOutputUsdPerMillion
+            : pricing.outputUsdPerMillion
+        )
+      ) / 1_000_000;
+    }
+    return {
+      ...usage,
+      model,
+      provider: normalizedProvider,
+      billingBasis: 'provider_usd',
+      billedCostUsd,
+      longContextModelCallCount,
+      pricing,
+      openAiUsageCredits: 0,
+      credits: Math.ceil(billedCostUsd * config.creditsPerUsd * config.creditsCostMarkup),
+    };
+  }
+
+  const uncachedInputTokens = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
+  const openAiUsageCredits = (
+    (uncachedInputTokens / 1_000_000) * config.codexUsageUncachedInputRate +
+    (usage.cachedInputTokens / 1_000_000) * config.codexUsageCachedInputRate +
+    (usage.outputTokens / 1_000_000) * config.codexUsageOutputRate
+  );
+  const pricing: Extract<CodexPricingSnapshot, {
+    source: 'openai-chatgpt-rate-card' | 'legacy-chatgpt-rate-card';
+  }> = {
+    source: normalizedProvider === 'openai'
+      ? 'openai-chatgpt-rate-card'
+      : 'legacy-chatgpt-rate-card',
+    uncachedInputCreditsPerMillion: nonNegativeNumber(config.codexUsageUncachedInputRate),
+    cachedInputCreditsPerMillion: nonNegativeNumber(config.codexUsageCachedInputRate),
+    outputCreditsPerMillion: nonNegativeNumber(config.codexUsageOutputRate),
+    creditMultiplier: nonNegativeNumber(config.codexUsageCreditMultiplier),
+  };
+  return {
+    ...usage,
+    model,
+    provider: normalizedProvider,
+    billingBasis: 'chatgpt_usage_credits',
+    billedCostUsd: 0,
+    longContextModelCallCount: 0,
+    pricing,
+    openAiUsageCredits,
+    credits: Math.ceil(openAiUsageCredits * config.codexUsageCreditMultiplier),
   };
 }
 

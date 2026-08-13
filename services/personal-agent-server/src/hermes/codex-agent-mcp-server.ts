@@ -5,6 +5,7 @@ import path from 'node:path';
 import { loadConfig, type ServerConfig } from '../config.js';
 import { PRODUCT_BRAND } from '../brand.js';
 import { CodexJsonRpcClient } from '../codex/json-rpc-client.js';
+import { resolveCodexModelSelection, type CodexModelSelection } from '../codex/model-provider.js';
 import { projectCodexNotification } from '../codex/event-projector.js';
 import {
   CodexOpenAiAuthHealthError,
@@ -44,13 +45,6 @@ import {
   HERMES_UPDATE_PLAN_TOOL_NAME,
   parseHermesPlanUpdate,
 } from './hermes-progress.js';
-
-type CodexModelProvider = 'openai' | 'openrouter';
-
-type CodexModelSelection = {
-  model?: string;
-  provider?: CodexModelProvider;
-};
 
 type McpMessage = {
   jsonrpc?: string;
@@ -286,7 +280,10 @@ async function runCodexAgentTool(argumentsValue: unknown) {
   const config = loadConfig();
   const runtime = readRuntimeEnv();
   const selectedModel = normalizeCodexModel(process.env.ALTSELFS_CODEX_MODEL?.trim() || config.codexModel);
-  const modelSelection = resolveCodexModelSelection(config, selectedModel);
+  const modelSelection = resolveCodexModelSelection(
+    selectedModel,
+    process.env.ALTSELFS_CODEX_MODEL_PROVIDER || config.codexModelProvider
+  );
   const localEnvironmentDisabled = config.disableLocalEnvironmentForGeneral;
   const requestedMode = toolArgs.mode || normalizeCodexDelegationMode(runtime.selectedAgentProfileId) || 'general';
   const developerInstructions = buildCodexDeveloperInstructions();
@@ -940,16 +937,6 @@ function requireEnv(key: string) {
   return value;
 }
 
-function resolveCodexModelSelection(config: ServerConfig, model?: string): CodexModelSelection {
-  const configuredProvider = normalizeCodexProvider(process.env.ALTSELFS_CODEX_MODEL_PROVIDER || config.codexModelProvider);
-  if (model === 'gpt-5.5') return { model, provider: 'openai' };
-  if (model === 'deepseek/deepseek-v3.2') return { model, provider: 'openrouter' };
-  return {
-    model,
-    provider: configuredProvider || (model ? 'openrouter' : undefined),
-  };
-}
-
 function normalizeCodexModel(model?: string) {
   const value = model?.trim();
   if (!value) return undefined;
@@ -965,13 +952,11 @@ function normalizeCodexModel(model?: string) {
   return value;
 }
 
-function normalizeCodexProvider(provider?: string): CodexModelProvider | undefined {
-  const value = provider?.trim().toLowerCase();
-  if (value === 'openai' || value === 'openrouter') return value;
-  return undefined;
-}
-
-function buildCodexProcessEnv(config: ServerConfig, selection: CodexModelSelection, noProxy: string) {
+function buildCodexProcessEnv(
+  config: ServerConfig,
+  selection: CodexModelSelection,
+  noProxy: string
+) {
   if (selection.provider !== 'openai' || !config.codexOpenAiProxyUrl) return undefined;
   const proxyUrl = config.codexOpenAiProxyUrl;
   return {

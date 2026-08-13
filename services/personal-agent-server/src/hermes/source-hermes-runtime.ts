@@ -12,6 +12,11 @@ import {
 import { collectGeneratedWorkspaceArtifacts, ingestWorkspaceAttachments } from '../artifact-ingestion.js';
 import { PRODUCT_BRAND } from '../brand.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
+import {
+  resolveCodexModelSelection,
+  type CodexModelProvider,
+  type CodexModelSelection,
+} from '../codex/model-provider.js';
 import type { MemoryReviewJobStore } from '../memory-review-queue.js';
 import { listPersonalConnections } from '../personal-data-store.js';
 import { createPersonalDataDynamictools } from '../tools/personal-data.js';
@@ -37,13 +42,6 @@ import type { AgentEvent, SourceAgentRunResult, TurnStartRequest } from '../type
 import { buildAgentRunUsage, readHermesUsageSnapshot } from '../usage-meter.js';
 import { id, isRecord, nowIso, safeJson, truncate } from '../util.js';
 import { resolveHermesApiKey, resolveHermesModelSelection, type HermesModelSelection } from './llm-provider.js';
-
-type CodexModelProvider = 'openai' | 'openrouter';
-
-type CodexModelSelection = {
-  model?: string;
-  provider?: CodexModelProvider;
-};
 
 export const HERMES_PROMPT_CACHE_TTL = '1h';
 export const ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV = 'ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT';
@@ -105,7 +103,7 @@ export class HermesSourceRuntime {
     const { hermesHome, codexHome, workspace } = runtimePaths;
     const hermesUsageLogPath = path.join(workspace, '.altselfs-runtime', `hermes-usage-${runId}.jsonl`);
     const selectedCodexModel = resolveSelectedCodexModel(this.config, request);
-    const codexModelSelection = resolveCodexModelSelection(this.config, selectedCodexModel);
+    const codexModelSelection = resolveCodexModelSelection(selectedCodexModel, this.config.codexModelProvider);
     const hermesModelSelection = resolveHermesModelSelection(this.config, request.metadata?.hermesModel);
     const runtimeStatePaths = { hermesHome, codexHome, workspace };
     const codexLocalEnvironmentDisabled = this.config.disableLocalEnvironmentForGeneral;
@@ -432,6 +430,7 @@ export class HermesSourceRuntime {
       hermesProvider: hermesModelSelection.provider,
       codexHome,
       codexModel: codexModelSelection.model || this.config.codexModel || 'gpt-5.5',
+      codexProvider: codexModelSelection.provider,
       startedAtMs,
     });
     const hermesUsageCalls = await readHermesUsageCallRecords(hermesUsageLogPath);
@@ -458,6 +457,10 @@ export class HermesSourceRuntime {
       totalCredits: usage.totalCredits,
       hermesCredits: usage.hermes.credits,
       codexCredits: usage.codex.credits,
+      codexProvider: usage.codex.provider,
+      codexBillingBasis: usage.codex.billingBasis,
+      codexBilledCostUsd: roundMoney(usage.codex.billedCostUsd),
+      codexLongContextModelCallCount: usage.codex.longContextModelCallCount,
     });
     await emit('hermes.source_runtime.completed', {
       sessionId: sessionId || null,
@@ -640,6 +643,35 @@ export class HermesSourceRuntime {
           `writable_roots = [${tomlString(paths.workspace)}]`,
           '',
         ].filter(Boolean).join('\n'),
+        'utf8'
+      );
+      return;
+    }
+
+    if (provider === 'apiyi') {
+      await fs.writeFile(
+        configPath,
+        [
+          `model = ${tomlString(model)}`,
+          'model_provider = "apiyi"',
+          `web_search = ${tomlString(this.config.codexWebSearchMode)}`,
+          'sandbox_mode = "workspace-write"',
+          'approval_policy = "never"',
+          'disable_response_storage = true',
+          ...codexModelMetadataLines(metadata),
+          '',
+          '[sandbox_workspace_write]',
+          'network_access = true',
+          `writable_roots = [${tomlString(paths.workspace)}]`,
+          '',
+          '[model_providers.apiyi]',
+          'name = "APIYi"',
+          `base_url = ${tomlString(this.config.codexApiYiBaseUrl)}`,
+          `env_key = ${tomlString(this.config.codexApiYiApiKeyEnv)}`,
+          'wire_api = "responses"',
+          'requires_openai_auth = false',
+          '',
+        ].join('\n'),
         'utf8'
       );
       return;
@@ -1160,6 +1192,8 @@ function buildCodexMcpEnvEntries(config: ServerConfig, selection: CodexModelSele
   set('CODEX_OPENAI_AUTH_HEALTH_CHECK_INTERVAL_MS', String(config.codexOpenAiAuthHealthCheckIntervalMs));
   set('CODEX_OPENAI_AUTH_HEALTH_CHECK_TIMEOUT_MS', String(config.codexOpenAiAuthHealthCheckTimeoutMs));
   set('CODEX_WEB_SEARCH_MODE', config.codexWebSearchMode);
+  set('CODEX_APIYI_BASE_URL', config.codexApiYiBaseUrl);
+  set('CODEX_APIYI_API_KEY_ENV', config.codexApiYiApiKeyEnv);
   set('OPENROUTER_BASE_URL', config.openRouterBaseUrl);
   set('OPENROUTER_API_KEY_ENV', config.openRouterApiKeyEnv);
   set('OPENROUTER_APP_TITLE', config.openRouterAppTitle);
@@ -1192,6 +1226,7 @@ function buildCodexMcpEnvEntries(config: ServerConfig, selection: CodexModelSele
   refIfPresent('CREDENTIAL_VAULT_MASTER_KEY_FILE');
   refIfPresent('CREDENTIAL_VAULT_MASTER_KEY_BASE64');
   refIfPresent('CREDENTIAL_VAULT_KEY_VERSION');
+  refIfPresent(config.codexApiYiApiKeyEnv);
   refIfPresent(config.openRouterApiKeyEnv);
   refIfPresent(config.rapidApiKeyEnv);
   refIfPresent(config.serpApiKeyEnv);
@@ -1539,16 +1574,6 @@ function resolveSelectedCodexModel(config: ServerConfig, request: TurnStartReque
   return normalizeCodexModel(typeof requested === 'string' && requested.trim() ? requested.trim() : config.codexModel);
 }
 
-function resolveCodexModelSelection(config: ServerConfig, model?: string): CodexModelSelection {
-  const configuredProvider = normalizeCodexProvider(config.codexModelProvider);
-  if (model === 'gpt-5.5') return { model, provider: 'openai' };
-  if (model === 'deepseek/deepseek-v3.2') return { model, provider: 'openrouter' };
-  return {
-    model,
-    provider: configuredProvider || (model ? 'openrouter' : undefined),
-  };
-}
-
 function normalizeCodexModel(model?: string) {
   const value = model?.trim();
   if (!value) return undefined;
@@ -1562,12 +1587,6 @@ function normalizeCodexModel(model?: string) {
     return 'deepseek/deepseek-v3.2';
   }
   return value;
-}
-
-function normalizeCodexProvider(provider?: string): CodexModelProvider | undefined {
-  const value = provider?.trim().toLowerCase();
-  if (value === 'openai' || value === 'openrouter') return value;
-  return undefined;
 }
 
 function resolveCodexModelMetadata(config: ServerConfig, model?: string): CodexModelMetadata {

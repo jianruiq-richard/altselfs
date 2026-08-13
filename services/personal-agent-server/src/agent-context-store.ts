@@ -48,6 +48,7 @@ export type AgentTurnQueueLimits = {
   maxPerThread: number;
   maxOpenAi: number;
   maxOpenRouter: number;
+  maxApiYi: number;
 };
 
 export type QueuedAgentTurn = {
@@ -430,20 +431,24 @@ export async function claimNextQueuedAgentTurn(
       'and (r.next_attempt_at is null or r.next_attempt_at <= now())',
       "and (select count(*) from agent_context_runs g where g.status in ('RUNNING', 'CANCELLING')) < $3",
       'and (',
-      '  coalesce(r.model_provider, $11) <> $4',
+      '  coalesce(r.model_provider, $13) <> $4',
       "  or (select count(*) from agent_context_runs o where o.status in ('RUNNING', 'CANCELLING') and o.model_provider = $4) < $5",
       ')',
       'and (',
-      '  coalesce(r.model_provider, $11) <> $6',
+      '  coalesce(r.model_provider, $13) <> $6',
       "  or (select count(*) from agent_context_runs o where o.status in ('RUNNING', 'CANCELLING') and o.model_provider = $6) < $7",
       ')',
       'and (',
-      '  $8 <= 0',
-      "  or (select count(*) from agent_context_runs u where u.status in ('RUNNING', 'CANCELLING') and u.investor_id = r.investor_id) < $8",
+      '  coalesce(r.model_provider, $13) <> $8',
+      "  or (select count(*) from agent_context_runs o where o.status in ('RUNNING', 'CANCELLING') and o.model_provider = $8) < $9",
       ')',
       'and (',
-      '  $9 <= 0',
-      "  or (select count(*) from agent_context_runs t where t.status in ('RUNNING', 'CANCELLING') and t.thread_id = r.thread_id) < $9",
+      '  $10 <= 0',
+      "  or (select count(*) from agent_context_runs u where u.status in ('RUNNING', 'CANCELLING') and u.investor_id = r.investor_id) < $10",
+      ')',
+      'and (',
+      '  $11 <= 0',
+      "  or (select count(*) from agent_context_runs t where t.status in ('RUNNING', 'CANCELLING') and t.thread_id = r.thread_id) < $11",
       ')',
       'and not exists (',
       '  select 1 from agent_context_runs e',
@@ -461,7 +466,7 @@ export async function claimNextQueuedAgentTurn(
       'worker_id = $1,',
       'worker_heartbeat_at = now(),',
       'attempt_count = coalesce(r.attempt_count, 0) + 1,',
-      'timeout_at = now() + ($10::bigint * interval \'1 millisecond\'),',
+      'timeout_at = now() + ($12::bigint * interval \'1 millisecond\'),',
       'updated_at = now()',
       'from candidate c',
       'where r.id = c.id',
@@ -475,6 +480,8 @@ export async function claimNextQueuedAgentTurn(
       Math.max(1, input.limits.maxOpenAi),
       'openrouter',
       Math.max(1, input.limits.maxOpenRouter),
+      'apiyi',
+      Math.max(1, input.limits.maxApiYi),
       Math.max(0, input.limits.maxPerUser),
       Math.max(0, input.limits.maxPerThread),
       Math.max(1_000, input.timeoutMs),

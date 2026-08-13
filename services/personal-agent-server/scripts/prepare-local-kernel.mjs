@@ -20,7 +20,7 @@ const hermesProviderMode = process.env.ALTSELFS_HERMES_PROVIDER_MODE || "apiyi";
 const codexModel = process.env.ALTSELFS_CODEX_MODEL || "gpt-5.5";
 const hermesModel = process.env.ALTSELFS_HERMES_MODEL || "claude-sonnet-4-6";
 const defaultHermesBaseUrl =
-  hermesProviderMode === "openrouter" ? "https://openrouter.ai/api/v1" : "https://api.apiyi.com/v1";
+  hermesProviderMode === "openrouter" ? "https://openrouter.ai/api/v1" : "https://vip.apiyi.com/v1";
 const defaultHermesApiKeyEnv = hermesProviderMode === "openrouter" ? "OPENROUTER_API_KEY" : "APIYI_API_KEY";
 const hermesBaseUrl = process.env.ALTSELFS_HERMES_BASE_URL || defaultHermesBaseUrl;
 const hermesApiKeyEnv = process.env.ALTSELFS_HERMES_API_KEY_ENV || defaultHermesApiKeyEnv;
@@ -121,8 +121,31 @@ network_access = true
 writable_roots = ["${workspace}"]
 `;
 
+const codexApiYiConfig = `model = "${codexModel}"
+model_provider = "apiyi"
+web_search = "live"
+sandbox_mode = "workspace-write"
+approval_policy = "never"
+disable_response_storage = true
+
+[sandbox_workspace_write]
+network_access = true
+writable_roots = ["${workspace}"]
+
+[model_providers.apiyi]
+name = "APIYi"
+base_url = "${process.env.CODEX_APIYI_BASE_URL || "https://vip.apiyi.com/v1"}"
+env_key = "${process.env.CODEX_APIYI_API_KEY_ENV || "APIYI_API_KEY"}"
+wire_api = "responses"
+requires_openai_auth = false
+`;
+
 const codexConfig =
-  codexProviderMode === "openai" ? codexOpenAiConfig : codexOpenRouterConfig;
+  codexProviderMode === "openai"
+    ? codexOpenAiConfig
+    : codexProviderMode === "apiyi"
+      ? codexApiYiConfig
+      : codexOpenRouterConfig;
 
 writeFileSync(join(hermesHome, "config.yaml"), hermesConfig, "utf8");
 writeFileSync(join(codexHome, "config.toml"), codexConfig, "utf8");

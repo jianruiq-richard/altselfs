@@ -22,6 +22,8 @@ export type ServerConfig = {
   workspaceRoot: string;
   codexModel?: string;
   codexModelProvider?: string;
+  codexApiYiBaseUrl: string;
+  codexApiYiApiKeyEnv: string;
   codexOpenAiAuthJsonPath?: string;
   codexOpenAiProxyUrl?: string;
   codexOpenAiAuthHealthCheckEnabled: boolean;
@@ -76,6 +78,7 @@ export type ServerConfig = {
   turnQueueMaxPerThread: number;
   turnQueueMaxOpenAi: number;
   turnQueueMaxOpenRouter: number;
+  turnQueueMaxApiYi: number;
   turnQueueRunTimeoutMs: number;
   turnQueueStaleHeartbeatMs: number;
   codexTurnTimeoutMs: number;
@@ -143,6 +146,13 @@ export type ServerConfig = {
   codexUsageCachedInputRate: number;
   codexUsageOutputRate: number;
   codexUsageCreditMultiplier: number;
+  codexApiyiUncachedInputRate: number;
+  codexApiyiCachedInputRate: number;
+  codexApiyiOutputRate: number;
+  codexApiyiLongContextThreshold: number;
+  codexApiyiLongUncachedInputRate: number;
+  codexApiyiLongCachedInputRate: number;
+  codexApiyiLongOutputRate: number;
 };
 
 export type CodexModelMetadata = {
@@ -467,14 +477,11 @@ export function loadConfig(): ServerConfig {
   const storageBackend = readStorageBackendEnv('STORAGE_BACKEND', 'file');
   const hermesModel = readEnv('HERMES_MODEL', 'claude-sonnet-4-6');
   const hermesProvider = readEnv('HERMES_PROVIDER', 'apiyi');
-  const hermesBaseUrl = readEnv('HERMES_BASE_URL', 'https://api.apiyi.com/v1');
+  const hermesBaseUrl = readEnv('HERMES_BASE_URL', 'https://vip.apiyi.com/v1');
   const hermesApiKeyEnv = readEnv('HERMES_API_KEY_ENV', 'APIYI_API_KEY');
   const openRouterApiKeyEnv = readEnv('OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY');
-  const hasOpenRouterKey = Boolean(process.env[openRouterApiKeyEnv]?.trim());
   const codexModel = process.env.CODEX_MODEL?.trim() || 'gpt-5.5';
-  const codexModelProvider = process.env.CODEX_MODEL_PROVIDER?.trim() || (
-    codexModel === 'gpt-5.5' ? 'openai' : hasOpenRouterKey ? 'openrouter' : undefined
-  );
+  const codexModelProvider = process.env.CODEX_MODEL_PROVIDER?.trim() || 'apiyi';
   const env = readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development');
   const config: ServerConfig = {
     port: readIntEnv('PORT', 8787),
@@ -496,6 +503,8 @@ export function loadConfig(): ServerConfig {
     workspaceRoot: path.resolve(readEnv('WORKSPACE_ROOT', '/tmp/altselfs-workspaces')),
     codexModel,
     codexModelProvider,
+    codexApiYiBaseUrl: readEnv('CODEX_APIYI_BASE_URL', 'https://vip.apiyi.com/v1'),
+    codexApiYiApiKeyEnv: readEnv('CODEX_APIYI_API_KEY_ENV', hermesApiKeyEnv),
     codexOpenAiAuthJsonPath: process.env.CODEX_OPENAI_AUTH_JSON_PATH?.trim() || undefined,
     codexOpenAiProxyUrl: process.env.CODEX_OPENAI_PROXY_URL?.trim() || undefined,
     codexOpenAiAuthHealthCheckEnabled: readBoolEnv('CODEX_OPENAI_AUTH_HEALTH_CHECK_ENABLED', true),
@@ -546,10 +555,11 @@ export function loadConfig(): ServerConfig {
     turnQueueCancelPollMs: readIntEnv('AGENT_TURN_CANCEL_POLL_MS', 1500),
     turnQueueCancelGraceMs: readIntEnv('AGENT_RUN_CANCEL_GRACE_MS', 5000),
     turnQueueMaxConcurrency: readIntEnv('AGENT_TURN_MAX_CONCURRENCY', 3),
-    turnQueueMaxPerUser: readIntEnv('AGENT_TURN_MAX_PER_USER', 20),
+    turnQueueMaxPerUser: readIntEnv('AGENT_TURN_MAX_PER_USER', 3),
     turnQueueMaxPerThread: readIntEnv('AGENT_TURN_MAX_PER_THREAD', 1),
-    turnQueueMaxOpenAi: readIntEnv('AGENT_TURN_MAX_OPENAI', 1),
-    turnQueueMaxOpenRouter: readIntEnv('AGENT_TURN_MAX_OPENROUTER', 2),
+    turnQueueMaxOpenAi: readIntEnv('AGENT_TURN_MAX_OPENAI', 3),
+    turnQueueMaxOpenRouter: readIntEnv('AGENT_TURN_MAX_OPENROUTER', 3),
+    turnQueueMaxApiYi: readIntEnv('AGENT_TURN_MAX_APIYI', 3),
     turnQueueRunTimeoutMs: readIntEnv('AGENT_TURN_RUN_TIMEOUT_MS', 80 * 60 * 1000),
     turnQueueStaleHeartbeatMs: readIntEnv('AGENT_TURN_STALE_HEARTBEAT_MS', 90 * 1000),
     codexTurnTimeoutMs: readIntEnv('CODEX_TURN_TIMEOUT_MS', 80 * 60 * 1000),
@@ -619,6 +629,13 @@ export function loadConfig(): ServerConfig {
     codexUsageCachedInputRate: readFloatEnv('CODEX_USAGE_CACHED_INPUT_RATE', 12.5),
     codexUsageOutputRate: readFloatEnv('CODEX_USAGE_OUTPUT_RATE', 750),
     codexUsageCreditMultiplier: readFloatEnv('CODEX_USAGE_CREDIT_MULTIPLIER', 7.5),
+    codexApiyiUncachedInputRate: readFloatEnv('CODEX_APIYI_UNCACHED_INPUT_RATE', 5),
+    codexApiyiCachedInputRate: readFloatEnv('CODEX_APIYI_CACHED_INPUT_RATE', 0.5),
+    codexApiyiOutputRate: readFloatEnv('CODEX_APIYI_OUTPUT_RATE', 30),
+    codexApiyiLongContextThreshold: readIntEnv('CODEX_APIYI_LONG_CONTEXT_THRESHOLD', 278_528),
+    codexApiyiLongUncachedInputRate: readFloatEnv('CODEX_APIYI_LONG_UNCACHED_INPUT_RATE', 10),
+    codexApiyiLongCachedInputRate: readFloatEnv('CODEX_APIYI_LONG_CACHED_INPUT_RATE', 1),
+    codexApiyiLongOutputRate: readFloatEnv('CODEX_APIYI_LONG_OUTPUT_RATE', 45),
   };
   validateHermesSkillsConfig(config);
   return config;

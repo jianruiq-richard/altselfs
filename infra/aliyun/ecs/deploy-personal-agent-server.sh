@@ -17,6 +17,10 @@ DEPLOY_HEALTH_TIMEOUT_SECONDS="${DEPLOY_HEALTH_TIMEOUT_SECONDS:-180}"
 DEPLOY_DRAIN_TIMEOUT_SECONDS="${DEPLOY_DRAIN_TIMEOUT_SECONDS:-5400}"
 DEPLOY_SWITCH_TIMEOUT_SECONDS="${DEPLOY_SWITCH_TIMEOUT_SECONDS:-30}"
 DEPLOY_POLL_SECONDS="${DEPLOY_POLL_SECONDS:-3}"
+DEPLOY_CODEX_MODEL_PROVIDER="${DEPLOY_CODEX_MODEL_PROVIDER:-apiyi}"
+DEPLOY_CODEX_APIYI_BASE_URL="${DEPLOY_CODEX_APIYI_BASE_URL:-https://vip.apiyi.com/v1}"
+DEPLOY_CODEX_APIYI_API_KEY_ENV="${DEPLOY_CODEX_APIYI_API_KEY_ENV:-APIYI_API_KEY}"
+DEPLOY_AGENT_CONCURRENCY="${DEPLOY_AGENT_CONCURRENCY:-3}"
 
 CURRENT_SKILLS_LINK="${HERMES_EXPERT_SKILLS_ROOT}/current"
 ACTIVE_COLOR_FILE="${AGENT_DEPLOYMENT_STATE_HOST_DIR}/active-color"
@@ -39,6 +43,65 @@ trap cleanup EXIT
 
 log() {
   printf '[blue-green-deploy] %s\n' "$*"
+}
+
+set_runtime_env() {
+  local key="$1"
+  local value="$2"
+  local env_file="${APP_DIR}/.env.production"
+  local next_file="${env_file}.next.$$"
+  awk -v key="${key}" -v value="${value}" '
+    BEGIN { replaced = 0 }
+    index($0, key "=") == 1 {
+      if (!replaced) print key "=" value
+      replaced = 1
+      next
+    }
+    { print }
+    END { if (!replaced) print key "=" value }
+  ' "${env_file}" > "${next_file}"
+  chmod --reference="${env_file}" "${next_file}"
+  mv -f "${next_file}" "${env_file}"
+}
+
+configure_runtime_limits_and_codex_provider() {
+  case "${DEPLOY_CODEX_MODEL_PROVIDER}" in
+    apiyi|openai|openrouter) ;;
+    *)
+      echo "Unsupported DEPLOY_CODEX_MODEL_PROVIDER: ${DEPLOY_CODEX_MODEL_PROVIDER}" >&2
+      return 1
+      ;;
+  esac
+  if ! [[ "${DEPLOY_AGENT_CONCURRENCY}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "DEPLOY_AGENT_CONCURRENCY must be a positive integer." >&2
+    return 1
+  fi
+
+  if [ "${DEPLOY_CODEX_MODEL_PROVIDER}" = "apiyi" ]; then
+    if ! awk -F= -v key="${DEPLOY_CODEX_APIYI_API_KEY_ENV}" '
+      $1 == key {
+        value = substr($0, index($0, "=") + 1)
+        gsub(/^[[:space:]"'\'' ]+|[[:space:]"'\'' ]+$/, "", value)
+        if (length(value) > 0) found = 1
+      }
+      END { exit(found ? 0 : 1) }
+    ' "${APP_DIR}/.env.production"; then
+      echo "${DEPLOY_CODEX_APIYI_API_KEY_ENV} must be set in ${APP_DIR}/.env.production before deploying APIYi Codex." >&2
+      return 1
+    fi
+  fi
+
+  set_runtime_env CODEX_MODEL_PROVIDER "${DEPLOY_CODEX_MODEL_PROVIDER}"
+  set_runtime_env CODEX_APIYI_BASE_URL "${DEPLOY_CODEX_APIYI_BASE_URL}"
+  set_runtime_env CODEX_APIYI_API_KEY_ENV "${DEPLOY_CODEX_APIYI_API_KEY_ENV}"
+  set_runtime_env AGENT_TURN_MAX_CONCURRENCY "${DEPLOY_AGENT_CONCURRENCY}"
+  set_runtime_env AGENT_TURN_MAX_PER_USER "${DEPLOY_AGENT_CONCURRENCY}"
+  set_runtime_env AGENT_TURN_MAX_PER_THREAD 1
+  set_runtime_env AGENT_TURN_MAX_OPENAI "${DEPLOY_AGENT_CONCURRENCY}"
+  set_runtime_env AGENT_TURN_MAX_OPENROUTER "${DEPLOY_AGENT_CONCURRENCY}"
+  set_runtime_env AGENT_TURN_MAX_APIYI "${DEPLOY_AGENT_CONCURRENCY}"
+
+  log "runtime provider=${DEPLOY_CODEX_MODEL_PROVIDER} endpoint=${DEPLOY_CODEX_APIYI_BASE_URL} concurrency=${DEPLOY_AGENT_CONCURRENCY} perThread=1"
 }
 
 validate_color() {
@@ -517,6 +580,7 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
   echo "Missing ${APP_DIR}/${COMPOSE_FILE}; upload docker-compose.acr.yml first." >&2
   exit 1
 fi
+configure_runtime_limits_and_codex_provider
 docker compose -f "${COMPOSE_FILE}" config >/dev/null
 
 install_skill_release

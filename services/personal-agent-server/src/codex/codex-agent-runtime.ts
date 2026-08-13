@@ -1,6 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { CodexJsonRpcClient } from './json-rpc-client.js';
+import {
+  resolveCodexModelSelection,
+  type CodexModelSelection,
+} from './model-provider.js';
 import { projectCodexNotification } from './event-projector.js';
 import { PRODUCT_BRAND } from '../brand.js';
 import { buildMemoryContext } from '../memory-store.js';
@@ -36,13 +40,6 @@ import {
 import { prepareTemporaryOpenAiAuth, type TemporaryOpenAiAuth } from './openai-auth-lock.js';
 import type { ChildAgentRunInput, ChildAgentRunResult, ChildAgentRuntime, AgentEvent } from '../types.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
-
-type CodexModelProvider = 'openai' | 'openrouter';
-
-type CodexModelSelection = {
-  model?: string;
-  provider?: CodexModelProvider;
-};
 
 export class CodexAgentRuntime implements ChildAgentRuntime {
   id = 'codex';
@@ -270,7 +267,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
   private async writeCodexConfig(codexHome: string, selection: CodexModelSelection) {
     const configPath = path.join(codexHome, 'config.toml');
     const metadata = this.resolveModelMetadata(selection.model);
-    const catalogPath = selection.provider === 'openrouter'
+    const catalogPath = selection.provider !== 'openai'
       ? await this.writeCodexModelCatalog(codexHome, selection.model)
       : undefined;
     const modelLine = selection.model ? `model = ${tomlString(selection.model)}\n` : '';
@@ -284,6 +281,26 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         catalogPath ? `model_catalog_json = ${tomlString(catalogPath)}` : '',
         'disable_response_storage = true',
         ...codexModelMetadataLines(metadata),
+      ].filter(Boolean).join('\n') + '\n';
+      await fs.writeFile(configPath, content, 'utf8');
+      return;
+    }
+
+    if (selection.provider === 'apiyi') {
+      const content = [
+        modelLine.trimEnd(),
+        providerLine,
+        `web_search = ${tomlString(this.config.codexWebSearchMode)}`,
+        catalogPath ? `model_catalog_json = ${tomlString(catalogPath)}` : '',
+        'disable_response_storage = true',
+        ...codexModelMetadataLines(metadata),
+        '',
+        '[model_providers.apiyi]',
+        'name = "APIYi"',
+        `base_url = ${tomlString(this.config.codexApiYiBaseUrl)}`,
+        'wire_api = "responses"',
+        `env_key = ${tomlString(this.config.codexApiYiApiKeyEnv)}`,
+        'requires_openai_auth = false',
       ].filter(Boolean).join('\n') + '\n';
       await fs.writeFile(configPath, content, 'utf8');
       return;
@@ -329,13 +346,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
   }
 
   private resolveModelSelection(model?: string): CodexModelSelection {
-    const configuredProvider = normalizeCodexProvider(this.config.codexModelProvider);
-    if (model === 'gpt-5.5') return { model, provider: 'openai' };
-    if (model === 'deepseek/deepseek-v3.2') return { model, provider: 'openrouter' };
-    return {
-      model,
-      provider: configuredProvider || (model ? 'openrouter' : undefined),
-    };
+    return resolveCodexModelSelection(model, this.config.codexModelProvider);
   }
 
   private resolveModelMetadata(model?: string): CodexModelMetadata {
@@ -674,12 +685,6 @@ function normalizeCodexModel(model?: string) {
     return 'deepseek/deepseek-v3.2';
   }
   return value;
-}
-
-function normalizeCodexProvider(provider?: string): CodexModelProvider | undefined {
-  const value = provider?.trim().toLowerCase();
-  if (value === 'openai' || value === 'openrouter') return value;
-  return undefined;
 }
 
 function mergeNoProxy(existing: string) {

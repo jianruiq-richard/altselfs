@@ -58,6 +58,7 @@ export class AgentTurnQueueWorker {
         `perThread=${this.config.turnQueueMaxPerThread}`,
         `openai=${this.config.turnQueueMaxOpenAi}`,
         `openrouter=${this.config.turnQueueMaxOpenRouter}`,
+        `apiyi=${this.config.turnQueueMaxApiYi}`,
       ].join(' ')
     );
   }
@@ -118,6 +119,7 @@ export class AgentTurnQueueWorker {
             maxPerThread: this.config.turnQueueMaxPerThread,
             maxOpenAi: this.config.turnQueueMaxOpenAi,
             maxOpenRouter: this.config.turnQueueMaxOpenRouter,
+            maxApiYi: this.config.turnQueueMaxApiYi,
           },
         }).catch(async (error) => {
           console.warn(`[agent-turn-worker] claim failed: ${error instanceof Error ? error.message : String(error)}`);

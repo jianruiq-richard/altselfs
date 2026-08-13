@@ -49,7 +49,7 @@ export function resolveHermesModelSelection(config: ServerConfig, requested?: un
     return {
       model,
       provider: 'apiyi',
-      baseUrl: config.hermesBaseUrl || 'https://api.apiyi.com/v1',
+      baseUrl: config.hermesBaseUrl || 'https://vip.apiyi.com/v1',
       apiKeyEnv: config.hermesApiKeyEnv || 'APIYI_API_KEY',
       apiMode: 'anthropic_messages',
     };
