@@ -208,7 +208,7 @@ BING_SEARCH_ENDPOINT=https://api.bing.microsoft.com/v7.0/search
 When `WEB_SEARCH_PROVIDER=auto`, the server chooses `serpapi` first, then
 `serper`, then `google_cse`, then `bing`, then `duckduckgo`.
 
-### Local OpenRouter + Codex Smoke Test
+### Local Hermes + Codex Smoke Test
 
 From the repository root:
 
@@ -222,9 +222,7 @@ HERMES_MODEL=claude-sonnet-4-6 \
 HERMES_PROVIDER=apiyi \
 HERMES_BASE_URL=https://vip.apiyi.com/v1 \
 HERMES_API_KEY_ENV=APIYI_API_KEY \
-CODEX_MODEL_PROVIDER=apiyi \
-CODEX_APIYI_BASE_URL=https://vip.apiyi.com/v1 \
-CODEX_APIYI_API_KEY_ENV=CODEX_APIYI_API_KEY \
+CODEX_MODEL_PROVIDER=openai \
 CODEX_MODEL=gpt-5.5 \
 CODEX_MODEL_CONTEXT_WINDOW=128000 \
 CODEX_MODEL_AUTO_COMPACT_TOKEN_LIMIT=64000 \
@@ -234,12 +232,22 @@ CODEX_GENERAL_DISABLE_LOCAL_ENVIRONMENT=true \
 npx tsx services/personal-agent-server/src/index.ts
 ```
 
-`CODEX_MODEL_PROVIDER=apiyi` runs Codex against APIYi's Responses-compatible
-endpoint. Set `APIYI_API_KEY` to the Hermes ClaudeCode-group credential and
-`CODEX_APIYI_API_KEY` to a separate credential whose group serves the selected
-GPT model (for example Default, CodexResponses, or CodexReverse). The existing
-ChatGPT login is retained: switch the provider back to `openai` and restart to
-return to the OAuth-backed provider.
+`CODEX_MODEL_PROVIDER=openai` runs Codex with the retained ChatGPT OAuth
+credential at `CODEX_OPENAI_AUTH_JSON_PATH`. APIYi remains available as an
+explicit fallback: set the provider to `apiyi` and use a separate
+`CODEX_APIYI_API_KEY` whose group serves the selected GPT model (for example
+Default, CodexResponses, or CodexReverse).
+
+For the OpenAI provider, the server owns the OAuth refresh token through an
+auth broker. Each Codex app-server receives only the current access token via
+Codex's external `chatgptAuthTokens` login protocol. If an access token is near
+expiry or Codex receives a 401, the broker takes a short cross-process lock,
+re-reads the shared credential, rotates the refresh token once, and atomically
+writes the result back with mode `0600`. The lock is never held for the Codex
+turn, so `AGENT_TURN_MAX_OPENAI=3` allows three different turns to use the same
+ChatGPT account concurrently while each thread remains single-flight. The auth
+file must therefore be writable by the server and shared by all workers that
+use that account.
 
 Codex model metadata can be supplied per model so OpenRouter model slugs still
 have explicit context and compaction limits even when Codex does not know the

@@ -37,7 +37,7 @@ import {
   isCodexOpenAiAuthFailure,
   markCodexOpenAiAuthUnhealthyFromError,
 } from './openai-auth-health.js';
-import { prepareTemporaryOpenAiAuth, type TemporaryOpenAiAuth } from './openai-auth-lock.js';
+import { BrokeredOpenAiAuthSession, OpenAiAuthBroker } from './openai-auth-broker.js';
 import type { ChildAgentRunInput, ChildAgentRunResult, ChildAgentRuntime, AgentEvent } from '../types.js';
 import type { CodexModelMetadata, ServerConfig } from '../config.js';
 
@@ -69,18 +69,12 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     let policyViolationMessage: string | null = null;
     let usedExternalSearch = false;
     let client: CodexJsonRpcClient | undefined;
-    let codexOpenAiAuth: TemporaryOpenAiAuth | undefined;
     const nonLocalProfile = this.isNonLocalCodexProfile(input.profileId);
     const localEnvironmentDisabled = nonLocalProfile && this.config.disableLocalEnvironmentForGeneral;
 
     try {
       if (modelSelection.provider === 'openai') {
         await ensureCodexOpenAiAuthHealthy(this.config, modelSelection, { reason: 'codex_runtime' });
-        codexOpenAiAuth = await prepareTemporaryOpenAiAuth({
-          codexHome,
-          sourcePath: this.config.codexOpenAiAuthJsonPath,
-          label: this.resolveRunLabel(input),
-        });
       }
       client = new CodexJsonRpcClient({
         codexBin: this.config.codexBin,
@@ -104,22 +98,6 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       });
       await activeClient.initialize();
       const dynamictools = nonLocalProfile ? await this.buildDynamictools(input, modelSelection) : undefined;
-      const thread = await activeClient.request(
-        'thread/start',
-        {
-          cwd: workspace,
-          ...(localEnvironmentDisabled ? { environments: [] } : {}),
-          ...(nonLocalProfile ? { dynamictools } : {}),
-          ...(modelSelection.model ? { model: modelSelection.model } : {}),
-          ...(modelSelection.provider ? { modelProvider: modelSelection.provider } : {}),
-          developerInstructions: this.buildDeveloperInstructions(),
-          personality: 'pragmatic',
-        },
-        15_000
-      );
-      codexThreadId = extractThreadId(thread);
-      await emit({ type: 'codex.thread.started', timestamp: nowIso(), payload: { codexThreadId, raw: thread } });
-
       const sandboxExecContext: SandboxExecContext = {
         userId: input.userId,
         investorId: typeof input.metadata?.investorId === 'string' && input.metadata.investorId.trim()
@@ -137,11 +115,49 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         threadId: input.threadId,
         runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : undefined,
       };
+      const authSession = modelSelection.provider === 'openai'
+        ? new BrokeredOpenAiAuthSession(new OpenAiAuthBroker({
+          sourcePath: this.config.codexOpenAiAuthJsonPath || '',
+          proxyUrl: this.config.codexOpenAiProxyUrl,
+        }))
+        : undefined;
+
       activeClient.on('serverRequest', (request: Record<string, unknown>) => {
-        this.handleServerRequest(activeClient, request, emit, sandboxExecContext, personaltoolContext).then((handled) => {
+        void (async () => {
+          if (authSession && await authSession.handleServerRequest(activeClient, request)) return;
+          const handled = await this.handleServerRequest(
+            activeClient,
+            request,
+            emit,
+            sandboxExecContext,
+            personaltoolContext
+          );
           if (handled === 'web_search') usedExternalSearch = true;
+        })().catch((error) => {
+          activeClient.respondError(
+            request.id,
+            -32000,
+            error instanceof Error ? error.message : String(error)
+          );
         });
       });
+      if (authSession) await authSession.login(activeClient);
+
+      const thread = await activeClient.request(
+        'thread/start',
+        {
+          cwd: workspace,
+          ...(localEnvironmentDisabled ? { environments: [] } : {}),
+          ...(nonLocalProfile ? { dynamictools } : {}),
+          ...(modelSelection.model ? { model: modelSelection.model } : {}),
+          ...(modelSelection.provider ? { modelProvider: modelSelection.provider } : {}),
+          developerInstructions: this.buildDeveloperInstructions(),
+          personality: 'pragmatic',
+        },
+        15_000
+      );
+      codexThreadId = extractThreadId(thread);
+      await emit({ type: 'codex.thread.started', timestamp: nowIso(), payload: { codexThreadId, raw: thread } });
 
       activeClient.on('notification', (notification: Record<string, unknown>) => {
         if (localEnvironmentDisabled && this.isProhibitedLocaltoolNotification(notification)) {
@@ -232,22 +248,6 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
       };
     } finally {
       client?.close();
-      if (codexOpenAiAuth) {
-        try {
-          await codexOpenAiAuth.release();
-        } catch (error) {
-          await emit({
-            type: 'codex.openai_auth.cleanup_failed',
-            timestamp: nowIso(),
-            payload: {
-              authPath: codexOpenAiAuth.authPath,
-              sourcePath: codexOpenAiAuth.sourcePath,
-              tempDir: codexOpenAiAuth.tempDir,
-              error: error instanceof Error ? error.message : String(error),
-            },
-          });
-        }
-      }
     }
   }
 
@@ -256,12 +256,6 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
     await fs.mkdir(dir, { recursive: true });
     await this.writeCodexConfig(dir, selection);
     return dir;
-  }
-
-  private resolveRunLabel(input: ChildAgentRunInput) {
-    if (typeof input.metadata?.runId === 'string' && input.metadata.runId.trim()) return input.metadata.runId.trim();
-    if (input.threadId.trim()) return input.threadId.trim();
-    return input.userId;
   }
 
   private async writeCodexConfig(codexHome: string, selection: CodexModelSelection) {

@@ -28,7 +28,6 @@ export type ServerConfig = {
   codexOpenAiProxyUrl?: string;
   codexOpenAiAuthHealthCheckEnabled: boolean;
   codexOpenAiAuthHealthCheckIntervalMs: number;
-  codexOpenAiAuthHealthCheckTimeoutMs: number;
   codexModelCatalog: CodexModelCatalog;
   openRouterBaseUrl: string;
   openRouterApiKeyEnv: string;
@@ -481,7 +480,7 @@ export function loadConfig(): ServerConfig {
   const hermesApiKeyEnv = readEnv('HERMES_API_KEY_ENV', 'APIYI_API_KEY');
   const openRouterApiKeyEnv = readEnv('OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY');
   const codexModel = process.env.CODEX_MODEL?.trim() || 'gpt-5.5';
-  const codexModelProvider = process.env.CODEX_MODEL_PROVIDER?.trim() || 'apiyi';
+  const codexModelProvider = process.env.CODEX_MODEL_PROVIDER?.trim() || 'openai';
   const env = readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development');
   const config: ServerConfig = {
     port: readIntEnv('PORT', 8787),
@@ -509,7 +508,6 @@ export function loadConfig(): ServerConfig {
     codexOpenAiProxyUrl: process.env.CODEX_OPENAI_PROXY_URL?.trim() || undefined,
     codexOpenAiAuthHealthCheckEnabled: readBoolEnv('CODEX_OPENAI_AUTH_HEALTH_CHECK_ENABLED', true),
     codexOpenAiAuthHealthCheckIntervalMs: readIntEnv('CODEX_OPENAI_AUTH_HEALTH_CHECK_INTERVAL_MS', 15 * 60_000),
-    codexOpenAiAuthHealthCheckTimeoutMs: readIntEnv('CODEX_OPENAI_AUTH_HEALTH_CHECK_TIMEOUT_MS', 90_000),
     codexModelCatalog: readCodexModelCatalog(codexModel),
     openRouterBaseUrl: readEnv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
     openRouterApiKeyEnv,

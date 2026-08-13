@@ -13,7 +13,7 @@ import {
   isCodexOpenAiAuthFailure,
   markCodexOpenAiAuthUnhealthyFromError,
 } from '../codex/openai-auth-health.js';
-import { prepareTemporaryOpenAiAuth, type TemporaryOpenAiAuth } from '../codex/openai-auth-lock.js';
+import { BrokeredOpenAiAuthSession, OpenAiAuthBroker } from '../codex/openai-auth-broker.js';
 import { createWebSearchDynamictool, runWebSearchtool } from '../tools/web-search.js';
 import {
   RAPIDAPI_COMPETITOR_TOOL_PROVIDER_NAMES,
@@ -289,7 +289,6 @@ async function runCodexAgentTool(argumentsValue: unknown) {
   const developerInstructions = buildCodexDeveloperInstructions();
   const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
   const processEnv = buildCodexProcessEnv(config, modelSelection, noProxy);
-  let openAiAuth: TemporaryOpenAiAuth | undefined;
   let client: CodexJsonRpcClient | undefined;
   let finalText = '';
   let assistantBuffer = '';
@@ -304,14 +303,6 @@ async function runCodexAgentTool(argumentsValue: unknown) {
     }
 
     const dynamicTools = await buildDynamicTools(config, runtime, modelSelection);
-
-    if (modelSelection.provider === 'openai') {
-      openAiAuth = await prepareTemporaryOpenAiAuth({
-        codexHome: runtime.codexHome,
-        sourcePath: config.codexOpenAiAuthJsonPath,
-        label: runtime.runId,
-      });
-    }
 
     client = new CodexJsonRpcClient({
       codexBin: config.codexBin,
@@ -338,22 +329,32 @@ async function runCodexAgentTool(argumentsValue: unknown) {
       threadId: runtime.threadId,
       runId: runtime.runId,
     };
+    const authSession = modelSelection.provider === 'openai'
+      ? new BrokeredOpenAiAuthSession(new OpenAiAuthBroker({
+        sourcePath: config.codexOpenAiAuthJsonPath || '',
+        proxyUrl: config.codexOpenAiProxyUrl,
+      }))
+      : undefined;
 
     activeClient.on('serverRequest', (request: Record<string, unknown>) => {
-      handleCodexServerRequest(
-        activeClient,
-        request,
-        config,
-        sandboxExecContext,
-        personalToolContext,
-        dynamicTools.competitorNames,
-        dynamicTools.personalNames
-      ).catch((error) => {
+      void (async () => {
+        if (authSession && await authSession.handleServerRequest(activeClient, request)) return;
+        await handleCodexServerRequest(
+          activeClient,
+          request,
+          config,
+          sandboxExecContext,
+          personalToolContext,
+          dynamicTools.competitorNames,
+          dynamicTools.personalNames
+        );
+      })().catch((error) => {
         const requestId = request.id;
         const message = error instanceof Error ? error.message : String(error);
         activeClient.respondError(requestId, -32000, message);
       });
     });
+    if (authSession) await authSession.login(activeClient);
 
     const emitAssistantSnapshot = (status: 'delta' | 'final') => {
       const message = (status === 'final' ? finalText : assistantBuffer).trim();
@@ -515,11 +516,6 @@ async function runCodexAgentTool(argumentsValue: unknown) {
     throw error;
   } finally {
     client?.close();
-    if (openAiAuth) {
-      await openAiAuth.release().catch((error) => {
-        log(`OpenAI temporary auth cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
-      });
-    }
   }
 }
 

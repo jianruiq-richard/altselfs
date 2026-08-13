@@ -1190,7 +1190,6 @@ function buildCodexMcpEnvEntries(config: ServerConfig, selection: CodexModelSele
   set('CODEX_OPENAI_PROXY_URL', config.codexOpenAiProxyUrl || '');
   set('CODEX_OPENAI_AUTH_HEALTH_CHECK_ENABLED', config.codexOpenAiAuthHealthCheckEnabled ? 'true' : 'false');
   set('CODEX_OPENAI_AUTH_HEALTH_CHECK_INTERVAL_MS', String(config.codexOpenAiAuthHealthCheckIntervalMs));
-  set('CODEX_OPENAI_AUTH_HEALTH_CHECK_TIMEOUT_MS', String(config.codexOpenAiAuthHealthCheckTimeoutMs));
   set('CODEX_WEB_SEARCH_MODE', config.codexWebSearchMode);
   set('CODEX_APIYI_BASE_URL', config.codexApiYiBaseUrl);
   set('CODEX_APIYI_API_KEY_ENV', config.codexApiYiApiKeyEnv);

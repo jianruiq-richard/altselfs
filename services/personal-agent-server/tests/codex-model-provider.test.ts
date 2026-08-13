@@ -9,7 +9,7 @@ test('explicit APIYi provider overrides the native gpt-5.5 OpenAI default', () =
   });
 });
 
-test('OpenAI remains available as the default and explicit rollback provider', () => {
+test('OpenAI remains the native default and can be selected explicitly', () => {
   assert.deepEqual(resolveCodexModelSelection('gpt-5.5'), {
     model: 'gpt-5.5',
     provider: 'openai',

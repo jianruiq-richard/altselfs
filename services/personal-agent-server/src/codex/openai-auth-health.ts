@@ -1,10 +1,7 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import type { ServerConfig } from '../config.js';
-import { PRODUCT_BRAND } from '../brand.js';
-import { CodexJsonRpcClient } from './json-rpc-client.js';
-import { prepareTemporaryOpenAiAuth, type TemporaryOpenAiAuth } from './openai-auth-lock.js';
+import { OpenAiAuthBroker } from './openai-auth-broker.js';
 
 type CodexOpenAiAuthHealthStatus = 'healthy' | 'unhealthy' | 'skipped';
 
@@ -54,7 +51,6 @@ type AuthFingerprint = {
 const HEALTH_FILE_VERSION = 1;
 const MIN_HEALTH_CHECK_INTERVAL_MS = 60_000;
 const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 15 * 60_000;
-const DEFAULT_HEALTH_CHECK_TIMEOUT_MS = 90_000;
 
 let inFlightCheck: Promise<CodexOpenAiAuthHealthResult> | null = null;
 let memoryHealth: CodexOpenAiAuthHealthResult | null = null;
@@ -227,134 +223,25 @@ async function runCodexOpenAiAuthSmokeCheck(
   }
 
   const startedAtMs = Date.now();
-  const timeoutMs = healthCheckTimeoutMs(config);
-  const deadlineAtMs = startedAtMs + timeoutMs;
-  const remainingMs = () => Math.max(1_000, deadlineAtMs - Date.now());
   const model = selection.model || config.codexModel || 'gpt-5.5';
-  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), 'altselfs-codex-openai-health-'));
-  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'altselfs-codex-openai-health-workspace-'));
-  let auth: TemporaryOpenAiAuth | undefined;
-  let client: CodexJsonRpcClient | undefined;
-  let primaryError: unknown;
-
-  try {
-    await fs.writeFile(path.join(codexHome, 'config.toml'), [
-      `model = ${tomlString(model)}`,
-      'model_provider = "openai"',
-      'web_search = "disabled"',
-      'disable_response_storage = true',
-      'model_context_window = 200000',
-      'model_max_output_tokens = 2048',
-      '',
-    ].join('\n'), 'utf8');
-
-    auth = await prepareTemporaryOpenAiAuth({
-      codexHome,
-      sourcePath,
-      label: 'health',
-      waitTimeoutMs: remainingMs(),
-    });
-
-    client = new CodexJsonRpcClient({
-      codexBin: config.codexBin,
-      codexHome,
-      env: buildCodexOpenAiProcessEnv(config),
-    });
-    const activeClient = client;
-    activeClient.on('serverRequest', (request: Record<string, unknown>) => {
-      activeClient.respond(request.id, {
-        decision: 'decline',
-        contentItems: [{ type: 'inputText', text: 'No tools are needed for the Codex OpenAI auth health check.' }],
-        success: false,
-      });
-    });
-
-    await activeClient.initialize({
-      clientName: 'altselfs-codex-openai-auth-health',
-      clientTitle: `${PRODUCT_BRAND.name} Codex OpenAI Auth Health`,
-      clientVersion: '0.1.0',
-    });
-
-    const startedThread = await activeClient.request('thread/start', {
-      cwd: workspace,
-      runtimeWorkspaceRoots: [workspace],
-      environments: [],
-      model,
-      modelProvider: 'openai',
-      developerInstructions: 'This is an auth health check. Reply exactly OK. Do not use tools.',
-      personality: 'pragmatic',
-    }, Math.min(20_000, remainingMs()));
-    const threadId = extractThreadId(startedThread);
-
-    const completed = new Promise<void>((resolve, reject) => {
-      const onNotification = (notification: Record<string, unknown>) => {
-        if (notification.method !== 'turn/completed') return;
-        clearTimeout(timer);
-        activeClient.off('notification', onNotification);
-        const params = isRecord(notification.params) ? notification.params : {};
-        const turn = isRecord(params.turn) ? params.turn : {};
-        const status = String(turn.status || 'completed');
-        if (status === 'failed') {
-          reject(new Error(extractTurnErrorMessage(turn)));
-          return;
-        }
-        resolve();
-      };
-      const timer = setTimeout(() => {
-        activeClient.off('notification', onNotification);
-        reject(new Error(`Codex OpenAI auth smoke turn timed out after ${remainingMs()}ms remaining.`));
-      }, remainingMs());
-      activeClient.on('notification', onNotification);
-    });
-
-    await activeClient.request('turn/start', {
-      threadId,
-      input: [{ type: 'text', text: 'Reply exactly OK.' }],
-      cwd: workspace,
-      runtimeWorkspaceRoots: [workspace],
-      environments: [],
-    }, Math.min(20_000, remainingMs()));
-    await completed;
-    if (auth) {
-      await auth.release();
-      auth = undefined;
-    }
-    const fingerprint = await readAuthFingerprint(sourcePath);
-    return {
-      status: 'healthy' as const,
-      category: 'healthy' as const,
-      checkedAt: new Date().toISOString(),
-      reason,
-      model,
-      provider: 'openai',
-      authPath: fingerprint.authPath,
-      authMtimeMs: fingerprint.authMtimeMs,
-      authSize: fingerprint.authSize,
-      durationMs: Date.now() - startedAtMs,
-    };
-  } catch (error) {
-    primaryError = error;
-    const stderrTail = client?.stderrTail(20).join('\n');
-    if (stderrTail) {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}\n${stderrTail}`);
-    }
-    throw error;
-  } finally {
-    client?.close();
-    if (auth) {
-      try {
-        await auth.release();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!primaryError) {
-          throw new Error(`Codex OpenAI auth smoke cleanup failed: ${message}`);
-        }
-        console.warn(`[codex-openai-auth-health] cleanup failed after primary error: ${message}`);
-      }
-    }
-    await fs.rm(codexHome, { recursive: true, force: true }).catch(() => undefined);
-    await fs.rm(workspace, { recursive: true, force: true }).catch(() => undefined);
-  }
+  const broker = new OpenAiAuthBroker({
+    sourcePath,
+    proxyUrl: config.codexOpenAiProxyUrl,
+  });
+  await broker.getAuth();
+  const fingerprint = await readAuthFingerprint(sourcePath);
+  return {
+    status: 'healthy' as const,
+    category: 'healthy' as const,
+    checkedAt: new Date().toISOString(),
+    reason,
+    model,
+    provider: 'openai',
+    authPath: fingerprint.authPath,
+    authMtimeMs: fingerprint.authMtimeMs,
+    authSize: fingerprint.authSize,
+    durationMs: Date.now() - startedAtMs,
+  };
 }
 
 function skippedHealthResult(
@@ -489,13 +376,9 @@ function healthCheckIntervalMs(config: ServerConfig) {
   );
 }
 
-function healthCheckTimeoutMs(config: ServerConfig) {
-  return Math.max(10_000, config.codexOpenAiAuthHealthCheckTimeoutMs || DEFAULT_HEALTH_CHECK_TIMEOUT_MS);
-}
-
 function classifyCodexOpenAiAuthError(error: unknown): CodexOpenAiAuthHealthCategory {
   const message = stringifyError(error).toLowerCase();
-  if (message.includes('timed out waiting for codex openai auth lock')) return 'auth_lock_busy';
+  if (message.includes('timed out waiting for codex openai auth refresh lock')) return 'auth_lock_busy';
   if (isCodexOpenAiAuthFailure(error)) return 'refresh_token_invalid';
   if (
     message.includes('network') ||
@@ -529,54 +412,6 @@ function normalizeCategory(value: string): CodexOpenAiAuthHealthCategory {
     : 'unknown';
 }
 
-function buildCodexOpenAiProcessEnv(config: ServerConfig) {
-  if (!config.codexOpenAiProxyUrl) return undefined;
-  const noProxy = mergeNoProxy(process.env.NO_PROXY || process.env.no_proxy || '');
-  const proxyUrl = config.codexOpenAiProxyUrl;
-  return {
-    HTTP_PROXY: proxyUrl,
-    HTTPS_PROXY: proxyUrl,
-    ALL_PROXY: proxyUrl,
-    http_proxy: proxyUrl,
-    https_proxy: proxyUrl,
-    all_proxy: proxyUrl,
-    NO_PROXY: noProxy,
-    no_proxy: noProxy,
-  };
-}
-
-function mergeNoProxy(value: string) {
-  const entries = new Set(
-    value
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-  );
-  entries.add('127.0.0.1');
-  entries.add('localhost');
-  entries.add('::1');
-  return Array.from(entries).join(',');
-}
-
-function extractThreadId(result: Record<string, unknown>) {
-  const thread = isRecord(result.thread) ? result.thread : {};
-  const id = typeof thread.id === 'string'
-    ? thread.id
-    : typeof result.threadId === 'string'
-      ? result.threadId
-      : typeof result.id === 'string'
-        ? result.id
-        : '';
-  if (!id) throw new Error('Codex OpenAI auth smoke thread/start returned no thread id.');
-  return id;
-}
-
-function extractTurnErrorMessage(turn: Record<string, unknown>) {
-  const error = isRecord(turn.error) ? turn.error : {};
-  if (typeof error.message === 'string' && error.message.trim()) return error.message;
-  return `Codex OpenAI auth smoke turn failed: ${JSON.stringify(turn).slice(0, 500)}`;
-}
-
 function redactErrorMessage(error: unknown) {
   return stringifyError(error)
     .replace(/Bearer\s+\S+/gi, 'Bearer REDACTED')
@@ -593,10 +428,6 @@ function stringifyError(error: unknown) {
   } catch {
     return String(error);
   }
-}
-
-function tomlString(value: string) {
-  return JSON.stringify(value);
 }
 
 function normalizeProvider(value?: string) {
