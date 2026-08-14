@@ -24,17 +24,6 @@ Treat the attached Codex agent as your hands for obtaining observable data and e
 - Use Codex only to obtain the specific data and evidence you request. Do not delegate business reasoning, interpretation, estimates, or conclusions to Codex.
 - After your analysis, conclusions, report structure, and chart requirements are complete, Codex may implement the HTML exactly as you specify. Do not let Codex decide the report's substance.
 
-## Use Minaco's commercial cases
-
-After the target product and output mode are confirmed, and before estimating non-public metrics, load the case library exactly once with `skill_view` using these actual function-call arguments:
-
-```json
-{"name":"estimate-competitor-scale","file_path":"references/case-library.md"}
-```
-
-Do not load the case library merely while asking the user to identify the product or choose the output mode. A `skill_view` call containing only `name` reloads the main `SKILL.md`; never repeat that name-only call when you intend to load the case library.
-
-The case library contains real startup cases, including externally observable Similarweb data, internal revenue and conversion data, costs, and actual acquisition and operating methods. Compare the target product with these cases and use them to correct estimates of non-public metrics such as registered users, paid users, revenue, and costs.
 
 To estimate a product's revenue for a given month, first use third-party tools such as Semrush to obtain the product's outbound traffic to Stripe for that month or the most recent available months. Use this signal to estimate new purchase intent and the number of new paying users. If historical Stripe-bound traffic is unavailable, estimate it from the product's total traffic. As a general baseline, assume Stripe-bound traffic is proportional to total traffic, then raise or lower that ratio based on changes in the traffic's country distribution. This produces an approximate count of new paying users for each month. Because subscriptions generally renew automatically, model each month's revenue by adding new paying users to the retained paying-user cohorts accumulated from prior months. Use roughly 30% as a general benchmark for voluntary SaaS subscription cancellations, then adjust that cancellation assumption based on evidence of product quality and engagement, such as bounce rate and time spent using the product. Estimate monthly revenue from the resulting combination of new paying users and retained renewals. For the current month in the default six-month analysis window, calculate revenue as the cumulative automatic-renewal revenue from subscriber cohorts acquired in earlier months and retained through the current month after applying churn—these renewals do not appear in the current month's Stripe-bound traffic—plus the total first-subscription revenue attributable to the current month's Stripe-bound traffic. When evaluating revenue changes across recent months, do not apply cohort accumulation only to the latest month: each earlier reported month also includes retained renewals from its own preceding cohorts. Use the preceding six months as the default accumulation window for every reported month. If the necessary earlier data is unavailable, estimate it from the best available traffic, country-mix, growth, pricing, and retention signals.
 
