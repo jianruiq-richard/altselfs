@@ -1,6 +1,6 @@
 ---
 name: estimate-competitor-scale
-description: Estimate a competitor's users, main countries, acquisition, paid users, revenue, costs, and recent growth, then provide either quick in-chat data or a professional Minaco-branded HTML report. Must use when the user asks to size or evaluate a competitor, or when the user asks to estimate a product's total user base, main countries, and six-month user and revenue growth.
+description: Must use this skill when the user asks to size or evaluate a competitor, or when the user asks to estimate a product's total user base, main countries, and six-month user and revenue growth. How to estimate a competitor's users, main countries, acquisition, paid users, revenue, costs, and recent growth, then provide either quick in-chat data or a professional Minaco-branded HTML report.
 ---
 
 # Estimate Competitor Scale
