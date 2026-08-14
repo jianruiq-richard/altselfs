@@ -1,8 +1,9 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { Buffer } from 'node:buffer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import {
   loadCleanTurnContext,
   upsertAgentSandboxControlPlane,
@@ -45,6 +46,8 @@ import { resolveHermesApiKey, resolveHermesModelSelection, type HermesModelSelec
 
 export const HERMES_PROMPT_CACHE_TTL = '1h';
 export const ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV = 'ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT';
+
+const execFileAsync = promisify(execFile);
 
 const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_NAME = 'altselfs-runtime-context';
 const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_MANIFEST = [
@@ -395,7 +398,27 @@ export class HermesSourceRuntime {
       });
     }
     const codexReply = codexOutcome.reply;
-    const baseReply = normalizeAssistantReply(extractReply(combinedOutput).trim());
+    const stdoutReply = normalizeAssistantReply(extractReply(result.stdout).trim());
+    const stderrReply = normalizeAssistantReply(extractReply(result.stderr).trim());
+    const recoveredStateReply = stdoutReply || !sessionId
+      ? ''
+      : normalizeAssistantReply(await readLatestHermesAssistantReply(hermesHome, sessionId, startedAtMs));
+    const baseReply = stdoutReply || recoveredStateReply || stderrReply;
+    const hermesReplySource = stdoutReply
+      ? 'stdout'
+      : recoveredStateReply
+        ? 'state_db'
+        : stderrReply
+          ? 'stderr'
+          : 'none';
+    if (recoveredStateReply) {
+      await emit('hermes.final_response.recovered', {
+        sessionId,
+        responseChars: recoveredStateReply.length,
+        source: 'state_db',
+        reason: 'stdout_reply_empty',
+      });
+    }
     const generatedArtifacts = await collectGeneratedWorkspaceArtifacts(
       this.config,
       request,
@@ -466,6 +489,7 @@ export class HermesSourceRuntime {
       sessionId: sessionId || null,
       codexReply: codexReply || null,
       hermesReply: reply || null,
+      hermesReplySource,
       codexTaskComplete: codexOutcome.taskComplete,
       codexTurnAborted: codexOutcome.turnAborted,
       stdout: truncate(result.stdout, 20000),
@@ -989,6 +1013,53 @@ function extractReply(stdout: string) {
     .trim();
 }
 
+export async function readLatestHermesAssistantReply(
+  hermesHome: string,
+  sessionId: string,
+  startedAtMs: number
+): Promise<string> {
+  const normalizedSessionId = sessionId.trim();
+  if (!normalizedSessionId || !Number.isFinite(startedAtMs) || startedAtMs <= 0) return '';
+
+  const stateDb = path.join(hermesHome, 'state.db');
+  try {
+    await fs.access(stateDb);
+    const script = [
+      'import json, sqlite3, sys',
+      'db, session_id, started_at = sys.argv[1], sys.argv[2], float(sys.argv[3])',
+      'conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)',
+      'row = conn.execute("""',
+      'SELECT content FROM messages',
+      'WHERE session_id = ?',
+      '  AND timestamp >= ?',
+      '  AND role = \'assistant\'',
+      '  AND active = 1',
+      '  AND content IS NOT NULL',
+      '  AND LENGTH(TRIM(content)) > 0',
+      '  AND TRIM(content) <> \'(empty)\'',
+      '  AND (tool_calls IS NULL OR TRIM(tool_calls) IN (\'\', \'[]\', \'null\'))',
+      '  AND (finish_reason IS NULL OR finish_reason <> \'tool_calls\')',
+      'ORDER BY id DESC LIMIT 1',
+      '""", (session_id, started_at)).fetchone()',
+      'print(json.dumps(row[0] if row else "", ensure_ascii=False))',
+    ].join('\n');
+    const { stdout } = await execFileAsync('python3', [
+      '-c',
+      script,
+      stateDb,
+      normalizedSessionId,
+      String(startedAtMs / 1000),
+    ], {
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+    });
+    const parsed = JSON.parse(stdout.trim() || '""') as unknown;
+    return typeof parsed === 'string' ? parsed.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 function tail(value: string, maxLines: number) {
   const lines = value.split(/\r?\n/);
   return lines.slice(Math.max(0, lines.length - maxLines)).join('\n');
@@ -1372,6 +1443,7 @@ export function buildHermesStableSystemPrompt() {
     '',
     'Expert Skill policy:',
     '- Before answering, follow the native Hermes Skill catalog contract: scan the available Skills and load every relevant or partially relevant Skill with `skill_view`.',
+    '- To read a linked Skill file, include both `name` and the exact `file_path` in the actual `skill_view` function-call arguments. A name-only call reloads the main SKILL.md. Never repeat an identical name-only `skill_view` call when attempting to access a linked file; correct the arguments and retry once.',
     '- Product expert Skills are centrally maintained and read-only in this runtime. Do not call `skill_manage` to create, patch, replace, or delete them; report missing or incorrect guidance so maintainers can update the versioned library.',
     '- Treat filled expert rules and cases as maintained policy. Keep facts, rules, assumptions, calculations, and judgments distinct, and label missing knowledge instead of inventing a threshold.',
     '',

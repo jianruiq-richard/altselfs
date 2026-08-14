@@ -9,6 +9,7 @@ const codexRuntimePath = path.join(hermesSourceRoot, "agent", "codex_runtime.py"
 const codexAppServerSessionPath = path.join(hermesSourceRoot, "agent", "transports", "codex_app_server_session.py");
 const runAgentPath = path.join(hermesSourceRoot, "run_agent.py");
 const backgroundReviewPath = path.join(hermesSourceRoot, "agent", "background_review.py");
+const skillsToolPath = path.join(hermesSourceRoot, "tools", "skills_tool.py");
 const usagePricingPath = path.join(hermesSourceRoot, "agent", "usage_pricing.py");
 const conversationLoopPath = path.join(hermesSourceRoot, "agent", "conversation_loop.py");
 
@@ -226,6 +227,71 @@ if (backgroundReview.includes(reviewRuntimeAfter)) {
   writeFileSync(backgroundReviewPath, backgroundReview, "utf8");
   console.log("Hermes OpenRouter background review runtime patch applied.");
   console.log(backgroundReviewPath);
+}
+
+const reviewOutputRedirectBefore = String.raw`        with open(os.devnull, "w", encoding="utf-8") as _devnull, \
+             contextlib.redirect_stdout(_devnull), \
+             contextlib.redirect_stderr(_devnull):`;
+const reviewOutputRedirectAfter = `        # Never redirect sys.stdout/sys.stderr from a background thread. Python's
+        # stdio objects are process-global, so doing that here can swallow the
+        # foreground CLI's final response. quiet_mode and agent-local callbacks
+        # are responsible for suppressing review output.
+        with contextlib.nullcontext():`;
+const reviewCleanupRedirectBefore = String.raw`                with open(os.devnull, "w", encoding="utf-8") as _fn, \
+                     contextlib.redirect_stdout(_fn), \
+                     contextlib.redirect_stderr(_fn):`;
+const reviewCleanupRedirectAfter = `                # Keep cleanup suppression agent-local as well; process-global
+                # stdio redirection here races with foreground response delivery.
+                with contextlib.nullcontext():`;
+
+if (
+  backgroundReview.includes(reviewOutputRedirectAfter) &&
+  backgroundReview.includes(reviewCleanupRedirectAfter)
+) {
+  console.log("Hermes background review process-global stdio patch already applied.");
+  console.log(backgroundReviewPath);
+} else if (
+  !backgroundReview.includes(reviewOutputRedirectBefore) ||
+  !backgroundReview.includes(reviewCleanupRedirectBefore)
+) {
+  console.error("Could not find the Hermes background review stdio redirect blocks to patch.");
+  console.error(backgroundReviewPath);
+  process.exit(1);
+} else {
+  backgroundReview = backgroundReview
+    .replace(reviewOutputRedirectBefore, reviewOutputRedirectAfter)
+    .replace(reviewCleanupRedirectBefore, reviewCleanupRedirectAfter);
+  writeFileSync(backgroundReviewPath, backgroundReview, "utf8");
+  console.log("Hermes background review process-global stdio patch applied.");
+  console.log(backgroundReviewPath);
+}
+
+let skillsTool = readFileSync(skillsToolPath, "utf8");
+const skillViewDescriptionBefore = "Skills allow for loading information about specific tasks and workflows, as well as scripts and templates. Load a skill's full content or access its linked files (references, templates, scripts). First call returns SKILL.md content plus a 'linked_files' dict showing available references/templates/scripts. To access those, call again with file_path parameter.";
+const skillViewDescriptionAfter = "Skills allow for loading information about specific tasks and workflows, as well as scripts and templates. Load a skill's full content or access its linked files (references, templates, scripts). IMPORTANT ARGUMENT RULE: to load the main SKILL.md, call with {\\\"name\\\":\\\"<skill-name>\\\"}. To load a linked file, the actual function-call arguments MUST include both fields: {\\\"name\\\":\\\"<skill-name>\\\",\\\"file_path\\\":\\\"<exact path from linked_files>\\\"}. A name-only call always reloads SKILL.md. Never repeat the same name-only call when you intend to read a linked file; correct the arguments and retry once.";
+const skillViewUsageHintBefore = "To view linked files, call skill_view(name, file_path) where file_path is e.g. 'references/api.md' or 'assets/config.yaml'";
+const skillViewUsageHintAfter = "To read a linked file, the next skill_view function-call arguments must include both name and file_path, for example: {\\\"name\\\":\\\"<skill-name>\\\",\\\"file_path\\\":\\\"references/api.md\\\"}. Calling with only name reloads SKILL.md; do not repeat it when a linked file is intended.";
+
+if (
+  skillsTool.includes(skillViewDescriptionAfter) &&
+  skillsTool.includes(skillViewUsageHintAfter)
+) {
+  console.log("Hermes skill_view argument-contract patch already applied.");
+  console.log(skillsToolPath);
+} else if (
+  !skillsTool.includes(skillViewDescriptionBefore) ||
+  !skillsTool.includes(skillViewUsageHintBefore)
+) {
+  console.error("Could not find the Hermes skill_view descriptions to patch.");
+  console.error(skillsToolPath);
+  process.exit(1);
+} else {
+  skillsTool = skillsTool
+    .replace(skillViewDescriptionBefore, skillViewDescriptionAfter)
+    .replace(skillViewUsageHintBefore, skillViewUsageHintAfter);
+  writeFileSync(skillsToolPath, skillsTool, "utf8");
+  console.log("Hermes skill_view argument-contract patch applied.");
+  console.log(skillsToolPath);
 }
 
 let usagePricing = readFileSync(usagePricingPath, "utf8");

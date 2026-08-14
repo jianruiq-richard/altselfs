@@ -26,7 +26,13 @@ Treat the attached Codex agent as your hands for obtaining observable data and e
 
 ## Use Minaco's commercial cases
 
-Always load `references/case-library.md` with `skill_view` before estimating non-public metrics.
+After the target product and output mode are confirmed, and before estimating non-public metrics, load the case library exactly once with `skill_view` using these actual function-call arguments:
+
+```json
+{"name":"estimate-competitor-scale","file_path":"references/case-library.md"}
+```
+
+Do not load the case library merely while asking the user to identify the product or choose the output mode. A `skill_view` call containing only `name` reloads the main `SKILL.md`; never repeat that name-only call when you intend to load the case library.
 
 The case library contains real startup cases, including externally observable Similarweb data, internal revenue and conversion data, costs, and actual acquisition and operating methods. Compare the target product with these cases and use them to correct estimates of non-public metrics such as registered users, paid users, revenue, and costs.
 
