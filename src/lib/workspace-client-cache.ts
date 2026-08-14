@@ -177,6 +177,17 @@ export type WorkspacePersonalAgentPayload = {
   hasMore?: unknown;
 };
 
+export function setWorkspacePersonalAgentThreadPage(payload: WorkspacePersonalAgentPayload) {
+  if (!browserReady()) return;
+  const threadId = typeof payload.threadId === 'string' ? payload.threadId.trim() : '';
+  if (!threadId) return;
+  setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentThread(threadId), {
+    threadId,
+    messages: Array.isArray(payload.messages) ? payload.messages : [],
+    hasMore: Boolean(payload.hasMore),
+  });
+}
+
 function getBootstrapUserId(user: unknown) {
   if (!user || typeof user !== 'object' || !('id' in user)) return null;
   const id = (user as { id?: unknown }).id;
@@ -215,7 +226,7 @@ export function applyWorkspacePersonalAgentPayload(payload: WorkspacePersonalAge
   };
   setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentDefault, page);
   if (threadId) {
-    setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentThread(threadId), page);
+    setWorkspacePersonalAgentThreadPage(page);
   }
 }
 

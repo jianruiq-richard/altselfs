@@ -17,10 +17,13 @@ import {
 } from '@/components/billing-capacity-popover';
 import {
   applyWorkspacePersonalAgentPayload,
+  clearWorkspacePersonalAgentCache,
+  deleteWorkspaceCached,
   fetchWorkspaceJson,
   getWorkspaceCachedStale,
   resetWorkspaceClientCache,
   setWorkspaceCached,
+  setWorkspacePersonalAgentThreadPage,
   WORKSPACE_CACHE_KEYS,
 } from '@/lib/workspace-client-cache';
 import {
@@ -2464,8 +2467,11 @@ export function InvestorAgentChatPage() {
       : filterPersistedSessions(
         firstNonEmptySessions(sessionsRef.current, cachedSessions?.sessions) || []
       );
+    const normalizedThreadId = page.threadId && stableSessions.some((session) => session.id === page.threadId)
+      ? page.threadId
+      : null;
     const normalized: PersonalAgentCachedPage = {
-      threadId: page.threadId || null,
+      threadId: normalizedThreadId,
       sessions: stableSessions,
       messages: Array.isArray(page.messages) ? page.messages : [],
       hasMore: Boolean(page.hasMore),
@@ -2476,19 +2482,18 @@ export function InvestorAgentChatPage() {
     });
     setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentDefault, normalized);
     if (normalized.threadId) {
-      setWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentThread(normalized.threadId), normalized);
+      setWorkspacePersonalAgentThreadPage(normalized);
     }
   }, []);
 
   const applyPersonalAgentCachedPage = useCallback((page: PersonalAgentCachedPage) => {
     const cachedThreadId = typeof page.threadId === 'string' ? page.threadId : null;
     selectThreadId(cachedThreadId);
-    if (Array.isArray(page.sessions)) setSessions(page.sessions, { allowEmpty: true });
     const cachedMessages = Array.isArray(page.messages) ? page.messages : [];
     messagesAutoFollowRef.current = true;
     setThreadMessages(cachedMessages, cachedThreadId);
     if (typeof page.hasMore === 'boolean') setHasMoreMessages(page.hasMore);
-  }, [selectThreadId, setSessions, setThreadMessages]);
+  }, [selectThreadId, setThreadMessages]);
 
   const getCachedPersonalAgentPage = useCallback((targetThreadId?: string | null) => {
     const threadCache = targetThreadId
@@ -3321,6 +3326,10 @@ export function InvestorAgentChatPage() {
           handleSessionExpired();
           return;
         }
+        if (res.status === 404 && requestedThreadId) {
+          deleteWorkspaceCached(WORKSPACE_CACHE_KEYS.personalAgentThread(requestedThreadId));
+          return 'missing' as const;
+        }
         if (!options?.suppressErrors) setError(data.error || 'Failed to load discussion');
         return;
       }
@@ -3359,8 +3368,10 @@ export function InvestorAgentChatPage() {
       if (showExecutiveControls && getStoredActiveRunId()) {
         void resumeExecutiveRun(getStoredActiveRunId(), loadedMessages, { closePlannerOnSuccess: false });
       }
+      return 'loaded' as const;
     } catch {
       if (isCurrentLoad() && !options?.suppressErrors) setError('Network error. Please try again later.');
+      return 'error' as const;
     } finally {
       if (isCurrentLoad()) {
         if (showBlockingLoading) setLoading(false);
@@ -3392,12 +3403,48 @@ export function InvestorAgentChatPage() {
       : await loadSessions({ force: true, suppressErrors: options?.suppressErrors });
     if (!isCurrentLoad()) return;
     const threadToLoad = requestedThreadId || sessionsPayload.threadId || null;
-    await loadThreadMessages(threadToLoad, {
+    const loadResult = await loadThreadMessages(threadToLoad, {
       loadSeq,
       showBlockingLoading,
       suppressErrors: options?.suppressErrors,
     });
-  }, [applyPersonalAgentCachedPage, getCachedPersonalAgentPage, isExecutive, loadSessions, loadThreadMessages]);
+    if (loadResult !== 'missing' || !isCurrentLoad()) return;
+
+    clearWorkspacePersonalAgentCache();
+    selectThreadId(null);
+    setThreadMessages([], null);
+    setHasMoreMessages(false);
+    const refreshedSessions = await loadSessions({ force: true, suppressErrors: true });
+    if (!isCurrentLoad()) return;
+    const fallbackThreadId = refreshedSessions.sessions
+      ?.find((session) => session.id !== threadToLoad)?.id || null;
+    if (!fallbackThreadId) {
+      applyWorkspacePersonalAgentPayload({
+        threadId: null,
+        sessions: [],
+        messages: [],
+        hasMore: false,
+      });
+      selectThreadId(null);
+      setThreadMessages([], null);
+      setHasMoreMessages(false);
+      setError(null);
+      return;
+    }
+
+    const fallbackResult = await loadThreadMessages(fallbackThreadId, {
+      loadSeq,
+      showBlockingLoading: true,
+      suppressErrors: true,
+    });
+    if (fallbackResult === 'missing' && isCurrentLoad()) {
+      clearWorkspacePersonalAgentCache();
+      selectThreadId(null);
+      setThreadMessages([], null);
+      setHasMoreMessages(false);
+      setError(null);
+    }
+  }, [applyPersonalAgentCachedPage, getCachedPersonalAgentPage, isExecutive, loadSessions, loadThreadMessages, selectThreadId, setThreadMessages]);
 
   useEffect(() => {
     if (!threadId || !activeRunId) return;
@@ -3530,23 +3577,30 @@ export function InvestorAgentChatPage() {
       }
 
       const nextSessions = Array.isArray(data.sessions) ? data.sessions : [];
-      setSessions(nextSessions, { allowEmpty: true });
-      cachePersonalAgentPage({
-        threadId,
-        sessions: nextSessions,
-        messages,
-        hasMore: hasMoreMessages,
-      });
+      const removesSession = action === 'archive' || action === 'delete';
+      if (removesSession) clearWorkspacePersonalAgentCache();
+      const appliedSessions = setSessions(nextSessions, { allowEmpty: true });
 
-      if ((action === 'archive' || action === 'delete') && session.id === threadId) {
-        await loadData(nextSessions[0]?.id || null, { showBlockingLoading: true });
+      if (removesSession && session.id === threadId) {
+        const fallbackThreadId = appliedSessions[0]?.id || null;
+        selectThreadId(fallbackThreadId);
+        setThreadMessages([], fallbackThreadId);
+        setHasMoreMessages(false);
+        await loadData(fallbackThreadId, { showBlockingLoading: true });
+      } else {
+        cachePersonalAgentPage({
+          threadId,
+          sessions: appliedSessions,
+          messages,
+          hasMore: hasMoreMessages,
+        });
       }
     } catch {
       setError(`Failed to ${action} conversation. Please try again.`);
     } finally {
       setSessionActionBusyId(null);
     }
-  }, [cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, loadData, messages, recoveringRunState, sending, sessionActionBusyId, setSessions, startingRun, threadId]);
+  }, [cachePersonalAgentPage, handleSessionExpired, hasMoreMessages, loadData, messages, recoveringRunState, selectThreadId, sending, sessionActionBusyId, setSessions, setThreadMessages, startingRun, threadId]);
 
   useEffect(() => {
     if (!openSessionMenuId) return;
