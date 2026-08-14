@@ -9,6 +9,7 @@ const codexRuntimePath = path.join(hermesSourceRoot, "agent", "codex_runtime.py"
 const codexAppServerSessionPath = path.join(hermesSourceRoot, "agent", "transports", "codex_app_server_session.py");
 const runAgentPath = path.join(hermesSourceRoot, "run_agent.py");
 const backgroundReviewPath = path.join(hermesSourceRoot, "agent", "background_review.py");
+const skillUtilsPath = path.join(hermesSourceRoot, "agent", "skill_utils.py");
 const skillsToolPath = path.join(hermesSourceRoot, "tools", "skills_tool.py");
 const usagePricingPath = path.join(hermesSourceRoot, "agent", "usage_pricing.py");
 const conversationLoopPath = path.join(hermesSourceRoot, "agent", "conversation_loop.py");
@@ -326,6 +327,42 @@ if (
   writeFileSync(backgroundReviewPath, backgroundReview, "utf8");
   console.log("Hermes background review process-global stdio patch applied.");
   console.log(backgroundReviewPath);
+}
+
+let skillUtils = readFileSync(skillUtilsPath, "utf8");
+const skillDescriptionLimitBefore = `def extract_skill_description(frontmatter: Dict[str, Any]) -> str:
+    \"\"\"Extract a truncated description from parsed frontmatter.\"\"\"
+    raw_desc = frontmatter.get(\"description\", \"\")
+    if not raw_desc:
+        return \"\"
+    desc = str(raw_desc).strip().strip(\"'\\\"\")
+    if len(desc) > 60:
+        return desc[:57] + \"...\"
+    return desc
+`;
+const skillDescriptionLimitAfter = `def extract_skill_description(frontmatter: Dict[str, Any]) -> str:
+    \"\"\"Extract a compact description from parsed frontmatter.\"\"\"
+    raw_desc = frontmatter.get(\"description\", \"\")
+    if not raw_desc:
+        return \"\"
+    desc = str(raw_desc).strip().strip(\"'\\\"\")
+    if len(desc) > 1024:
+        return desc[:1021] + \"...\"
+    return desc
+`;
+
+if (skillUtils.includes(skillDescriptionLimitAfter)) {
+  console.log("Hermes skill activation description limit patch already applied.");
+  console.log(skillUtilsPath);
+} else if (!skillUtils.includes(skillDescriptionLimitBefore)) {
+  console.error("Could not find the Hermes skill description limit to patch.");
+  console.error(skillUtilsPath);
+  process.exit(1);
+} else {
+  skillUtils = skillUtils.replace(skillDescriptionLimitBefore, skillDescriptionLimitAfter);
+  writeFileSync(skillUtilsPath, skillUtils, "utf8");
+  console.log("Hermes skill activation description limit patch applied (60 -> 1024).");
+  console.log(skillUtilsPath);
 }
 
 let skillsTool = readFileSync(skillsToolPath, "utf8");
