@@ -17,6 +17,7 @@ export type ServerConfig = {
   hermesBaseUrl: string;
   hermesApiKeyEnv: string;
   hermesOpenRouterApiKeyEnv: string;
+  hermesOpenRouterProvidersOnly: string[];
   codexBin: string;
   codexHomeRoot: string;
   workspaceRoot: string;
@@ -497,6 +498,7 @@ export function loadConfig(): ServerConfig {
     hermesBaseUrl,
     hermesApiKeyEnv,
     hermesOpenRouterApiKeyEnv: readEnv('HERMES_OPENROUTER_API_KEY_ENV', hermesApiKeyEnv),
+    hermesOpenRouterProvidersOnly: readCsvEnv('HERMES_OPENROUTER_PROVIDERS_ONLY'),
     codexBin: readEnv('CODEX_BIN', 'codex'),
     codexHomeRoot: path.resolve(readEnv('CODEX_HOME_ROOT', '/tmp/altselfs-codex-homes')),
     workspaceRoot: path.resolve(readEnv('WORKSPACE_ROOT', '/tmp/altselfs-workspaces')),

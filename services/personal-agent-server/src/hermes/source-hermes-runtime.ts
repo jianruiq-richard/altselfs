@@ -596,6 +596,7 @@ export class HermesSourceRuntime {
         `  key_env: ${yamlString(hermesModelSelection.apiKeyEnv)}`,
         '',
         ...hermesProviderConfigYamlLines(hermesModelSelection),
+        ...buildHermesProviderRoutingYamlLines(hermesModelSelection, this.config),
         '',
         ...buildHermesPromptCachingYamlLines(),
         '',
@@ -1189,6 +1190,21 @@ function hermesProviderConfigYamlLines(selection: HermesModelSelection) {
     `    key_env: ${yamlString(selection.apiKeyEnv)}`,
     `    default_model: ${yamlString(selection.model)}`,
     `    transport: ${yamlString(selection.apiMode)}`,
+  ];
+}
+
+export function buildHermesProviderRoutingYamlLines(
+  selection: Pick<HermesModelSelection, 'provider'>,
+  config: Pick<ServerConfig, 'hermesOpenRouterProvidersOnly'>
+) {
+  if (selection.provider !== 'openrouter' || config.hermesOpenRouterProvidersOnly.length === 0) {
+    return [];
+  }
+  return [
+    'provider_routing:',
+    '  only:',
+    ...config.hermesOpenRouterProvidersOnly.map((provider) => `    - ${yamlString(provider)}`),
+    '  require_parameters: true',
   ];
 }
 

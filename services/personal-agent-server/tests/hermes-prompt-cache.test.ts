@@ -7,6 +7,7 @@ import {
   ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV,
   buildHermesDynamicUserContext,
   buildHermesPromptCachingYamlLines,
+  buildHermesProviderRoutingYamlLines,
   buildHermesSkillsYamlLines,
   buildHermesStableSystemPrompt,
   buildHermesToolsets,
@@ -69,6 +70,22 @@ test('Hermes prompt caching is configured for one hour', () => {
     'prompt_caching:',
     '  cache_ttl: "1h"',
   ]);
+});
+
+test('Hermes can pin OpenRouter requests to Friendli without affecting other providers', () => {
+  const config = { hermesOpenRouterProvidersOnly: ['friendli'] };
+
+  assert.deepEqual(buildHermesProviderRoutingYamlLines({ provider: 'openrouter' }, config), [
+    'provider_routing:',
+    '  only:',
+    '    - "friendli"',
+    '  require_parameters: true',
+  ]);
+  assert.deepEqual(buildHermesProviderRoutingYamlLines({ provider: 'apiyi' }, config), []);
+  assert.deepEqual(buildHermesProviderRoutingYamlLines(
+    { provider: 'openrouter' },
+    { hermesOpenRouterProvidersOnly: [] }
+  ), []);
 });
 
 test('Hermes external skills use the native toolset with write approval', () => {
