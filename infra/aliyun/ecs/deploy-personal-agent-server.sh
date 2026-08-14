@@ -283,19 +283,32 @@ wait_for_healthy_container() {
 validate_container_runtime_dependencies() {
   local container_id="$1"
   local label="$2"
-  local version
-  if ! version="$(docker exec "${container_id}" sh -eu -c '
+  local runtime_summary
+  if ! runtime_summary="$(docker exec "${container_id}" sh -eu -c '
     tirith_bin="${TIRITH_BIN:-/usr/local/bin/tirith}"
     test -x "${tirith_bin}"
     expected_version="${TIRITH_EXPECTED_VERSION:?TIRITH_EXPECTED_VERSION is missing}"
     actual_version="$("${tirith_bin}" --version)"
     test "${actual_version}" = "tirith ${expected_version}"
-    printf "%s" "${actual_version}"
+    test "${ALTSELFS_HERMES_DISABLE_BUNDLED_PLUGIN_AUTOLOAD:-}" = "1"
+
+    metadata_cache="${HERMES_OPENROUTER_MODEL_METADATA_CACHE_PATH:?HERMES_OPENROUTER_MODEL_METADATA_CACHE_PATH is missing}"
+    case "${metadata_cache}" in
+      /data/altselfs-agent/shared-cache/*) ;;
+      *) echo "Unsafe shared OpenRouter metadata cache path: ${metadata_cache}" >&2; exit 1 ;;
+    esac
+    metadata_count="$(
+      cd /opt/altselfs/hermes-agent
+      /opt/altselfs/hermes-agent/.venv/bin/python -c \
+        "from agent.model_metadata import fetch_model_metadata; data = fetch_model_metadata(); print(len(data)); raise SystemExit(0 if data else 1)"
+    )"
+    test -s "${metadata_cache}"
+    printf "%s; openrouterMetadata=%s" "${actual_version}" "${metadata_count}"
   ')"; then
-    echo "${label} is healthy but its pinned Tirith runtime is unavailable or invalid." >&2
+    echo "${label} is healthy but one or more pinned Hermes runtime dependencies are unavailable or invalid." >&2
     return 1
   fi
-  log "${label} runtime dependency verified: ${version}"
+  log "${label} runtime dependencies verified: ${runtime_summary}"
 }
 
 backend_control() {

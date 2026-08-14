@@ -12,6 +12,8 @@ const backgroundReviewPath = path.join(hermesSourceRoot, "agent", "background_re
 const skillsToolPath = path.join(hermesSourceRoot, "tools", "skills_tool.py");
 const usagePricingPath = path.join(hermesSourceRoot, "agent", "usage_pricing.py");
 const conversationLoopPath = path.join(hermesSourceRoot, "agent", "conversation_loop.py");
+const modelMetadataPath = path.join(hermesSourceRoot, "agent", "model_metadata.py");
+const pluginsPath = path.join(hermesSourceRoot, "hermes_cli", "plugins.py");
 
 const before = `    # {"openai", "openai-codex"}. Default is unchanged.
     "codex_app_server",
@@ -66,6 +68,66 @@ if (source.includes(providerAfter)) {
   writeFileSync(runtimeProviderPath, source, "utf8");
   console.log("Hermes OpenRouter codex_app_server runtime patch applied.");
   console.log(runtimeProviderPath);
+}
+
+let modelMetadata = readFileSync(modelMetadataPath, "utf8");
+const modelMetadataCachePathBefore = `def _get_model_metadata_cache_path() -> Path:
+    """Return path to the OpenRouter model metadata disk cache."""
+    from hermes_constants import get_hermes_home
+    return get_hermes_home() / "cache" / "openrouter_model_metadata.json"
+`;
+const modelMetadataCachePathAfter = `def _get_model_metadata_cache_path() -> Path:
+    """Return path to the OpenRouter model metadata disk cache."""
+    shared_cache_path = os.getenv(
+        "HERMES_OPENROUTER_MODEL_METADATA_CACHE_PATH", ""
+    ).strip()
+    if shared_cache_path:
+        return Path(os.path.expanduser(shared_cache_path))
+    from hermes_constants import get_hermes_home
+    return get_hermes_home() / "cache" / "openrouter_model_metadata.json"
+`;
+
+if (modelMetadata.includes(modelMetadataCachePathAfter)) {
+  console.log("Hermes shared OpenRouter model metadata cache patch already applied.");
+  console.log(modelMetadataPath);
+} else if (!modelMetadata.includes(modelMetadataCachePathBefore)) {
+  console.error("Could not find the Hermes OpenRouter model metadata cache path function to patch.");
+  console.error(modelMetadataPath);
+  process.exit(1);
+} else {
+  modelMetadata = modelMetadata.replace(modelMetadataCachePathBefore, modelMetadataCachePathAfter);
+  writeFileSync(modelMetadataPath, modelMetadata, "utf8");
+  console.log("Hermes shared OpenRouter model metadata cache patch applied.");
+  console.log(modelMetadataPath);
+}
+
+let plugins = readFileSync(pluginsPath, "utf8");
+const bundledPluginAutoloadBefore = `            if manifest.source == "bundled" and manifest.kind in {"backend", "platform"}:
+                self._load_plugin(manifest)
+                continue
+`;
+const bundledPluginAutoloadAfter = `            if manifest.source == "bundled" and manifest.kind in {"backend", "platform"}:
+                if _env_enabled("ALTSELFS_HERMES_DISABLE_BUNDLED_PLUGIN_AUTOLOAD"):
+                    loaded = LoadedPlugin(manifest=manifest, enabled=False)
+                    loaded.error = "bundled backend/platform autoload disabled by Minaco"
+                    self._plugins[lookup_key] = loaded
+                    continue
+                self._load_plugin(manifest)
+                continue
+`;
+
+if (plugins.includes(bundledPluginAutoloadAfter)) {
+  console.log("Hermes bundled backend/platform autoload patch already applied.");
+  console.log(pluginsPath);
+} else if (!plugins.includes(bundledPluginAutoloadBefore)) {
+  console.error("Could not find the Hermes bundled backend/platform autoload block to patch.");
+  console.error(pluginsPath);
+  process.exit(1);
+} else {
+  plugins = plugins.replace(bundledPluginAutoloadBefore, bundledPluginAutoloadAfter);
+  writeFileSync(pluginsPath, plugins, "utf8");
+  console.log("Hermes bundled backend/platform autoload patch applied.");
+  console.log(pluginsPath);
 }
 
 let codexRuntime = readFileSync(codexRuntimePath, "utf8");

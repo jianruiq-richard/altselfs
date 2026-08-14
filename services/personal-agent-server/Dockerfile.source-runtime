@@ -100,7 +100,8 @@ RUN python3 -m venv /opt/altselfs/hermes-agent/.venv \
     'done' \
     'exec /opt/altselfs/hermes-agent/.venv/bin/python "$@"' \
     > /usr/local/bin/altselfs-hermes-run \
-  && chmod +x /usr/local/bin/altselfs-hermes-run
+  && chmod +x /usr/local/bin/altselfs-hermes-run \
+  && /opt/altselfs/hermes-agent/.venv/bin/python -m compileall -q -x '/(\.venv|tests?)/' /opt/altselfs/hermes-agent
 
 ENV NODE_ENV=production
 ENV ALTSELFS_AGENT_ENV=production
@@ -111,6 +112,8 @@ ENV UV_BIN=/usr/local/bin/altselfs-hermes-run
 ENV CODEX_BIN=/opt/altselfs/codex-bin/codex
 ENV TIRITH_BIN=/usr/local/bin/tirith
 ENV TIRITH_EXPECTED_VERSION=${TIRITH_VERSION}
+ENV HERMES_OPENROUTER_MODEL_METADATA_CACHE_PATH=/data/altselfs-agent/shared-cache/openrouter_model_metadata.json
+ENV ALTSELFS_HERMES_DISABLE_BUNDLED_PLUGIN_AUTOLOAD=1
 
 EXPOSE 8787
 
