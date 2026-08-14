@@ -280,6 +280,24 @@ wait_for_healthy_container() {
   return 1
 }
 
+validate_container_runtime_dependencies() {
+  local container_id="$1"
+  local label="$2"
+  local version
+  if ! version="$(docker exec "${container_id}" sh -eu -c '
+    tirith_bin="${TIRITH_BIN:-/usr/local/bin/tirith}"
+    test -x "${tirith_bin}"
+    expected_version="${TIRITH_EXPECTED_VERSION:?TIRITH_EXPECTED_VERSION is missing}"
+    actual_version="$("${tirith_bin}" --version)"
+    test "${actual_version}" = "tirith ${expected_version}"
+    printf "%s" "${actual_version}"
+  ')"; then
+    echo "${label} is healthy but its pinned Tirith runtime is unavailable or invalid." >&2
+    return 1
+  fi
+  log "${label} runtime dependency verified: ${version}"
+}
+
 backend_control() {
   local container_id="$1"
   local action="$2"
@@ -434,7 +452,9 @@ bootstrap_blue_green() {
   log "bootstrapping blue-green deployment with ${target_color} in standby"
   start_color "${target_color}"
   target_container_id="$(compose_service_container "${target_service}")"
-  if [ -z "${target_container_id}" ] || ! wait_for_healthy_container "${target_container_id}" "${target_service}"; then
+  if [ -z "${target_container_id}" ] \
+    || ! wait_for_healthy_container "${target_container_id}" "${target_service}" \
+    || ! validate_container_runtime_dependencies "${target_container_id}" "${target_service}"; then
     stop_color "${target_color}" >/dev/null 2>&1 || true
     return 1
   fi
@@ -521,7 +541,9 @@ deploy_next_color() {
   log "starting ${target_color} in standby with image ${ALTSELFS_PERSONAL_AGENT_IMAGE}"
   start_color "${target_color}"
   target_container_id="$(compose_service_container "${target_service}")"
-  if [ -z "${target_container_id}" ] || ! wait_for_healthy_container "${target_container_id}" "${target_service}"; then
+  if [ -z "${target_container_id}" ] \
+    || ! wait_for_healthy_container "${target_container_id}" "${target_service}" \
+    || ! validate_container_runtime_dependencies "${target_container_id}" "${target_service}"; then
     stop_color "${target_color}" >/dev/null 2>&1 || true
     return 1
   fi
