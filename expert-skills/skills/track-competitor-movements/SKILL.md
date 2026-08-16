@@ -50,6 +50,21 @@ Run a broad, cross-platform investigation across both product-internal and produ
    - GEO effectiveness: assess whether generative engine optimization produces measurable visibility, citations, recommendations, and qualified referral traffic from AI answer engines. Distinguish visible GEO activity from demonstrated impact.
 6. Look for offline promotion, conferences, meetups, workshops, sponsorships, pop-ups, campus activity, partner events, and other physical distribution. Use online announcements, registration pages, photographs, recaps, and partner posts as evidence.
 
+### Discover date-bounded social posts through Google
+
+Use Google site-restricted searches in addition to each platform's native search. For YouTube in particular, Google often surfaces a broader set of videos, Shorts, descriptions, creator pages, and indexed mentions than YouTube's own search. Search the product name, official handle, campaign phrases, hashtags, referral codes, and landing-page URLs.
+
+Use `after:` and `before:` to constrain discovery to the reporting window:
+
+- To find posts from one exact calendar day, bracket that day with the preceding and following dates: `site:instagram.com "#coffee" after:2026-05-19 before:2026-05-21` for May 20, 2026.
+- To find posts before a cutoff: `site:instagram.com "#travel" before:2026-01-01`.
+- To find posts after a starting date: `site:instagram.com "#fitness" after:2026-06-01`.
+- Apply the same pattern to YouTube, using searches such as `site:youtube.com/watch`, `site:youtube.com/shorts`, and `site:youtu.be` with the product name or hashtag.
+- For broad TikTok discovery, use `site:tiktok.com "#cooking" after:2026-03-01 before:2026-03-16`.
+- To target individual TikTok videos whose visible text contains a hashtag, prefer `site:tiktok.com intext:"#travel" after:2026-07-01 before:2026-07-11`.
+
+Treat Google date operators as discovery filters, not final proof of publication time. Open each result and verify the platform's actual post or video timestamp before including it in the requested period. Do not count tag pages, duplicate snippets, mirrors, or inaccessible search-result snippets as separate posts.
+
 ### Product-internal activity
 
 Monitor changes to the product itself and its monetization system, including:
@@ -117,6 +132,9 @@ Show observed evidence before interpretation. Conclude with the competitor's act
 
 When the user chooses the professional visual report, consolidate the evidence ledger, calculations, and conclusions into a polished, professional HTML report.
 
+- Include all six external-activity modules defined above: the verified official-account map, official publishing and distribution, non-official KOC/KOL and affiliate promotion, paid acquisition, SEO activity covering on-site SEO, off-site SEO or PR, link building, and GEO, and offline promotion or events. Each module may begin with a concise synthesis, but none may be omitted. When no qualifying action is found, retain the module and state the surfaces and queries checked, the evidence limitations, and that no verified in-window activity was found.
+- Treat content publishing as the most important acquisition surface and document it comprehensively. Itemize every discovered in-window post from verified official accounts and every discovered in-window KOC, KOL, affiliate, reviewer, or sponsored account; do not replace the source-level inventory with an aggregate summary.
+- For each official or non-official post, show at least the platform, account, account status, publication date, post title or concise description, content format, source URL, campaign or tracking signal, raw views or exposure, validity assessment, estimated effective views or exposure, estimated qualified visits, estimated registrations, estimated paying users, estimated directly added revenue, confidence, and key assumptions. If a metric is unavailable, mark it unavailable and show the basis of any estimate instead of silently dropping the field.
 - Use a dated timeline for competitor actions and visual funnels for exposure, effective exposure, registrations, paid users, and revenue.
 - Prefer charts for channel mix, campaign reach, cost, estimated return, and daily or weekly movement. Use tables only when exact source-level detail is clearer in tabular form.
 - Clearly distinguish observed values, adjusted values, inferred estimates, and confidence ranges.
