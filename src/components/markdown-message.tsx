@@ -152,9 +152,26 @@ function parseBlocks(content: string): MarkdownBlock[] {
       while (index < lines.length) {
         const current = lines[index].trim();
         const match = orderedList ? current.match(/^\d+[.)]\s+(.+)$/) : current.match(/^[-*+]\s+(.+)$/);
-        if (!match) break;
-        items.push(match[1]);
-        index += 1;
+        if (match) {
+          items.push(match[1]);
+          index += 1;
+          continue;
+        }
+
+        if (!current) {
+          let nextItemIndex = index + 1;
+          while (nextItemIndex < lines.length && !lines[nextItemIndex].trim()) nextItemIndex += 1;
+          const nextItem = lines[nextItemIndex]?.trim() || '';
+          const nextMatch = orderedList
+            ? nextItem.match(/^\d+[.)]\s+(.+)$/)
+            : nextItem.match(/^[-*+]\s+(.+)$/);
+          if (nextMatch) {
+            index = nextItemIndex;
+            continue;
+          }
+        }
+
+        break;
       }
       blocks.push({ type: 'list', ordered: orderedList, items });
       continue;
