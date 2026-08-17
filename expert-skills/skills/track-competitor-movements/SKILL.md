@@ -12,8 +12,7 @@ Apply these requirements on top of your existing competitive-intelligence knowle
 Before research, establish:
 
 1. The competitor: product name, company name, domain, URL, or exact app link.
-2. The reporting period and, when boundary dates matter, the timezone.
-3. The output mode:
+2. The output mode:
    - **Quick data:** evidence and decisive analysis in chat; no HTML.
    - **Professional visual report:** a complete, presentation-ready HTML report. Warn that this can take around 10 minutes.
 
@@ -31,6 +30,20 @@ Include:
 ## Do not use monthly aggregate tools
 
 When the tracking window is one month or shorter, never use Similarweb, Semrush, or Ahrefs. Do not call these tools for discovery, evidence, or validation because their monthly-granularity data cannot establish which competitor actions occurred inside the requested date window. Use Google search and original YouTube pages instead.
+
+## Extract YouTube metadata with Python
+
+When normal page inspection does not expose the required fields, use Python on an execution host that can reach YouTube. Request the public watch URL with a normal desktop browser `User-Agent` and `Accept-Language`; do not require login cookies or bypass access controls.
+
+Parse the JSON objects embedded after `var ytInitialPlayerResponse =` and `var ytInitialData =`. Start at the opening `{` and use `json.JSONDecoder().raw_decode` instead of a fragile regular expression. Extract:
+
+- Title, channel, and view count from `videoDetails`; fall back to `videoPrimaryInfoRenderer`, `videoOwnerRenderer`, and `videoViewCountRenderer` in `ytInitialData`.
+- Publication date from `microformat.playerMicroformatRenderer.publishDate` or `uploadDate`; fall back to a rendered `publishDate` or `dateText` in `ytInitialData`.
+- Comment count from a digit-bearing `commentsEntryPointHeaderRenderer.commentCount` or `commentsHeaderRenderer.countText`.
+
+If the page exposes only the generic word `Comments`, find the continuation token inside the comment `itemSectionRenderer`. Read `INNERTUBE_API_KEY`, `INNERTUBE_CLIENT_VERSION`, and, when present, `VISITOR_DATA` from the page. POST the client context and continuation token to `https://www.youtube.com/youtubei/v1/next?key=<INNERTUBE_API_KEY>`, then read the digit-bearing `commentsHeaderRenderer.countText` from the public response.
+
+A `LOGIN_REQUIRED` player status does not by itself make the metadata unavailable: `ytInitialData` may still contain the public title, channel, view count, publication date, and comment continuation. Use only values actually present in YouTube's public responses. Record the retrieval time because view and comment counts change, and return `Unavailable` when a field cannot be verified.
 
 ## Search YouTube through Google
 
