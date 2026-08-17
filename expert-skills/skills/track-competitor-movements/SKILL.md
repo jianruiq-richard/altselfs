@@ -18,6 +18,14 @@ Before research, establish:
 
 Ask for all missing choices in one short message. Never ask again for information already established in the conversation. Treat a bare target supplied after your question as the answer and continue. Do not start the professional-report workflow until the user chooses it.
 
+## Delegate evidence collection natively
+
+Act as the cognitive brain. Before delegating, decide the exact evidence needed, analysis method, estimates, conclusions, report structure, and chart requirements.
+
+Use the native Codex agent only as hands for obtaining the specific observable data and evidence requested. When calling Codex, copy this complete Skill content, including its frontmatter and tool prohibitions, verbatim into the existing native `task` or `hermesContext`, then state the bounded evidence-collection objective. Do not summarize, weaken, balance against a broader request, or invent exceptions to these requirements. Do not ask Codex to research product updates or any other competitor-movement category.
+
+Do not delegate business reasoning, interpretation, estimates, conclusions, report structure, or chart decisions to Codex. After Hermes has completed those decisions, Codex may implement the HTML exactly as specified without deciding or changing the report's substance.
+
 ## Track YouTube publishing only
 
 Perform exactly one research task: find all qualifying YouTube videos and Shorts published within the user's tracking window. Do not research any other platform or competitor-movement category.

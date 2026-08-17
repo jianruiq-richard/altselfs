@@ -28,6 +28,10 @@ test('Hermes stable system prompt excludes all per-turn runtime context', () => 
   assert.match(stablePrompt, /Product expert Skills are centrally maintained and read-only/);
   assert.match(stablePrompt, /include both `name` and the exact `file_path`/);
   assert.match(stablePrompt, /A name-only call reloads the main SKILL\.md/);
+  assert.match(stablePrompt, /## Be the cognitive brain/);
+  assert.match(stablePrompt, /Decide what data is needed, how it should be analyzed, what the estimates are, and what conclusions to draw/);
+  assert.match(stablePrompt, /Do not delegate business reasoning, interpretation, estimates, or conclusions to Codex/);
+  assert.match(stablePrompt, /Codex may implement the HTML exactly as you specify/);
   assert.doesNotMatch(stablePrompt, /Current time:/);
   assert.doesNotMatch(stablePrompt, /Minaco runtime metadata for this turn:/);
   assert.doesNotMatch(stablePrompt, /<altselfs_user_profile>/);
