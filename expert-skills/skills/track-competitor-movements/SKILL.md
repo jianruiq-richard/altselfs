@@ -33,17 +33,7 @@ When the tracking window is one month or shorter, never use Similarweb, Semrush,
 
 ## Extract YouTube metadata with Python
 
-When normal page inspection does not expose the required fields, use Python on an execution host that can reach YouTube. Request the public watch URL with a normal desktop browser `User-Agent` and `Accept-Language`; do not require login cookies or bypass access controls.
-
-Parse the JSON objects embedded after `var ytInitialPlayerResponse =` and `var ytInitialData =`. Start at the opening `{` and use `json.JSONDecoder().raw_decode` instead of a fragile regular expression. Extract:
-
-- Title, channel, and view count from `videoDetails`; fall back to `videoPrimaryInfoRenderer`, `videoOwnerRenderer`, and `videoViewCountRenderer` in `ytInitialData`.
-- Publication date from `microformat.playerMicroformatRenderer.publishDate` or `uploadDate`; fall back to a rendered `publishDate` or `dateText` in `ytInitialData`.
-- Comment count from a digit-bearing `commentsEntryPointHeaderRenderer.commentCount` or `commentsHeaderRenderer.countText`.
-
-If the page exposes only the generic word `Comments`, find the continuation token inside the comment `itemSectionRenderer`. Read `INNERTUBE_API_KEY`, `INNERTUBE_CLIENT_VERSION`, and, when present, `VISITOR_DATA` from the page. POST the client context and continuation token to `https://www.youtube.com/youtubei/v1/next?key=<INNERTUBE_API_KEY>`, then read the digit-bearing `commentsHeaderRenderer.countText` from the public response.
-
-A `LOGIN_REQUIRED` player status does not by itself make the metadata unavailable: `ytInitialData` may still contain the public title, channel, view count, publication date, and comment continuation. Use only values actually present in YouTube's public responses. Record the retrieval time because view and comment counts change, and return `Unavailable` when a field cannot be verified.
+Use Python on a host that can reach YouTube to fetch each public watch page and extract the title, channel, publication date, view count, and comment count from its embedded `ytInitialPlayerResponse` and `ytInitialData` JSON. If the comment count is not embedded, follow the page's public comment continuation through `youtubei/v1/next`; use only verified public values, record the retrieval time, and return `Unavailable` when a field cannot be confirmed.
 
 ## Search YouTube through Google
 
