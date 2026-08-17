@@ -28,6 +28,31 @@ Include:
 1. Every video or Short published by the competitor's official YouTube account or accounts during the window.
 2. Every promotional video or Short published during the window by a non-official KOC, KOL, creator, reviewer, affiliate, or other account. Treat sponsorships, endorsements, recommendations, product-led tutorials or reviews, affiliate links, referral or discount codes, and other clearly promotional treatments as qualifying.
 
+## Do not use monthly aggregate tools
+
+When the tracking window is one month or shorter, never use Similarweb, Semrush, or Ahrefs. Do not call these tools for discovery, evidence, or validation because their monthly-granularity data cannot establish which competitor actions occurred inside the requested date window. Use Google search and original YouTube pages instead.
+
+## Search YouTube through Google
+
+Use Google site-restricted search as the primary discovery method. Resolve the requested tracking window to explicit dates, then search:
+
+`site:youtube.com "<competitor-name>" after:<start-date> before:<end-date>`
+
+For example:
+
+`site:youtube.com "competitor name" after:2026-08-09 before:2026-08-16`
+
+Repeat the query with the competitor's company name, domain, official handles, and common name variants when applicable, and exhaust the relevant Google results. Treat Google dates and snippets only as discovery signals. Open every candidate YouTube link that may fall inside the requested window and verify the publication time on the original YouTube page. From that page, collect:
+
+- Title
+- Publication time
+- Channel or creator name
+- Clickable YouTube link
+- View count
+- Comment count
+
+Do not report a candidate from the Google result alone. Include it only after opening the original YouTube link and confirming that its publication time is inside the requested window.
+
 Identify official accounts from the competitor's website, app, or verified cross-links. Search both the official channel archives and YouTube or web search using the product name, company name, domain, official handles, common name variants, hashtags, referral codes, and links. Check both standard videos and Shorts. Do not exclude a candidate merely because the competitor is absent from its title; inspect the description and other visible video details. Open the original YouTube page, verify that its publication time falls inside the requested window, and deduplicate repeated links or reposted search results.
 
 Return every qualifying item, not examples or an aggregate, separated into **Official** and **Non-official KOC/KOL promotions**. For each item list:
