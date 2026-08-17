@@ -18,13 +18,26 @@ Before research, establish:
 
 Ask for all missing choices in one short message. Never ask again for information already established in the conversation. Treat a bare target supplied after your question as the answer and continue. Do not start the professional-report workflow until the user chooses it.
 
-## Delegate evidence collection natively
+## Required Codex handoff
 
-Act as the cognitive brain. Before delegating, decide the exact evidence needed, analysis method, estimates, conclusions, report structure, and chart requirements.
+Act as the cognitive brain. Decide the evidence needed, analysis, conclusions, report structure, and chart requirements before delegating. Use the native Codex agent only as hands for evidence collection or for implementing a fully specified HTML report.
 
-Use the native Codex agent only as hands for obtaining the specific observable data and evidence requested. When calling Codex, copy this complete Skill content, including its frontmatter and tool prohibitions, verbatim into the existing native `task` or `hermesContext`, then state the bounded evidence-collection objective. Do not summarize, weaken, balance against a broader request, or invent exceptions to these requirements. Do not ask Codex to research product updates or any other competitor-movement category.
+For evidence collection, make one complete Codex delegation instead of a series of partial delegations. Put every item below explicitly in the native `task` or `hermesContext`; do not replace this checklist with a summary or a generic instruction to "follow the Skill":
 
-Do not delegate business reasoning, interpretation, estimates, conclusions, report structure, or chart decisions to Codex. After Hermes has completed those decisions, Codex may implement the HTML exactly as specified without deciding or changing the report's substance.
+1. Target: the exact competitor name, company, domain, URL, or app link.
+2. Window: inclusive start date, inclusive end date, and timezone when date boundaries matter.
+3. Scope: YouTube videos and Shorts only; include both official publishing and non-official KOC/KOL promotions; exclude product updates and every other competitor-movement category.
+4. Discovery: use Google `site:youtube.com` searches with the target, company, domain, handles, and common variants; treat search results only as candidates.
+5. Verification: open every candidate's original YouTube page, confirm its publication time is inside the window, inspect visible description details, and deduplicate by video ID or canonical URL.
+6. Metadata method: use Python to parse `ytInitialPlayerResponse` and `ytInitialData` from every public watch page. If a numeric comment count is not embedded, extract the public comment continuation and call `youtubei/v1/next`. Do not mark comment count `Unavailable` until this continuation path has been attempted, or until the page exposes no usable continuation or API context; record the specific failure reason.
+7. Required fields: title, publication time, channel or creator name, clickable YouTube link, view count, comment count, and retrieval time.
+8. Completeness: return every qualifying item, separated into **Official** and **Non-official KOC/KOL promotions**; report zero plus searches, accounts checked, and access limitations when a section is empty.
+9. Prohibited tools: for a window of one month or less, do not call Similarweb, Semrush, or Ahrefs for any purpose.
+10. Output discipline: use verified public values only; never estimate missing metrics or infer broader product, user, or revenue movements.
+
+In that same evidence-collection delegation, require Codex to parallelize independent work with bounded concurrency: batch independent Google query variants where supported, search official and non-official sources concurrently, and fetch or parse independent candidate videos concurrently. Require isolated retries and per-video failure reporting so parallel execution cannot silently drop candidates. Do not parallelize dependent stages, and merge and deduplicate all parallel results before returning the complete list.
+
+For a professional visual report, first receive the complete evidence from Codex, then finish the analysis, conclusions, report structure, and chart requirements as Hermes. Make one separate Codex delegation to implement that exact HTML specification. Do not ask Codex to decide business reasoning, estimates, conclusions, or report substance, and do not reintroduce product updates or other out-of-scope categories.
 
 ## Track YouTube publishing only
 
