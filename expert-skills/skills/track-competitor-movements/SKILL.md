@@ -1,15 +1,11 @@
 ---
 name: track-competitor-movements
-description: Must use when the user asks to track a competitor's recent product, acquisition, creator or KOC/KOL, advertising, SEO or GEO, PR, event, pricing, user, or revenue movements, including yesterday or last week. Also use when a bare product name, company name, domain, URL, or app link follows established monitoring intent. Produce quick in-chat intelligence or a professional Minaco-branded HTML report.
+description: Must use when the user asks to track a competitor's recent product updates, acquisition moves, and likely user and revenue impact.
 ---
-
-# Track Competitor Movements
-
-Apply these requirements on top of your existing competitive-intelligence knowledge.
 
 ## Establish scope and output
 
-Before research, establish:
+Before starting research, establish both the target product and the output mode. If either is missing, ask for the missing choices together in one short message:
 
 1. The competitor: product name, company name, domain, URL, or exact app link.
 2. The output mode:
@@ -18,7 +14,7 @@ Before research, establish:
 
 Ask for all missing choices in one short message. Never ask again for information already established in the conversation. Treat a bare target supplied after your question as the answer and continue. Do not start the professional-report workflow until the user chooses it.
 
-Once both user intents above have been established, directly delegate the following command to Codex:
+Once both user intents above have been established, directly delegate the following command EXACTLY to Codex when you investigate acquisition moves, as these commands are carefully polished for best practices:
 
 ```text
 Help me investigate the following activity related to <product name, company name, domain, URL, or app link> from last week: KOC promotional videos or posts and organic discussion posts on YouTube, posts from official social media accounts, and any online or offline event interactions. List every result with the creator or poster name, title, link, publication date, and view or watch count.
