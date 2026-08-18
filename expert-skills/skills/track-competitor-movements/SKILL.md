@@ -19,13 +19,13 @@ Once both user intents above have been established, directly delegate the follow
 ```text
 Help me investigate the following activity related to <product name, company name, domain, URL, or app link> from last week: KOC promotional videos or posts and organic discussion posts on YouTube, X, TikTok, Instagram, Reddit, Facebook, and LinkedIn, posts from official social media accounts, and any online or offline event interactions. List every result with the creator or poster name, title, link, publication date, and view or watch count. Complete the task in parallel wherever possible rather than sequentially.
 
-For YouTube, identify candidate keywords and then run:
+For YouTube, identify candidate keywords. Use Python (not Node.js) to invoke the system `curl` binary via `subprocess` with the following command and capture the returned HTML:
 curl -L -A 'Mozilla/5.0' 'https://www.youtube.com/results?search_query=<product-name-keyword>&sp=EgIIAw%253D%253D'
 
-Parse the page's ytInitialData in code and extract videoRenderer entries, videoId, title, channel, relative publication date, and view count. Then request:
+Use Python to parse the returned HTML's `ytInitialData` and extract `videoRenderer` entries, `videoId`, title, channel, relative publication date, and view count. Then use the same Python `subprocess` and system `curl` approach to request:
 https://www.youtube.com/watch?v=<videoId>
 
-Parse ytInitialPlayerResponse to obtain and verify the exact publication date, full description, and view count.
+Use Python to parse `ytInitialPlayerResponse` and obtain and verify the exact publication date, full description, and view count.
 
 ## Short-range tool restriction
 
