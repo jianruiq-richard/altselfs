@@ -27,6 +27,8 @@ https://www.youtube.com/watch?v=<videoId>
 
 Use Python to parse `ytInitialPlayerResponse` and obtain and verify the exact publication date, full description, and view count.
 
+For X, TikTok, Instagram, Reddit, Facebook, and LinkedIn, you can directly use Python and Google Search. Parallelize tasks where possible, keep the process concise, minimize verification, and prioritize speed over strict accuracy.
+
 ## Short-range tool restriction
 
 If the user requests an investigation covering one month or less, never use `altselfs_similarweb_api1`, `altselfs_semrush13`, or `altselfs_ahrefs_url_research`. These tools provide macro-level information at monthly granularity and are not suitable for shorter time ranges. Strictly follow the method above and delegate the prescribed command to Codex to collect acquisition activity across different platforms.
