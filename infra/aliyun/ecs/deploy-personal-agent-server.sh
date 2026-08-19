@@ -100,7 +100,7 @@ configure_runtime_limits_and_codex_provider() {
   set_runtime_env AGENT_TURN_MAX_OPENAI "${DEPLOY_AGENT_CONCURRENCY}"
   set_runtime_env AGENT_TURN_MAX_OPENROUTER "${DEPLOY_AGENT_CONCURRENCY}"
   set_runtime_env AGENT_TURN_MAX_APIYI "${DEPLOY_AGENT_CONCURRENCY}"
-  set_runtime_env HERMES_OPENROUTER_PROVIDERS_ONLY friendli
+  set_runtime_env HERMES_OPENROUTER_PROVIDERS_ONLY friendli,alibaba
 
   if [ "${DEPLOY_CODEX_MODEL_PROVIDER}" = "apiyi" ]; then
     log "runtime provider=apiyi endpoint=${DEPLOY_CODEX_APIYI_BASE_URL} concurrency=${DEPLOY_AGENT_CONCURRENCY} perThread=1"

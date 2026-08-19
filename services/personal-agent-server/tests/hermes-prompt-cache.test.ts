@@ -76,13 +76,17 @@ test('Hermes prompt caching is configured for one hour', () => {
   ]);
 });
 
-test('Hermes can pin OpenRouter requests to Friendli without affecting other providers', () => {
-  const config = { hermesOpenRouterProvidersOnly: ['friendli'] };
+test('Hermes prioritizes Friendli and falls back to Alibaba without affecting other providers', () => {
+  const config = { hermesOpenRouterProvidersOnly: ['friendli', 'alibaba'] };
 
   assert.deepEqual(buildHermesProviderRoutingYamlLines({ provider: 'openrouter' }, config), [
     'provider_routing:',
     '  only:',
     '    - "friendli"',
+    '    - "alibaba"',
+    '  order:',
+    '    - "friendli"',
+    '    - "alibaba"',
     '  require_parameters: true',
   ]);
   assert.deepEqual(buildHermesProviderRoutingYamlLines({ provider: 'apiyi' }, config), []);

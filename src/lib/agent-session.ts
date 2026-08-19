@@ -50,7 +50,7 @@ export async function getLatestThreadWithMessages(investorId: string, agentType:
 export async function listAgentThreads(
   investorId: string,
   agentType: AgentType,
-  limit = 30,
+  limit = 100,
   status: AgentThreadStatus = ACTIVE_THREAD_STATUS
 ) {
   const threads = await prisma.agentThread.findMany({

@@ -1204,6 +1204,8 @@ export function buildHermesProviderRoutingYamlLines(
     'provider_routing:',
     '  only:',
     ...config.hermesOpenRouterProvidersOnly.map((provider) => `    - ${yamlString(provider)}`),
+    '  order:',
+    ...config.hermesOpenRouterProvidersOnly.map((provider) => `    - ${yamlString(provider)}`),
     '  require_parameters: true',
   ];
 }
