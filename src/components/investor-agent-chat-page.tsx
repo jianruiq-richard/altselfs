@@ -365,8 +365,8 @@ const starterTemplates: StarterTemplate[] = [
     connectorKeys: ['similarweb_api1', 'semrush13', 'ahrefs_url_research', 'appark'],
   },
   {
-    title: "I have a competitor. Help me track last week's product updates, acquisition moves, and likely user and revenue impact.",
-    prompt: "I have a competitor. Help me track last week's product updates, acquisition moves, and likely user and revenue impact.",
+    title: "I have a competitor. Help me track their last week's acquisition moves.",
+    prompt: "I have a competitor. Help me track their last week's acquisition moves.",
     connectorKeys: ['similarweb_api1', 'semrush13', 'ahrefs_url_research', 'appark'],
   },
   {

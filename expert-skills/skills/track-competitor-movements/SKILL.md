@@ -1,6 +1,6 @@
 ---
 name: track-competitor-movements
-description: Must use when the user asks to track a competitor's recent product updates, acquisition moves, and likely user and revenue impact.
+description: Must use when the user asks to track a competitor's acquisition moves.
 ---
 
 ## Establish scope and output
