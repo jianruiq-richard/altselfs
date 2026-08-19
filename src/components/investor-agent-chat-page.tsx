@@ -370,8 +370,8 @@ const starterTemplates: StarterTemplate[] = [
     connectorKeys: ['similarweb_api1', 'semrush13', 'ahrefs_url_research', 'appark'],
   },
   {
-    title: 'I have a product. Help me find my first 100 seed users.',
-    prompt: 'I have a product. Help me find my first 100 seed users.',
+    title: 'I have a competitor. Help me estimate their revenue for last month.',
+    prompt: 'I have a competitor. Help me estimate their revenue for last month.',
     connectorKeys: ['similarweb_api1', 'semrush13', 'ahrefs_url_research', 'appark'],
   },
 ];
