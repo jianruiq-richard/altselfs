@@ -211,7 +211,6 @@ const CONNECTOR_LOGOS: Record<string, {
     width: 24,
     height: 24,
     imageClassName: 'h-7 w-7 object-contain',
-    tileClassName: 'bg-white',
   },
   tiktok_api23: {
     src: '/connector-logos/tiktok.svg',
