@@ -3,6 +3,7 @@
 import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import {
   BarChart3,
+  Camera,
   Check,
   Gauge,
   LoaderCircle,
@@ -61,6 +62,7 @@ type FeishuFlowState = {
 const SUPPORTED_CONNECTOR_KEYS = new Set([
   'gmail',
   'feishu',
+  'instagram_looter2',
   'similarweb_api1',
   'semrush13',
   'ahrefs_url_research',
@@ -94,6 +96,11 @@ const CONNECTOR_PERMISSIONS: Record<string, Array<{ title: string; description: 
     { title: 'Messages and docs', description: 'Use selected Lark context when you ask for it.' },
     { title: 'Calendar and contacts', description: 'Read schedule and people context for relevant tasks.' },
     { title: 'Scoped feature packages', description: 'Only enabled packages are available to the agent.' },
+  ],
+  instagram_looter2: [
+    { title: 'Official account resolution', description: 'Resolve and verify a competitor Instagram profile from its product name, domain, URL, or username.' },
+    { title: 'Recent official activity', description: 'Review public posts and Reels with publication dates, links, and engagement counts.' },
+    { title: 'KOC promotion candidates', description: 'Find public posts tagging the official account and surface collaboration, affiliate, and conversion signals.' },
   ],
   similarweb_api1: [
     { title: 'Website performance', description: 'Estimate visits, engagement, bounce behavior, pages per visit, and visit duration.' },
@@ -201,6 +208,7 @@ function connectorCategory(connector: ConnectorItem): Exclude<ConnectorCategory,
 function connectorIcon(connector: ConnectorItem): { Icon: LucideIcon; color: string } {
   if (connector.key === 'gmail') return { Icon: Mail, color: 'text-[#ff7d73]' };
   if (connector.key === 'feishu') return { Icon: MessageSquare, color: 'text-[#8eb3ff]' };
+  if (connector.key === 'instagram_looter2') return { Icon: Camera, color: 'text-[#e879f9]' };
   if (connector.key.includes('similarweb')) return { Icon: Gauge, color: 'text-[#8eb3ff]' };
   if (connector.key.includes('semrush')) return { Icon: BarChart3, color: 'text-[#e9b85a]' };
   if (connector.key.includes('ahrefs')) return { Icon: Search, color: 'text-[#ff8b4a]' };

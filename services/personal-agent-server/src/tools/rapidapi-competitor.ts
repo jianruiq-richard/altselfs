@@ -17,6 +17,34 @@ type ApparkAppCandidate = {
   publish_store?: unknown;
 };
 
+type InstagramSearchCandidate = {
+  id: string;
+  username: string;
+  fullName: string;
+  position: number;
+};
+
+type InstagramActivityPost = {
+  id: string;
+  shortcode: string;
+  permalink: string;
+  authorUsername: string;
+  authorFullName?: string;
+  publishedAt: string | null;
+  title: string;
+  caption: string;
+  mediaType: string;
+  viewCount: number | null;
+  likeCount: number | null;
+  commentCount: number | null;
+  shareCount: number | null;
+  paidPartnership: boolean;
+  coauthors: string[];
+  sourceTypes: string[];
+  promotionSignals: string[];
+  promotionConfidence?: 'high' | 'medium' | 'low';
+};
+
 type RapidApitoolSpec = {
   provider: string;
   source: string;
@@ -59,6 +87,58 @@ const TOOLS: RapidApitoolSpec[] = [
       const appId = readString(args.appId);
       if (!appName && !appId) return missingInput('appName or appId');
       return apparkAppIntelligence(args, config);
+    },
+  },
+  {
+    provider: 'instagram_looter2',
+    source: 'instagram-looter2',
+    host: 'instagram-looter2.p.rapidapi.com',
+    name: 'altselfs_instagram_competitor_activity',
+    description:
+      'Track a competitor\'s recent Instagram promotion activity with RapidAPI Instagram Looter. Resolves the official Instagram account from a product name, domain, URL, or username; verifies the profile website; and returns normalized official posts/Reels plus tagged KOC or creator promotion candidates with dates, permalinks, engagement counts, and promotion signals. Best for day- or week-level acquisition monitoring.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: {
+          type: 'string',
+          description: 'Product name, domain, website URL, Instagram profile URL, or @username, for example figurelabs.ai.',
+        },
+        username: {
+          type: 'string',
+          description: 'Optional exact Instagram username when already known. This bypasses account search but still verifies the profile.',
+        },
+        since: {
+          type: 'string',
+          description: 'Optional inclusive ISO-8601 start date or timestamp. When omitted, lookbackDays is used.',
+        },
+        until: {
+          type: 'string',
+          description: 'Optional inclusive ISO-8601 end date or timestamp. Defaults to the current time.',
+        },
+        lookbackDays: {
+          type: 'number',
+          description: 'Lookback window in days when since is omitted, from 1 to 31. Defaults to 7.',
+        },
+        includeOfficial: {
+          type: 'boolean',
+          description: 'Include posts and Reels published by the resolved official account. Defaults to true.',
+        },
+        includeKoc: {
+          type: 'boolean',
+          description: 'Include recent posts that tag the official account as KOC/creator promotion candidates. Defaults to true.',
+        },
+        maxResults: {
+          type: 'number',
+          description: 'Maximum normalized results per section, from 1 to 100. Defaults to 50.',
+        },
+      },
+      additionalProperties: false,
+    },
+    run: async (args, config) => {
+      const target = readString(args.target);
+      const username = normalizeInstagramUsername(readString(args.username));
+      if (!target && !username) return missingInput('target or username');
+      return instagramCompetitorActivity(args, config);
     },
   },
   {
@@ -241,6 +321,12 @@ export async function runRapidApiCompetitortool(toolName: string, argumentsValue
             'Appark data is retrieved from public web endpoints rather than a contracted official API; endpoint behavior may change.',
             'Downloads, revenue, traffic, ranking, and competitor figures are third-party estimates or proxy signals; present them with source and confidence labels.',
           ]
+        : tool.source === 'instagram-looter2'
+          ? [
+              'Instagram Looter is an independent third-party wrapper, not an official Meta API. Availability, fields, counts, and pagination may change without notice.',
+              'Tagged posts are KOC or creator promotion candidates, not proof of payment. Use the returned promotion signals and captions to distinguish paid, gifted, affiliate, and organic mentions.',
+              'The tool only reports public content returned by the provider in the requested window; private, deleted, untagged, story-only, or unindexed posts can be missing.',
+            ]
         : [
             'RapidAPI providers are third-party wrappers and may differ from official Semrush, Similarweb, Moz, Majestic, or Ahrefs APIs.',
             'Traffic, user, revenue, backlink, and keyword numbers are estimates or proxy signals; present them with source and confidence labels.',
@@ -255,6 +341,8 @@ export async function runRapidApiCompetitortool(toolName: string, argumentsValue
       error: error instanceof Error ? error.message : String(error),
       limitations: tool.source === 'appark'
         ? ['The Appark public endpoint failed, changed behavior, rate-limited the request, or the app is not covered.']
+        : tool.source === 'instagram-looter2'
+          ? ['The Instagram Looter request failed, the provider rate-limited the request, the public account could not be resolved, or Instagram did not return the requested content.']
         : ['The RapidAPI request failed, the provider rate-limited the request, or the domain is not covered.'],
     }, null, 2);
   }
@@ -425,6 +513,533 @@ function parseBody(text: string) {
   } catch {
     return trimmed;
   }
+}
+
+const INSTAGRAM_LOOTER_HOST = 'instagram-looter2.p.rapidapi.com';
+
+async function instagramCompetitorActivity(args: Record<string, unknown>, config: ServerConfig) {
+  const target = readString(args.target);
+  const requestedUsername = normalizeInstagramUsername(readString(args.username));
+  const includeOfficial = args.includeOfficial !== false;
+  const includeKoc = args.includeKoc !== false;
+  const lookbackDays = clampInt(readNumber(args.lookbackDays), 1, 31, 7);
+  const maxResults = clampInt(readNumber(args.maxResults), 1, 100, 50);
+  const until = parseInstagramDate(readString(args.until), new Date());
+  const since = parseInstagramDate(
+    readString(args.since),
+    new Date(until.getTime() - lookbackDays * 24 * 60 * 60 * 1000)
+  );
+  if (since.getTime() > until.getTime()) {
+    return { error: 'since must be earlier than or equal to until.' };
+  }
+
+  const resolution = await resolveInstagramProfile({ target, requestedUsername, config });
+  if (!resolution.username || !resolution.id) {
+    return {
+      request: { target: target || undefined, username: requestedUsername || undefined },
+      window: { since: since.toISOString(), until: until.toISOString(), lookbackDays },
+      resolution,
+      official: { count: 0, posts: [] },
+      koc: { count: 0, posts: [] },
+      error: 'No public Instagram profile with a usable user id could be resolved.',
+    };
+  }
+
+  const endpointTasks: Array<{ label: string; run: () => Promise<unknown> }> = [];
+  if (includeOfficial) {
+    endpointTasks.push(
+      {
+        label: 'user-feeds2',
+        run: () => instagramLooterGet('/user-feeds2', {
+          id: resolution.id,
+          count: String(Math.min(maxResults, 50)),
+        }, config),
+      },
+      {
+        label: 'reels',
+        run: () => instagramLooterGet('/reels', {
+          id: resolution.id,
+          count: String(Math.min(maxResults, 50)),
+          fields: [
+            'items[].media.pk',
+            'items[].media.code',
+            'items[].media.taken_at',
+            'items[].media.caption.text',
+            'items[].media.user.username',
+            'items[].media.user.full_name',
+            'items[].media.like_count',
+            'items[].media.comment_count',
+            'items[].media.share_count',
+            'items[].media.play_count',
+            'items[].media.ig_play_count',
+            'items[].media.product_type',
+            'items[].media.coauthor_producers',
+            'items[].media.is_paid_partnership',
+            'next_max_id',
+          ].join(','),
+        }, config),
+      }
+    );
+  }
+  if (includeKoc) {
+    endpointTasks.push({
+      label: 'user-tags',
+      run: () => instagramLooterGet('/user-tags', {
+        id: resolution.id,
+        count: String(Math.min(maxResults, 50)),
+      }, config),
+    });
+  }
+
+  const settled = await Promise.allSettled(endpointTasks.map((task) => task.run()));
+  const bodies = new Map<string, unknown>();
+  const errors: Array<{ endpoint: string; error: string }> = [];
+  settled.forEach((result, index) => {
+    const label = endpointTasks[index].label;
+    if (result.status === 'fulfilled') bodies.set(label, result.value);
+    else errors.push({ endpoint: label, error: result.reason instanceof Error ? result.reason.message : String(result.reason) });
+  });
+
+  const officialCandidates = includeOfficial
+    ? mergeInstagramPosts([
+        extractInstagramFeedPosts(bodies.get('user-feeds2'), resolution.username),
+        extractInstagramReelPosts(bodies.get('reels'), resolution.username),
+      ])
+    : [];
+  const kocCandidates = includeKoc
+    ? extractInstagramTaggedPosts(bodies.get('user-tags'), resolution.username)
+    : [];
+  const official = filterInstagramPostsByWindow(officialCandidates, since, until).slice(0, maxResults);
+  const koc = filterInstagramPostsByWindow(kocCandidates, since, until).slice(0, maxResults);
+
+  return {
+    request: {
+      target: target || undefined,
+      username: requestedUsername || undefined,
+      includeOfficial,
+      includeKoc,
+      maxResults,
+    },
+    window: {
+      since: since.toISOString(),
+      until: until.toISOString(),
+      lookbackDays: readString(args.since) ? undefined : lookbackDays,
+      interpretation: readString(args.since) ? 'explicit_range' : 'rolling_lookback',
+    },
+    resolution,
+    official: {
+      count: official.length,
+      posts: official,
+    },
+    koc: {
+      count: koc.length,
+      posts: koc,
+      classification:
+        'Public posts tagging the verified official account are returned as KOC/creator promotion candidates. promotionSignals and promotionConfidence are heuristics, not proof of payment.',
+    },
+    coverage: {
+      endpoints: endpointTasks.map((task) => task.label),
+      rawOfficialCandidates: officialCandidates.length,
+      rawTaggedCandidates: kocCandidates.length,
+      errors,
+    },
+  };
+}
+
+async function resolveInstagramProfile(input: {
+  target: string;
+  requestedUsername: string;
+  config: ServerConfig;
+}) {
+  const usernameFromTarget = extractInstagramUsername(input.target);
+  const explicitUsername = input.requestedUsername || usernameFromTarget;
+  const targetDomain = extractTargetDomain(input.target);
+  let candidates: InstagramSearchCandidate[] = [];
+  let searchError = '';
+
+  if (explicitUsername) {
+    candidates = [{ id: '', username: explicitUsername, fullName: '', position: 0 }];
+  } else {
+    const query = instagramSearchQuery(input.target);
+    try {
+      const search = await instagramLooterGet('/search', { query }, input.config);
+      candidates = extractInstagramSearchCandidates(search, query);
+    } catch (error) {
+      searchError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  let fallback: { candidate: InstagramSearchCandidate; profile: Record<string, unknown> } | null = null;
+  const attempts = explicitUsername ? candidates : candidates.slice(0, 5);
+  for (const candidate of attempts) {
+    try {
+      const rawProfile = await instagramLooterGet('/profile', { username: candidate.username }, input.config);
+      const profile = isRecord(rawProfile) ? rawProfile : {};
+      const profileUsername = normalizeInstagramUsername(readString(profile.username)) || candidate.username;
+      const profileId = readString(profile.id) || candidate.id;
+      if (!profileUsername || !profileId) continue;
+      const current = { candidate: { ...candidate, id: profileId, username: profileUsername }, profile };
+      fallback ||= current;
+      const externalDomain = extractTargetDomain(readString(profile.external_url));
+      if (explicitUsername || !targetDomain || (externalDomain && externalDomain === targetDomain)) {
+        return summarizeInstagramResolution({
+          selected: current,
+          targetDomain,
+          candidates,
+          matchReason: explicitUsername
+            ? 'explicit_username'
+            : externalDomain === targetDomain
+              ? 'profile_website_matches_target_domain'
+              : 'ranked_search_candidate',
+          searchError,
+        });
+      }
+    } catch (error) {
+      if (!searchError) searchError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  if (fallback) {
+    return summarizeInstagramResolution({
+      selected: fallback,
+      targetDomain,
+      candidates,
+      matchReason: 'ranked_search_candidate_unverified_domain',
+      searchError,
+    });
+  }
+
+  return {
+    username: '',
+    id: '',
+    profileUrl: '',
+    targetDomain: targetDomain || undefined,
+    matchReason: 'not_resolved',
+    alternatives: candidates.slice(0, 5),
+    searchError: searchError || undefined,
+  };
+}
+
+function summarizeInstagramResolution(input: {
+  selected: { candidate: InstagramSearchCandidate; profile: Record<string, unknown> };
+  targetDomain: string;
+  candidates: InstagramSearchCandidate[];
+  matchReason: string;
+  searchError: string;
+}) {
+  const { candidate, profile } = input.selected;
+  const followerEdge = isRecord(profile.edge_followed_by) ? profile.edge_followed_by : {};
+  const followingEdge = isRecord(profile.edge_follow) ? profile.edge_follow : {};
+  const externalUrl = readString(profile.external_url);
+  return {
+    username: candidate.username,
+    id: readString(profile.id) || candidate.id,
+    fullName: readString(profile.full_name) || candidate.fullName || undefined,
+    profileUrl: `https://www.instagram.com/${candidate.username}/`,
+    externalUrl: externalUrl || undefined,
+    targetDomain: input.targetDomain || undefined,
+    biography: truncate(readString(profile.biography), 500) || undefined,
+    followers: nonNegativeNumber(followerEdge.count),
+    following: nonNegativeNumber(followingEdge.count),
+    isVerified: profile.is_verified === true,
+    isProfessional: profile.is_professional_account === true,
+    isPrivate: profile.is_private === true,
+    matchReason: input.matchReason,
+    alternatives: input.candidates
+      .filter((item) => item.username !== candidate.username)
+      .slice(0, 5),
+    searchError: input.searchError || undefined,
+  };
+}
+
+async function instagramLooterGet(pathname: string, params: Record<string, string>, config: ServerConfig) {
+  const url = new URL(`https://${INSTAGRAM_LOOTER_HOST}${pathname}`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value) url.searchParams.set(key, value);
+  }
+  const response = await rapidApiJson({
+    config,
+    host: INSTAGRAM_LOOTER_HOST,
+    url: url.toString(),
+    publicInput: { endpoint: pathname, ...params, fields: params.fields ? '[normalized fields]' : undefined },
+  });
+  return isRecord(response) ? response.body : null;
+}
+
+function extractInstagramSearchCandidates(value: unknown, query: string) {
+  if (!isRecord(value) || !Array.isArray(value.users)) return [];
+  const comparableQuery = normalizeInstagramComparable(query);
+  return value.users
+    .map((entry, index) => {
+      if (!isRecord(entry)) return null;
+      const user = isRecord(entry.user) ? entry.user : entry;
+      const username = normalizeInstagramUsername(readString(user.username));
+      if (!username) return null;
+      const fullName = readString(user.full_name);
+      const position = readNumber(entry.position) ?? index;
+      const usernameComparable = normalizeInstagramComparable(username);
+      const fullNameComparable = normalizeInstagramComparable(fullName);
+      const score = Math.max(0, 30 - position)
+        + (usernameComparable === comparableQuery ? 60 : usernameComparable.includes(comparableQuery) ? 40 : 0)
+        + (fullNameComparable.startsWith(comparableQuery) ? 35 : fullNameComparable.includes(comparableQuery) ? 20 : 0);
+      return {
+        id: readString(user.id) || readString(user.pk),
+        username,
+        fullName,
+        position,
+        score,
+      };
+    })
+    .filter((item): item is InstagramSearchCandidate & { score: number } => Boolean(item))
+    .sort((left, right) => right.score - left.score || left.position - right.position)
+    .map(({ score: _score, ...candidate }) => candidate);
+}
+
+function extractInstagramFeedPosts(value: unknown, officialUsername: string) {
+  if (!isRecord(value)) return [];
+  const data = isRecord(value.data) ? value.data : {};
+  const user = isRecord(data.user) ? data.user : {};
+  const timeline = isRecord(user.edge_owner_to_timeline_media) ? user.edge_owner_to_timeline_media : {};
+  const edges = Array.isArray(timeline.edges) ? timeline.edges : [];
+  return edges
+    .map((edge) => isRecord(edge) ? normalizeInstagramPost(edge.node, 'official_feed', officialUsername) : null)
+    .filter((item): item is InstagramActivityPost => Boolean(item));
+}
+
+function extractInstagramReelPosts(value: unknown, officialUsername: string) {
+  if (!isRecord(value) || !Array.isArray(value.items)) return [];
+  return value.items
+    .map((item) => isRecord(item) ? normalizeInstagramPost(item.media || item, 'official_reel', officialUsername) : null)
+    .filter((post): post is InstagramActivityPost => Boolean(post));
+}
+
+function extractInstagramTaggedPosts(value: unknown, officialUsername: string) {
+  if (!isRecord(value)) return [];
+  const data = isRecord(value.data) ? value.data : {};
+  const user = isRecord(data.user) ? data.user : {};
+  const tagged = isRecord(user.edge_user_to_photos_of_you) ? user.edge_user_to_photos_of_you : {};
+  const edges = Array.isArray(tagged.edges) ? tagged.edges : [];
+  return edges
+    .map((edge) => isRecord(edge) ? normalizeInstagramPost(edge.node, 'tagged_koc_candidate', officialUsername) : null)
+    .filter((item): item is InstagramActivityPost => Boolean(item));
+}
+
+function normalizeInstagramPost(value: unknown, sourceType: string, officialUsername: string): InstagramActivityPost | null {
+  if (!isRecord(value)) return null;
+  const id = readString(value.pk) || readString(value.id);
+  const shortcode = readString(value.code) || readString(value.shortcode);
+  if (!id && !shortcode) return null;
+  const caption = instagramCaption(value);
+  const user = isRecord(value.user) ? value.user : isRecord(value.owner) ? value.owner : {};
+  const authorUsername = normalizeInstagramUsername(readString(user.username));
+  const authorFullName = readString(user.full_name);
+  const timestamp = firstInstagramNumber(value.taken_at, value.taken_at_timestamp, value.timestamp);
+  const publishedAt = instagramTimestampIso(timestamp);
+  const coauthors = instagramCoauthors(value);
+  const paidPartnership = value.is_paid_partnership === true || instagramSponsorUsernames(value).length > 0;
+  const mediaType = instagramMediaType(value);
+  const promotionSignals = sourceType === 'tagged_koc_candidate'
+    ? instagramPromotionSignals(caption, officialUsername, paidPartnership)
+    : paidPartnership ? ['paid_partnership_flag'] : [];
+  const firstLine = caption.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
+  return {
+    id: id || shortcode,
+    shortcode,
+    permalink: shortcode ? `https://www.instagram.com/${mediaType === 'reel' ? 'reel' : 'p'}/${shortcode}/` : '',
+    authorUsername: authorUsername || (sourceType.startsWith('official') ? officialUsername : ''),
+    authorFullName: authorFullName || undefined,
+    publishedAt,
+    title: truncate(firstLine || caption || `Instagram post ${shortcode || id}`, 180),
+    caption: truncate(caption, 1800),
+    mediaType,
+    viewCount: maxNonNegativeNumber(value.play_count, value.ig_play_count, value.video_view_count, value.view_count),
+    likeCount: maxNonNegativeNumber(
+      value.like_count,
+      instagramEdgeCount(value.edge_liked_by),
+      instagramEdgeCount(value.edge_media_preview_like)
+    ),
+    commentCount: maxNonNegativeNumber(value.comment_count, instagramEdgeCount(value.edge_media_to_comment)),
+    shareCount: maxNonNegativeNumber(value.share_count),
+    paidPartnership,
+    coauthors,
+    sourceTypes: [sourceType],
+    promotionSignals,
+    promotionConfidence: sourceType === 'tagged_koc_candidate'
+      ? promotionSignals.includes('paid_or_collaboration_language') || promotionSignals.includes('affiliate_or_reward_offer')
+        ? 'high'
+        : promotionSignals.length >= 2
+          ? 'medium'
+          : 'low'
+      : undefined,
+  };
+}
+
+function instagramCaption(value: Record<string, unknown>) {
+  if (isRecord(value.caption)) {
+    const text = readString(value.caption.text);
+    if (text) return text;
+  }
+  const captionEdge = isRecord(value.edge_media_to_caption) ? value.edge_media_to_caption : {};
+  const edges = Array.isArray(captionEdge.edges) ? captionEdge.edges : [];
+  for (const edge of edges) {
+    if (!isRecord(edge) || !isRecord(edge.node)) continue;
+    const text = readString(edge.node.text);
+    if (text) return text;
+  }
+  return '';
+}
+
+function instagramCoauthors(value: Record<string, unknown>) {
+  const result = new Set<string>();
+  const coauthors = Array.isArray(value.coauthor_producers) ? value.coauthor_producers : [];
+  for (const item of coauthors) {
+    if (!isRecord(item)) continue;
+    const username = normalizeInstagramUsername(readString(item.username));
+    if (username) result.add(username);
+  }
+  for (const username of instagramSponsorUsernames(value)) result.add(username);
+  return Array.from(result);
+}
+
+function instagramSponsorUsernames(value: Record<string, unknown>) {
+  const sponsorEdge = isRecord(value.edge_media_to_sponsor_user) ? value.edge_media_to_sponsor_user : {};
+  const edges = Array.isArray(sponsorEdge.edges) ? sponsorEdge.edges : [];
+  return edges.map((edge) => {
+    if (!isRecord(edge) || !isRecord(edge.node)) return '';
+    return normalizeInstagramUsername(readString(edge.node.username));
+  }).filter(Boolean);
+}
+
+function instagramPromotionSignals(caption: string, officialUsername: string, paidPartnership: boolean) {
+  const normalized = caption.toLowerCase();
+  const signals = new Set<string>();
+  if (officialUsername && normalized.includes(`@${officialUsername.toLowerCase()}`)) signals.add('official_account_tagged');
+  if (paidPartnership) signals.add('paid_partnership_flag');
+  if (/\b(collab(?:oration)?|partner(?:ship)?|sponsor(?:ed)?|paid\s+partnership|ad)\b|en colaboración|colaboración|合作|赞助/i.test(caption)) {
+    signals.add('paid_or_collaboration_language');
+  }
+  if (/affiliate|referral|promo\s*code|discount\s*code|credits?\s+extra|extra\s+credits?|cr[eé]ditos?\s+extra|\bcode\s*[=:]|\?code=/i.test(caption)) {
+    signals.add('affiliate_or_reward_offer');
+  }
+  if (/link\s+in\s+(?:my\s+)?bio|link\s+en\s+(?:mi\s+)?bio|comment\s+[“"']?(?:link|enlace)|comenta\s+[“"']?enlace|try\s+it|register|regístrate/i.test(caption)) {
+    signals.add('conversion_call_to_action');
+  }
+  return Array.from(signals);
+}
+
+function instagramMediaType(value: Record<string, unknown>) {
+  const productType = readString(value.product_type);
+  if (productType) return productType === 'clips' ? 'reel' : productType;
+  if (value.is_video === true || readString(value.__typename) === 'GraphVideo' || readNumber(value.media_type) === 2) return 'video';
+  if (readString(value.__typename) === 'GraphSidecar' || readNumber(value.media_type) === 8) return 'carousel';
+  return 'image';
+}
+
+function mergeInstagramPosts(groups: InstagramActivityPost[][]) {
+  const merged = new Map<string, InstagramActivityPost>();
+  for (const post of groups.flat()) {
+    const key = post.shortcode || post.id;
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, post);
+      continue;
+    }
+    merged.set(key, {
+      ...current,
+      ...post,
+      title: post.title.length >= current.title.length ? post.title : current.title,
+      caption: post.caption.length >= current.caption.length ? post.caption : current.caption,
+      viewCount: maxNonNegativeNumber(current.viewCount, post.viewCount),
+      likeCount: maxNonNegativeNumber(current.likeCount, post.likeCount),
+      commentCount: maxNonNegativeNumber(current.commentCount, post.commentCount),
+      shareCount: maxNonNegativeNumber(current.shareCount, post.shareCount),
+      paidPartnership: current.paidPartnership || post.paidPartnership,
+      coauthors: Array.from(new Set([...current.coauthors, ...post.coauthors])),
+      sourceTypes: Array.from(new Set([...current.sourceTypes, ...post.sourceTypes])),
+      promotionSignals: Array.from(new Set([...current.promotionSignals, ...post.promotionSignals])),
+    });
+  }
+  return Array.from(merged.values());
+}
+
+function filterInstagramPostsByWindow(posts: InstagramActivityPost[], since: Date, until: Date) {
+  return posts
+    .filter((post) => {
+      if (!post.publishedAt) return false;
+      const timestamp = Date.parse(post.publishedAt);
+      return Number.isFinite(timestamp) && timestamp >= since.getTime() && timestamp <= until.getTime();
+    })
+    .sort((left, right) => Date.parse(right.publishedAt || '') - Date.parse(left.publishedAt || ''));
+}
+
+function instagramEdgeCount(value: unknown) {
+  return isRecord(value) ? value.count : null;
+}
+
+function firstInstagramNumber(...values: unknown[]) {
+  for (const value of values) {
+    const number = readNumber(value);
+    if (number !== null) return number;
+  }
+  return null;
+}
+
+function maxNonNegativeNumber(...values: unknown[]) {
+  const numbers = values.map(nonNegativeNumber).filter((value): value is number => value !== null);
+  return numbers.length ? Math.max(...numbers) : null;
+}
+
+function nonNegativeNumber(value: unknown) {
+  const number = readNumber(value);
+  return number !== null && number >= 0 ? number : null;
+}
+
+function instagramTimestampIso(value: number | null) {
+  if (value === null) return null;
+  const milliseconds = value > 1_000_000_000_000 ? value : value * 1000;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function parseInstagramDate(value: string, fallback: Date) {
+  if (!value) return fallback;
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const date = new Date(dateOnly ? `${value}T00:00:00.000Z` : value);
+  return Number.isNaN(date.getTime()) ? fallback : date;
+}
+
+function extractInstagramUsername(value: string) {
+  const normalized = value.trim();
+  if (/^@[A-Za-z0-9._]+$/.test(normalized)) return normalizeInstagramUsername(normalized);
+  try {
+    const url = new URL(/^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`);
+    if (!/(^|\.)instagram\.com$/i.test(url.hostname)) return '';
+    const segment = url.pathname.split('/').filter(Boolean)[0] || '';
+    return normalizeInstagramUsername(segment);
+  } catch {
+    return '';
+  }
+}
+
+function normalizeInstagramUsername(value: string) {
+  return value.replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9._]/g, '');
+}
+
+function instagramSearchQuery(value: string) {
+  const domain = extractTargetDomain(value);
+  if (domain) return domain.split('.')[0].replace(/[-_]+/g, ' ');
+  return value.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\s+/g, ' ').trim();
+}
+
+function extractTargetDomain(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return '';
+  if (!/^https?:\/\//i.test(normalized) && !/^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/.*)?$/i.test(normalized)) return '';
+  return normalizeDomain(normalized);
+}
+
+function normalizeInstagramComparable(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 async function apparkAppIntelligence(args: Record<string, unknown>, config: ServerConfig) {
@@ -937,6 +1552,14 @@ function publicArgs(args: Record<string, unknown>) {
     'searchSize',
     'includeDownloadRevenue',
     'includeCompetitors',
+    'target',
+    'username',
+    'since',
+    'until',
+    'lookbackDays',
+    'includeOfficial',
+    'includeKoc',
+    'maxResults',
   ];
   return Object.fromEntries(Object.entries(args).filter(([key]) => allowed.includes(key)));
 }

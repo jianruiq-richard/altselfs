@@ -3,6 +3,7 @@ import { getInvestorOrNull } from '@/lib/investor-auth';
 import { prisma } from '@/lib/prisma';
 
 type CompetitiveDataSourceProvider =
+  | 'instagram_looter2'
   | 'similarweb_api1'
   | 'semrush13'
   | 'semrush8'
@@ -19,6 +20,11 @@ const COMPETITIVE_DATA_SOURCES: Record<CompetitiveDataSourceProvider, {
   label: string;
   scope: string;
 }> = {
+  instagram_looter2: {
+    dbProvider: 'INSTAGRAM_LOOTER2',
+    label: 'Instagram Competitive Activity',
+    scope: 'profile_resolution,official_posts,reels,tagged_koc_candidates,engagement,promotion_signals',
+  },
   similarweb_api1: {
     dbProvider: 'SIMILARWEB_API1',
     label: 'Similarweb API1',

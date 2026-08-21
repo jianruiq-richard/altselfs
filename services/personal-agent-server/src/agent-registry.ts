@@ -84,11 +84,11 @@ export function defaultAgentProfiles(): AgentProfile[] {
       runtimeId: 'codex',
       name: 'Competitive Intelligence Agent',
       description:
-        'A specialized Codex profile for competitive intelligence, growth-channel analysis, SEO/PPC research, market positioning, user/traffic proxy analysis, revenue estimation, and evidence-based competitor synthesis. It uses enabled information-source agents such as Semrush, Similarweb, Google, YouTube, X/Twitter, Facebook, WeChat, Xiaohongshu, Gmail, and Feishu when available.',
+        'A specialized Codex profile for competitive intelligence, growth-channel analysis, SEO/PPC research, social promotion tracking, market positioning, user/traffic proxy analysis, revenue estimation, and evidence-based competitor synthesis. It uses enabled information-source agents such as Instagram Looter, Semrush, Similarweb, Google, YouTube, X/Twitter, Facebook, WeChat, Xiaohongshu, Gmail, and Feishu when available.',
       capabilities: [
         'Identify direct competitors, indirect competitors, SEO/PPC competitors, and channel competitors',
         'Organize evidence around users, traffic, revenue, growth rate, and acquisition motion',
-        'Prioritize enabled information-source teammates such as Similarweb API1, Semrush13, Semrush8, Ahrefs URL Research, Domain Metrics Check, and future Google, YouTube, X/Twitter, and Facebook sources',
+        'Prioritize enabled information-source teammates such as Instagram Looter, Similarweb API1, Semrush13, Semrush8, Ahrefs URL Research, Domain Metrics Check, and future Google, YouTube, X/Twitter, and Facebook sources',
         'Separate observable facts, third-party estimates, proxy metrics, and inferred assumptions',
         'Label competitive-intelligence conclusions with sources, confidence, limitations, and missing data sources',
       ],
@@ -110,6 +110,7 @@ export function defaultAgentProfiles(): AgentProfile[] {
         'current_time_context',
         'altselfs_web_search',
         'enabled_info_ops_source_agents',
+        'altselfs_instagram_competitor_activity_when_instagram_looter2_employee_enabled',
         'altselfs_similarweb_api1_when_similarweb_api1_employee_enabled',
         'altselfs_semrush13_when_semrush13_employee_enabled',
         'altselfs_semrush8_when_semrush8_employee_enabled',

@@ -491,6 +491,7 @@ function getAttachmentPayloads(attachments: UploadedAttachment[]) {
 }
 
 const COMPETITOR_DATA_TOOL_NAMES = new Set([
+  'altselfs_instagram_competitor_activity',
   'altselfs_similarweb_api1',
   'altselfs_semrush13',
   'altselfs_semrush8',
@@ -698,6 +699,7 @@ async function syncTerminalPersonalAgentRun(params: {
 
 async function getEnabledInfoSources(investorId: string) {
   const providerMap: Record<string, string> = {
+    INSTAGRAM_LOOTER2: 'instagram_looter2',
     SIMILARWEB_API1: 'similarweb_api1',
     SEMRUSH13: 'semrush13',
     SEMRUSH8: 'semrush8',

@@ -74,6 +74,12 @@ const PERSONAL_CONNECTORS = [
 
 const COMPETITIVE_CONNECTORS = [
   {
+    key: 'instagram_looter2',
+    label: 'Instagram Competitive Activity',
+    description: 'Recent official Instagram posts and Reels plus tagged KOC or creator promotion candidates, with dates, links, engagement, and promotion signals.',
+    dbProvider: 'INSTAGRAM_LOOTER2',
+  },
+  {
     key: 'similarweb_api1',
     label: 'Similarweb',
     description: 'Website traffic, engagement, rankings, traffic channels, geography, referrals, and similar-site signals.',
@@ -114,6 +120,7 @@ const COMPETITIVE_CONNECTORS = [
 const ENABLED_CONNECTOR_KEYS = new Set([
   'gmail',
   'feishu',
+  'instagram_looter2',
   'similarweb_api1',
   'semrush13',
   'ahrefs_url_research',

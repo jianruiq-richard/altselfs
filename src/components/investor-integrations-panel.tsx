@@ -9,6 +9,7 @@ type ProviderKey =
   | 'feishu'
   | 'meta'
   | 'xiaohongshu'
+  | 'instagram_looter2'
   | 'similarweb_api1'
   | 'semrush13'
   | 'semrush8'
@@ -54,6 +55,7 @@ type PersonalAccount = {
 type FeishuFeaturePackage = 'messages' | 'contacts' | 'calendar' | 'docs' | 'meetings';
 
 const COMPETITIVE_DATA_SOURCE_PROVIDERS = [
+  'instagram_looter2',
   'similarweb_api1',
   'semrush13',
   'semrush8',
@@ -79,6 +81,7 @@ const providerLabels: Record<ProviderKey, string> = {
   feishu: 'Lark',
   meta: 'Instagram / Facebook',
   xiaohongshu: 'Xiaohongshu',
+  instagram_looter2: 'Instagram Competitive Activity',
   similarweb_api1: 'Similarweb API1',
   semrush13: 'Semrush13',
   semrush8: 'Semrush8',
@@ -92,6 +95,7 @@ function providerLabel(provider: ProviderKey) {
 }
 
 const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
+  instagram_looter2: 'Recent official Instagram posts and Reels plus tagged KOC or creator promotion candidates.',
   similarweb_api1: 'Traffic, rankings, audience, referral, and engagement insights from Similarweb-style APIs.',
   semrush13: 'Domain overview, SEO traffic, keyword, backlink, and authority metrics.',
   semrush8: 'URL-level SEO traffic, keywords, backlinks, and ranking insights.',
@@ -101,6 +105,7 @@ const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_
 };
 
 const competitiveDataSourceScopes: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
+  instagram_looter2: 'Official account resolution, recent posts and Reels, tagged creator content, engagement counts, and promotion signals.',
   similarweb_api1: 'Website traffic, country distribution, audience behavior, referrals, and engagement signals.',
   semrush13: 'Domain and keyword intelligence, backlink data, authority metrics, and AI traffic signals when available.',
   semrush8: 'URL rank, keyword, traffic, backlink, and competitor visibility analysis.',
@@ -114,6 +119,7 @@ const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
   feishu: value,
   meta: value,
   xiaohongshu: value,
+  instagram_looter2: value,
   similarweb_api1: value,
   semrush13: value,
   semrush8: value,
@@ -228,6 +234,7 @@ export default function InvestorIntegrationsPanel({
     feishu: [],
     meta: [],
     xiaohongshu: [],
+    instagram_looter2: [],
     similarweb_api1: [],
     semrush13: [],
     semrush8: [],
@@ -240,6 +247,7 @@ export default function InvestorIntegrationsPanel({
     feishu: null,
     meta: null,
     xiaohongshu: null,
+    instagram_looter2: null,
     similarweb_api1: null,
     semrush13: null,
     semrush8: null,

@@ -80,6 +80,7 @@ export default async function InfoOpsPage({
     feishu: 'FEISHU',
     meta: 'META',
     xiaohongshu: 'XIAOHONGSHU',
+    instagram_looter2: 'INSTAGRAM_LOOTER2',
     similarweb_api1: 'SIMILARWEB_API1',
     semrush13: 'SEMRUSH13',
     semrush8: 'SEMRUSH8',
@@ -112,6 +113,7 @@ export default async function InfoOpsPage({
     wechat: 'Add WeChat sources, then use the WeChat Assistant.',
     xiaohongshu: 'Connect Xiaohongshu, then use the Xiaohongshu Assistant.',
     semrush: 'Connect competitive data sources for AI teammate tools.',
+    instagram: 'Connect Instagram Competitive Activity for official and KOC promotion tracking.',
     appark: 'Connect Appark for mobile app market data and competitor discovery.',
   };
 
@@ -142,7 +144,8 @@ export default async function InfoOpsPage({
 }
 
 function isCompetitiveDataSource(provider: string) {
-  return provider === 'similarweb_api1'
+  return provider === 'instagram_looter2'
+    || provider === 'similarweb_api1'
     || provider === 'semrush13'
     || provider === 'semrush8'
     || provider === 'ahrefs_url_research'
