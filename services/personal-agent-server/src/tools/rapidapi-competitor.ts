@@ -595,15 +595,34 @@ export async function getRapidApiQuotaSnapshots() {
     const remaining = readNumber(quota?.remaining);
     const limit = readNumber(quota?.limit);
     const reset = typeof quota?.reset === 'string' ? quota.reset : '';
+    const updatedAt = typeof quota?.updatedAt === 'string' ? quota.updatedAt : new Date().toISOString();
+    const used = remaining !== null && limit !== null ? Math.max(0, limit - remaining) : null;
+    const resetAt = typeof quota?.resetAt === 'string'
+      ? quota.resetAt
+      : rapidApiQuotaResetAt(reset, updatedAt);
     return {
       provider: 'RapidAPI',
       account: `${tool.source} · ${tool.host}`,
       fingerprint: configured ? 'ECS key configured' : 'Not configured',
       balance: remaining !== null && limit !== null ? `${remaining.toLocaleString()} / ${limit.toLocaleString()}` : configured ? 'Unknown' : 'Not configured',
-      usage: reset ? `reset ${reset}` : quota ? `HTTP ${String(quota.status || 'unknown')}` : 'No quota data',
+      usage: resetAt ? `Resets ${resetAt}` : reset ? `Reset ${reset}` : quota ? `HTTP ${String(quota.status || 'unknown')}` : 'No quota data',
       status: !configured ? 'unknown' : remaining === null || limit === null ? 'unknown' : remaining <= 0 ? 'critical' : remaining / limit < 0.1 ? 'warning' : 'ok',
-      updatedAt: typeof quota?.updatedAt === 'string' ? quota.updatedAt : new Date().toISOString(),
-      note: quota ? 'RapidAPI quota headers were returned.' : 'Quota headers were not returned.',
+      updatedAt,
+      note: quota
+        ? 'Captured from the latest RapidAPI response headers for this provider.'
+        : 'No response-header snapshot yet. Run this provider once to collect quota data.',
+      quota: {
+        host: tool.host,
+        limit,
+        remaining,
+        used,
+        usedPercent: used !== null && limit !== null && limit > 0 ? (used / limit) * 100 : null,
+        reset: reset || null,
+        resetAt: resetAt || null,
+        httpStatus: readNumber(quota?.status),
+        sampled: Boolean(quota),
+        sampledAt: quota ? updatedAt : null,
+      },
     };
   });
 }
@@ -638,10 +657,12 @@ async function persistRapidApiQuota(host: string, quota: { limit: number | null;
   if (quota.limit === null && quota.remaining === null && !quota.reset) return;
   const filePath = rapidApiQuotaSnapshotPath();
   const current: Record<string, unknown> = await readRapidApiQuotaFile().catch(() => ({}));
+  const updatedAt = new Date().toISOString();
   current[host] = {
     ...quota,
+    resetAt: rapidApiQuotaResetAt(quota.reset, updatedAt) || null,
     status,
-    updatedAt: new Date().toISOString(),
+    updatedAt,
   };
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, `${JSON.stringify(current, null, 2)}\n`, 'utf8');
@@ -655,6 +676,16 @@ async function readRapidApiQuotaFile(): Promise<Record<string, unknown>> {
 
 function rapidApiQuotaSnapshotPath() {
   return process.env.RAPIDAPI_QUOTA_SNAPSHOT_PATH?.trim() || '/data/altselfs-agent/ops/rapidapi-quota.json';
+}
+
+function rapidApiQuotaResetAt(reset: string, updatedAt: string) {
+  if (!reset) return '';
+  const absolute = Date.parse(reset);
+  if (Number.isFinite(absolute)) return new Date(absolute).toISOString();
+  const seconds = /^([0-9]+(?:\.[0-9]+)?)s$/.exec(reset)?.[1];
+  const sampledAt = Date.parse(updatedAt);
+  if (!seconds || !Number.isFinite(sampledAt)) return '';
+  return new Date(sampledAt + Number(seconds) * 1000).toISOString();
 }
 
 function headerNumber(headers: Headers, keys: string[]) {

@@ -11,6 +11,8 @@ export default async function OpsPage() {
   if (!admin) redirect('/dashboard');
 
   const data = await getOpsDashboardData();
+  const rapidApiAccounts = data.apiAccounts.filter((row) => row.provider === 'RapidAPI');
+  const otherApiAccounts = data.apiAccounts.filter((row) => row.provider !== 'RapidAPI');
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -34,7 +36,7 @@ export default async function OpsPage() {
           </div>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {data.summary.map((item) => (
             <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-4">
               <div className="flex items-center justify-between gap-3">
@@ -66,9 +68,69 @@ export default async function OpsPage() {
           </div>
         </section>
 
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white">
+          <SectionTitle
+            title="RapidAPI Provider Quotas"
+            subtitle="Latest-known limits from each provider's response headers. A successful or failed provider request refreshes that provider's row."
+          />
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Source</th>
+                  <th className="px-4 py-3 font-medium">Used</th>
+                  <th className="px-4 py-3 font-medium">Remaining</th>
+                  <th className="px-4 py-3 font-medium">Plan limit</th>
+                  <th className="px-4 py-3 font-medium">Resets at</th>
+                  <th className="px-4 py-3 font-medium">Sampled</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rapidApiAccounts.length === 0 ? (
+                  <tr><td colSpan={7} className="px-4 py-5 text-slate-500">No RapidAPI provider data is available.</td></tr>
+                ) : (
+                  rapidApiAccounts.map((row) => (
+                    <tr key={row.account}>
+                      <td className="px-4 py-3">
+                        <p className="font-medium">{rapidApiSourceName(row.account)}</p>
+                        <p className="mt-1 font-mono text-xs text-slate-500">{row.quota?.host || row.account}</p>
+                        <p className="mt-1 text-xs text-slate-500">{row.note}</p>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">{formatInteger(row.quota?.used)}</td>
+                      <td className="min-w-36 px-4 py-3 tabular-nums">
+                        <p className="font-medium">{formatInteger(row.quota?.remaining)}</p>
+                        {row.quota?.usedPercent !== null && row.quota?.usedPercent !== undefined ? (
+                          <div className="mt-2 h-1.5 w-28 overflow-hidden rounded-full bg-slate-100" aria-label={`${row.quota.usedPercent.toFixed(1)}% used`}>
+                            <div
+                              className="h-full rounded-full bg-slate-500"
+                              style={{ width: `${Math.min(100, Math.max(0, row.quota.usedPercent))}%` }}
+                            />
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">{formatInteger(row.quota?.limit)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {row.quota?.resetAt ? formatDateTime(row.quota.resetAt) : row.quota?.reset || 'Unknown'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <p>{row.quota?.sampledAt ? formatDateTime(row.quota.sampledAt) : 'Not sampled'}</p>
+                        {row.quota?.httpStatus !== null && row.quota?.httpStatus !== undefined ? (
+                          <p className="mt-1 text-xs text-slate-500">HTTP {row.quota.httpStatus}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3"><StatusPill status={row.status} /></td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <section className="mt-6 grid gap-6 lg:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-white">
-            <SectionTitle title="API Keys / Credits" subtitle="Configured API keys, balances, and usage status." />
+            <SectionTitle title="API Keys / Credits" subtitle="Configured non-RapidAPI keys, balances, and usage status." />
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
@@ -80,7 +142,7 @@ export default async function OpsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {data.apiAccounts.map((row) => (
+                  {otherApiAccounts.map((row) => (
                     <tr key={`${row.provider}-${row.account}`}>
                       <td className="px-4 py-3">
                         <p className="font-medium">{row.provider}</p>
@@ -174,4 +236,12 @@ function formatDateTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+function rapidApiSourceName(account: string) {
+  return account.split(' · ', 1)[0] || account;
+}
+
+function formatInteger(value: number | null | undefined) {
+  return typeof value === 'number' ? value.toLocaleString('en-US') : 'Unknown';
 }

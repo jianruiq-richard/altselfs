@@ -19,6 +19,20 @@ export type ApiAccountSnapshot = {
   status: OpsStatus;
   updatedAt: string;
   note?: string;
+  quota?: ApiQuotaSnapshot;
+};
+
+export type ApiQuotaSnapshot = {
+  host: string;
+  limit: number | null;
+  remaining: number | null;
+  used: number | null;
+  usedPercent: number | null;
+  reset: string | null;
+  resetAt: string | null;
+  httpStatus: number | null;
+  sampled: boolean;
+  sampledAt: string | null;
 };
 
 export type ResourceSnapshot = {
@@ -90,6 +104,20 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
     ...aliyunResources.filter((resource) => resource.metadata?.kind !== 'ecs_disk'),
   ];
 
+  const rapidApiAccounts = apiAccounts.filter((account) => account.provider === 'RapidAPI');
+  const sampledRapidApiAccounts = rapidApiAccounts.filter((account) => account.quota?.sampled);
+  const remainingRapidApiRequests = sampledRapidApiAccounts.reduce(
+    (total, account) => total + (account.quota?.remaining ?? 0),
+    0
+  );
+  const rapidApiStatus: OpsStatus = rapidApiAccounts.some((account) => account.status === 'critical')
+    ? 'critical'
+    : rapidApiAccounts.some((account) => account.status === 'warning') || sampledRapidApiAccounts.length < rapidApiAccounts.length
+      ? 'warning'
+      : sampledRapidApiAccounts.length > 0
+        ? 'ok'
+        : 'unknown';
+
   const summary: OpsMetric[] = [
     { label: 'Users', value: String(appStats.userCount), detail: `${appStats.investorCount} investors / ${appStats.candidateCount} candidates`, status: 'ok' },
     { label: 'Messages in last 7 days', value: String(appStats.recentMessageCount), detail: 'Candidate chat and agent context messages', status: 'ok' },
@@ -99,6 +127,14 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
       value: agentSnapshot.connected ? 'Connected' : 'Unknown',
       detail: agentSnapshot.note,
       status: agentSnapshot.connected ? 'ok' : 'unknown',
+    },
+    {
+      label: 'RapidAPI quotas',
+      value: `${sampledRapidApiAccounts.length} / ${rapidApiAccounts.length} sampled`,
+      detail: sampledRapidApiAccounts.length > 0
+        ? `${remainingRapidApiRequests.toLocaleString()} requests remaining across sampled provider plans`
+        : 'Run a RapidAPI provider once to collect response-header quota data',
+      status: rapidApiStatus,
     },
   ];
 
@@ -114,6 +150,7 @@ export async function getOpsDashboardData(): Promise<OpsDashboardData> {
       'Clerk user counts, database usage, OpenRouter credits, and Agent server resource checks are combined in this view.',
       'Per-user usage, conversations, failures, and resource footprint are loaded on demand in User Admin.',
       'Supabase, Vercel, and Aliyun API data depends on available API tokens and configured limit environment variables.',
+      'RapidAPI quotas are latest-known response-header snapshots, not no-cost live balance checks. Each provider call refreshes its own snapshot.',
     ],
   };
 }
@@ -257,6 +294,7 @@ async function getAgentSnapshot(): Promise<AgentSnapshot> {
           status: isOpsStatus(item.status) ? item.status : 'unknown',
           updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : new Date().toISOString(),
           note: typeof item.note === 'string' ? item.note : undefined,
+          quota: parseApiQuotaSnapshot(item.quota),
         }))
       : [];
     return { connected: true, note: 'Read from personal-agent-server /internal/ops/snapshot', resources, apiAccounts };
@@ -843,6 +881,22 @@ function fingerprint(value: string) {
 function readNumber(value: unknown) {
   const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   return Number.isFinite(number) ? number : null;
+}
+
+function parseApiQuotaSnapshot(value: unknown): ApiQuotaSnapshot | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    host: typeof value.host === 'string' ? value.host : '',
+    limit: readNumber(value.limit),
+    remaining: readNumber(value.remaining),
+    used: readNumber(value.used),
+    usedPercent: readNumber(value.usedPercent),
+    reset: typeof value.reset === 'string' ? value.reset : null,
+    resetAt: typeof value.resetAt === 'string' ? value.resetAt : null,
+    httpStatus: readNumber(value.httpStatus),
+    sampled: value.sampled === true,
+    sampledAt: typeof value.sampledAt === 'string' ? value.sampledAt : null,
+  };
 }
 
 function readBytesEnv(key: string) {
