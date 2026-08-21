@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { COMPETITIVE_CONNECTOR_DISPLAY_NAMES } from '@/lib/competitive-connector-presentation';
 import { DebugCollapsible } from '@/components/debug-collapsible';
 import { MarkdownMessage } from '@/components/markdown-message';
 
@@ -87,10 +88,10 @@ const providerLabels: Record<ProviderKey, string> = {
   feishu: 'Lark',
   meta: 'Instagram / Facebook',
   xiaohongshu: 'Xiaohongshu',
-  instagram_looter2: 'Instagram Competitive Activity',
-  twitter241: 'X Competitive Activity',
-  tiktok_api23: 'TikTok API23',
-  youtube_v2: 'YouTube Competitive Activity',
+  instagram_looter2: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.instagram_looter2,
+  twitter241: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.twitter241,
+  tiktok_api23: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.tiktok_api23,
+  youtube_v2: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.youtube_v2,
   similarweb_api1: 'Similarweb API1',
   semrush13: 'Semrush13',
   semrush8: 'Semrush8',

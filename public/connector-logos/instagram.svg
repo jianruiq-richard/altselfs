@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="instagram-title">
+  <title id="instagram-title">Instagram</title>
+  <defs>
+    <radialGradient id="instagram-gradient-a" cx="30%" cy="107%" r="120%">
+      <stop offset="0" stop-color="#ffd600"/>
+      <stop offset=".34" stop-color="#ff7a00"/>
+      <stop offset=".67" stop-color="#ff0169"/>
+      <stop offset="1" stop-color="#d300c5"/>
+    </radialGradient>
+    <radialGradient id="instagram-gradient-b" cx="102%" cy="0" r="102%">
+      <stop offset="0" stop-color="#7638fa"/>
+      <stop offset="1" stop-color="#7638fa" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#instagram-gradient-a)"/>
+  <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#instagram-gradient-b)"/>
+  <rect x="12" y="12" width="24" height="24" rx="7" fill="none" stroke="#fff" stroke-width="3.2"/>
+  <circle cx="24" cy="24" r="6" fill="none" stroke="#fff" stroke-width="3.2"/>
+  <circle cx="32.25" cy="15.75" r="2" fill="#fff"/>
+</svg>

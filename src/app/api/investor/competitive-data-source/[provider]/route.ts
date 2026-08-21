@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { COMPETITIVE_CONNECTOR_DISPLAY_NAMES } from '@/lib/competitive-connector-presentation';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import { prisma } from '@/lib/prisma';
 
@@ -25,22 +26,22 @@ const COMPETITIVE_DATA_SOURCES: Record<CompetitiveDataSourceProvider, {
 }> = {
   instagram_looter2: {
     dbProvider: 'INSTAGRAM_LOOTER2',
-    label: 'Instagram Competitive Activity',
+    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.instagram_looter2,
     scope: 'profile_resolution,official_posts,reels,tagged_koc_candidates,engagement,promotion_signals',
   },
   twitter241: {
     dbProvider: 'TWITTER241',
-    label: 'X Competitive Activity',
+    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.twitter241,
     scope: 'profile_resolution,official_posts,replies,creator_koc_candidates,organic_discussion,exact_publication_filter,views,engagement,promotion_signals',
   },
   tiktok_api23: {
     dbProvider: 'TIKTOK_API23',
-    label: 'TikTok API23',
+    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.tiktok_api23,
     scope: 'account_search,user_info,user_posts,video_search,post_discovery,pagination,publication_filter',
   },
   youtube_v2: {
     dbProvider: 'YOUTUBE_V2',
-    label: 'YouTube Competitive Activity',
+    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.youtube_v2,
     scope: 'channel_resolution,official_videos,shorts,keyword_koc_candidates,publication_dates,views,promotion_signals',
   },
   similarweb_api1: {

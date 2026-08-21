@@ -116,7 +116,7 @@ export default async function InfoOpsPage({
     wechat: 'Add WeChat sources, then use the WeChat Assistant.',
     xiaohongshu: 'Connect Xiaohongshu, then use the Xiaohongshu Assistant.',
     semrush: 'Connect competitive data sources for AI teammate tools.',
-    instagram: 'Connect Instagram Competitive Activity for official and KOC promotion tracking.',
+    instagram: 'Connect Instagram for official and KOC promotion tracking.',
     appark: 'Connect Appark for mobile app market data and competitor discovery.',
   };
 

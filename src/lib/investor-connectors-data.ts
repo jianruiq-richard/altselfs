@@ -1,6 +1,7 @@
 import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
 import { prisma } from '@/lib/prisma';
 import type { ServerTiming } from '@/lib/server-timing';
+import { COMPETITIVE_CONNECTOR_DISPLAY_NAMES } from '@/lib/competitive-connector-presentation';
 
 type ConnectorType = 'app' | 'data_source';
 
@@ -75,25 +76,25 @@ const PERSONAL_CONNECTORS = [
 const COMPETITIVE_CONNECTORS = [
   {
     key: 'instagram_looter2',
-    label: 'Instagram Competitive Activity',
+    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.instagram_looter2,
     description: 'Recent official Instagram posts and Reels plus tagged KOC or creator promotion candidates, with dates, links, engagement, and promotion signals.',
     dbProvider: 'INSTAGRAM_LOOTER2',
   },
   {
     key: 'twitter241',
-    label: 'X Competitive Activity',
+    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.twitter241,
     description: 'Official X posts plus creator/KOC promotion candidates and organic discussion, with exact dates, links, views, engagement, and evidence signals.',
     dbProvider: 'TWITTER241',
   },
   {
     key: 'tiktok_api23',
-    label: 'TikTok API23',
+    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.tiktok_api23,
     description: 'General-purpose public TikTok account search, user profiles, user posts, video search, and post discovery with caller-controlled queries and filters.',
     dbProvider: 'TIKTOK_API23',
   },
   {
     key: 'youtube_v2',
-    label: 'YouTube Competitive Activity',
+    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.youtube_v2,
     description: 'Official channel videos and Shorts plus keyword-discovered KOC or creator promotion candidates, with exact dates, links, views, and promotion signals.',
     dbProvider: 'YOUTUBE_V2',
   },

@@ -2,9 +2,7 @@
 
 import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import {
-  AtSign,
   BarChart3,
-  Camera,
   Check,
   Gauge,
   LoaderCircle,
@@ -13,7 +11,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  SquarePlay,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -201,6 +198,35 @@ const CONNECTOR_LOGOS: Record<string, {
     imageClassName: 'h-9 w-9 rounded-[6px] object-cover',
     tileClassName: 'bg-[#b9ff62]',
   },
+  instagram_looter2: {
+    src: '/connector-logos/instagram.svg',
+    alt: 'Instagram logo',
+    width: 48,
+    height: 48,
+    imageClassName: 'h-9 w-9 object-contain',
+  },
+  twitter241: {
+    src: '/connector-logos/x.svg',
+    alt: 'X logo',
+    width: 24,
+    height: 24,
+    imageClassName: 'h-7 w-7 object-contain',
+    tileClassName: 'bg-white',
+  },
+  tiktok_api23: {
+    src: '/connector-logos/tiktok.svg',
+    alt: 'TikTok logo',
+    width: 48,
+    height: 48,
+    imageClassName: 'h-9 w-9 object-contain',
+  },
+  youtube_v2: {
+    src: '/connector-logos/youtube.svg',
+    alt: 'Youtube logo',
+    width: 48,
+    height: 48,
+    imageClassName: 'h-8 w-9 object-contain',
+  },
 };
 
 function connectorCategory(connector: ConnectorItem): Exclude<ConnectorCategory, 'all'> {
@@ -210,10 +236,6 @@ function connectorCategory(connector: ConnectorItem): Exclude<ConnectorCategory,
 function connectorIcon(connector: ConnectorItem): { Icon: LucideIcon; color: string } {
   if (connector.key === 'gmail') return { Icon: Mail, color: 'text-[#ff7d73]' };
   if (connector.key === 'feishu') return { Icon: MessageSquare, color: 'text-[#8eb3ff]' };
-  if (connector.key === 'instagram_looter2') return { Icon: Camera, color: 'text-[#e879f9]' };
-  if (connector.key === 'twitter241') return { Icon: AtSign, color: 'text-zinc-100' };
-  if (connector.key === 'tiktok_api23') return { Icon: Camera, color: 'text-[#57e6d7]' };
-  if (connector.key === 'youtube_v2') return { Icon: SquarePlay, color: 'text-[#ff5c5c]' };
   if (connector.key.includes('similarweb')) return { Icon: Gauge, color: 'text-[#8eb3ff]' };
   if (connector.key.includes('semrush')) return { Icon: BarChart3, color: 'text-[#e9b85a]' };
   if (connector.key.includes('ahrefs')) return { Icon: Search, color: 'text-[#ff8b4a]' };
