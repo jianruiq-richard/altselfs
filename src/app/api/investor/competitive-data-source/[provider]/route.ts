@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 
 type CompetitiveDataSourceProvider =
   | 'instagram_looter2'
+  | 'twitter241'
   | 'tiktok_api23'
   | 'youtube_v2'
   | 'similarweb_api1'
@@ -26,6 +27,11 @@ const COMPETITIVE_DATA_SOURCES: Record<CompetitiveDataSourceProvider, {
     dbProvider: 'INSTAGRAM_LOOTER2',
     label: 'Instagram Competitive Activity',
     scope: 'profile_resolution,official_posts,reels,tagged_koc_candidates,engagement,promotion_signals',
+  },
+  twitter241: {
+    dbProvider: 'TWITTER241',
+    label: 'X Competitive Activity',
+    scope: 'profile_resolution,official_posts,replies,creator_koc_candidates,organic_discussion,exact_publication_filter,views,engagement,promotion_signals',
   },
   tiktok_api23: {
     dbProvider: 'TIKTOK_API23',

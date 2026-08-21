@@ -45,6 +45,53 @@ type InstagramActivityPost = {
   promotionConfidence?: 'high' | 'medium' | 'low';
 };
 
+type XProfileCandidate = {
+  id: string;
+  username: string;
+  name: string;
+  bio: string;
+  urls: string[];
+  followersCount: number | null;
+  verified: boolean;
+  blueVerified: boolean;
+  professionalType?: string;
+  score?: number;
+  matchSignals?: string[];
+};
+
+type XActivityPost = {
+  id: string;
+  permalink: string;
+  authorId: string;
+  authorUsername: string;
+  authorName: string;
+  authorBio: string;
+  authorFollowersCount: number | null;
+  authorVerified: boolean;
+  authorProfessionalType?: string;
+  publishedAt: string | null;
+  title: string;
+  text: string;
+  lang?: string;
+  mediaTypes: string[];
+  mediaUrls: string[];
+  externalUrls: string[];
+  hashtags: string[];
+  viewCount: number | null;
+  likeCount: number | null;
+  replyCount: number | null;
+  quoteCount: number | null;
+  retweetCount: number | null;
+  bookmarkCount: number | null;
+  isReply: boolean;
+  isQuote: boolean;
+  sourceTypes: string[];
+  matchedQueries: string[];
+  relevanceSignals: string[];
+  promotionSignals: string[];
+  promotionConfidence?: 'high' | 'medium' | 'low';
+};
+
 type YouTubeSearchCandidate = {
   channelId: string;
   title: string;
@@ -166,6 +213,78 @@ const TOOLS: RapidApitoolSpec[] = [
       if (!target && !username) return missingInput('target or username');
       if (!readString(args.since) || !readString(args.until)) return missingInput('since and until');
       return instagramCompetitorActivity(args, config);
+    },
+  },
+  {
+    provider: 'twitter241',
+    source: 'twitter241',
+    host: 'twitter241.p.rapidapi.com',
+    name: 'altselfs_x_competitor_activity',
+    description:
+      'Track a competitor\'s public X/Twitter activity for an explicit caller-supplied time range with RapidAPI Twitter241. Resolves and verifies the official account from caller evidence and public profile links, paginates the official timeline and caller-derived keyword searches, applies exact local publication-time filtering, and returns normalized official posts, creator/KOC promotion candidates, and organic discussion with permalinks, views, engagement, relevance signals, and promotion-confidence heuristics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: {
+          type: 'string',
+          description: 'Product name, company name, domain, website URL, X profile URL, or @username, for example az8.art.',
+        },
+        username: {
+          type: 'string',
+          description: 'Optional exact official X username when already established. The profile is still checked against target evidence.',
+        },
+        since: {
+          type: 'string',
+          description: 'Inclusive ISO-8601 start timestamp supplied by the calling agent. Use an explicit timezone.',
+        },
+        until: {
+          type: 'string',
+          description: 'Inclusive ISO-8601 end timestamp supplied by the calling agent. Use an explicit timezone.',
+        },
+        includeOfficial: {
+          type: 'boolean',
+          description: 'Include posts from the resolved official account. Defaults to true.',
+        },
+        includeKoc: {
+          type: 'boolean',
+          description: 'Include non-official creator or KOC promotion candidates. Defaults to true.',
+        },
+        includeOrganic: {
+          type: 'boolean',
+          description: 'Include relevant non-official discussion that lacks material promotion signals. Defaults to true.',
+        },
+        includeReplies: {
+          type: 'boolean',
+          description: 'Include replies from the official account and reply results found through search. Defaults to true.',
+        },
+        keywords: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: 8,
+          description: 'Optional product names, corrected aliases, domains, handles, or campaign terms established by the current investigation. The tool also derives conservative aliases from target and verified profile evidence.',
+        },
+        maxPages: {
+          type: 'number',
+          description: 'Maximum cursor pages per official timeline or search query, from 1 to 10. Defaults to 4.',
+        },
+        pageSize: {
+          type: 'number',
+          description: 'Requested provider page size, from 1 to 100. Defaults to 20.',
+        },
+        maxResults: {
+          type: 'number',
+          description: 'Maximum normalized results per section, from 1 to 100. Defaults to 50.',
+        },
+      },
+      required: ['since', 'until'],
+      additionalProperties: false,
+    },
+    run: async (args, config) => {
+      const target = readString(args.target);
+      const username = normalizeXUsername(readString(args.username));
+      if (!target && !username) return missingInput('target or username');
+      if (!readString(args.since) || !readString(args.until)) return missingInput('since and until');
+      return xCompetitorActivity(args, config);
     },
   },
   {
@@ -490,6 +609,13 @@ export async function runRapidApiCompetitortool(toolName: string, argumentsValue
               'Tagged posts are KOC or creator promotion candidates, not proof of payment. Use the returned promotion signals and captions to distinguish paid, gifted, affiliate, and organic mentions.',
               'The tool only reports public content returned by the provider in the requested window; private, deleted, untagged, story-only, or unindexed posts can be missing.',
             ]
+        : tool.source === 'twitter241'
+          ? [
+              'Twitter241 is an independent unofficial X/Twitter wrapper. Availability, fields, result ordering, and pagination may change without notice.',
+              'Creator/KOC classification is based on public promotion signals and is not proof of payment, sponsorship, gifting, affiliation, or another commercial relationship.',
+              'Search is provider-ranked and exact publication-time filtering is applied locally; private, deleted, protected, unindexed, or lower-ranked posts can be missing.',
+              'Views and engagement metrics are current cumulative snapshots rather than historical values at publication time.',
+            ]
         : tool.source === 'tiktok-api23'
           ? [
               'TikTok API23 is an independent unofficial third-party wrapper, not an official TikTok API. Availability, fields, counts, ordering, and pagination may change without notice.',
@@ -520,6 +646,8 @@ export async function runRapidApiCompetitortool(toolName: string, argumentsValue
         ? ['The Appark public endpoint failed, changed behavior, rate-limited the request, or the app is not covered.']
         : tool.source === 'instagram-looter2'
           ? ['The Instagram Looter request failed, the provider rate-limited the request, the public account could not be resolved, or Instagram did not return the requested content.']
+        : tool.source === 'twitter241'
+          ? ['The Twitter241 request failed, the provider rate-limited the request, the official account could not be resolved from supplied/public evidence, or X did not return the requested public content.']
         : tool.source === 'tiktok-api23'
           ? ['The TikTok API23 request failed, the provider rate-limited the request, the free plan blocked the selected operation, or TikTok did not return the requested public data.']
         : tool.source === 'youtube-v2'
@@ -1249,6 +1377,810 @@ function extractTargetDomain(value: string) {
 
 function normalizeInstagramComparable(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+const TWITTER241_HOST = 'twitter241.p.rapidapi.com';
+
+async function xCompetitorActivity(args: Record<string, unknown>, config: ServerConfig) {
+  const target = readString(args.target);
+  const requestedUsername = normalizeXUsername(readString(args.username)) || extractXUsername(target);
+  const includeOfficial = args.includeOfficial !== false;
+  const includeKoc = args.includeKoc !== false;
+  const includeOrganic = args.includeOrganic !== false;
+  const includeReplies = args.includeReplies !== false;
+  const maxPages = clampInt(readNumber(args.maxPages), 1, 10, 4);
+  const pageSize = clampInt(readNumber(args.pageSize), 1, 100, 20);
+  const maxResults = clampInt(readNumber(args.maxResults), 1, 100, 50);
+  const suppliedKeywords = Array.isArray(args.keywords)
+    ? uniqueStrings(args.keywords.map(readString).filter(Boolean)).slice(0, 8)
+    : [];
+  const since = parseRequiredDate(readString(args.since));
+  const until = parseRequiredDate(readString(args.until));
+  if (!since || !until) {
+    return { error: 'since and until must be valid ISO-8601 timestamps with an explicit timezone.' };
+  }
+  if (since.getTime() > until.getTime()) {
+    return { error: 'since must be earlier than or equal to until.' };
+  }
+
+  const errors: Array<{ endpoint: string; error: string }> = [];
+  const calls: Array<{ endpoint: string; query?: string; page?: number }> = [];
+  const request = async (
+    endpoint: string,
+    params: Record<string, string>,
+    audit: { query?: string; page?: number } = {}
+  ) => {
+    calls.push({ endpoint, ...audit });
+    try {
+      return await twitter241Get(endpoint, params, config);
+    } catch (error) {
+      errors.push({ endpoint, error: error instanceof Error ? error.message : String(error) });
+      return null;
+    }
+  };
+
+  const seedQuery = xSeedSearchQuery(target, suppliedKeywords, requestedUsername);
+  let seedBody: unknown = null;
+  let directProfileBody: unknown = null;
+  if (requestedUsername) {
+    directProfileBody = await request('/user', { username: requestedUsername });
+  } else if (seedQuery) {
+    seedBody = await request('/search-v2', {
+      type: 'Latest',
+      count: String(pageSize),
+      query: seedQuery,
+    }, { query: seedQuery, page: 1 });
+  }
+
+  let profileCandidates = mergeXProfiles([
+    extractXProfiles(directProfileBody),
+    extractXProfiles(seedBody),
+  ]);
+  let resolution = selectXOfficialProfile({
+    profiles: profileCandidates,
+    target,
+    requestedUsername,
+  });
+
+  if (!resolution.username && target) {
+    const accountQuery = xAccountSearchQuery(target);
+    if (accountQuery) {
+      const peopleBody = await request('/search-v2', {
+        type: 'People',
+        count: String(pageSize),
+        query: accountQuery,
+      }, { query: accountQuery, page: 1 });
+      profileCandidates = mergeXProfiles([profileCandidates, extractXProfiles(peopleBody)]);
+      resolution = selectXOfficialProfile({ profiles: profileCandidates, target, requestedUsername });
+    }
+  }
+
+  if (resolution.username && !requestedUsername) {
+    const verifiedBody = await request('/user', { username: resolution.username });
+    const verifiedProfiles = extractXProfiles(verifiedBody);
+    if (verifiedProfiles.length) {
+      profileCandidates = mergeXProfiles([profileCandidates, verifiedProfiles]);
+      resolution = selectXOfficialProfile({ profiles: profileCandidates, target, requestedUsername });
+    }
+  }
+
+  const searchQueries = buildXSearchQueries({
+    target,
+    suppliedKeywords,
+    profile: resolution.profile,
+  });
+  const collectionSummaries: Array<{
+    source: string;
+    query?: string;
+    pages: number;
+    stopReason: string;
+    returnedPosts: number;
+  }> = [];
+
+  let officialPosts: XActivityPost[] = [];
+  if (includeOfficial && resolution.profile?.id) {
+    const officialTimeline = await collectTwitter241Pages({
+      endpoint: '/user-tweets',
+      params: { user: resolution.profile.id, count: String(pageSize) },
+      sourceType: 'official_timeline',
+      since,
+      maxPages,
+      request,
+    });
+    officialPosts = officialTimeline.posts;
+    collectionSummaries.push(officialTimeline.summary);
+
+    if (includeReplies) {
+      const officialReplies = await collectTwitter241Pages({
+        endpoint: '/user-replies-v2',
+        params: { user: resolution.profile.id, count: String(pageSize) },
+        sourceType: 'official_replies',
+        since,
+        maxPages,
+        request,
+      });
+      officialPosts = mergeXPosts([officialPosts, officialReplies.posts]);
+      collectionSummaries.push(officialReplies.summary);
+    }
+  }
+
+  const discoveryGroups: XActivityPost[][] = [];
+  if (includeKoc || includeOrganic) {
+    for (const query of searchQueries) {
+      const initialBody = query === seedQuery ? seedBody : null;
+      const discovery = await collectTwitter241Pages({
+        endpoint: '/search-v2',
+        params: { type: 'Latest', count: String(pageSize), query },
+        sourceType: 'keyword_search',
+        matchedQuery: query,
+        since,
+        maxPages,
+        initialBody,
+        request,
+      });
+      discoveryGroups.push(discovery.posts);
+      collectionSummaries.push(discovery.summary);
+    }
+  }
+
+  const officialUsername = resolution.username;
+  const targetDomain = extractTargetDomain(target);
+  const relevanceAliases = xRelevanceAliases(target, suppliedKeywords, resolution.profile);
+  const mergedPosts = mergeXPosts([officialPosts, ...discoveryGroups]);
+  const relatedUsernames = new Set(uniqueStrings([
+    ...officialPosts.flatMap((post) => xMentionedUsernames(post.text)),
+    ...mergedPosts
+      .filter((post) => (
+        inputTextMentionsXUsername(post.text, officialUsername)
+        || (targetDomain && (
+          post.text.toLowerCase().includes(targetDomain)
+          || post.externalUrls.some((url) => normalizeDomain(url) === targetDomain)
+        ))
+      ))
+      .map((post) => post.authorUsername),
+  ]).map((username) => username.toLowerCase()));
+  const normalizedAll = mergedPosts
+    .map((post) => classifyXPost(post, { targetDomain, officialUsername, aliases: relevanceAliases, relatedUsernames }))
+    .filter((post) => post.relevanceSignals.length > 0)
+    .filter((post) => includeReplies || !post.isReply);
+  const inWindow = filterXPostsByWindow(normalizedAll, since, until);
+  const official = inWindow
+    .filter((post) => officialUsername && post.authorUsername.toLowerCase() === officialUsername.toLowerCase())
+    .slice(0, maxResults);
+  const nonOfficial = inWindow.filter((post) => !officialUsername || post.authorUsername.toLowerCase() !== officialUsername.toLowerCase());
+  const koc = nonOfficial
+    .filter((post) => post.promotionConfidence === 'high' || post.promotionConfidence === 'medium')
+    .slice(0, maxResults);
+  const organic = nonOfficial
+    .filter((post) => post.promotionConfidence !== 'high' && post.promotionConfidence !== 'medium')
+    .slice(0, maxResults);
+
+  return {
+    request: {
+      target: target || undefined,
+      username: requestedUsername || undefined,
+      suppliedKeywords,
+    },
+    window: { since: since.toISOString(), until: until.toISOString(), interpretation: 'explicit_range' },
+    resolution: {
+      username: resolution.username || null,
+      name: resolution.profile?.name || null,
+      userId: resolution.profile?.id || null,
+      profileUrl: resolution.username ? `https://x.com/${resolution.username}` : null,
+      profileWebsiteUrls: resolution.profile?.urls || [],
+      followersCount: resolution.profile?.followersCount ?? null,
+      matchReason: resolution.matchReason,
+      matchSignals: resolution.profile?.matchSignals || [],
+      candidates: resolution.candidates,
+    },
+    official: { count: includeOfficial ? official.length : 0, posts: includeOfficial ? official : [] },
+    koc: {
+      count: includeKoc ? koc.length : 0,
+      posts: includeKoc ? koc : [],
+      classification: 'Non-official posts with material public promotion signals are creator/KOC promotion candidates, not proof of payment, sponsorship, gifting, or another commercial relationship.',
+    },
+    organic: {
+      count: includeOrganic ? organic.length : 0,
+      posts: includeOrganic ? organic : [],
+      classification: 'Relevant non-official posts without material public promotion signals are classified as organic discussion candidates.',
+    },
+    coverage: {
+      apiCallCount: calls.length,
+      calls,
+      searchQueries,
+      maxPagesPerStream: maxPages,
+      pageSize,
+      collections: collectionSummaries,
+      errors,
+    },
+  };
+}
+
+async function twitter241Get(pathname: string, params: Record<string, string>, config: ServerConfig) {
+  const url = new URL(`https://${TWITTER241_HOST}${pathname}`);
+  for (const [key, value] of Object.entries(params)) if (value) url.searchParams.set(key, value);
+  const response = await rapidApiJson({
+    config,
+    host: TWITTER241_HOST,
+    url: url.toString(),
+    publicInput: { endpoint: pathname, ...params },
+  });
+  return isRecord(response) ? response.body : null;
+}
+
+async function collectTwitter241Pages(input: {
+  endpoint: string;
+  params: Record<string, string>;
+  sourceType: string;
+  matchedQuery?: string;
+  since: Date;
+  maxPages: number;
+  initialBody?: unknown;
+  request: (
+    endpoint: string,
+    params: Record<string, string>,
+    audit?: { query?: string; page?: number }
+  ) => Promise<unknown>;
+}) {
+  const posts: XActivityPost[] = [];
+  const seenCursors = new Set<string>();
+  let cursor = '';
+  let pages = 0;
+  let stopReason = 'max_pages';
+
+  while (pages < input.maxPages) {
+    const pageNumber = pages + 1;
+    let body: unknown;
+    if (pageNumber === 1 && input.initialBody) {
+      body = input.initialBody;
+    } else {
+      body = await input.request(
+        input.endpoint,
+        { ...input.params, ...(cursor ? { cursor } : {}) },
+        { query: input.matchedQuery, page: pageNumber }
+      );
+    }
+    pages += 1;
+    if (!body) {
+      stopReason = 'request_error';
+      break;
+    }
+
+    const pagePosts = extractXPosts(body, input.sourceType, input.matchedQuery);
+    posts.push(...pagePosts);
+    if (!pagePosts.length) {
+      stopReason = 'empty_page';
+      break;
+    }
+    const timestamps = pagePosts
+      .map((post) => post.publishedAt ? Date.parse(post.publishedAt) : NaN)
+      .filter(Number.isFinite);
+    if (timestamps.length && Math.min(...timestamps) < input.since.getTime()) {
+      stopReason = 'passed_window_start';
+      break;
+    }
+
+    const nextCursor = extractXBottomCursor(body);
+    if (!nextCursor) {
+      stopReason = 'no_cursor';
+      break;
+    }
+    if (seenCursors.has(nextCursor)) {
+      stopReason = 'repeated_cursor';
+      break;
+    }
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  }
+
+  const merged = mergeXPosts([posts]);
+  return {
+    posts: merged,
+    summary: {
+      source: input.sourceType,
+      query: input.matchedQuery,
+      pages,
+      stopReason,
+      returnedPosts: merged.length,
+    },
+  };
+}
+
+function extractXPosts(value: unknown, sourceType: string, matchedQuery?: string) {
+  const entryRecords: Record<string, unknown>[] = [];
+  walkJsonRecords(value, (record) => {
+    if (readString(record.entryId).startsWith('tweet-')) entryRecords.push(record);
+  });
+
+  const posts = entryRecords.map((entry) => {
+    const tweet = findFirstXTweetRecord(entry.content ?? entry);
+    return tweet ? normalizeXPost(tweet, sourceType, matchedQuery) : null;
+  }).filter((post): post is XActivityPost => Boolean(post));
+  if (posts.length) return mergeXPosts([posts]);
+
+  const fallback: XActivityPost[] = [];
+  walkJsonRecords(value, (record) => {
+    if (!isXTweetRecord(record)) return;
+    const post = normalizeXPost(record, sourceType, matchedQuery);
+    if (post) fallback.push(post);
+  });
+  return mergeXPosts([fallback]);
+}
+
+function normalizeXPost(value: Record<string, unknown>, sourceType: string, matchedQuery?: string): XActivityPost | null {
+  const legacy = isRecord(value.legacy) ? value.legacy : {};
+  const id = readString(legacy.id_str) || readString(value.rest_id);
+  if (!id) return null;
+  const profile = normalizeXProfile(xTweetUserRecord(value));
+  const username = profile?.username || '';
+  const noteTweet = isRecord(value.note_tweet) ? value.note_tweet : {};
+  const noteResults = isRecord(noteTweet.note_tweet_results) ? noteTweet.note_tweet_results : {};
+  const noteResult = isRecord(noteResults.result) ? noteResults.result : {};
+  const legacyText = readString(legacy.full_text) || readString(legacy.text);
+  const noteText = readString(noteResult.text);
+  const text = noteText.length > legacyText.length ? noteText : legacyText;
+  const entities = isRecord(legacy.entities) ? legacy.entities : {};
+  const extendedEntities = isRecord(legacy.extended_entities) ? legacy.extended_entities : {};
+  const media = xMediaItems(extendedEntities, entities);
+  const externalUrls = xExpandedUrls(entities);
+  const hashtags = Array.isArray(entities.hashtags)
+    ? entities.hashtags.map((item) => readStringFromRecord(item, 'text')).filter(Boolean)
+    : [];
+  return {
+    id,
+    permalink: username ? `https://x.com/${username}/status/${id}` : `https://x.com/i/status/${id}`,
+    authorId: profile?.id || readString(legacy.user_id_str),
+    authorUsername: username,
+    authorName: profile?.name || '',
+    authorBio: profile?.bio || '',
+    authorFollowersCount: profile?.followersCount ?? null,
+    authorVerified: Boolean(profile?.verified || profile?.blueVerified),
+    authorProfessionalType: profile?.professionalType,
+    publishedAt: xTimestampIso(readString(legacy.created_at)),
+    title: truncate(text.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || text || `X post ${id}`, 220),
+    text: truncate(text, 3_000),
+    lang: readString(legacy.lang) || undefined,
+    mediaTypes: uniqueStrings(media.map((item) => item.type)),
+    mediaUrls: uniqueStrings(media.map((item) => item.url).filter(Boolean)),
+    externalUrls,
+    hashtags: uniqueStrings(hashtags),
+    viewCount: nonNegativeNumber(isRecord(value.views) ? value.views.count : null),
+    likeCount: nonNegativeNumber(legacy.favorite_count),
+    replyCount: nonNegativeNumber(legacy.reply_count),
+    quoteCount: nonNegativeNumber(legacy.quote_count),
+    retweetCount: nonNegativeNumber(legacy.retweet_count),
+    bookmarkCount: nonNegativeNumber(legacy.bookmark_count),
+    isReply: Boolean(readString(legacy.in_reply_to_status_id_str) || readString(legacy.in_reply_to_user_id_str)),
+    isQuote: legacy.is_quote_status === true,
+    sourceTypes: [sourceType],
+    matchedQueries: matchedQuery ? [matchedQuery] : [],
+    relevanceSignals: [],
+    promotionSignals: [],
+  };
+}
+
+function extractXProfiles(value: unknown) {
+  const profiles: XProfileCandidate[] = [];
+  walkJsonRecords(value, (record) => {
+    const profile = normalizeXProfile(record);
+    if (profile) profiles.push(profile);
+  });
+  return mergeXProfiles([profiles]);
+}
+
+function normalizeXProfile(value: unknown): XProfileCandidate | null {
+  if (!isRecord(value)) return null;
+  const core = isRecord(value.core) ? value.core : {};
+  const legacy = isRecord(value.legacy) ? value.legacy : {};
+  const username = normalizeXUsername(readString(core.screen_name));
+  const id = readString(value.rest_id);
+  if (!username || !id || readString(legacy.id_str)) return null;
+  const privacy = isRecord(value.privacy) ? value.privacy : {};
+  const professional = isRecord(value.professional) ? value.professional : {};
+  return {
+    id,
+    username,
+    name: readString(core.name),
+    bio: readString(legacy.description) || readStringFromRecord(value.profile_bio, 'description'),
+    urls: xProfileUrls(legacy),
+    followersCount: nonNegativeNumber(legacy.followers_count),
+    verified: readString(privacy.verified_type).length > 0 || isRecord(value.verification) && value.verification.verified === true,
+    blueVerified: value.is_blue_verified === true,
+    professionalType: readString(professional.professional_type) || undefined,
+  };
+}
+
+function mergeXProfiles(groups: XProfileCandidate[][]) {
+  const profiles = new Map<string, XProfileCandidate>();
+  for (const profile of groups.flat()) {
+    const key = profile.id || profile.username.toLowerCase();
+    const current = profiles.get(key);
+    if (!current) {
+      profiles.set(key, profile);
+      continue;
+    }
+    profiles.set(key, {
+      ...current,
+      ...profile,
+      name: profile.name || current.name,
+      bio: profile.bio.length >= current.bio.length ? profile.bio : current.bio,
+      urls: uniqueStrings([...current.urls, ...profile.urls]),
+      followersCount: maxNonNegativeNumber(current.followersCount, profile.followersCount),
+      verified: current.verified || profile.verified,
+      blueVerified: current.blueVerified || profile.blueVerified,
+      professionalType: current.professionalType || profile.professionalType,
+    });
+  }
+  return Array.from(profiles.values());
+}
+
+function selectXOfficialProfile(input: {
+  profiles: XProfileCandidate[];
+  target: string;
+  requestedUsername: string;
+}) {
+  const targetDomain = extractTargetDomain(input.target);
+  const targetName = normalizeComparableName(xAccountSearchQuery(input.target));
+  const scored = input.profiles.map((profile) => {
+    const signals: string[] = [];
+    let score = 0;
+    const username = profile.username.toLowerCase();
+    const normalizedName = normalizeComparableName(profile.name);
+    if (input.requestedUsername && username === input.requestedUsername.toLowerCase()) {
+      score += 1_000;
+      signals.push('caller_supplied_username');
+    }
+    if (targetDomain && profile.urls.some((url) => normalizeDomain(url) === targetDomain)) {
+      score += 500;
+      signals.push('profile_website_matches_target_domain');
+    }
+    if (targetDomain && profile.bio.toLowerCase().includes(targetDomain)) {
+      score += 220;
+      signals.push('profile_bio_mentions_target_domain');
+    }
+    if (targetName && normalizeComparableName(username) === targetName) {
+      score += 120;
+      signals.push('username_matches_target_name');
+    } else if (targetName && normalizeComparableName(username).includes(targetName)) {
+      score += 45;
+      signals.push('username_contains_target_name');
+    }
+    if (targetName && normalizedName === targetName) {
+      score += 100;
+      signals.push('display_name_matches_target_name');
+    } else if (targetName && normalizedName.includes(targetName)) {
+      score += 35;
+      signals.push('display_name_contains_target_name');
+    }
+    if (profile.blueVerified || profile.verified) score += 5;
+    return { ...profile, score, matchSignals: signals };
+  }).sort((left, right) => (right.score || 0) - (left.score || 0) || (right.followersCount || 0) - (left.followersCount || 0));
+  const selected = scored.find((profile) => (profile.score || 0) >= (input.requestedUsername ? 1_000 : targetDomain ? 220 : 100)) || null;
+  return {
+    username: selected?.username || '',
+    profile: selected,
+    matchReason: selected?.matchSignals?.[0] || 'unresolved',
+    candidates: scored.slice(0, 5).map((profile) => ({
+      username: profile.username,
+      name: profile.name,
+      followersCount: profile.followersCount,
+      score: profile.score,
+      matchSignals: profile.matchSignals,
+      urls: profile.urls,
+    })),
+  };
+}
+
+function classifyXPost(
+  post: XActivityPost,
+  input: { targetDomain: string; officialUsername: string; aliases: string[]; relatedUsernames: Set<string> }
+) {
+  const textAndUrls = `${post.text}\n${post.externalUrls.join('\n')}`;
+  const relevanceSignals = new Set<string>();
+  const promotionSignals = new Set<string>();
+  const official = Boolean(input.officialUsername
+    && post.authorUsername.toLowerCase() === input.officialUsername.toLowerCase());
+  if (official) relevanceSignals.add('official_author');
+  if (input.targetDomain && post.externalUrls.some((url) => normalizeDomain(url) === input.targetDomain)) {
+    relevanceSignals.add('target_domain_link');
+    promotionSignals.add('brand_link_in_post');
+  }
+  if (input.targetDomain && post.text.toLowerCase().includes(input.targetDomain)) {
+    relevanceSignals.add('target_domain_mentioned');
+  }
+  if (inputTextMentionsXUsername(post.text, input.officialUsername)) {
+    relevanceSignals.add('official_account_mentioned');
+  }
+  const matchingAliases = input.aliases.filter((alias) => xTextContainsAlias(post.text, alias));
+  const relatedAuthor = input.relatedUsernames.has(post.authorUsername.toLowerCase());
+  const hasUnambiguousAlias = matchingAliases.some((alias) => normalizeComparableName(alias.replace(/^@/, '')).length > 3);
+  if (matchingAliases.length && (hasUnambiguousAlias || relatedAuthor)) relevanceSignals.add('brand_alias_mentioned');
+  if (matchingAliases.length && relatedAuthor) relevanceSignals.add('related_account_brand_mention');
+  if (post.matchedQueries.some((query) => {
+    const queryDomain = extractTargetDomain(query);
+    return Boolean(queryDomain && queryDomain === input.targetDomain);
+  })) relevanceSignals.add('target_domain_search_result');
+
+  if (official) promotionSignals.add('official_account_post');
+  if (post.matchedQueries.length && !official) promotionSignals.add('brand_keyword_search_result');
+  if (post.externalUrls.some(xHasTrackingOrAffiliateParams)) promotionSignals.add('tracking_or_affiliate_link');
+  if (post.externalUrls.some((url) => xAttributionMatchesAuthor(url, post.authorUsername))) {
+    promotionSignals.add('tracking_attribution_matches_author');
+  }
+  if (/\b(?:sponsored|paid promotion|paid partnership|in collaboration with|partnered with|gifted|ambassador|thanks to .{0,60} sponsoring|made possible by|supported by)\b/i.test(textAndUrls)) {
+    promotionSignals.add('paid_or_collaboration_language');
+  }
+  if (/\b(?:spec ad|advertisement|commercial concept)\b/i.test(textAndUrls)) {
+    promotionSignals.add('advertising_format_language');
+  }
+  if (/\b(?:affiliate|discount|promo code|coupon|use (?:my )?code|code\s*[:=]|\d+%\s*off|save\s+\d+%)\b/i.test(textAndUrls)) {
+    promotionSignals.add('affiliate_or_discount_offer');
+  }
+  if (/\b(?:try it|try now|sign up|download|get started|learn more|create now|check (?:it|them) out|explore .{0,50}(?:here|now)|link in (?:the )?bio)\b/i.test(textAndUrls)) {
+    promotionSignals.add('conversion_call_to_action');
+  }
+  const creatorOrMarketingProfile = !official
+    && /\b(?:creator|influencer|artist|filmmaker|director|growth|marketing|promoter|dm for collab|dm for collaboration|cpp)\b/i.test(`${post.authorProfessionalType || ''} ${post.authorBio}`);
+  if (creatorOrMarketingProfile) {
+    promotionSignals.add('creator_or_marketing_profile');
+  }
+  const explicitlyReferencesOfficial = relevanceSignals.has('official_account_mentioned')
+    || relevanceSignals.has('target_domain_link')
+    || relevanceSignals.has('target_domain_mentioned')
+    || relevanceSignals.has('related_account_brand_mention');
+  const creatorUseLanguage = /\b(?:created|made|generated|produced|directed)\s+(?:with|using|on)\b|\bbuilt\s+(?:with|using)\b|\bprompt(?:ed)?\b/i.test(post.text);
+  if (explicitlyReferencesOfficial && post.mediaTypes.length > 0 && (creatorOrMarketingProfile || creatorUseLanguage)) {
+    promotionSignals.add('creator_generated_brand_content');
+  }
+  if (!official && explicitlyReferencesOfficial && /\b(?:live demo|livestream|see you live|starts in|watch live|webinar|register|join us|joins us|tune in|launch event|workshop|conference|on (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.?\s+\d{1,2})\b/i.test(textAndUrls)) {
+    promotionSignals.add('event_or_launch_promotion');
+  }
+  const high = promotionSignals.has('paid_or_collaboration_language')
+    || promotionSignals.has('tracking_attribution_matches_author');
+  const medium = promotionSignals.has('tracking_or_affiliate_link')
+    || promotionSignals.has('affiliate_or_discount_offer')
+    || promotionSignals.has('creator_generated_brand_content')
+    || promotionSignals.has('event_or_launch_promotion')
+    || (promotionSignals.has('brand_link_in_post') && promotionSignals.has('conversion_call_to_action'));
+  const promotionConfidence: 'high' | 'medium' | 'low' | undefined = official
+    ? undefined
+    : high ? 'high' : medium ? 'medium' : 'low';
+  return {
+    ...post,
+    relevanceSignals: Array.from(relevanceSignals),
+    promotionSignals: Array.from(promotionSignals),
+    promotionConfidence,
+  };
+}
+
+function mergeXPosts(groups: XActivityPost[][]) {
+  const posts = new Map<string, XActivityPost>();
+  for (const post of groups.flat()) {
+    const current = posts.get(post.id);
+    if (!current) {
+      posts.set(post.id, post);
+      continue;
+    }
+    posts.set(post.id, {
+      ...current,
+      ...post,
+      permalink: current.permalink || post.permalink,
+      authorId: current.authorId || post.authorId,
+      authorUsername: current.authorUsername || post.authorUsername,
+      authorName: current.authorName || post.authorName,
+      authorBio: current.authorBio.length >= post.authorBio.length ? current.authorBio : post.authorBio,
+      authorFollowersCount: maxNonNegativeNumber(current.authorFollowersCount, post.authorFollowersCount),
+      publishedAt: current.publishedAt || post.publishedAt,
+      title: current.title.length >= post.title.length ? current.title : post.title,
+      text: current.text.length >= post.text.length ? current.text : post.text,
+      mediaTypes: uniqueStrings([...current.mediaTypes, ...post.mediaTypes]),
+      mediaUrls: uniqueStrings([...current.mediaUrls, ...post.mediaUrls]),
+      externalUrls: uniqueStrings([...current.externalUrls, ...post.externalUrls]),
+      hashtags: uniqueStrings([...current.hashtags, ...post.hashtags]),
+      viewCount: maxNonNegativeNumber(current.viewCount, post.viewCount),
+      likeCount: maxNonNegativeNumber(current.likeCount, post.likeCount),
+      replyCount: maxNonNegativeNumber(current.replyCount, post.replyCount),
+      quoteCount: maxNonNegativeNumber(current.quoteCount, post.quoteCount),
+      retweetCount: maxNonNegativeNumber(current.retweetCount, post.retweetCount),
+      bookmarkCount: maxNonNegativeNumber(current.bookmarkCount, post.bookmarkCount),
+      sourceTypes: uniqueStrings([...current.sourceTypes, ...post.sourceTypes]),
+      matchedQueries: uniqueStrings([...current.matchedQueries, ...post.matchedQueries]),
+      relevanceSignals: uniqueStrings([...current.relevanceSignals, ...post.relevanceSignals]),
+      promotionSignals: uniqueStrings([...current.promotionSignals, ...post.promotionSignals]),
+    });
+  }
+  return Array.from(posts.values());
+}
+
+function filterXPostsByWindow(posts: XActivityPost[], since: Date, until: Date) {
+  return posts.filter((post) => {
+    if (!post.publishedAt) return false;
+    const timestamp = Date.parse(post.publishedAt);
+    return Number.isFinite(timestamp) && timestamp >= since.getTime() && timestamp <= until.getTime();
+  }).sort((left, right) => Date.parse(right.publishedAt || '') - Date.parse(left.publishedAt || ''));
+}
+
+function findFirstXTweetRecord(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  if (isXTweetRecord(value)) return value;
+  for (const nested of Object.values(value)) {
+    if (Array.isArray(nested)) {
+      for (const item of nested) {
+        const found = findFirstXTweetRecord(item);
+        if (found) return found;
+      }
+    } else if (isRecord(nested)) {
+      const found = findFirstXTweetRecord(nested);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function isXTweetRecord(value: Record<string, unknown>) {
+  const legacy = isRecord(value.legacy) ? value.legacy : {};
+  return Boolean((readString(legacy.id_str) || readString(value.rest_id)) && readString(legacy.created_at));
+}
+
+function xTweetUserRecord(value: Record<string, unknown>) {
+  const core = isRecord(value.core) ? value.core : {};
+  const userResults = isRecord(core.user_results) ? core.user_results : {};
+  return isRecord(userResults.result) ? userResults.result : {};
+}
+
+function walkJsonRecords(value: unknown, visit: (record: Record<string, unknown>) => void) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => walkJsonRecords(item, visit));
+    return;
+  }
+  if (!isRecord(value)) return;
+  visit(value);
+  Object.values(value).forEach((nested) => walkJsonRecords(nested, visit));
+}
+
+function xProfileUrls(legacy: Record<string, unknown>) {
+  const urls: string[] = [];
+  walkJsonRecords(legacy.entities, (record) => {
+    const expanded = readString(record.expanded_url);
+    if (expanded) urls.push(expanded);
+  });
+  return uniqueStrings(urls);
+}
+
+function xExpandedUrls(entities: Record<string, unknown>) {
+  if (!Array.isArray(entities.urls)) return [];
+  return uniqueStrings(entities.urls.map((item) => readStringFromRecord(item, 'expanded_url')).filter(Boolean));
+}
+
+function xMediaItems(extendedEntities: Record<string, unknown>, entities: Record<string, unknown>) {
+  const values = Array.isArray(extendedEntities.media)
+    ? extendedEntities.media
+    : Array.isArray(entities.media) ? entities.media : [];
+  return values.map((item) => {
+    if (!isRecord(item)) return null;
+    return {
+      type: readString(item.type) || 'media',
+      url: readString(item.expanded_url) || readString(item.media_url_https),
+    };
+  }).filter((item): item is { type: string; url: string } => Boolean(item));
+}
+
+function extractXBottomCursor(value: unknown) {
+  if (isRecord(value)) {
+    const cursorRecord = isRecord(value.cursor) ? value.cursor : {};
+    if (readString(cursorRecord.bottom)) return readString(cursorRecord.bottom);
+  }
+  let cursor = '';
+  walkJsonRecords(value, (record) => {
+    if (!cursor && readString(record.cursorType).toLowerCase() === 'bottom') cursor = readString(record.value);
+  });
+  return cursor;
+}
+
+function xSeedSearchQuery(target: string, suppliedKeywords: string[], requestedUsername: string) {
+  if (requestedUsername) return `@${requestedUsername}`;
+  const domain = extractTargetDomain(target);
+  if (domain) return domain;
+  return suppliedKeywords[0] || target.replace(/^https?:\/\//i, '').replace(/^www\./i, '').trim();
+}
+
+function xAccountSearchQuery(target: string) {
+  const domain = extractTargetDomain(target);
+  if (domain) return domain.split('.')[0].replace(/[-_]+/g, ' ').trim();
+  return target.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/^@/, '').replace(/\s+/g, ' ').trim();
+}
+
+function buildXSearchQueries(input: {
+  target: string;
+  suppliedKeywords: string[];
+  profile: XProfileCandidate | null;
+}) {
+  const domain = extractTargetDomain(input.target);
+  const brand = domain ? domain.split('.')[0].replace(/[-_]+/g, ' ') : xAccountSearchQuery(input.target);
+  return uniqueStrings([
+    ...input.suppliedKeywords,
+    domain,
+    input.target && !extractXUsername(input.target) ? input.target.replace(/^https?:\/\//i, '').replace(/^www\./i, '') : '',
+    brand,
+    input.profile?.username ? `@${input.profile.username}` : '',
+    input.profile?.name || '',
+  ]).slice(0, 8);
+}
+
+function xRelevanceAliases(target: string, suppliedKeywords: string[], profile: XProfileCandidate | null) {
+  const domain = extractTargetDomain(target);
+  return uniqueStrings([
+    ...suppliedKeywords,
+    domain,
+    profile?.username || '',
+    profile?.name || '',
+    domain ? domain.split('.')[0].replace(/[-_]+/g, ' ') : xAccountSearchQuery(target),
+  ]);
+}
+
+function xTextContainsAlias(text: string, aliasValue: string) {
+  const alias = aliasValue.replace(/^@/, '').trim();
+  const comparableAlias = normalizeComparableName(alias);
+  if (comparableAlias.length < 3) return false;
+  if (comparableAlias.length <= 3) {
+    if (!/[A-Z0-9]/.test(alias)) return false;
+    return new RegExp(`(?:^|[^A-Za-z0-9])${escapeRegExp(alias)}(?:$|[^A-Za-z0-9])`).test(text);
+  }
+  const comparableText = normalizeComparableName(text);
+  return ` ${comparableText} `.includes(` ${comparableAlias} `);
+}
+
+function inputTextMentionsXUsername(text: string, username: string) {
+  return Boolean(username && new RegExp(`@${escapeRegExp(username)}\\b`, 'i').test(text));
+}
+
+function xMentionedUsernames(text: string) {
+  return uniqueStrings(Array.from(text.matchAll(/@([A-Za-z0-9_]{1,15})/g), (match) => match[1] || ''));
+}
+
+function normalizeXUsername(value: string) {
+  return value.replace(/^@/, '').trim().replace(/[^A-Za-z0-9_]/g, '');
+}
+
+function extractXUsername(value: string) {
+  const normalized = value.trim();
+  if (/^@[A-Za-z0-9_]+$/.test(normalized)) return normalizeXUsername(normalized);
+  try {
+    const url = new URL(/^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`);
+    if (!/(^|\.)(?:x|twitter)\.com$/i.test(url.hostname)) return '';
+    return normalizeXUsername(url.pathname.split('/').filter(Boolean)[0] || '');
+  } catch {
+    return '';
+  }
+}
+
+function xTimestampIso(value: string) {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function xHasTrackingOrAffiliateParams(value: string) {
+  try {
+    const url = new URL(value);
+    return Array.from(url.searchParams.keys()).some((key) => /^(?:utm_[a-z]+|ref|referral|affiliate|aff|source|campaign)$/i.test(key));
+  } catch {
+    return /[?&](?:utm_[a-z]+|ref|referral|affiliate|aff|source|campaign)=/i.test(value);
+  }
+}
+
+function xAttributionMatchesAuthor(value: string, username: string) {
+  if (!username) return false;
+  try {
+    const url = new URL(value);
+    const author = normalizeComparableName(username);
+    return Array.from(url.searchParams.entries()).some(([key, parameter]) => (
+      /^(?:utm_[a-z]+|ref|referral|affiliate|aff|source|campaign)$/i.test(key)
+      && normalizeComparableName(parameter).includes(author)
+    ));
+  } catch {
+    return false;
+  }
 }
 
 const TIKTOK_API23_HOST = 'tiktok-api23.p.rapidapi.com';
@@ -2452,12 +3384,16 @@ function publicArgs(args: Record<string, unknown>) {
     'until',
     'includeOfficial',
     'includeKoc',
+    'includeOrganic',
+    'includeReplies',
     'includeShorts',
     'keywords',
     'channelId',
     'channelName',
     'lang',
     'maxResults',
+    'maxPages',
+    'pageSize',
     'operation',
     'keyword',
     'uniqueId',

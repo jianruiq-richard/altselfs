@@ -1334,6 +1334,7 @@ function buildCodexMcpEnvEntries(config: ServerConfig, selection: CodexModelSele
 
 const COMPETITOR_INFO_SOURCE_TO_TOOL: Record<string, string> = {
   instagram_looter2: 'altselfs_instagram_competitor_activity',
+  twitter241: 'altselfs_x_competitor_activity',
   tiktok_api23: 'altselfs_tiktok_api23',
   youtube_v2: 'altselfs_youtube_competitor_activity',
   similarweb_api1: 'altselfs_similarweb_api1',

@@ -80,6 +80,12 @@ const COMPETITIVE_CONNECTORS = [
     dbProvider: 'INSTAGRAM_LOOTER2',
   },
   {
+    key: 'twitter241',
+    label: 'X Competitive Activity',
+    description: 'Official X posts plus creator/KOC promotion candidates and organic discussion, with exact dates, links, views, engagement, and evidence signals.',
+    dbProvider: 'TWITTER241',
+  },
+  {
     key: 'tiktok_api23',
     label: 'TikTok API23',
     description: 'General-purpose public TikTok account search, user profiles, user posts, video search, and post discovery with caller-controlled queries and filters.',
@@ -133,6 +139,7 @@ const ENABLED_CONNECTOR_KEYS = new Set([
   'gmail',
   'feishu',
   'instagram_looter2',
+  'twitter241',
   'tiktok_api23',
   'youtube_v2',
   'similarweb_api1',
