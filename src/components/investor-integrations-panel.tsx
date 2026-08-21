@@ -10,6 +10,8 @@ type ProviderKey =
   | 'meta'
   | 'xiaohongshu'
   | 'instagram_looter2'
+  | 'tiktok_api23'
+  | 'youtube_v2'
   | 'similarweb_api1'
   | 'semrush13'
   | 'semrush8'
@@ -56,6 +58,8 @@ type FeishuFeaturePackage = 'messages' | 'contacts' | 'calendar' | 'docs' | 'mee
 
 const COMPETITIVE_DATA_SOURCE_PROVIDERS = [
   'instagram_looter2',
+  'tiktok_api23',
+  'youtube_v2',
   'similarweb_api1',
   'semrush13',
   'semrush8',
@@ -82,6 +86,8 @@ const providerLabels: Record<ProviderKey, string> = {
   meta: 'Instagram / Facebook',
   xiaohongshu: 'Xiaohongshu',
   instagram_looter2: 'Instagram Competitive Activity',
+  tiktok_api23: 'TikTok API23',
+  youtube_v2: 'YouTube Competitive Activity',
   similarweb_api1: 'Similarweb API1',
   semrush13: 'Semrush13',
   semrush8: 'Semrush8',
@@ -96,6 +102,8 @@ function providerLabel(provider: ProviderKey) {
 
 const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
   instagram_looter2: 'Recent official Instagram posts and Reels plus tagged KOC or creator promotion candidates.',
+  tiktok_api23: 'General-purpose public TikTok account, profile, post, video-search, and discovery data.',
+  youtube_v2: 'Official YouTube videos and Shorts plus keyword-discovered KOC or creator promotion candidates.',
   similarweb_api1: 'Traffic, rankings, audience, referral, and engagement insights from Similarweb-style APIs.',
   semrush13: 'Domain overview, SEO traffic, keyword, backlink, and authority metrics.',
   semrush8: 'URL-level SEO traffic, keywords, backlinks, and ranking insights.',
@@ -106,6 +114,8 @@ const competitiveDataSourceDescriptions: Record<(typeof COMPETITIVE_DATA_SOURCE_
 
 const competitiveDataSourceScopes: Record<(typeof COMPETITIVE_DATA_SOURCE_PROVIDERS)[number], string> = {
   instagram_looter2: 'Official account resolution, recent posts and Reels, tagged creator content, engagement counts, and promotion signals.',
+  tiktok_api23: 'Account search, user profiles, user posts, video search, post discovery, pagination, and optional exact publication filtering.',
+  youtube_v2: 'Official channel resolution, videos and Shorts, keyword creator discovery, exact publication dates, views, and promotion signals.',
   similarweb_api1: 'Website traffic, country distribution, audience behavior, referrals, and engagement signals.',
   semrush13: 'Domain and keyword intelligence, backlink data, authority metrics, and AI traffic signals when available.',
   semrush8: 'URL rank, keyword, traffic, backlink, and competitor visibility analysis.',
@@ -120,6 +130,8 @@ const recordForProviders = <T,>(value: T): Record<ProviderKey, T> => ({
   meta: value,
   xiaohongshu: value,
   instagram_looter2: value,
+  tiktok_api23: value,
+  youtube_v2: value,
   similarweb_api1: value,
   semrush13: value,
   semrush8: value,
@@ -235,6 +247,8 @@ export default function InvestorIntegrationsPanel({
     meta: [],
     xiaohongshu: [],
     instagram_looter2: [],
+    tiktok_api23: [],
+    youtube_v2: [],
     similarweb_api1: [],
     semrush13: [],
     semrush8: [],
@@ -248,6 +262,8 @@ export default function InvestorIntegrationsPanel({
     meta: null,
     xiaohongshu: null,
     instagram_looter2: null,
+    tiktok_api23: null,
+    youtube_v2: null,
     similarweb_api1: null,
     semrush13: null,
     semrush8: null,

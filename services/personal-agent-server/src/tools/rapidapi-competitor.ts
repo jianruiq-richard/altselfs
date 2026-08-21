@@ -45,6 +45,35 @@ type InstagramActivityPost = {
   promotionConfidence?: 'high' | 'medium' | 'low';
 };
 
+type YouTubeSearchCandidate = {
+  channelId: string;
+  title: string;
+  description: string;
+  position: number;
+  score: number;
+};
+
+type YouTubeActivityVideo = {
+  videoId: string;
+  permalink: string;
+  title: string;
+  description: string;
+  author: string;
+  channelId: string;
+  channelUrl: string;
+  publishedAt: string | null;
+  publishedTimeRaw?: string;
+  durationSeconds: number | null;
+  viewCount: number | null;
+  category?: string;
+  mediaType: string;
+  keywords: string[];
+  sourceTypes: string[];
+  matchedQueries: string[];
+  promotionSignals: string[];
+  promotionConfidence?: 'high' | 'medium' | 'low';
+};
+
 type RapidApitoolSpec = {
   provider: string;
   source: string;
@@ -109,15 +138,11 @@ const TOOLS: RapidApitoolSpec[] = [
         },
         since: {
           type: 'string',
-          description: 'Optional inclusive ISO-8601 start date or timestamp. When omitted, lookbackDays is used.',
+          description: 'Inclusive ISO-8601 start timestamp supplied by the calling agent. Use an explicit timezone.',
         },
         until: {
           type: 'string',
-          description: 'Optional inclusive ISO-8601 end date or timestamp. Defaults to the current time.',
-        },
-        lookbackDays: {
-          type: 'number',
-          description: 'Lookback window in days when since is omitted, from 1 to 31. Defaults to 7.',
+          description: 'Inclusive ISO-8601 end timestamp supplied by the calling agent. Use an explicit timezone.',
         },
         includeOfficial: {
           type: 'boolean',
@@ -132,13 +157,151 @@ const TOOLS: RapidApitoolSpec[] = [
           description: 'Maximum normalized results per section, from 1 to 100. Defaults to 50.',
         },
       },
+      required: ['since', 'until'],
       additionalProperties: false,
     },
     run: async (args, config) => {
       const target = readString(args.target);
       const username = normalizeInstagramUsername(readString(args.username));
       if (!target && !username) return missingInput('target or username');
+      if (!readString(args.since) || !readString(args.until)) return missingInput('since and until');
       return instagramCompetitorActivity(args, config);
+    },
+  },
+  {
+    provider: 'tiktok_api23',
+    source: 'tiktok-api23',
+    host: 'tiktok-api23.p.rapidapi.com',
+    name: 'altselfs_tiktok_api23',
+    description:
+      'Call TikTok API23 as a general-purpose TikTok public-data source. Select one operation to search accounts, load a user profile, list a user\'s posts, search videos, or discover posts. The calling agent supplies identifiers, keywords, pagination, and any exact publication-time filter; the tool does not resolve brands, classify official/KOC activity, invent keywords, or choose a time range.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        operation: {
+          type: 'string',
+          enum: ['account_search', 'user_info', 'user_posts', 'video_search', 'post_discover'],
+          description: 'TikTok API23 operation to execute.',
+        },
+        keyword: {
+          type: 'string',
+          description: 'Caller-supplied query for account_search, video_search, or post_discover.',
+        },
+        uniqueId: {
+          type: 'string',
+          description: 'Exact TikTok handle without @ for user_info.',
+        },
+        secUid: {
+          type: 'string',
+          description: 'TikTok secUid for user_posts.',
+        },
+        cursor: {
+          type: 'string',
+          description: 'Optional opaque provider cursor for account_search, user_posts, or video_search.',
+        },
+        searchId: {
+          type: 'string',
+          description: 'Optional opaque search id returned by a previous search page.',
+        },
+        page: {
+          type: 'number',
+          description: 'Optional page number for post_discover.',
+        },
+        count: {
+          type: 'number',
+          description: 'Optional requested post count for user_posts, from 1 to the provider maximum of 35.',
+        },
+        since: {
+          type: 'string',
+          description: 'Optional inclusive ISO-8601 publication timestamp filter with an explicit timezone. Must be paired with until.',
+        },
+        until: {
+          type: 'string',
+          description: 'Optional inclusive ISO-8601 publication timestamp filter with an explicit timezone. Must be paired with since.',
+        },
+        maxItems: {
+          type: 'number',
+          description: 'Optional local cap for returned item arrays after filtering, from 1 to 100. Omit to preserve the provider page.',
+        },
+      },
+      required: ['operation'],
+      additionalProperties: false,
+    },
+    run: async (args, config) => {
+      return tiktokApi23(args, config);
+    },
+  },
+  {
+    provider: 'youtube_v2',
+    source: 'youtube-v2',
+    host: 'youtube-v2.p.rapidapi.com',
+    name: 'altselfs_youtube_competitor_activity',
+    description:
+      'Track a competitor\'s public YouTube promotion activity for an explicit caller-supplied time range with RapidAPI YouTube V2. Resolves the official channel and combines channel videos, Shorts, and keyword search into normalized official releases plus KOC or creator promotion candidates with exact publication dates, permalinks, views, and promotion signals. The calling agent must translate requests such as “last week” into exact since/until timestamps using the user\'s current date and timezone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: {
+          type: 'string',
+          description: 'Product name, domain, website URL, YouTube channel URL, or channel name, for example az8.art.',
+        },
+        channelId: {
+          type: 'string',
+          description: 'Optional exact official YouTube channel id when already known.',
+        },
+        channelName: {
+          type: 'string',
+          description: 'Optional expected official channel name. Strongly recommended when the target domain is ambiguous or misspelled.',
+        },
+        since: {
+          type: 'string',
+          description: 'Inclusive ISO-8601 start timestamp supplied by the calling agent. Use an explicit timezone.',
+        },
+        until: {
+          type: 'string',
+          description: 'Inclusive ISO-8601 end timestamp supplied by the calling agent. Use an explicit timezone.',
+        },
+        includeOfficial: {
+          type: 'boolean',
+          description: 'Include videos and Shorts published by the resolved official channel. Defaults to true.',
+        },
+        includeKoc: {
+          type: 'boolean',
+          description: 'Include public keyword-discovered KOC or creator promotion candidates. Defaults to true.',
+        },
+        includeShorts: {
+          type: 'boolean',
+          description: 'Include Shorts from the resolved official channel. Defaults to true.',
+        },
+        keywords: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: 5,
+          description: 'Optional product names, corrected aliases, domains, or campaign keywords for channel resolution and KOC discovery.',
+        },
+        country: {
+          type: 'string',
+          description: 'Two-letter search country code. Defaults to US.',
+        },
+        lang: {
+          type: 'string',
+          description: 'Two-letter search language code. Defaults to en.',
+        },
+        maxResults: {
+          type: 'number',
+          description: 'Maximum normalized results per section, from 1 to 30. Defaults to 20.',
+        },
+      },
+      required: ['since', 'until'],
+      additionalProperties: false,
+    },
+    run: async (args, config) => {
+      const target = readString(args.target);
+      const channelId = readString(args.channelId);
+      const channelName = readString(args.channelName);
+      if (!target && !channelId && !channelName) return missingInput('target, channelId, or channelName');
+      if (!readString(args.since) || !readString(args.until)) return missingInput('since and until');
+      return youtubeCompetitorActivity(args, config);
     },
   },
   {
@@ -327,6 +490,20 @@ export async function runRapidApiCompetitortool(toolName: string, argumentsValue
               'Tagged posts are KOC or creator promotion candidates, not proof of payment. Use the returned promotion signals and captions to distinguish paid, gifted, affiliate, and organic mentions.',
               'The tool only reports public content returned by the provider in the requested window; private, deleted, untagged, story-only, or unindexed posts can be missing.',
             ]
+        : tool.source === 'tiktok-api23'
+          ? [
+              'TikTok API23 is an independent unofficial third-party wrapper, not an official TikTok API. Availability, fields, counts, ordering, and pagination may change without notice.',
+              'The tool returns public provider data without deciding which account is official or whether a post is paid, gifted, affiliate, KOC, or organic; the calling agent must make and label those assessments.',
+              'TikTok content endpoints do not provide a server-side publication-date filter. When since/until are supplied, the tool filters the returned page by createTime, so deleted, private, unindexed, or lower-ranked posts can be missing.',
+              'Engagement metrics are current cumulative snapshots rather than historical values at publication time.',
+            ]
+        : tool.source === 'youtube-v2'
+          ? [
+              'YouTube V2 is an independent third-party wrapper, not the official YouTube Data API. Availability, fields, result ordering, and pagination may change without notice.',
+              'Keyword results are KOC or creator promotion candidates, not proof of payment. promotionSignals and promotionConfidence are evidence heuristics and must not be presented as proof of a commercial relationship.',
+              'Search ranking and the provider page can omit deleted, private, unlisted, lower-ranked, or unindexed videos. Exact-range filtering is applied after video-detail timestamps are loaded.',
+              'View counts are current cumulative snapshots rather than historical values at publication time.',
+            ]
         : [
             'RapidAPI providers are third-party wrappers and may differ from official Semrush, Similarweb, Moz, Majestic, or Ahrefs APIs.',
             'Traffic, user, revenue, backlink, and keyword numbers are estimates or proxy signals; present them with source and confidence labels.',
@@ -343,6 +520,10 @@ export async function runRapidApiCompetitortool(toolName: string, argumentsValue
         ? ['The Appark public endpoint failed, changed behavior, rate-limited the request, or the app is not covered.']
         : tool.source === 'instagram-looter2'
           ? ['The Instagram Looter request failed, the provider rate-limited the request, the public account could not be resolved, or Instagram did not return the requested content.']
+        : tool.source === 'tiktok-api23'
+          ? ['The TikTok API23 request failed, the provider rate-limited the request, the free plan blocked the selected operation, or TikTok did not return the requested public data.']
+        : tool.source === 'youtube-v2'
+          ? ['The YouTube V2 request failed, the provider rate-limited the request, the free plan blocked an endpoint, the official channel could not be resolved, or YouTube did not return the requested public content.']
         : ['The RapidAPI request failed, the provider rate-limited the request, or the domain is not covered.'],
     }, null, 2);
   }
@@ -522,13 +703,12 @@ async function instagramCompetitorActivity(args: Record<string, unknown>, config
   const requestedUsername = normalizeInstagramUsername(readString(args.username));
   const includeOfficial = args.includeOfficial !== false;
   const includeKoc = args.includeKoc !== false;
-  const lookbackDays = clampInt(readNumber(args.lookbackDays), 1, 31, 7);
   const maxResults = clampInt(readNumber(args.maxResults), 1, 100, 50);
-  const until = parseInstagramDate(readString(args.until), new Date());
-  const since = parseInstagramDate(
-    readString(args.since),
-    new Date(until.getTime() - lookbackDays * 24 * 60 * 60 * 1000)
-  );
+  const since = parseRequiredDate(readString(args.since));
+  const until = parseRequiredDate(readString(args.until));
+  if (!since || !until) {
+    return { error: 'since and until must be valid ISO-8601 timestamps with an explicit timezone.' };
+  }
   if (since.getTime() > until.getTime()) {
     return { error: 'since must be earlier than or equal to until.' };
   }
@@ -537,7 +717,7 @@ async function instagramCompetitorActivity(args: Record<string, unknown>, config
   if (!resolution.username || !resolution.id) {
     return {
       request: { target: target || undefined, username: requestedUsername || undefined },
-      window: { since: since.toISOString(), until: until.toISOString(), lookbackDays },
+      window: { since: since.toISOString(), until: until.toISOString(), interpretation: 'explicit_range' },
       resolution,
       official: { count: 0, posts: [] },
       koc: { count: 0, posts: [] },
@@ -623,8 +803,7 @@ async function instagramCompetitorActivity(args: Record<string, unknown>, config
     window: {
       since: since.toISOString(),
       until: until.toISOString(),
-      lookbackDays: readString(args.since) ? undefined : lookbackDays,
-      interpretation: readString(args.since) ? 'explicit_range' : 'rolling_lookback',
+      interpretation: 'explicit_range',
     },
     resolution,
     official: {
@@ -1001,11 +1180,10 @@ function instagramTimestampIso(value: number | null) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function parseInstagramDate(value: string, fallback: Date) {
-  if (!value) return fallback;
-  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-  const date = new Date(dateOnly ? `${value}T00:00:00.000Z` : value);
-  return Number.isNaN(date.getTime()) ? fallback : date;
+function parseRequiredDate(value: string) {
+  if (!value || !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function extractInstagramUsername(value: string) {
@@ -1040,6 +1218,682 @@ function extractTargetDomain(value: string) {
 
 function normalizeInstagramComparable(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+const TIKTOK_API23_HOST = 'tiktok-api23.p.rapidapi.com';
+
+const TIKTOK_API23_OPERATIONS = {
+  account_search: { endpoint: '/api/search/account', required: 'keyword' },
+  user_info: { endpoint: '/api/user/info', required: 'uniqueId' },
+  user_posts: { endpoint: '/api/user/posts', required: 'secUid' },
+  video_search: { endpoint: '/api/search/video', required: 'keyword' },
+  post_discover: { endpoint: '/api/post/discover', required: 'keyword' },
+} as const;
+
+async function tiktokApi23(args: Record<string, unknown>, config: ServerConfig) {
+  const operationName = readString(args.operation);
+  if (!(operationName in TIKTOK_API23_OPERATIONS)) {
+    return { error: 'operation must be one of account_search, user_info, user_posts, video_search, or post_discover.' };
+  }
+  const operation = operationName as keyof typeof TIKTOK_API23_OPERATIONS;
+  const operationConfig = TIKTOK_API23_OPERATIONS[operation];
+  const requiredValue = readString(args[operationConfig.required]);
+  if (!requiredValue) return missingInput(operationConfig.required);
+
+  const sinceValue = readString(args.since);
+  const untilValue = readString(args.until);
+  if (Boolean(sinceValue) !== Boolean(untilValue)) {
+    return { error: 'since and until must be supplied together.' };
+  }
+  const since = sinceValue ? parseRequiredDate(sinceValue) : null;
+  const until = untilValue ? parseRequiredDate(untilValue) : null;
+  if ((sinceValue && !since) || (untilValue && !until)) {
+    return { error: 'since and until must be valid ISO-8601 timestamps with an explicit timezone.' };
+  }
+  if (since && until && since.getTime() > until.getTime()) {
+    return { error: 'since must be earlier than or equal to until.' };
+  }
+
+  const params = tiktokApi23Params(operation, args);
+  const response = await tiktokApi23Get(operationConfig.endpoint, params, config);
+  const maxItems = readNumber(args.maxItems);
+  return {
+    operation,
+    endpoint: operationConfig.endpoint,
+    request: params,
+    publicationWindow: since && until
+      ? { since: since.toISOString(), until: until.toISOString(), interpretation: 'explicit_range' }
+      : undefined,
+    response: transformTikTokApi23Response(
+      response,
+      since,
+      until,
+      maxItems === null ? null : clampInt(maxItems, 1, 100, 100)
+    ),
+  };
+}
+
+function tiktokApi23Params(
+  operation: keyof typeof TIKTOK_API23_OPERATIONS,
+  args: Record<string, unknown>
+) {
+  const params: Record<string, string> = {};
+  if (operation === 'account_search' || operation === 'video_search' || operation === 'post_discover') {
+    params.keyword = readString(args.keyword);
+  }
+  if (operation === 'user_info') params.uniqueId = readString(args.uniqueId);
+  if (operation === 'user_posts') params.secUid = readString(args.secUid);
+
+  const cursor = readString(args.cursor);
+  const searchId = readString(args.searchId);
+  const count = readNumber(args.count);
+  const page = readNumber(args.page);
+  if (cursor && ['account_search', 'user_posts', 'video_search'].includes(operation)) params.cursor = cursor;
+  if (searchId && ['account_search', 'video_search'].includes(operation)) params.search_id = searchId;
+  if (count !== null && operation === 'user_posts') params.count = String(clampInt(count, 1, 35, 35));
+  if (page !== null && operation === 'post_discover') params.page = String(Math.max(1, Math.floor(page)));
+  return params;
+}
+
+async function tiktokApi23Get(pathname: string, params: Record<string, string>, config: ServerConfig) {
+  const url = new URL(`https://${TIKTOK_API23_HOST}${pathname}`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value) url.searchParams.set(key, value);
+  }
+  const response = await rapidApiJson({
+    config,
+    host: TIKTOK_API23_HOST,
+    url: url.toString(),
+    publicInput: { endpoint: pathname, ...params },
+  });
+  return isRecord(response) ? response.body : null;
+}
+
+const TIKTOK_API23_ITEM_ARRAY_KEYS = new Set([
+  'user_list',
+  'userList',
+  'item_list',
+  'itemList',
+  'video_list',
+  'videoList',
+  'seoBizItemInfoList',
+]);
+const TIKTOK_API23_POST_ARRAY_KEYS = new Set([
+  'item_list',
+  'itemList',
+  'video_list',
+  'videoList',
+  'seoBizItemInfoList',
+]);
+
+function transformTikTokApi23Response(
+  value: unknown,
+  since: Date | null,
+  until: Date | null,
+  maxItems: number | null,
+  parentKey = ''
+): unknown {
+  if (Array.isArray(value)) {
+    let items = value;
+    if (since && until && TIKTOK_API23_POST_ARRAY_KEYS.has(parentKey)) {
+      items = items.filter((item) => {
+        const timestamp = tiktokApi23CreateTimeMs(item);
+        return timestamp !== null && timestamp >= since.getTime() && timestamp <= until.getTime();
+      });
+    }
+    if (maxItems !== null && TIKTOK_API23_ITEM_ARRAY_KEYS.has(parentKey)) {
+      items = items.slice(0, maxItems);
+    }
+    return items.map((item) => transformTikTokApi23Response(item, since, until, maxItems));
+  }
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nested]) => [
+      key,
+      transformTikTokApi23Response(nested, since, until, maxItems, key),
+    ])
+  );
+}
+
+function tiktokApi23CreateTimeMs(value: unknown) {
+  if (!isRecord(value)) return null;
+  const timestamp = readNumber(value.createTime) ?? readNumber(value.create_time);
+  if (timestamp === null) return null;
+  return timestamp > 1_000_000_000_000 ? timestamp : timestamp * 1000;
+}
+
+const YOUTUBE_V2_HOST = 'youtube-v2.p.rapidapi.com';
+
+async function youtubeCompetitorActivity(args: Record<string, unknown>, config: ServerConfig) {
+  const target = readString(args.target);
+  const requestedChannelId = readString(args.channelId);
+  const channelName = readString(args.channelName);
+  const since = parseRequiredDate(readString(args.since));
+  const until = parseRequiredDate(readString(args.until));
+  if (!since || !until) {
+    return { error: 'since and until must be valid ISO-8601 timestamps with an explicit timezone.' };
+  }
+  if (since.getTime() > until.getTime()) return { error: 'since must be earlier than or equal to until.' };
+
+  const includeOfficial = args.includeOfficial !== false;
+  const includeKoc = args.includeKoc !== false;
+  const includeShorts = args.includeShorts !== false;
+  const maxResults = clampInt(readNumber(args.maxResults), 1, 30, 20);
+  const country = normalizeYoutubeCountry(readString(args.country));
+  const lang = normalizeYoutubeLanguage(readString(args.lang));
+  const extraKeywords = Array.isArray(args.keywords)
+    ? args.keywords.map(readString).filter(Boolean).slice(0, 5)
+    : [];
+  const targetDomain = extractTargetDomain(target);
+  const targetStem = targetDomain ? targetDomain.split('.')[0] : youtubeSearchQuery(target);
+  const aliases = uniqueStrings([channelName, ...extraKeywords, targetDomain, targetStem, youtubeSearchQuery(target)]);
+  const resolution = await resolveYouTubeChannel({
+    target,
+    requestedChannelId,
+    channelName,
+    aliases,
+    country,
+    lang,
+    config,
+  });
+  const searchQueries = uniqueStrings([
+    channelName,
+    ...extraKeywords,
+    resolution.title,
+    targetDomain,
+    targetStem,
+    youtubeSearchQuery(target),
+  ]).slice(0, 4);
+  const orderBy = youtubeSearchOrderBy(since, new Date());
+
+  const endpointTasks: Array<{
+    label: string;
+    kind: 'official' | 'koc';
+    query?: string;
+    run: () => Promise<unknown>;
+  }> = [];
+  if (includeOfficial && resolution.channelId) {
+    endpointTasks.push({
+      label: 'channel-videos',
+      kind: 'official',
+      run: () => youtubeV2Get('/channel/videos', { channel_id: resolution.channelId }, config),
+    });
+    if (includeShorts) {
+      endpointTasks.push({
+        label: 'channel-shorts',
+        kind: 'official',
+        run: () => youtubeV2Get('/channel/shorts', { channel_id: resolution.channelId }, config),
+      });
+    }
+  }
+  if (includeKoc) {
+    for (const query of searchQueries) {
+      endpointTasks.push({
+        label: `search:${query}`,
+        kind: 'koc',
+        query,
+        run: () => youtubeV2Get('/search/', {
+          query,
+          country,
+          lang,
+          ...(orderBy ? { order_by: orderBy } : {}),
+        }, config),
+      });
+    }
+  }
+
+  const settled = await Promise.allSettled(endpointTasks.map((task) => task.run()));
+  const officialGroups: YouTubeActivityVideo[][] = [];
+  const kocGroups: YouTubeActivityVideo[][] = [];
+  const errors: Array<{ endpoint: string; error: string }> = [...resolution.errors];
+  settled.forEach((result, index) => {
+    const task = endpointTasks[index];
+    if (result.status === 'rejected') {
+      errors.push({ endpoint: task.label, error: result.reason instanceof Error ? result.reason.message : String(result.reason) });
+      return;
+    }
+    const videos = extractYouTubeVideos(result.value, task.label, task.query);
+    if (task.kind === 'official') officialGroups.push(videos);
+    else kocGroups.push(videos);
+  });
+
+  const rawOfficialCandidates = mergeYouTubeVideos(officialGroups);
+  const rawKocCandidates = mergeYouTubeVideos(kocGroups)
+    .filter((video) => !resolution.channelId || video.channelId !== resolution.channelId)
+    .filter((video) => youtubeBrandRelevant(video, aliases));
+  const detailLimit = Math.min(40, maxResults * 2);
+  const officialDetails = await loadYouTubeVideoDetails(rawOfficialCandidates, since, until, detailLimit, config, errors);
+  const kocDetails = await loadYouTubeVideoDetails(rawKocCandidates, since, until, detailLimit, config, errors);
+  const official = filterYouTubeVideosByWindow(officialDetails.videos, since, until).slice(0, maxResults);
+  const koc = filterYouTubeVideosByWindow(kocDetails.videos, since, until)
+    .filter((video) => !resolution.channelId || video.channelId !== resolution.channelId)
+    .filter((video) => youtubeBrandRelevant(video, aliases))
+    .map((video) => applyYouTubePromotionClassification(video, aliases, targetDomain))
+    .slice(0, maxResults);
+
+  const request = {
+    target: target || undefined,
+    channelId: requestedChannelId || undefined,
+    channelName: channelName || undefined,
+    keywords: extraKeywords,
+    includeOfficial,
+    includeKoc,
+    includeShorts,
+    country,
+    lang,
+    maxResults,
+  };
+  const window = { since: since.toISOString(), until: until.toISOString(), interpretation: 'explicit_range' };
+  const coverage = {
+    endpoints: endpointTasks.map((task) => task.label),
+    apiCallCount: resolution.apiCallCount + endpointTasks.length + officialDetails.apiCallCount + kocDetails.apiCallCount,
+    searchQueries,
+    orderBy: orderBy || null,
+    rawOfficialCandidates: rawOfficialCandidates.length,
+    rawKocCandidates: rawKocCandidates.length,
+    detailedOfficialCandidates: officialDetails.apiCallCount,
+    detailedKocCandidates: kocDetails.apiCallCount,
+    errors,
+  };
+
+  if (!resolution.channelId) {
+    return {
+      request,
+      window,
+      resolution,
+      official: { count: 0, videos: [] },
+      koc: { count: koc.length, videos: koc, classification: youtubeKocClassification() },
+      coverage,
+      warning: 'No official YouTube channel could be resolved; keyword KOC candidates may still be available.',
+    };
+  }
+  return {
+    request,
+    window,
+    resolution,
+    official: { count: official.length, videos: official },
+    koc: { count: koc.length, videos: koc, classification: youtubeKocClassification() },
+    coverage,
+  };
+}
+
+function youtubeKocClassification() {
+  return 'Public keyword-search results from non-official channels are returned as KOC/creator promotion candidates. promotionSignals and promotionConfidence are heuristics, not proof of payment, sponsorship, gifting, or another commercial relationship.';
+}
+
+async function resolveYouTubeChannel(input: {
+  target: string;
+  requestedChannelId: string;
+  channelName: string;
+  aliases: string[];
+  country: string;
+  lang: string;
+  config: ServerConfig;
+}) {
+  const errors: Array<{ endpoint: string; error: string }> = [];
+  let apiCallCount = 0;
+  if (input.requestedChannelId) {
+    try {
+      apiCallCount += 1;
+      const details = await youtubeV2Get('/channel/details', { channel_id: input.requestedChannelId }, input.config);
+      return {
+        ...normalizeYouTubeChannelDetails(details, input.requestedChannelId),
+        matchReason: 'explicit_channel_id',
+        alternatives: [],
+        apiCallCount,
+        errors,
+      };
+    } catch (error) {
+      errors.push({ endpoint: `channel-details:${input.requestedChannelId}`, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  const query = input.channelName || input.aliases.find(Boolean) || youtubeSearchQuery(input.target);
+  let candidates: YouTubeSearchCandidate[] = [];
+  if (query) {
+    try {
+      apiCallCount += 1;
+      const search = await youtubeV2Get('/search/', { query, country: input.country, lang: input.lang }, input.config);
+      candidates = extractYouTubeChannelCandidates(search, input.aliases, query);
+    } catch (error) {
+      errors.push({ endpoint: `channel-search:${query}`, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  const attempts: Array<ReturnType<typeof normalizeYouTubeChannelDetails> & { score: number }> = [];
+  for (const candidate of candidates.slice(0, 3)) {
+    try {
+      apiCallCount += 1;
+      const raw = await youtubeV2Get('/channel/details', { channel_id: candidate.channelId }, input.config);
+      const details = normalizeYouTubeChannelDetails(raw, candidate.channelId);
+      attempts.push({
+        ...details,
+        title: details.title || candidate.title,
+        description: details.description || candidate.description,
+        score: candidate.score + youtubeChannelDetailScore(details, input.aliases, extractTargetDomain(input.target)),
+      });
+    } catch (error) {
+      errors.push({ endpoint: `channel-details:${candidate.channelId}`, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  attempts.sort((left, right) => right.score - left.score);
+  const selected = attempts[0];
+  if (selected) {
+    const { score: _score, ...channel } = selected;
+    const expected = normalizeComparableName(input.channelName);
+    const actual = normalizeComparableName(channel.title);
+    return {
+      ...channel,
+      matchReason: expected && actual === expected ? 'exact_channel_name' : 'ranked_search_candidate',
+      alternatives: attempts.slice(1, 4).map(({ score: _candidateScore, ...item }) => item),
+      apiCallCount,
+      errors,
+    };
+  }
+
+  const fallback = candidates[0];
+  return {
+    channelId: fallback?.channelId || input.requestedChannelId,
+    title: fallback?.title || input.channelName,
+    description: fallback?.description || '',
+    channelUrl: fallback?.channelId ? `https://www.youtube.com/channel/${fallback.channelId}` : '',
+    matchReason: fallback ? 'ranked_search_candidate_details_unavailable' : 'not_resolved',
+    alternatives: candidates.slice(1, 5),
+    apiCallCount,
+    errors,
+  };
+}
+
+function extractYouTubeChannelCandidates(value: unknown, aliases: string[], query: string) {
+  const videos = youtubeVideoArray(value);
+  const merged = new Map<string, YouTubeSearchCandidate>();
+  videos.forEach((entry, index) => {
+    if (!isRecord(entry)) return;
+    const channelId = readString(entry.channel_id) || readString(entry.channelId);
+    if (!channelId) return;
+    const title = readString(entry.author) || readString(entry.channel_title) || readString(entry.channelTitle);
+    const description = readString(entry.description);
+    const comparableTitle = normalizeComparableName(title);
+    const comparableText = normalizeComparableName(`${title} ${description} ${readString(entry.title)}`);
+    const comparableAliases = uniqueStrings([...aliases, query]).map(normalizeComparableName).filter((item) => item.length >= 2);
+    const score = Math.max(0, 30 - index)
+      + Math.max(0, ...comparableAliases.map((alias) => comparableTitle === alias ? 100 : comparableTitle.includes(alias) ? 55 : comparableText.includes(alias) ? 20 : 0));
+    const candidate = { channelId, title, description, position: index, score };
+    const current = merged.get(channelId);
+    if (!current || candidate.score > current.score) merged.set(channelId, candidate);
+  });
+  return Array.from(merged.values()).sort((left, right) => right.score - left.score || left.position - right.position);
+}
+
+function normalizeYouTubeChannelDetails(value: unknown, fallbackChannelId = '') {
+  const root = youtubeRecord(value);
+  const channelId = readString(root.channel_id) || readString(root.channelId) || readString(root.id) || fallbackChannelId;
+  const title = readString(root.title) || readString(root.channel_name) || readString(root.name);
+  return {
+    channelId,
+    title,
+    description: truncate(readString(root.description), 1_000),
+    channelUrl: readString(root.channel_url) || readString(root.url) || (channelId ? `https://www.youtube.com/channel/${channelId}` : ''),
+    customUrl: readString(root.custom_url) || readString(root.handle) || undefined,
+    subscribers: youtubeMetric(root.number_of_subscribers ?? root.subscriber_count ?? root.subscribers),
+    videoCount: youtubeMetric(root.number_of_videos ?? root.video_count ?? root.videos_count),
+    views: youtubeMetric(root.number_of_views ?? root.view_count ?? root.views),
+    links: Array.isArray(root.links) ? root.links.slice(0, 20) : [],
+  };
+}
+
+function youtubeChannelDetailScore(
+  channel: ReturnType<typeof normalizeYouTubeChannelDetails>,
+  aliases: string[],
+  targetDomain: string
+) {
+  const title = normalizeComparableName(channel.title);
+  const text = `${channel.title} ${channel.description} ${JSON.stringify(channel.links)}`.toLowerCase();
+  const aliasScore = Math.max(0, ...aliases.map(normalizeComparableName).filter(Boolean)
+    .map((alias) => title === alias ? 120 : title.includes(alias) ? 60 : normalizeComparableName(text).includes(alias) ? 25 : 0));
+  return aliasScore + (targetDomain && text.includes(targetDomain.toLowerCase()) ? 150 : 0);
+}
+
+async function youtubeV2Get(pathname: string, params: Record<string, string>, config: ServerConfig) {
+  const url = new URL(`https://${YOUTUBE_V2_HOST}${pathname}`);
+  for (const [key, value] of Object.entries(params)) if (value) url.searchParams.set(key, value);
+  const response = await rapidApiJson({
+    config,
+    host: YOUTUBE_V2_HOST,
+    url: url.toString(),
+    publicInput: { endpoint: pathname, ...params },
+  });
+  return isRecord(response) ? response.body : null;
+}
+
+function extractYouTubeVideos(value: unknown, sourceType: string, query?: string) {
+  return youtubeVideoArray(value)
+    .map((item) => normalizeYouTubeVideo(item, sourceType, query))
+    .filter((item): item is YouTubeActivityVideo => Boolean(item));
+}
+
+function youtubeVideoArray(value: unknown) {
+  const root = youtubeRecord(value);
+  const candidate = root.videos ?? root.items ?? root.results ?? root.data;
+  return Array.isArray(candidate) ? candidate : [];
+}
+
+function youtubeRecord(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return {};
+  if (isRecord(value.data) && !Array.isArray(value.data)) return value.data;
+  return value;
+}
+
+function normalizeYouTubeVideo(value: unknown, sourceType: string, query?: string): YouTubeActivityVideo | null {
+  if (!isRecord(value)) return null;
+  const videoId = readString(value.video_id) || readString(value.videoId) || readString(value.id);
+  if (!videoId) return null;
+  const publishedTimeRaw = readString(value.published_time) || readString(value.publishedAt) || readString(value.publish_time);
+  const channelId = readString(value.channel_id) || readString(value.channelId);
+  const description = readString(value.description);
+  const keywords = Array.isArray(value.keywords) ? value.keywords.map(readString).filter(Boolean).slice(0, 30) : [];
+  return {
+    videoId,
+    permalink: `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
+    title: truncate(readString(value.title), 300),
+    description: truncate(description, 2_500),
+    author: readString(value.author) || readString(value.channel_title) || readString(value.channelTitle),
+    channelId,
+    channelUrl: channelId ? `https://www.youtube.com/channel/${channelId}` : '',
+    publishedAt: youtubePublishedAt(publishedTimeRaw),
+    publishedTimeRaw: publishedTimeRaw || undefined,
+    durationSeconds: youtubeMetric(value.video_length ?? value.duration),
+    viewCount: youtubeMetric(value.number_of_views ?? value.view_count ?? value.views),
+    category: readString(value.category) || undefined,
+    mediaType: sourceType.includes('shorts') ? 'short' : readString(value.type) || 'video',
+    keywords,
+    sourceTypes: [sourceType],
+    matchedQueries: query ? [query] : [],
+    promotionSignals: [],
+  };
+}
+
+function mergeYouTubeVideos(groups: YouTubeActivityVideo[][]) {
+  const merged = new Map<string, YouTubeActivityVideo>();
+  for (const video of groups.flat()) {
+    const current = merged.get(video.videoId);
+    if (!current) {
+      merged.set(video.videoId, video);
+      continue;
+    }
+    merged.set(video.videoId, {
+      ...current,
+      title: video.title.length > current.title.length ? video.title : current.title,
+      description: video.description.length > current.description.length ? video.description : current.description,
+      author: current.author || video.author,
+      channelId: current.channelId || video.channelId,
+      channelUrl: current.channelUrl || video.channelUrl,
+      publishedAt: video.publishedAt || current.publishedAt,
+      publishedTimeRaw: video.publishedTimeRaw || current.publishedTimeRaw,
+      durationSeconds: maxNonNegativeNumber(current.durationSeconds, video.durationSeconds),
+      viewCount: maxNonNegativeNumber(current.viewCount, video.viewCount),
+      category: current.category || video.category,
+      mediaType: current.mediaType === 'short' || video.mediaType === 'short' ? 'short' : current.mediaType,
+      keywords: uniqueStrings([...current.keywords, ...video.keywords]),
+      sourceTypes: uniqueStrings([...current.sourceTypes, ...video.sourceTypes]),
+      matchedQueries: uniqueStrings([...current.matchedQueries, ...video.matchedQueries]),
+      promotionSignals: uniqueStrings([...current.promotionSignals, ...video.promotionSignals]),
+    });
+  }
+  return Array.from(merged.values());
+}
+
+async function loadYouTubeVideoDetails(
+  candidates: YouTubeActivityVideo[],
+  since: Date,
+  until: Date,
+  maxCandidates: number,
+  config: ServerConfig,
+  errors: Array<{ endpoint: string; error: string }>
+) {
+  const shortlisted = candidates
+    .filter((video) => youtubeApproximateDateMayOverlap(video.publishedTimeRaw || '', since, until, new Date()))
+    .slice(0, maxCandidates);
+  const videos: YouTubeActivityVideo[] = [];
+  for (let index = 0; index < shortlisted.length; index += 5) {
+    const batch = shortlisted.slice(index, index + 5);
+    const settled = await Promise.allSettled(batch.map((video) => youtubeV2Get('/video/details', { video_id: video.videoId }, config)));
+    settled.forEach((result, resultIndex) => {
+      const candidate = batch[resultIndex];
+      if (result.status === 'rejected') {
+        errors.push({ endpoint: `video-details:${candidate.videoId}`, error: result.reason instanceof Error ? result.reason.message : String(result.reason) });
+        if (candidate.publishedAt) videos.push(candidate);
+        return;
+      }
+      const detail = normalizeYouTubeVideo(result.value, 'video-details');
+      videos.push(...mergeYouTubeVideos([[candidate], detail ? [detail] : []]));
+    });
+  }
+  return { videos: mergeYouTubeVideos([videos]), apiCallCount: shortlisted.length };
+}
+
+function filterYouTubeVideosByWindow(videos: YouTubeActivityVideo[], since: Date, until: Date) {
+  return videos
+    .filter((video) => {
+      if (!video.publishedAt) return false;
+      const timestamp = Date.parse(video.publishedAt);
+      return Number.isFinite(timestamp) && timestamp >= since.getTime() && timestamp <= until.getTime();
+    })
+    .sort((left, right) => Date.parse(right.publishedAt || '') - Date.parse(left.publishedAt || ''));
+}
+
+function youtubeBrandRelevant(video: YouTubeActivityVideo, aliases: string[]) {
+  const text = normalizeComparableName(`${video.title} ${video.description} ${video.author} ${video.keywords.join(' ')}`);
+  return aliases.map(normalizeComparableName).filter((alias) => alias.length >= 3).some((alias) => text.includes(alias));
+}
+
+function applyYouTubePromotionClassification(video: YouTubeActivityVideo, aliases: string[], targetDomain: string) {
+  const text = `${video.title}\n${video.description}`;
+  const normalized = text.toLowerCase();
+  const signals = new Set<string>();
+  const knownDomains = uniqueStrings([targetDomain, ...aliases.filter((alias) => /(?:^|\.)[a-z0-9-]+\.[a-z]{2,}$/i.test(alias))])
+    .map(normalizeDomain)
+    .filter(Boolean);
+  if (video.matchedQueries.length) signals.add('brand_keyword_search_result');
+  if (knownDomains.some((domain) => normalized.includes(domain))) signals.add('brand_domain_mentioned');
+  if (knownDomains.some((domain) => new RegExp(`https?://[^\\s]*${escapeRegExp(domain)}`, 'i').test(text))) signals.add('brand_link_in_description');
+  if (/[?&](?:utm_[a-z]+|ref|referral|affiliate|aff|source|campaign)=/i.test(text)) signals.add('tracking_or_affiliate_link');
+  if (/\b(?:ad|sponsored|paid promotion|paid partnership|in collaboration with|partnered with|gifted|thanks to .{0,60} sponsoring|made possible by|supported by)\b/i.test(text)) signals.add('paid_or_collaboration_language');
+  if (/\b(?:affiliate|discount|promo code|coupon|use (?:my )?code|code\s*[:=])\b/i.test(text)) signals.add('affiliate_or_discount_offer');
+  if (/\b(?:link in (?:the )?description|check (?:it|them) out|try it|sign up|download|get started|learn more)\b/i.test(text)) signals.add('conversion_call_to_action');
+  if (aliases.some((alias) => alias && normalized.includes(alias.toLowerCase()))) signals.add('brand_mentioned_in_metadata');
+  const promotionSignals = Array.from(signals);
+  const promotionConfidence: 'high' | 'medium' | 'low' = promotionSignals.includes('paid_or_collaboration_language')
+    || promotionSignals.includes('tracking_or_affiliate_link')
+    ? 'high'
+    : promotionSignals.includes('brand_link_in_description')
+      || promotionSignals.includes('affiliate_or_discount_offer')
+      || promotionSignals.includes('conversion_call_to_action')
+      ? 'medium'
+      : 'low';
+  return { ...video, promotionSignals, promotionConfidence };
+}
+
+function youtubePublishedAt(value: string) {
+  if (!value || /\bago\b|today|yesterday|streamed|premiered/i.test(value)) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function youtubeApproximateDateMayOverlap(rawValue: string, since: Date, until: Date, now: Date) {
+  if (!rawValue) return true;
+  const exact = youtubePublishedAt(rawValue);
+  if (exact) {
+    const timestamp = Date.parse(exact);
+    return timestamp >= since.getTime() && timestamp <= until.getTime();
+  }
+  const normalized = rawValue.toLowerCase().replace(/^(?:streamed|premiered)\s+/, '').trim();
+  const relative = normalized.match(/(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago/);
+  if (relative) {
+    const amount = Number(relative[1]);
+    const units: Record<string, number> = {
+      second: 1_000,
+      minute: 60_000,
+      hour: 3_600_000,
+      day: 86_400_000,
+      week: 7 * 86_400_000,
+      month: 30 * 86_400_000,
+      year: 365 * 86_400_000,
+    };
+    const unit = units[relative[2]];
+    const newest = now.getTime() - amount * unit;
+    const oldest = now.getTime() - (amount + 1) * unit;
+    return newest >= since.getTime() && oldest <= until.getTime();
+  }
+  if (normalized.includes('today')) return now.getTime() >= since.getTime() && now.getTime() - 86_400_000 <= until.getTime();
+  if (normalized.includes('yesterday')) return now.getTime() - 86_400_000 >= since.getTime() && now.getTime() - 2 * 86_400_000 <= until.getTime();
+  return true;
+}
+
+function youtubeSearchOrderBy(since: Date, now: Date) {
+  const age = Math.max(0, now.getTime() - since.getTime());
+  if (age <= 3_600_000) return 'last_hour';
+  if (age <= 86_400_000) return 'today';
+  if (age <= 7 * 86_400_000) return 'this_week';
+  if (age <= 31 * 86_400_000) return 'this_month';
+  if (age <= 366 * 86_400_000) return 'this_year';
+  return '';
+}
+
+function youtubeSearchQuery(value: string) {
+  const domain = extractTargetDomain(value);
+  if (domain) return domain.split('.')[0].replace(/[-_]+/g, ' ').trim();
+  return value.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeYoutubeCountry(value: string) {
+  const normalized = value.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(normalized) ? normalized : 'US';
+}
+
+function normalizeYoutubeLanguage(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return /^[a-z]{2}$/.test(normalized) ? normalized : 'en';
+}
+
+function youtubeMetric(value: unknown) {
+  if (typeof value === 'string') {
+    const match = value.replace(/,/g, '').match(/([0-9]+(?:\.[0-9]+)?)\s*([kmb])?/i);
+    if (!match) return null;
+    const multiplier = match[2]?.toLowerCase() === 'b'
+      ? 1_000_000_000
+      : match[2]?.toLowerCase() === 'm'
+        ? 1_000_000
+        : match[2]?.toLowerCase() === 'k'
+          ? 1_000
+          : 1;
+    return nonNegativeNumber(Number(match[1]) * multiplier);
+  }
+  return nonNegativeNumber(value);
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function apparkAppIntelligence(args: Record<string, unknown>, config: ServerConfig) {
@@ -1476,6 +2330,15 @@ function normalizeComparableName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function uniqueStrings(values: string[]) {
+  const unique = new Map<string, string>();
+  for (const value of values) {
+    const normalized = value.trim();
+    if (normalized && !unique.has(normalized.toLowerCase())) unique.set(normalized.toLowerCase(), normalized);
+  }
+  return Array.from(unique.values());
+}
+
 function parseMaybeJson(value: unknown) {
   if (typeof value !== 'string') return value ?? null;
   const trimmed = value.trim();
@@ -1556,10 +2419,23 @@ function publicArgs(args: Record<string, unknown>) {
     'username',
     'since',
     'until',
-    'lookbackDays',
     'includeOfficial',
     'includeKoc',
+    'includeShorts',
+    'keywords',
+    'channelId',
+    'channelName',
+    'lang',
     'maxResults',
+    'operation',
+    'keyword',
+    'uniqueId',
+    'secUid',
+    'cursor',
+    'searchId',
+    'page',
+    'count',
+    'maxItems',
   ];
   return Object.fromEntries(Object.entries(args).filter(([key]) => allowed.includes(key)));
 }

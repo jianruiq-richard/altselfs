@@ -81,6 +81,8 @@ export default async function InfoOpsPage({
     meta: 'META',
     xiaohongshu: 'XIAOHONGSHU',
     instagram_looter2: 'INSTAGRAM_LOOTER2',
+    tiktok_api23: 'TIKTOK_API23',
+    youtube_v2: 'YOUTUBE_V2',
     similarweb_api1: 'SIMILARWEB_API1',
     semrush13: 'SEMRUSH13',
     semrush8: 'SEMRUSH8',
@@ -145,6 +147,8 @@ export default async function InfoOpsPage({
 
 function isCompetitiveDataSource(provider: string) {
   return provider === 'instagram_looter2'
+    || provider === 'tiktok_api23'
+    || provider === 'youtube_v2'
     || provider === 'similarweb_api1'
     || provider === 'semrush13'
     || provider === 'semrush8'

@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  SquarePlay,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -63,6 +64,8 @@ const SUPPORTED_CONNECTOR_KEYS = new Set([
   'gmail',
   'feishu',
   'instagram_looter2',
+  'tiktok_api23',
+  'youtube_v2',
   'similarweb_api1',
   'semrush13',
   'ahrefs_url_research',
@@ -101,6 +104,16 @@ const CONNECTOR_PERMISSIONS: Record<string, Array<{ title: string; description: 
     { title: 'Official account resolution', description: 'Resolve and verify a competitor Instagram profile from its product name, domain, URL, or username.' },
     { title: 'Recent official activity', description: 'Review public posts and Reels with publication dates, links, and engagement counts.' },
     { title: 'KOC promotion candidates', description: 'Find public posts tagging the official account and surface collaboration, affiliate, and conversion signals.' },
+  ],
+  tiktok_api23: [
+    { title: 'Account and profile lookup', description: 'Search public TikTok accounts and load a selected user profile without assuming which account is official.' },
+    { title: 'Posts and pagination', description: 'Load public user posts with caller-supplied identifiers, counts, and cursors.' },
+    { title: 'Search and discovery', description: 'Run caller-supplied video searches or post-discovery queries with optional exact publication filters.' },
+  ],
+  youtube_v2: [
+    { title: 'Official channel resolution', description: 'Resolve a competitor YouTube channel from a product, domain, known channel id, or expected channel name.' },
+    { title: 'Videos and Shorts', description: 'Review official public uploads with exact publication dates, links, and current view counts.' },
+    { title: 'Creator promotion candidates', description: 'Discover public KOC or creator videos and surface sponsorship, affiliate, and conversion signals.' },
   ],
   similarweb_api1: [
     { title: 'Website performance', description: 'Estimate visits, engagement, bounce behavior, pages per visit, and visit duration.' },
@@ -209,6 +222,8 @@ function connectorIcon(connector: ConnectorItem): { Icon: LucideIcon; color: str
   if (connector.key === 'gmail') return { Icon: Mail, color: 'text-[#ff7d73]' };
   if (connector.key === 'feishu') return { Icon: MessageSquare, color: 'text-[#8eb3ff]' };
   if (connector.key === 'instagram_looter2') return { Icon: Camera, color: 'text-[#e879f9]' };
+  if (connector.key === 'tiktok_api23') return { Icon: Camera, color: 'text-[#57e6d7]' };
+  if (connector.key === 'youtube_v2') return { Icon: SquarePlay, color: 'text-[#ff5c5c]' };
   if (connector.key.includes('similarweb')) return { Icon: Gauge, color: 'text-[#8eb3ff]' };
   if (connector.key.includes('semrush')) return { Icon: BarChart3, color: 'text-[#e9b85a]' };
   if (connector.key.includes('ahrefs')) return { Icon: Search, color: 'text-[#ff8b4a]' };

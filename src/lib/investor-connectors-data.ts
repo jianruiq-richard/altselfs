@@ -80,6 +80,18 @@ const COMPETITIVE_CONNECTORS = [
     dbProvider: 'INSTAGRAM_LOOTER2',
   },
   {
+    key: 'tiktok_api23',
+    label: 'TikTok API23',
+    description: 'General-purpose public TikTok account search, user profiles, user posts, video search, and post discovery with caller-controlled queries and filters.',
+    dbProvider: 'TIKTOK_API23',
+  },
+  {
+    key: 'youtube_v2',
+    label: 'YouTube Competitive Activity',
+    description: 'Official channel videos and Shorts plus keyword-discovered KOC or creator promotion candidates, with exact dates, links, views, and promotion signals.',
+    dbProvider: 'YOUTUBE_V2',
+  },
+  {
     key: 'similarweb_api1',
     label: 'Similarweb',
     description: 'Website traffic, engagement, rankings, traffic channels, geography, referrals, and similar-site signals.',
@@ -121,6 +133,8 @@ const ENABLED_CONNECTOR_KEYS = new Set([
   'gmail',
   'feishu',
   'instagram_looter2',
+  'tiktok_api23',
+  'youtube_v2',
   'similarweb_api1',
   'semrush13',
   'ahrefs_url_research',
