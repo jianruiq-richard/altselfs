@@ -61,20 +61,6 @@ type FeishuFlowState = {
   userCode?: string;
 };
 
-const SUPPORTED_CONNECTOR_KEYS = new Set([
-  'gmail',
-  'feishu',
-  'instagram_looter2',
-  'twitter241',
-  'tiktok_api23',
-  'youtube_v2',
-  'similarweb_api1',
-  'semrush13',
-  'ahrefs_url_research',
-  'domain_metrics_check',
-  'appark',
-]);
-
 const categories: Array<{ key: ConnectorCategory; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'communication', label: 'Communication' },
@@ -217,10 +203,6 @@ const CONNECTOR_LOGOS: Record<string, {
   },
 };
 
-function supportedConnectors(connectors: ConnectorItem[]) {
-  return connectors.filter((connector) => SUPPORTED_CONNECTOR_KEYS.has(connector.key));
-}
-
 function connectorCategory(connector: ConnectorItem): Exclude<ConnectorCategory, 'all'> {
   return connector.type === 'data_source' ? 'intelligence' : 'communication';
 }
@@ -279,7 +261,7 @@ type AstromarConnectorsPageProps = {
 
 export function AstromarConnectorsPage({ initialData = null }: AstromarConnectorsPageProps) {
   const cachedConnectors = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
-  const initialConnectors = supportedConnectors(initialData?.connectors || cachedConnectors?.connectors || []);
+  const initialConnectors = initialData?.connectors || cachedConnectors?.connectors || [];
   const [connectors, setConnectors] = useState<ConnectorItem[]>(initialConnectors);
   const [loading, setLoading] = useState(initialConnectors.length === 0);
   const [error, setError] = useState<string | null>(null);
@@ -323,7 +305,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
         {},
         { force: options.force ?? true, ttlMs: 45_000 },
       );
-      const next = supportedConnectors(Array.isArray(data.connectors) ? data.connectors : []);
+      const next = Array.isArray(data.connectors) ? data.connectors : [];
       if (!isCurrentLoad()) return null;
       setConnectors(next);
       setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, { ...data, connectors: next });
@@ -340,15 +322,15 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
     if (loadStartedRef.current) return;
     loadStartedRef.current = true;
     if (initialData) {
-      const next = { ...initialData, connectors: supportedConnectors(initialData.connectors || []) };
+      const next = { ...initialData, connectors: initialData.connectors || [] };
       setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, next);
       void loadConnectors({ showLoading: false, force: false });
       return;
     }
     const cached = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
-    const supportedCached = supportedConnectors(cached?.connectors || []);
-    if (supportedCached.length) {
-      setConnectors(supportedCached);
+    const cachedItems = cached?.connectors || [];
+    if (cachedItems.length) {
+      setConnectors(cachedItems);
       setLoading(false);
       void loadConnectors({ showLoading: false, force: false });
       return;
