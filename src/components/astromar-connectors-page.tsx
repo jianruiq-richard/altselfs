@@ -2,6 +2,7 @@
 
 import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
 import {
+  AtSign,
   BarChart3,
   Camera,
   Check,
@@ -64,6 +65,7 @@ const SUPPORTED_CONNECTOR_KEYS = new Set([
   'gmail',
   'feishu',
   'instagram_looter2',
+  'twitter241',
   'tiktok_api23',
   'youtube_v2',
   'similarweb_api1',
@@ -104,6 +106,11 @@ const CONNECTOR_PERMISSIONS: Record<string, Array<{ title: string; description: 
     { title: 'Official account resolution', description: 'Resolve and verify a competitor Instagram profile from its product name, domain, URL, or username.' },
     { title: 'Recent official activity', description: 'Review public posts and Reels with publication dates, links, and engagement counts.' },
     { title: 'KOC promotion candidates', description: 'Find public posts tagging the official account and surface collaboration, affiliate, and conversion signals.' },
+  ],
+  twitter241: [
+    { title: 'Official account resolution', description: 'Resolve and verify a competitor X profile from its product name, domain, URL, or established username.' },
+    { title: 'Official posts and replies', description: 'Review public official activity within an exact caller-supplied publication window.' },
+    { title: 'Creator and discussion discovery', description: 'Find public creator/KOC promotion candidates and organic discussion with links, views, engagement, and evidence signals.' },
   ],
   tiktok_api23: [
     { title: 'Account and profile lookup', description: 'Search public TikTok accounts and load a selected user profile without assuming which account is official.' },
@@ -222,6 +229,7 @@ function connectorIcon(connector: ConnectorItem): { Icon: LucideIcon; color: str
   if (connector.key === 'gmail') return { Icon: Mail, color: 'text-[#ff7d73]' };
   if (connector.key === 'feishu') return { Icon: MessageSquare, color: 'text-[#8eb3ff]' };
   if (connector.key === 'instagram_looter2') return { Icon: Camera, color: 'text-[#e879f9]' };
+  if (connector.key === 'twitter241') return { Icon: AtSign, color: 'text-zinc-100' };
   if (connector.key === 'tiktok_api23') return { Icon: Camera, color: 'text-[#57e6d7]' };
   if (connector.key === 'youtube_v2') return { Icon: SquarePlay, color: 'text-[#ff5c5c]' };
   if (connector.key.includes('similarweb')) return { Icon: Gauge, color: 'text-[#8eb3ff]' };
