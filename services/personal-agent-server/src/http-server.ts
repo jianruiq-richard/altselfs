@@ -27,6 +27,7 @@ import {
   startFeishuCliAuthorization,
 } from './feishu-cli.js';
 import {
+  createAgentArtifactShare,
   getAgentThreadRuntimeStatus,
   getAgentContextOpsUserUsage,
   getAgentContextOpsSingleUserUsage,
@@ -40,7 +41,10 @@ import {
   persistAgentTurnRejected,
   persistAgentTurnSuccess,
   requestAgentRunCancellation,
+  resolveAgentArtifactShare,
+  revokeAgentArtifactShare,
   touchAgentRunHeartbeat,
+  type AgentArtifactShareRecord,
   type AgentContextArtifactRecord,
   type PersistedAgentTurnInput,
 } from './agent-context-store.js';
@@ -644,6 +648,63 @@ export function createHttpServer(
           url: createSignedObjectUrl(config, { objectKey, method: 'GET' }),
           expiresInSeconds: config.artifactObjectStorageDownloadTtlSeconds,
         });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/artifacts/shares') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        const investorId = readRequiredBodyString(body, 'investorId');
+        const artifactId = readRequiredBodyString(body, 'artifactId');
+        const threadId = typeof body.threadId === 'string' && body.threadId.trim() ? body.threadId.trim() : undefined;
+        const created = await createAgentArtifactShare(config, { investorId, artifactId, threadId });
+        if (!created.ok) {
+          if (created.reason === 'not_found') return json(res, 404, { error: 'Artifact not found' });
+          if (created.reason === 'unsupported_type') {
+            return json(res, 400, { error: 'Only agent-generated HTML files can be shared' });
+          }
+          return json(res, 409, { error: 'Artifact is not available in object storage' });
+        }
+        return json(res, 201, {
+          ok: true,
+          token: created.token,
+          share: publicArtifactShareRecord(created.share),
+          artifact: publicArtifactRecord(created.artifact),
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/artifacts/shares/resolve') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        const token = readRequiredBodyString(body, 'token');
+        const resolved = await resolveAgentArtifactShare(config, token);
+        if (!resolved) return json(res, 404, { error: 'Share link is invalid or expired' });
+        const objectKey = artifactMetadataString(resolved.artifact.metadata, 'ossObjectKey')
+          || artifactMetadataString(resolved.artifact.metadata, 'objectKey');
+        if (!objectKey) return json(res, 404, { error: 'Shared artifact is unavailable' });
+        return json(res, 200, {
+          ok: true,
+          share: publicArtifactShareRecord(resolved.share),
+          artifact: publicArtifactRecord(resolved.artifact),
+          url: createSignedObjectUrl(config, { objectKey, method: 'GET' }),
+          expiresInSeconds: config.artifactObjectStorageDownloadTtlSeconds,
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/internal/artifacts/shares/revoke') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const body = await readJsonBody(req);
+        if (!isRecord(body)) return json(res, 400, { error: 'JSON body must be an object' });
+        const investorId = readRequiredBodyString(body, 'investorId');
+        const shareId = readRequiredBodyString(body, 'shareId');
+        const artifactId = typeof body.artifactId === 'string' && body.artifactId.trim() ? body.artifactId.trim() : undefined;
+        const revoked = await revokeAgentArtifactShare(config, { investorId, shareId, artifactId });
+        if (!revoked) return json(res, 404, { error: 'Active share link not found' });
+        return json(res, 200, { ok: true, shareId, revoked: true });
       }
 
       if (req.method === 'GET' && url.pathname === '/v1/threads/status') {
@@ -1833,6 +1894,18 @@ function publicArtifactRecord(artifact: AgentContextArtifactRecord) {
     storageProvider: artifactMetadataString(artifact.metadata, 'storageProvider') || null,
     uploadStatus: artifactMetadataString(artifact.metadata, 'uploadStatus') || null,
     downloadPath: downloadPath || null,
+  };
+}
+
+function publicArtifactShareRecord(share: AgentArtifactShareRecord) {
+  return {
+    id: share.id,
+    artifactId: share.artifactId,
+    expiresAt: share.expiresAt,
+    revokedAt: share.revokedAt,
+    accessCount: share.accessCount,
+    lastAccessedAt: share.lastAccessedAt,
+    createdAt: share.createdAt,
   };
 }
 

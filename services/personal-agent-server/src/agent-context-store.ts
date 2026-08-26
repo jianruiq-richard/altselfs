@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import type { ServerConfig } from './config.js';
 import type { RuntimePaths } from './sandbox-runtime.js';
 import type { AgentEvent, AgentRoute, TurnStartRequest } from './types.js';
@@ -81,6 +82,36 @@ export type AgentContextArtifactRecord = Required<Pick<AgentContextArtifactInput
   metadata: Record<string, unknown>;
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+export const AGENT_ARTIFACT_SHARE_TTL_DAYS = 30;
+
+export type AgentArtifactShareRecord = {
+  id: string;
+  artifactId: string;
+  investorId: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  accessCount: number;
+  lastAccessedAt: string | null;
+  createdAt: string | null;
+};
+
+export type CreateAgentArtifactShareResult =
+  | {
+      ok: true;
+      token: string;
+      share: AgentArtifactShareRecord;
+      artifact: AgentContextArtifactRecord;
+    }
+  | {
+      ok: false;
+      reason: 'not_found' | 'unsupported_type' | 'storage_unavailable';
+    };
+
+export type ResolvedAgentArtifactShare = {
+  share: AgentArtifactShareRecord;
+  artifact: AgentContextArtifactRecord;
 };
 
 export type AgentSandboxControlPlaneInput = {
@@ -627,6 +658,157 @@ export async function getAgentContextArtifactsByIds(
     values
   );
   return result.rows.map(rowToAgentContextArtifactRecord);
+}
+
+export async function createAgentArtifactShare(
+  config: ServerConfig,
+  input: { investorId: string; artifactId: string; threadId?: string | null }
+): Promise<CreateAgentArtifactShareResult> {
+  const artifacts = await getAgentContextArtifactsByIds(config, {
+    investorId: input.investorId,
+    threadId: input.threadId,
+    artifactIds: [input.artifactId],
+  });
+  const artifact = artifacts[0];
+  if (!artifact) return { ok: false, reason: 'not_found' };
+  if (!isShareableGeneratedHtmlArtifact(artifact)) {
+    return { ok: false, reason: 'unsupported_type' };
+  }
+  if (!artifactObjectKey(artifact)) {
+    return { ok: false, reason: 'storage_unavailable' };
+  }
+
+  const pool = await getRequiredContextPool(config);
+  const shareId = id('shr');
+  const secret = randomBytes(32).toString('base64url');
+  const tokenHash = hashAgentArtifactShareSecret(secret);
+  const expiresAt = agentArtifactShareExpiresAt();
+  const result = await pool.query(
+    [
+      'insert into agent_artifact_shares',
+      '(id, artifact_id, investor_id, token_hash, expires_at)',
+      'values ($1, $2, $3, $4, $5::timestamptz)',
+      'returning id, artifact_id as "artifactId", investor_id as "investorId",',
+      'expires_at as "expiresAt", revoked_at as "revokedAt", access_count as "accessCount",',
+      'last_accessed_at as "lastAccessedAt", created_at as "createdAt"',
+    ].join(' '),
+    [shareId, artifact.id, input.investorId, tokenHash, expiresAt]
+  );
+  const share = rowToAgentArtifactShareRecord(result.rows[0]);
+  return {
+    ok: true,
+    token: `${shareId}.${secret}`,
+    share,
+    artifact,
+  };
+}
+
+export async function resolveAgentArtifactShare(
+  config: ServerConfig,
+  token: string
+): Promise<ResolvedAgentArtifactShare | null> {
+  const parsed = parseAgentArtifactShareToken(token);
+  if (!parsed) return null;
+  const pool = await getRequiredContextPool(config);
+  const result = await pool.query(
+    [
+      'update agent_artifact_shares s',
+      'set access_count = s.access_count + 1, last_accessed_at = now()',
+      'from agent_context_artifacts a',
+      'where s.id = $1 and s.token_hash = $2',
+      'and s.revoked_at is null and s.expires_at > now()',
+      'and s.artifact_id = a.id',
+      "and a.kind = 'generated_file'",
+      "and (lower(coalesce(a.mime_type, '')) like 'text/html%' or lower(a.name) ~ '\\.html?$')",
+      "and coalesce(a.metadata->>'ossObjectKey', a.metadata->>'objectKey', '') <> ''",
+      'returning s.id as "shareId", s.artifact_id as "shareArtifactId",',
+      's.investor_id as "shareInvestorId", s.expires_at as "shareExpiresAt",',
+      's.revoked_at as "shareRevokedAt", s.access_count as "shareAccessCount",',
+      's.last_accessed_at as "shareLastAccessedAt", s.created_at as "shareCreatedAt",',
+      'a.id as "artifactId", a.investor_id as "artifactInvestorId",',
+      'a.thread_id as "artifactThreadId", a.run_id as "artifactRunId",',
+      'a.kind as "artifactKind", a.name as "artifactName", a.mime_type as "artifactMimeType",',
+      'a.size_bytes as "artifactSizeBytes", a.content_text as "artifactContentText",',
+      'a.metadata as "artifactMetadata", a.created_at as "artifactCreatedAt",',
+      'a.updated_at as "artifactUpdatedAt"',
+    ].join(' '),
+    [parsed.shareId, hashAgentArtifactShareSecret(parsed.secret)]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    share: rowToAgentArtifactShareRecord({
+      id: row.shareId,
+      artifactId: row.shareArtifactId,
+      investorId: row.shareInvestorId,
+      expiresAt: row.shareExpiresAt,
+      revokedAt: row.shareRevokedAt,
+      accessCount: row.shareAccessCount,
+      lastAccessedAt: row.shareLastAccessedAt,
+      createdAt: row.shareCreatedAt,
+    }),
+    artifact: rowToAgentContextArtifactRecord({
+      id: row.artifactId,
+      investorId: row.artifactInvestorId,
+      threadId: row.artifactThreadId,
+      runId: row.artifactRunId,
+      kind: row.artifactKind,
+      name: row.artifactName,
+      mimeType: row.artifactMimeType,
+      sizeBytes: row.artifactSizeBytes,
+      contentText: row.artifactContentText,
+      metadata: row.artifactMetadata,
+      createdAt: row.artifactCreatedAt,
+      updatedAt: row.artifactUpdatedAt,
+    }),
+  };
+}
+
+export async function revokeAgentArtifactShare(
+  config: ServerConfig,
+  input: { shareId: string; investorId: string; artifactId?: string | null }
+) {
+  const pool = await getRequiredContextPool(config);
+  const values: unknown[] = [input.shareId, input.investorId];
+  const where = ['id = $1', 'investor_id = $2', 'revoked_at is null'];
+  if (input.artifactId) {
+    values.push(input.artifactId);
+    where.push(`artifact_id = $${values.length}`);
+  }
+  const result = await pool.query(
+    [
+      'update agent_artifact_shares',
+      'set revoked_at = now()',
+      `where ${where.join(' and ')}`,
+      'returning id',
+    ].join(' '),
+    values
+  );
+  return result.rows.length > 0;
+}
+
+export function agentArtifactShareExpiresAt(nowMs = Date.now()) {
+  return new Date(nowMs + AGENT_ARTIFACT_SHARE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+export function hashAgentArtifactShareSecret(secret: string) {
+  return createHash('sha256').update(secret, 'utf8').digest('hex');
+}
+
+export function parseAgentArtifactShareToken(token: string) {
+  const separator = token.indexOf('.');
+  if (separator <= 0 || separator !== token.lastIndexOf('.')) return null;
+  const shareId = token.slice(0, separator);
+  const secret = token.slice(separator + 1);
+  if (!/^shr_[a-f0-9]{32}$/.test(shareId) || !/^[A-Za-z0-9_-]{43}$/.test(secret)) return null;
+  return { shareId, secret };
+}
+
+export function isShareableGeneratedHtmlArtifact(artifact: AgentContextArtifactRecord) {
+  const name = artifact.name.trim().toLowerCase();
+  const mimeType = artifact.mimeType?.trim().toLowerCase() || '';
+  return artifact.kind === 'generated_file'
+    && (mimeType.startsWith('text/html') || name.endsWith('.html') || name.endsWith('.htm'));
 }
 
 export async function getAgentContextArtifactByWorkspacePath(
@@ -1524,6 +1706,24 @@ function rowToAgentContextArtifactRecord(row: Record<string, unknown>): AgentCon
   };
 }
 
+function rowToAgentArtifactShareRecord(row: Record<string, unknown>): AgentArtifactShareRecord {
+  return {
+    id: String(row.id || row.shareId || ''),
+    artifactId: String(row.artifactId || row.artifact_id || ''),
+    investorId: String(row.investorId || row.investor_id || ''),
+    expiresAt: rowDateIso(row.expiresAt ?? row.expires_at) || '',
+    revokedAt: rowDateIso(row.revokedAt ?? row.revoked_at),
+    accessCount: Math.max(0, readRowNumber(row.accessCount ?? row.access_count)),
+    lastAccessedAt: rowDateIso(row.lastAccessedAt ?? row.last_accessed_at),
+    createdAt: rowDateIso(row.createdAt ?? row.created_at),
+  };
+}
+
+function artifactObjectKey(artifact: AgentContextArtifactRecord) {
+  const value = artifact.metadata.ossObjectKey || artifact.metadata.objectKey;
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
 async function enqueueAgentBillingEvent(
   pool: PgPool,
   input: { runId: string; action: BillingOutboxAction; payload: Record<string, unknown> }
@@ -1826,6 +2026,21 @@ async function createAgentContextSchema(pool: PgPool) {
   `);
   await pool.query('create index if not exists agent_context_artifacts_thread_created_idx on agent_context_artifacts(thread_id, created_at)');
   await pool.query('create index if not exists agent_context_artifacts_investor_kind_created_idx on agent_context_artifacts(investor_id, kind, created_at)');
+  await pool.query(`
+    create table if not exists agent_artifact_shares (
+      id text primary key,
+      artifact_id text not null references agent_context_artifacts(id) on delete cascade,
+      investor_id text not null,
+      token_hash text not null unique,
+      expires_at timestamptz not null,
+      revoked_at timestamptz,
+      access_count bigint not null default 0,
+      last_accessed_at timestamptz,
+      created_at timestamptz not null default now()
+    )
+  `);
+  await pool.query('create index if not exists agent_artifact_shares_artifact_created_idx on agent_artifact_shares(artifact_id, created_at desc)');
+  await pool.query('create index if not exists agent_artifact_shares_investor_active_idx on agent_artifact_shares(investor_id, revoked_at, expires_at)');
   await pool.query(`
     create table if not exists agent_context_tool_calls (
       id text primary key,

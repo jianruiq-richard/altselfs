@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, SetStateAction } from 'react';
 import Link from 'next/link';
-import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, LockKeyhole, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
+import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, LockKeyhole, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, Share2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -2081,6 +2081,8 @@ function CompletedCodexActivitySummary({ activity }: { activity: CompletedCodexA
 }
 
 function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArtifact; inverted?: boolean }) {
+  const [shareStatus, setShareStatus] = useState<'idle' | 'creating' | 'copied' | 'error'>('idle');
+  const [shareFeedback, setShareFeedback] = useState('');
   const borderClass = inverted ? 'border-white/25 bg-white/10' : 'border-white/10 bg-white/[0.045]';
   const mutedClass = inverted ? 'text-blue-100' : 'text-zinc-500';
   const titleClass = inverted ? 'text-white' : 'text-zinc-100';
@@ -2098,6 +2100,33 @@ function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArt
   const html = isHtmlArtifact(artifact.name, artifact.mimeType);
   const openPath = html ? artifactDeliveryPath(artifact.downloadPath, 'preview') : artifact.downloadPath;
   const downloadPath = html ? artifactDeliveryPath(artifact.downloadPath, 'download') : artifact.downloadPath;
+  const shareable = html && artifact.kind === 'generated_file' && Boolean(artifact.id);
+
+  async function createShareLink() {
+    if (!artifact.id || shareStatus === 'creating') return;
+    setShareStatus('creating');
+    setShareFeedback('Creating 30-day link...');
+    try {
+      const threadId = artifactThreadId(artifact.downloadPath);
+      const response = await fetch(`/api/investor/artifacts/${encodeURIComponent(artifact.id)}/shares`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(threadId ? { threadId } : {}),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        share?: { url?: string };
+        error?: string;
+      };
+      const shareUrl = data.share?.url?.trim() || '';
+      if (!response.ok || !shareUrl) throw new Error(data.error || 'Failed to create share link');
+      await copyTextToClipboard(shareUrl);
+      setShareStatus('copied');
+      setShareFeedback('30-day link copied');
+    } catch (error) {
+      setShareStatus('error');
+      setShareFeedback(error instanceof Error ? error.message : 'Failed to create share link');
+    }
+  }
 
   return (
     <div className={`overflow-hidden rounded-xl border ${borderClass}`}>
@@ -2137,8 +2166,35 @@ function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArt
         <div className="min-w-0 flex-1">
           <p className={`truncate text-sm font-medium ${titleClass}`}>{artifact.name}</p>
           <p className={`text-xs ${mutedClass}`}>{[typeText, sizeText].filter(Boolean).join(' · ')}</p>
+          {shareFeedback ? (
+            <p
+              aria-live="polite"
+              className={`mt-0.5 truncate text-[10px] ${shareStatus === 'error' ? 'text-red-300' : shareStatus === 'copied' ? 'text-emerald-300' : mutedClass}`}
+              title={shareFeedback}
+            >
+              {shareFeedback}
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {shareable ? (
+            <button
+              type="button"
+              onClick={() => void createShareLink()}
+              disabled={shareStatus === 'creating'}
+              title={shareStatus === 'copied' ? 'Create and copy another 30-day share link' : 'Create a 30-day public share link'}
+              aria-label="Create a 30-day public share link"
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${actionClass} disabled:cursor-wait disabled:opacity-60`}
+            >
+              {shareStatus === 'creating'
+                ? <LoaderCircle className="h-4 w-4 animate-spin" />
+                : shareStatus === 'copied'
+                  ? <Check className="h-4 w-4 text-emerald-300" />
+                  : shareStatus === 'error'
+                    ? <AlertCircle className="h-4 w-4 text-red-300" />
+                    : <Share2 className="h-4 w-4" />}
+            </button>
+          ) : null}
           <a
             href={openPath}
             target="_blank"
@@ -2162,6 +2218,31 @@ function ArtifactPreviewCard({ artifact, inverted = false }: { artifact: ChatArt
       </div>
     </div>
   );
+}
+
+function artifactThreadId(downloadPath: string) {
+  try {
+    return new URL(downloadPath, 'https://minaco.invalid').searchParams.get('threadId')?.trim() || '';
+  } catch {
+    return '';
+  }
+}
+
+async function copyTextToClipboard(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    return;
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    if (!copied) throw new Error('Share link created, but it could not be copied');
+  }
 }
 
 function renderInlineMediaPreviewNode({
