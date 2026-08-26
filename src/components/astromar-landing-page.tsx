@@ -288,7 +288,7 @@ export function AstromarLandingPage() {
               data-analytics-cta="nav_get_started"
               data-analytics-location="landing_nav"
             >
-              Get Started
+              Try for free
             </Link>
           </div>
         </div>
@@ -344,7 +344,7 @@ export function AstromarLandingPage() {
             data-analytics-cta="hero_talk_to_cofounder"
             data-analytics-location="landing_hero"
           >
-            Talk to your AI cofounder
+            Try for free
             <ArrowRight aria-hidden="true" size={18} strokeWidth={2} />
           </Link>
           <a
