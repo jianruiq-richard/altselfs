@@ -34,6 +34,7 @@ import { MarkdownMessage } from '@/components/markdown-message';
 import { productBrand } from '@/lib/brand';
 import { getBillingPlan } from '@/lib/billing-plans';
 import { artifactDeliveryPath, isHtmlArtifact } from '@/lib/artifact-delivery';
+import { getVisibleConnectors } from '@/lib/investor-connector-visibility';
 import {
   analyticsWasReported,
   markAnalyticsReported,
@@ -2465,9 +2466,10 @@ export function InvestorAgentChatPage() {
   const [recoveringRunState, setRecoveringRunState] = useState(false);
   const [hermesModel, setHermesModel] = useState<HermesModelOption['value']>(DEFAULT_HERMES_MODEL);
   const [hermesModelMenuOpen, setHermesModelMenuOpen] = useState(false);
-  const [connectors, setConnectors] = useState<ConnectorItem[]>(
+  const [connectorItems, setConnectors] = useState<ConnectorItem[]>(
     () => initialConnectorsCache?.connectors || [],
   );
+  const connectors = useMemo(() => getVisibleConnectors(connectorItems), [connectorItems]);
   const [connectorsLoading, setConnectorsLoading] = useState(!initialConnectorsCache?.connectors?.length);
   const [connectorsError, setConnectorsError] = useState<string | null>(null);
   const [selectedConnectorKeys, setSelectedConnectorKeys] = useState<string[]>([]);
@@ -2732,7 +2734,7 @@ export function InvestorAgentChatPage() {
       };
     }
     const requested = new Set(requestedKeys);
-    const scopedConnectors = connectorItems.filter(
+    const scopedConnectors = getVisibleConnectors(connectorItems).filter(
       (connector) => connector.connected && connector.conversationAvailable !== false && requested.has(connector.key)
     );
     const nextKeys = scopedConnectors.map((connector) => connector.key);
@@ -2763,7 +2765,7 @@ export function InvestorAgentChatPage() {
         {},
         { force: true, ttlMs: 0 },
       );
-      nextConnectors = Array.isArray(data.connectors) ? data.connectors : [];
+      nextConnectors = getVisibleConnectors(Array.isArray(data.connectors) ? data.connectors : []);
       setConnectors(nextConnectors);
     }
 

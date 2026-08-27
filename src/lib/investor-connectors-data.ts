@@ -2,6 +2,7 @@ import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
 import { prisma } from '@/lib/prisma';
 import type { ServerTiming } from '@/lib/server-timing';
 import { COMPETITIVE_CONNECTOR_DISPLAY_NAMES } from '@/lib/competitive-connector-presentation';
+import { getVisibleConnectors } from '@/lib/investor-connector-visibility';
 
 type ConnectorType = 'app' | 'data_source';
 
@@ -135,20 +136,6 @@ const COMPETITIVE_CONNECTORS = [
     dbProvider: 'APPARK',
   },
 ] as const;
-
-const ENABLED_CONNECTOR_KEYS = new Set([
-  'gmail',
-  'feishu',
-  'instagram_looter2',
-  'twitter241',
-  'tiktok_api23',
-  'youtube_v2',
-  'similarweb_api1',
-  'semrush13',
-  'ahrefs_url_research',
-  'domain_metrics_check',
-  'appark',
-]);
 
 function readString(value: unknown) {
   return typeof value === 'string' ? value : '';
@@ -308,7 +295,7 @@ export async function loadInvestorConnectors(
   });
 
   return {
-    connectors: [...personal, ...managedSources, ...competitive].filter((connector) => ENABLED_CONNECTOR_KEYS.has(connector.key)),
+    connectors: getVisibleConnectors([...personal, ...managedSources, ...competitive]),
     warnings,
   };
 }

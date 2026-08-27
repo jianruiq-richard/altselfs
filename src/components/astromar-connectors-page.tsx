@@ -17,6 +17,7 @@ import {
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InvestorConnectorsData } from '@/lib/investor-connectors-data';
+import { getVisibleConnectors } from '@/lib/investor-connector-visibility';
 import { productBrand } from '@/lib/brand';
 import {
   fetchWorkspaceJson,
@@ -283,7 +284,8 @@ type AstromarConnectorsPageProps = {
 export function AstromarConnectorsPage({ initialData = null }: AstromarConnectorsPageProps) {
   const cachedConnectors = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
   const initialConnectors = initialData?.connectors || cachedConnectors?.connectors || [];
-  const [connectors, setConnectors] = useState<ConnectorItem[]>(initialConnectors);
+  const [connectorItems, setConnectors] = useState<ConnectorItem[]>(initialConnectors);
+  const connectors = useMemo(() => getVisibleConnectors(connectorItems), [connectorItems]);
   const [loading, setLoading] = useState(initialConnectors.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -326,7 +328,7 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
         {},
         { force: options.force ?? true, ttlMs: 45_000 },
       );
-      const next = Array.isArray(data.connectors) ? data.connectors : [];
+      const next = getVisibleConnectors(Array.isArray(data.connectors) ? data.connectors : []);
       if (!isCurrentLoad()) return null;
       setConnectors(next);
       setWorkspaceCached(WORKSPACE_CACHE_KEYS.connectors, { ...data, connectors: next });
