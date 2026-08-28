@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { BillingCapacityPopover, type BillingCapacityData } from '@/components/billing-capacity-popover';
+import { WorkspaceDiscordLink } from '@/components/workspace-discord-link';
 import { BillingPlanOverview } from '@/components/billing-plan-overview';
 import { MinacoCreditsIcon } from '@/components/minaco-credits-icon';
 import { productBrand } from '@/lib/brand';
@@ -636,7 +637,10 @@ export default function ProfilePage() {
             <strong className="block text-[13px] text-zinc-100">Settings</strong>
             <span className="mt-0.5 block text-[10px] text-zinc-600">Account and workspace</span>
           </div>
-          <BillingCapacityPopover />
+          <div className="flex items-center gap-2">
+            <WorkspaceDiscordLink />
+            <BillingCapacityPopover />
+          </div>
         </header>
 
         <main className="astromar-scrollbar min-h-0 min-w-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

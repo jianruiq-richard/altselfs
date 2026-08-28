@@ -1,5 +1,7 @@
 'use client';
 
+import { WorkspaceDiscordLink } from '@/components/workspace-discord-link';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, SetStateAction } from 'react';
 import Link from 'next/link';
@@ -4819,6 +4821,7 @@ export function InvestorAgentChatPage() {
             <span className="mt-0.5 block truncate text-[10px] text-zinc-600">Think with you. Act for you.</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <WorkspaceDiscordLink />
             <div data-hermes-model-menu="true" className="relative">
               <button
                 type="button"

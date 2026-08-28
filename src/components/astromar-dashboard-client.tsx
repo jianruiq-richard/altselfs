@@ -1,5 +1,7 @@
 'use client';
 
+import { WorkspaceDiscordLink } from '@/components/workspace-discord-link';
+
 import {
   BillingCapacityPopover,
   type BillingCapacityData,
@@ -230,6 +232,7 @@ export function AstromarDashboardClient({
             <span className="mt-0.5 block text-[10px] text-zinc-600">Founder operating view</span>
           </div>
           <div className="flex items-center gap-2">
+            <WorkspaceDiscordLink />
             <button
               type="button"
               onClick={() => router.refresh()}

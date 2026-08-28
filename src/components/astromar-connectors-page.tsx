@@ -1,6 +1,7 @@
 'use client';
 
 import { BillingCapacityPopover } from '@/components/billing-capacity-popover';
+import { WorkspaceDiscordLink } from '@/components/workspace-discord-link';
 import {
   BarChart3,
   Check,
@@ -906,11 +907,12 @@ export function AstromarConnectorsPage({ initialData = null }: AstromarConnector
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] md:grid-rows-[64px_minmax(0,1fr)]">
         <header className="hidden items-center justify-between border-b border-white/[0.09] px-6 md:flex">
-          <div>
-            <strong className="block text-[13px] text-zinc-100">Connectors</strong>
-            <span className="mt-0.5 block text-[10px] text-zinc-600">Workspace connections</span>
+          <div className="min-w-0 pr-3">
+            <strong className="block truncate text-[13px] text-zinc-100">Connectors</strong>
+            <span className="mt-0.5 block truncate text-[10px] text-zinc-600">Workspace connections</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            <WorkspaceDiscordLink />
             <BillingCapacityPopover />
             <button type="button" onClick={() => void loadConnectors({ showLoading: connectors.length === 0, force: true })} className="grid h-8 w-8 place-items-center rounded-[7px] text-zinc-600 hover:bg-white/5 hover:text-white" title="Refresh connections">
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
