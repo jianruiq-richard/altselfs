@@ -534,6 +534,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
   gap: 10px;
   min-height: 48px;
   border: 1px solid var(--auth-line-strong);
