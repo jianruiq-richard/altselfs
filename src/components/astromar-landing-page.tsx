@@ -245,7 +245,7 @@ const footerSections = [
     links: [
       { label: "Terms of Service", href: "/terms" },
       { label: "Privacy Policy", href: "/privacy" },
-      { label: "Contact", href: `mailto:${productBrand.supportEmail}` },
+      { label: "Contact", href: "/contact" },
     ],
   },
 ] as const;

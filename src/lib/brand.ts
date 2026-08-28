@@ -2,7 +2,7 @@ export const productBrand = {
   name: 'Minaco',
   domain: 'minaco.ai',
   canonicalUrl: 'https://minaco.ai',
-  supportEmail: 'support@minaco.ai',
+  supportEmail: 'contact@minaco.ai',
   tagline: 'Think with you. Act for you.',
   category: 'AI cofounder workspace',
   modelLiteName: 'Minaco Lite',
