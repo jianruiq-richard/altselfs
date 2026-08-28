@@ -192,7 +192,19 @@ export function AstromarAuthShell({
               </Link>
             </nav>
 
-            <div className={styles.authContent}>{children}</div>
+            <div className={styles.authContent}>
+              {children}
+              {isSignIn ? (
+                <Link
+                  className={styles.createAccountButton}
+                  href={`/sign-up?method=${method}`}
+                  data-analytics-cta="sign_in_create_account"
+                  data-analytics-location="auth_form"
+                >
+                  Create account
+                </Link>
+              ) : null}
+            </div>
           </div>
         </section>
 

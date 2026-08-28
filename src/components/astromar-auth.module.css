@@ -181,6 +181,32 @@
   margin-top: 18px;
 }
 
+.createAccountButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 10px 16px;
+  border: 1px solid var(--auth-line-strong);
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.035);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.createAccountButton:hover {
+  border-color: rgba(242, 195, 107, 0.42);
+  background: rgba(242, 195, 107, 0.1);
+}
+
+.createAccountButton:focus-visible {
+  outline: 2px solid var(--auth-amber);
+  outline-offset: 3px;
+}
+
 .productSide {
   position: relative;
   display: flex;
