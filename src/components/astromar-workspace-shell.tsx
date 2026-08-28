@@ -6,7 +6,6 @@ import {
   LogOut,
   Menu,
   MessagesSquare,
-  PanelLeftClose,
   Plug,
   Settings,
   SquarePen,
@@ -16,6 +15,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
+import { DiscordLogo } from '@/components/discord-logo';
 import { productBrand } from '@/lib/brand';
 import {
   prefetchWorkspaceBootstrap,
@@ -131,7 +131,7 @@ export function AstromarWorkspaceShell({
 
   const sidebar = (location: SidebarLocation) => (
     <div className="flex h-full min-h-0 flex-col bg-[#0c0d0e] text-zinc-100">
-      <div className="flex h-16 shrink-0 items-center justify-between px-4">
+      <div className="flex h-16 shrink-0 items-center justify-between px-4 md:hidden">
         <Link href={homeHref} className="inline-flex items-center gap-2 font-semibold leading-none text-zinc-50">
           <MinacoBrandMark className="block h-9 w-9 shrink-0 overflow-hidden rounded-[9px]" imageClassName="h-full w-full object-contain" />
           <span className="text-[15px]">{productBrand.name}</span>
@@ -144,7 +144,6 @@ export function AstromarWorkspaceShell({
         >
           <X className="h-4 w-4" />
         </button>
-        <PanelLeftClose className="hidden h-4 w-4 text-zinc-600 md:block" />
       </div>
 
       {onNewDiscussion ? (
@@ -155,7 +154,7 @@ export function AstromarWorkspaceShell({
             onNewDiscussion();
           }}
           disabled={newDiscussionBusy || newDiscussionDisabled}
-          className="mx-3 mb-3 inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[7px] border border-white/80 bg-[#f2f2f0] px-4 text-[13px] font-bold text-[#0b0b0b] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="mx-3 my-3 inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[7px] border border-white/80 bg-[#f2f2f0] px-4 text-[13px] font-bold text-[#0b0b0b] hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
         >
           <SquarePen className="h-4 w-4" />
           {newDiscussionBusy ? 'Creating...' : 'New discussion'}
@@ -164,34 +163,12 @@ export function AstromarWorkspaceShell({
         <Link
           href="/investor/chat/100"
           onClick={() => setMobileSidebarOpen(false)}
-          className="mx-3 mb-3 inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[7px] border border-white/80 bg-[#f2f2f0] px-4 text-[13px] font-bold text-[#0b0b0b] hover:bg-white"
+          className="mx-3 my-3 inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[7px] border border-white/80 bg-[#f2f2f0] px-4 text-[13px] font-bold text-[#0b0b0b] hover:bg-white"
         >
           <SquarePen className="h-4 w-4" />
           New discussion
         </Link>
       )}
-
-      <nav className="grid shrink-0 gap-0.5 border-b border-white/[0.09] px-2.5 pb-3" aria-label="Workspace navigation">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = item.key === activeKey;
-          return (
-            <Link
-              key={item.key}
-              href={item.href}
-              onPointerEnter={() => handleNavigationIntent(item.href)}
-              onFocus={() => handleNavigationIntent(item.href)}
-              onClick={() => setMobileSidebarOpen(false)}
-              className={`flex min-h-[38px] items-center gap-2.5 rounded-[7px] px-3 text-[13px] transition-colors ${
-                active ? 'bg-white/[0.085] text-white' : 'text-zinc-400 hover:bg-white/[0.045] hover:text-white'
-              }`}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span>{item.name}</span>
-            </Link>
-          );
-        })}
-      </nav>
 
       <div className="astromar-scrollbar astromar-scrollbar-stable min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {renderSidebarContent(location)}
@@ -224,49 +201,100 @@ export function AstromarWorkspaceShell({
   );
 
   return (
-    <div
-      className={`agent-activity-text grid h-dvh min-h-0 min-w-0 grid-cols-1 overflow-hidden bg-[#090a0a] text-zinc-100 md:grid-cols-[244px_minmax(0,1fr)] ${
-        rightRail ? 'xl:grid-cols-[244px_minmax(0,1fr)_304px]' : ''
-      }`}
-    >
-      <aside className="hidden min-h-0 border-r border-white/[0.09] md:block">{sidebar('desktop')}</aside>
-
-      {mobileSidebarOpen ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-black/65 md:hidden"
-          aria-label="Close sidebar"
-          onClick={() => setMobileSidebarOpen(false)}
-        />
-      ) : null}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-[244px] border-r border-white/[0.09] transition-transform md:hidden ${
-          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {sidebar('mobile')}
-      </aside>
-
-      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#090a0a]">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.09] px-3 md:hidden">
+    <div className="agent-activity-text flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-[#090a0a] text-zinc-100">
+      <header className="relative z-20 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-white/[0.09] bg-[#0c0d0e] px-3 md:h-16 md:grid-cols-[212px_minmax(0,1fr)_auto] md:gap-x-4 md:px-4">
+        <div className="flex h-14 min-w-0 items-center gap-2 md:h-16">
           <button
             type="button"
             onClick={() => setMobileSidebarOpen(true)}
-            className="grid h-9 w-9 place-items-center rounded-[7px] text-zinc-400 hover:bg-white/5 hover:text-white"
-            title="Open sidebar"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-[7px] text-zinc-400 hover:bg-white/5 hover:text-white md:hidden"
+            aria-label="Open sidebar"
+            aria-controls="workspace-mobile-sidebar"
+            aria-expanded={mobileSidebarOpen}
           >
-            <Menu className="h-4 w-4" />
+            <Menu className="h-4 w-4" aria-hidden="true" />
           </button>
-          <strong data-clarity-mask="true" className="truncate text-sm text-zinc-100">{mobileTitle}</strong>
-        </header>
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
-      </section>
+          <Link href={homeHref} aria-label={`${productBrand.name} home`} className="inline-flex min-w-0 items-center gap-2 font-semibold leading-none text-zinc-50">
+            <MinacoBrandMark className="block h-7 w-7 shrink-0 overflow-hidden rounded-[7px] md:h-9 md:w-9" imageClassName="h-full w-full object-contain" />
+            <span className="hidden text-sm min-[360px]:inline md:text-[15px]">{productBrand.name}</span>
+          </Link>
+        </div>
 
-      {rightRail ? (
-        <aside className="hidden min-h-0 min-w-0 overflow-hidden border-l border-white/[0.09] bg-[#0c0d0e] xl:block">
-          {rightRail}
+        <nav className="col-span-2 row-start-2 flex min-w-0 items-center gap-1 pb-2 md:col-span-1 md:col-start-2 md:row-start-1 md:pb-0" aria-label="Workspace navigation">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = item.key === activeKey;
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                aria-current={active ? 'page' : undefined}
+                onPointerEnter={() => handleNavigationIntent(item.href)}
+                onFocus={() => handleNavigationIntent(item.href)}
+                onClick={() => setMobileSidebarOpen(false)}
+                className={`inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-[7px] px-3 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f2c36b] md:flex-none md:px-2 lg:px-3 lg:text-[13px] ${
+                  active ? 'bg-white/[0.085] text-white' : 'text-zinc-400 hover:bg-white/[0.045] hover:text-white'
+                }`}
+              >
+                <Icon className="hidden h-4 w-4 shrink-0 lg:block" aria-hidden="true" />
+                <span>{item.name}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <a
+          href={productBrand.discordUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Join our Discord (opens in a new tab)"
+          data-analytics-cta="workspace_join_discord"
+          data-analytics-location="workspace_header"
+          className="col-start-2 row-start-1 inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[7px] border border-white/10 bg-[#5865f2] px-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#4752c4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f2c36b] sm:px-3 sm:text-[13px] md:col-start-3"
+        >
+          <DiscordLogo />
+          <span>Join our Discord</span>
+        </a>
+      </header>
+
+      <div
+        className={`grid min-h-0 min-w-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[244px_minmax(0,1fr)] ${
+          rightRail ? 'xl:grid-cols-[244px_minmax(0,1fr)_304px]' : ''
+        }`}
+      >
+        <aside className="hidden min-h-0 border-r border-white/[0.09] md:block">{sidebar('desktop')}</aside>
+
+        {mobileSidebarOpen ? (
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-black/65 md:hidden"
+            aria-label="Close sidebar"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        ) : null}
+        <aside
+          id="workspace-mobile-sidebar"
+          aria-label="Discussion sidebar"
+          aria-hidden={!mobileSidebarOpen}
+          inert={!mobileSidebarOpen}
+          className={`fixed inset-y-0 left-0 z-50 w-[244px] border-r border-white/[0.09] transition-transform md:hidden ${
+            mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          {sidebar('mobile')}
         </aside>
-      ) : null}
+
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#090a0a]">
+          <span data-clarity-mask="true" className="sr-only md:hidden">{mobileTitle}</span>
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
+        </section>
+
+        {rightRail ? (
+          <aside className="hidden min-h-0 min-w-0 overflow-hidden border-l border-white/[0.09] bg-[#0c0d0e] xl:block">
+            {rightRail}
+          </aside>
+        ) : null}
+      </div>
     </div>
   );
 }

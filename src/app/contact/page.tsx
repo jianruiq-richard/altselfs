@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight, Mail, MessagesSquare } from 'lucide-react';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
+import { DiscordLogo } from '@/components/discord-logo';
 import { productBrand } from '@/lib/brand';
 import styles from './contact.module.css';
 
@@ -52,12 +53,13 @@ export default function ContactPage() {
         <div className={styles.contactCard}>
           <p className={styles.contactLabel}><MessagesSquare size={18} aria-hidden="true" /> Discord community</p>
           <a
-            href="https://discord.gg/Nt5NFdJRfN"
+            href={productBrand.discordUrl}
             target="_blank"
             rel="noopener noreferrer"
             className={`${styles.contactLink} ${styles.discordLink}`}
             aria-label="Join our Discord community (opens in a new tab)"
           >
+            <DiscordLogo />
             <span>Join our Discord</span>
             <ArrowUpRight size={22} aria-hidden="true" />
           </a>

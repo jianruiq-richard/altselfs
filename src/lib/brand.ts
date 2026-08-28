@@ -3,6 +3,7 @@ export const productBrand = {
   domain: 'minaco.ai',
   canonicalUrl: 'https://minaco.ai',
   supportEmail: 'contact@minaco.ai',
+  discordUrl: 'https://discord.gg/Nt5NFdJRfN',
   tagline: 'Think with you. Act for you.',
   category: 'AI cofounder workspace',
   modelLiteName: 'Minaco Lite',

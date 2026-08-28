@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { DiscordLogo } from "@/components/discord-logo";
 import { MinacoBrandMark } from "@/components/minaco-brand-mark";
 import { productBrand } from "@/lib/brand";
 import styles from "./astromar-landing-page.module.css";
@@ -350,11 +351,15 @@ export function AstromarLandingPage() {
           </Link>
           <a
             className={classes("button", "buttonLarge")}
-            href="#demo"
-            data-analytics-cta="hero_view_demo"
+            href={productBrand.discordUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Join our Discord (opens in a new tab)"
+            data-analytics-cta="hero_join_discord"
             data-analytics-location="landing_hero"
           >
-            See how it thinks
+            <DiscordLogo />
+            Join our Discord
           </a>
         </div>
 
