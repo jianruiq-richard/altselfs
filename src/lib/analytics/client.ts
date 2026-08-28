@@ -82,6 +82,8 @@ export function setAnalyticsUser(
 export function analyticsRoute(pathname: string) {
   if (pathname === '/') return { routeName: 'landing', pagePath: '/' };
   if (pathname === '/pricing') return { routeName: 'pricing', pagePath: '/pricing' };
+  if (pathname === '/blog') return { routeName: 'blog_index', pagePath: '/blog' };
+  if (/^\/blog\/[^/]+\/?$/.test(pathname)) return { routeName: 'blog_article', pagePath: pathname };
   if (pathname.startsWith('/sign-in')) return { routeName: 'sign_in', pagePath: '/sign-in' };
   if (pathname.startsWith('/sign-up')) return { routeName: 'sign_up', pagePath: '/sign-up' };
   if (pathname === '/sso-callback') return { routeName: 'sso_callback', pagePath: '/sso-callback' };
@@ -116,7 +118,7 @@ export function trackPageView(pathname: string) {
   if (typeof window === 'undefined') return;
   const route = analyticsRoute(pathname);
   trackEvent('page_view', {
-    app_area: route.routeName === 'landing' || route.routeName === 'pricing'
+    app_area: route.routeName === 'landing' || route.routeName === 'pricing' || route.routeName.startsWith('blog_')
       ? 'marketing'
       : route.routeName === 'sign_in' || route.routeName === 'sign_up' || route.routeName === 'sso_callback'
         ? 'authentication'

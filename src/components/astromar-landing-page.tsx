@@ -228,6 +228,7 @@ const footerSections = [
     title: "Product",
     links: [
       { label: "Pricing", href: "/pricing" },
+      { label: "Blog", href: "/blog" },
       { label: "Use cases", href: "#demo" },
       { label: "How it thinks", href: "#demo" },
     ],
@@ -270,7 +271,7 @@ export function AstromarLandingPage() {
           <div className={styles.navLinks} aria-label="Primary navigation">
             <Link href="/pricing">Pricing</Link>
             <a href="#demo">Use cases</a>
-            <a href="#demo">How it thinks</a>
+            <Link href="/blog">Blog</Link>
           </div>
 
           <div className={styles.authActions} aria-label="Account actions">
