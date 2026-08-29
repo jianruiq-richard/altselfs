@@ -704,7 +704,7 @@ export function AstromarLandingPage() {
               <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandMarkImage} />
               <span className={styles.brandName}>{productBrand.name}</span>
             </Link>
-            <p>Your AI cofounder workspace for startup context, connected work data, and founder decisions.</p>
+            <p>Your AI cofounder workspace for competitor intelligence, revenue and user estimates, and acquisition and marketing tactics.</p>
           </div>
 
           <div className={styles.footerGrid}>

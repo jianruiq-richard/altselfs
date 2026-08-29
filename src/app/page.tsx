@@ -4,19 +4,18 @@ import { redirect } from "next/navigation";
 import { AstromarLandingPage } from "@/components/astromar-landing-page";
 import { productBrand } from "@/lib/brand";
 
+const homepageDescription =
+  `${productBrand.name} is an AI cofounder workspace for competitor intelligence—estimate revenue and user counts, and uncover customer acquisition and marketing tactics.`;
+
 export const metadata: Metadata = {
   title: `${productBrand.name} | Your AI cofounder`,
-  description:
-    `${productBrand.name} is an AI cofounder workspace that helps founders analyze startup context, connected work data, and market signals to make clearer decisions.`,
+  description: homepageDescription,
   alternates: { canonical: '/' },
 };
 
 export const viewport: Viewport = {
   themeColor: "#090909",
 };
-
-const homepageDescription =
-  `${productBrand.name} is an AI cofounder workspace that helps founders track competitor moves, find seed users, and turn ideas into shippable first versions.`;
 
 const structuredData = [
   {
