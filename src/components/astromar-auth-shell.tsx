@@ -1,13 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import {
-  BrainCircuit,
-  CircleCheck,
-  KeyRound,
-  Plug,
-  Radar,
-  ShieldCheck,
-} from "lucide-react";
+import { AuthReportCarousel } from "@/components/auth-report-carousel";
 import { MinacoBrandMark } from "@/components/minaco-brand-mark";
 import { productBrand } from "@/lib/brand";
 import styles from "./astromar-auth.module.css";
@@ -29,123 +22,6 @@ function Brand() {
       </span>
       <span className={styles.brandTagline}>{productBrand.tagline}</span>
     </Link>
-  );
-}
-
-function SignInPreview() {
-  return (
-    <div className={styles.decisionRoom}>
-      <div className={styles.roomHead}>
-        <div>
-          <p>Your decision room</p>
-          <h2>Pick up exactly where you left off.</h2>
-        </div>
-        <span className={styles.contextStatus}>Context ready</span>
-      </div>
-
-      <div className={styles.roomFrame}>
-        <div className={styles.roomBar}>
-          <span className={styles.roomDots} aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span>Today, 9:41 AM</span>
-          <span>Private</span>
-        </div>
-        <div className={styles.roomBody}>
-          <div className={`${styles.message} ${styles.messageYou}`}>
-            <small>You</small>
-            What changed overnight, and what should I do first?
-          </div>
-          <div className={styles.message}>
-            <small>{productBrand.name}</small>
-            Three signals matter. One creates a decision you should make before the team starts work.
-          </div>
-          <div className={styles.signalList}>
-            <div className={styles.signal}>
-              <i />
-              <span><b>Competitor launch:</b> creator bundle shipped</span>
-              <span>High signal</span>
-            </div>
-            <div className={styles.signal}>
-              <i />
-              <span><b>Activation:</b> onboarding step 3 dropped 11%</span>
-              <span>Needs review</span>
-            </div>
-            <div className={styles.signal}>
-              <i />
-              <span><b>Pipeline:</b> two founder replies ready</span>
-              <span>Actionable</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <p className={styles.roomNote}>Your workspace remains private and available across sessions.</p>
-    </div>
-  );
-}
-
-const setupSteps = [
-  {
-    icon: Radar,
-    title: "Analyze one competitor",
-    copy: "See their latest moves and the decision it creates for you.",
-    status: "Ready now",
-    ready: true,
-  },
-  {
-    icon: Plug,
-    title: "Connect the context you choose",
-    copy: "Bring in Gmail, Slack, Notion, Lark, or your current documents.",
-    status: "Optional",
-    ready: false,
-  },
-  {
-    icon: BrainCircuit,
-    title: "Shape how it thinks with you",
-    copy: "Correct recommendations and make every next conversation sharper.",
-    status: "Ongoing",
-    ready: false,
-  },
-] as const;
-
-function SignUpPreview() {
-  return (
-    <div className={styles.onboarding}>
-      <div className={styles.onboardingHead}>
-        <p>Useful from day one</p>
-        <h2>Your first decision room is ready in minutes.</h2>
-        <span>
-          No setup maze. Start with the question already blocking you, then connect context as it becomes useful.
-        </span>
-      </div>
-
-      <div className={styles.setupFrame}>
-        <div className={styles.setupBar}>
-          <strong>Your first session</strong>
-          <span>Private workspace</span>
-        </div>
-        <div className={styles.setupList}>
-          {setupSteps.map(({ icon: Icon, title, copy, status, ready }) => (
-            <div className={styles.setupStep} key={title}>
-              <span className={styles.stepIcon}><Icon size={18} /></span>
-              <span className={styles.stepCopy}>
-                <b>{title}</b>
-                <span>{copy}</span>
-              </span>
-              <span className={`${styles.stepStatus} ${ready ? styles.stepStatusReady : ""}`}>{status}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className={styles.trustRow}>
-        <span><ShieldCheck size={15} />Private by default</span>
-        <span><KeyRound size={15} />You control connections</span>
-        <span><CircleCheck size={15} />Cancel anytime</span>
-      </div>
-    </div>
   );
 }
 
@@ -208,8 +84,8 @@ export function AstromarAuthShell({
           </div>
         </section>
 
-        <aside className={styles.productSide} aria-label={`${productBrand.name} product preview`}>
-          {isSignIn ? <SignInPreview /> : <SignUpPreview />}
+        <aside className={styles.productSide} aria-label={`${productBrand.name} competitor intelligence report preview`}>
+          <AuthReportCarousel />
         </aside>
       </div>
     </main>
