@@ -1,7 +1,7 @@
 import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
 import { prisma } from '@/lib/prisma';
 import type { ServerTiming } from '@/lib/server-timing';
-import { COMPETITIVE_CONNECTOR_DISPLAY_NAMES } from '@/lib/competitive-connector-presentation';
+import { COMPETITIVE_DATA_SOURCE_LIST } from '@/lib/competitive-data-sources';
 import { getVisibleConnectors } from '@/lib/investor-connector-visibility';
 
 type ConnectorType = 'app' | 'data_source';
@@ -74,69 +74,6 @@ const PERSONAL_CONNECTORS = [
   },
 ] as const;
 
-const COMPETITIVE_CONNECTORS = [
-  {
-    key: 'instagram_looter2',
-    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.instagram_looter2,
-    description: 'Recent official Instagram posts and Reels plus tagged KOC or creator promotion candidates, with dates, links, engagement, and promotion signals.',
-    dbProvider: 'INSTAGRAM_LOOTER2',
-  },
-  {
-    key: 'twitter241',
-    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.twitter241,
-    description: 'Official X posts plus creator/KOC promotion candidates and organic discussion, with exact dates, links, views, engagement, and evidence signals.',
-    dbProvider: 'TWITTER241',
-  },
-  {
-    key: 'tiktok_api23',
-    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.tiktok_api23,
-    description: 'General-purpose public TikTok account search, user profiles, user posts, video search, and post discovery with caller-controlled queries and filters.',
-    dbProvider: 'TIKTOK_API23',
-  },
-  {
-    key: 'youtube_v2',
-    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.youtube_v2,
-    description: 'Official channel videos and Shorts plus keyword-discovered KOC or creator promotion candidates, with exact dates, links, views, and promotion signals.',
-    dbProvider: 'YOUTUBE_V2',
-  },
-  {
-    key: 'similarweb_api1',
-    label: 'Similarweb',
-    description: 'Website traffic, engagement, rankings, traffic channels, geography, referrals, and similar-site signals.',
-    dbProvider: 'SIMILARWEB_API1',
-  },
-  {
-    key: 'semrush13',
-    label: 'Semrush',
-    description: 'Domain SEO intelligence: traffic estimates, organic and paid keywords, backlinks, competitors, geography, and visibility signals.',
-    dbProvider: 'SEMRUSH13',
-  },
-  {
-    key: 'semrush8',
-    label: 'Semrush8',
-    description: 'SEO rank, keyword, backlink, and URL traffic analysis.',
-    dbProvider: 'SEMRUSH8',
-  },
-  {
-    key: 'ahrefs_url_research',
-    label: 'Ahrefs URL Research',
-    description: 'URL-level SEO metrics: authority, backlinks, referring domains, organic keywords, traffic proxy, and link footprint signals.',
-    dbProvider: 'AHREFS_URL_RESEARCH',
-  },
-  {
-    key: 'domain_metrics_check',
-    label: 'Domain Metrics Check',
-    description: 'Domain authority checks across DA/PA, spam score, Trust Flow, Citation Flow, DR, backlinks, and referring domains.',
-    dbProvider: 'DOMAIN_METRICS_CHECK',
-  },
-  {
-    key: 'appark',
-    label: 'Appark',
-    description: 'Mobile app intelligence: App Store and Google Play search, app metadata, ratings, downloads, revenue estimates, country split, and competitors.',
-    dbProvider: 'APPARK',
-  },
-] as const;
-
 function readString(value: unknown) {
   return typeof value === 'string' ? value : '';
 }
@@ -188,7 +125,7 @@ export async function loadInvestorConnectors(
         where: {
           investorId: investor.id,
           provider: {
-            in: [...COMPETITIVE_CONNECTORS.map((connector) => connector.dbProvider), 'XIAOHONGSHU'],
+            in: [...COMPETITIVE_DATA_SOURCE_LIST.map((connector) => connector.dbProvider), 'XIAOHONGSHU'],
           },
         },
         select: {
@@ -275,7 +212,7 @@ export async function loadInvestorConnectors(
     },
   ];
 
-  const competitive: ConnectorItem[] = COMPETITIVE_CONNECTORS.map((connector) => {
+  const competitive: ConnectorItem[] = COMPETITIVE_DATA_SOURCE_LIST.map((connector) => {
     const integration = integrationMap.get(connector.dbProvider);
     const connected = integration?.status === 'CONNECTED';
     return {

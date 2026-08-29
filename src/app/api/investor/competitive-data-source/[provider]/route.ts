@@ -1,84 +1,15 @@
 import { NextResponse } from 'next/server';
-import { COMPETITIVE_CONNECTOR_DISPLAY_NAMES } from '@/lib/competitive-connector-presentation';
+import {
+  COMPETITIVE_DATA_SOURCES,
+  toCompetitiveDataSourceProvider,
+  type CompetitiveDataSourceProvider,
+} from '@/lib/competitive-data-sources';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import { prisma } from '@/lib/prisma';
-
-type CompetitiveDataSourceProvider =
-  | 'instagram_looter2'
-  | 'twitter241'
-  | 'tiktok_api23'
-  | 'youtube_v2'
-  | 'similarweb_api1'
-  | 'semrush13'
-  | 'semrush8'
-  | 'ahrefs_url_research'
-  | 'domain_metrics_check'
-  | 'appark';
 
 type RouteParams = {
   params: Promise<{ provider: string }>;
 };
-
-const COMPETITIVE_DATA_SOURCES: Record<CompetitiveDataSourceProvider, {
-  dbProvider: string;
-  label: string;
-  scope: string;
-}> = {
-  instagram_looter2: {
-    dbProvider: 'INSTAGRAM_LOOTER2',
-    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.instagram_looter2,
-    scope: 'profile_resolution,official_posts,reels,tagged_koc_candidates,engagement,promotion_signals',
-  },
-  twitter241: {
-    dbProvider: 'TWITTER241',
-    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.twitter241,
-    scope: 'profile_resolution,official_posts,replies,creator_koc_candidates,organic_discussion,exact_publication_filter,views,engagement,promotion_signals',
-  },
-  tiktok_api23: {
-    dbProvider: 'TIKTOK_API23',
-    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.tiktok_api23,
-    scope: 'account_search,user_info,user_posts,video_search,post_discovery,pagination,publication_filter',
-  },
-  youtube_v2: {
-    dbProvider: 'YOUTUBE_V2',
-    label: COMPETITIVE_CONNECTOR_DISPLAY_NAMES.youtube_v2,
-    scope: 'channel_resolution,official_videos,shorts,keyword_koc_candidates,publication_dates,views,promotion_signals',
-  },
-  similarweb_api1: {
-    dbProvider: 'SIMILARWEB_API1',
-    label: 'Similarweb API1',
-    scope: 'traffic,trend,countries,devices,sources,keywords,competitors',
-  },
-  semrush13: {
-    dbProvider: 'SEMRUSH13',
-    label: 'Semrush13',
-    scope: 'traffic,growth,search,countries,devices,journey,backlinks_summary,keywords,competitors',
-  },
-  semrush8: {
-    dbProvider: 'SEMRUSH8',
-    label: 'Semrush8',
-    scope: 'seo_rank,keywords,traffic,cost,links,url_traffic',
-  },
-  ahrefs_url_research: {
-    dbProvider: 'AHREFS_URL_RESEARCH',
-    label: 'Ahrefs URL Research',
-    scope: 'url_metrics,authority,backlinks,referring_domains,organic_keywords,organic_traffic',
-  },
-  domain_metrics_check: {
-    dbProvider: 'DOMAIN_METRICS_CHECK',
-    label: 'Domain Metrics Check',
-    scope: 'moz,majestic,ahrefs_style_metrics,authority,backlinks,referring_domains',
-  },
-  appark: {
-    dbProvider: 'APPARK',
-    label: 'Appark',
-    scope: 'mobile_app_search,app_metadata,ratings,downloads,revenue_estimates,country_split,competitors',
-  },
-};
-
-function toProvider(value: string): CompetitiveDataSourceProvider | null {
-  return Object.hasOwn(COMPETITIVE_DATA_SOURCES, value) ? (value as CompetitiveDataSourceProvider) : null;
-}
 
 function toPayload(
   provider: CompetitiveDataSourceProvider,
@@ -89,7 +20,7 @@ function toPayload(
     provider,
     connected: integration?.status === 'CONNECTED',
     status: integration?.status || 'DISABLED',
-    accountName: integration?.accountName || `${config.label} teammate`,
+    accountName: integration?.accountName || config.accountName,
     updatedAt: integration?.updatedAt?.toISOString() || null,
     platformConfigured: true,
   };
@@ -97,7 +28,7 @@ function toPayload(
 
 async function getProvider(ctx: RouteParams) {
   const { provider } = await ctx.params;
-  return toProvider(provider);
+  return toCompetitiveDataSourceProvider(provider);
 }
 
 export async function GET(_req: Request, ctx: RouteParams) {
@@ -145,14 +76,14 @@ export async function PUT(_req: Request, ctx: RouteParams) {
       investorId: investor.id,
       provider: config.dbProvider,
       status: 'CONNECTED',
-      accountName: `${config.label} teammate`,
+      accountName: config.accountName,
       accountEmail: 'platform-provided',
       scope: config.scope,
       connectedAt: new Date(),
     },
     update: {
       status: 'CONNECTED',
-      accountName: `${config.label} teammate`,
+      accountName: config.accountName,
       accountEmail: 'platform-provided',
       scope: config.scope,
       connectedAt: new Date(),
@@ -187,7 +118,7 @@ export async function DELETE(_req: Request, ctx: RouteParams) {
       investorId: investor.id,
       provider: config.dbProvider,
       status: 'DISABLED',
-      accountName: `${config.label} teammate`,
+      accountName: config.accountName,
       accountEmail: 'platform-provided',
       scope: config.scope,
     },

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { buildDefaultVisibleCompetitiveIntegrations } from '@/lib/competitive-data-sources';
 import { prisma } from '@/lib/prisma';
 import { buildFallbackEmail } from '@/lib/user-identifier';
 
@@ -101,6 +102,7 @@ async function ensureDefaultInvestorWorkspace(user: {
     });
 
     if (!hasAvatar) {
+      const connectedAt = new Date();
       await tx.avatar.create({
         data: {
           investorId: user.id,
@@ -109,6 +111,10 @@ async function ensureDefaultInvestorWorkspace(user: {
           systemPrompt: DEFAULT_TWIN_PROMPT,
           status: 'ACTIVE',
         },
+      });
+      await tx.investorIntegration.createMany({
+        data: buildDefaultVisibleCompetitiveIntegrations(user.id, connectedAt),
+        skipDuplicates: true,
       });
     }
   });
