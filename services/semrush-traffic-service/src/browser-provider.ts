@@ -644,8 +644,9 @@ async function hasEmptyDestinationState(page: Page) {
     { exact: true },
   ).filter({ visible: true }).first();
   if (await emptyState.count().catch(() => 0)) return true;
-  const tableText = await page.locator('[data-ui-name="Table"], table').first()
-    .innerText().catch(() => '');
+  const table = page.locator('[data-ui-name="Table"], table').first();
+  if (!await table.count().catch(() => 0)) return false;
+  const tableText = await table.innerText({ timeout: 250 }).catch(() => '');
   return isDestinationEmptyStateText(tableText);
 }
 
@@ -746,6 +747,12 @@ function escapeRegExp(value: string) {
 }
 
 async function dismissTransientOverlays(page: Page) {
+  const onboardingDismiss = page.getByRole('button', {
+    name: /^(?:明白了|知道了|Got it|Understood)$/i,
+  }).filter({ visible: true }).first();
+  if (await onboardingDismiss.count().catch(() => 0)) {
+    await onboardingDismiss.click({ force: true }).catch(() => undefined);
+  }
   await page.keyboard.press('Escape').catch(() => undefined);
   await page.locator('[data-ui-name="Tooltip.Popper"]').evaluateAll((elements) => {
     for (const element of elements) {
