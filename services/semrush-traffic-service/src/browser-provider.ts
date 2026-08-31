@@ -642,14 +642,14 @@ async function hasEmptyDestinationState(page: Page) {
   const emptyState = page.getByText(
     /^(?:Nothing found|No data|No results|未找到(?:任何)?(?:结果|数据)?|没有(?:找到)?(?:结果|数据)|暂无数据|无结果)$/i,
     { exact: true },
-  ).first();
-  if (await emptyState.isVisible().catch(() => false)) return true;
+  ).filter({ visible: true }).first();
+  if (await emptyState.count().catch(() => 0)) return true;
   const tableText = await page.locator('[data-ui-name="Table"], table').first()
     .innerText().catch(() => '');
   return isDestinationEmptyStateText(tableText);
 }
 
-async function waitForRows(page: Page, timeoutMs = 60_000): Promise<DestinationTableState> {
+async function waitForRows(page: Page, timeoutMs = 90_000): Promise<DestinationTableState> {
   const rows = page.locator('[data-ui-name="Body.Row"], table tbody tr');
   const deadline = Date.now() + timeoutMs;
   let emptySince = 0;
