@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { aggregatePaymentDestinations } from '../src/aggregate.js';
 import {
+  buildMonthlyQueryOrder,
   buildReportUrl,
   chooseUsableNodeText,
+  isDestinationEmptyStateText,
   parseHumanNumber,
   parseRenderedDestinationRow,
   parseTargetTrafficFromTooltip,
@@ -47,6 +49,34 @@ test('returns monthly values and rolling six, three, and one month totals', () =
   assert.equal(result.data.last6MonthsPaymentOutboundVisits, 2_100);
   assert.equal(result.data.last3MonthsPaymentOutboundVisits, 1_500);
   assert.equal(result.data.last1MonthPaymentOutboundVisits, 600);
+});
+
+test('returns successful zero totals when all six monthly destination tables are empty', () => {
+  const displayDates = ['2026-02-01', '2026-03-01', '2026-04-01', '2026-05-01', '2026-06-01', '2026-07-01'];
+  const result = aggregatePaymentDestinations(
+    { domain: 'az8.art', months: 6 },
+    displayDates,
+    {
+      provider: 'semrush-browser-ui',
+      granularity: 'month',
+      warnings: ['All requested monthly destination tables returned an explicit empty state.'],
+      observations: [],
+    },
+  );
+  assert.deepEqual(result.data.monthly?.map((month) => month.paymentOutboundVisits), [0, 0, 0, 0, 0, 0]);
+  assert.equal(result.data.last6MonthsPaymentOutboundVisits, 0);
+  assert.equal(result.data.last3MonthsPaymentOutboundVisits, 0);
+  assert.equal(result.data.last1MonthPaymentOutboundVisits, 0);
+});
+
+test('recognizes Semrush explicit empty states and starts monthly scans from the latest month', () => {
+  assert.equal(isDestinationEmptyStateText('Nothing found\nTry changing your filters.'), true);
+  assert.equal(isDestinationEmptyStateText('暂无数据'), true);
+  assert.equal(isDestinationEmptyStateText('stripe.com Payments 123'), false);
+  assert.deepEqual(
+    buildMonthlyQueryOrder(['2026-02-01', '2026-03-01', '2026-04-01']),
+    ['2026-04-01', '2026-02-01', '2026-03-01'],
+  );
 });
 
 test('normalizes a caller URL into a Semrush target domain', () => {

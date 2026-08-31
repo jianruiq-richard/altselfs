@@ -90,9 +90,6 @@ export class SemrushBrowserProvider implements DestinationProvider {
           displayDates,
           input,
         );
-        if (monthlyResult.rowsScanned === 0) {
-          throw new Error('No destination rows could be parsed from the monthly report pages.');
-        }
         return {
           provider: 'semrush-browser-ui',
           granularity: 'month',
@@ -102,6 +99,9 @@ export class SemrushBrowserProvider implements DestinationProvider {
             'Six completed months are queried sequentially through the date picker on one warmed report tab.',
             'Speed mode scans only the first destination-table page for each month; payment destinations on later pages are not counted.',
             'The browser parser must be revalidated after Semrush UI changes.',
+            ...(monthlyResult.rowsScanned === 0
+              ? ['All requested monthly destination tables returned an explicit empty state.']
+              : []),
             ...(monthlyResult.observations.length === 0
               ? ['No registered payment-platform destination appeared in the scanned rows.']
               : []),
@@ -169,10 +169,7 @@ export class SemrushBrowserProvider implements DestinationProvider {
     input: QueryInput,
   ) {
     const startedAt = Date.now();
-    const currentMonth = singleMonthFromReportUrl(page.url());
-    const queryOrder = currentMonth && displayDates.includes(currentMonth)
-      ? [currentMonth, ...displayDates.filter((displayDate) => displayDate !== currentMonth)]
-      : displayDates;
+    const queryOrder = buildMonthlyQueryOrder(displayDates);
     const byDisplayDate = new Map<string, {
       displayDate: string;
       observations: DestinationObservation[];
@@ -626,16 +623,45 @@ async function clickAnalyzeIfPresent(page: Page) {
   }
 }
 
-async function waitForRows(page: Page) {
+type DestinationTableState = 'rows' | 'empty';
+
+export function isDestinationEmptyStateText(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return /(?:^|\s)(?:nothing found|no data|no results|未找到(?:任何)?(?:结果|数据)?|没有(?:找到)?(?:结果|数据)|暂无数据|无结果)(?:\s|$)/i.test(normalized);
+}
+
+export function buildMonthlyQueryOrder(displayDates: string[]) {
+  const latest = displayDates.at(-1);
+  return latest ? [latest, ...displayDates.filter((displayDate) => displayDate !== latest)] : [];
+}
+
+async function hasEmptyDestinationState(page: Page) {
+  const emptyState = page.getByText(
+    /^(?:Nothing found|No data|No results|未找到(?:任何)?(?:结果|数据)?|没有(?:找到)?(?:结果|数据)|暂无数据|无结果)$/i,
+    { exact: true },
+  ).first();
+  if (await emptyState.isVisible().catch(() => false)) return true;
+  const tableText = await page.locator('[data-ui-name="Table"], table').first()
+    .innerText().catch(() => '');
+  return isDestinationEmptyStateText(tableText);
+}
+
+async function waitForRows(page: Page, timeoutMs = 60_000): Promise<DestinationTableState> {
   const rows = page.locator('[data-ui-name="Body.Row"], table tbody tr');
-  await rows.first().waitFor({ state: 'visible', timeout: 60_000 });
-  const deadline = Date.now() + 60_000;
+  const deadline = Date.now() + timeoutMs;
+  let emptySince = 0;
   while (Date.now() < deadline) {
     const texts = await rows.allTextContents().catch(() => []);
-    if (texts.some((text) => /[a-z0-9-]+\.[a-z]{2,}/i.test(text))) return;
-    await page.waitForTimeout(500);
+    if (texts.some((text) => /[a-z0-9-]+\.[a-z]{2,}/i.test(text))) return 'rows';
+    if (await hasEmptyDestinationState(page)) {
+      if (!emptySince) emptySince = Date.now();
+      if (Date.now() - emptySince >= 500) return 'empty';
+    } else {
+      emptySince = 0;
+    }
+    await page.waitForTimeout(250);
   }
-  throw new Error('Destination table remained in its loading state.');
+  throw new Error('Destination table did not reach a rows or explicit-empty state.');
 }
 
 async function destinationRowsFingerprint(page: Page) {
@@ -651,6 +677,7 @@ async function waitForRowsToRefresh(page: Page, previousFingerprint: string, tim
   const startedAt = Date.now();
   let candidateFingerprint = '';
   let stableSince = 0;
+  let emptySince = 0;
   while (Date.now() - startedAt < timeoutMs) {
     const fingerprint = await destinationRowsFingerprint(page);
     if (fingerprint && fingerprint !== previousFingerprint) {
@@ -664,6 +691,15 @@ async function waitForRowsToRefresh(page: Page, previousFingerprint: string, tim
       // Adjacent months can legitimately render identical first pages. The URL
       // transition is already verified before this fallback can be reached.
       return;
+    }
+    if (await hasEmptyDestinationState(page)) {
+      if (!emptySince) emptySince = Date.now();
+      // Semrush can leave the previous empty state visible while a new filter
+      // is loading. Require both a short stable period and the same five-second
+      // settling window used for identical rendered rows.
+      if (Date.now() - startedAt >= 5_000 && Date.now() - emptySince >= 500) return;
+    } else {
+      emptySince = 0;
     }
     await page.waitForTimeout(250);
   }
@@ -740,7 +776,11 @@ async function readPaymentDestinationRowsAcrossPages(
     ? displayDates[0]
     : `${displayDates[0]}..${displayDates.at(-1) || displayDates[0]}`;
   for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
-    await waitForRows(page);
+    const tableState = await waitForRows(page);
+    if (tableState === 'empty') {
+      pagesScanned += 1;
+      break;
+    }
     const rows = page.locator('[data-ui-name="Body.Row"], table tbody tr');
     const renderedRows = await rows.evaluateAll((elements) => elements.map((row, index) => ({
       index,
