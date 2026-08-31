@@ -16,17 +16,17 @@ cd "${APP_DIR}"
 test -f .env.production
 test -f "${COMPOSE_FILE}"
 
-docker compose -f "${COMPOSE_FILE}" config >/dev/null
+docker compose --env-file .env.production -f "${COMPOSE_FILE}" config >/dev/null
 docker pull "${ALTSELFS_SEMRUSH_TRAFFIC_IMAGE}"
-docker compose -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate semrush-traffic
+docker compose --env-file .env.production -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate semrush-traffic
 
-container_id="$(docker compose -f "${COMPOSE_FILE}" ps -q semrush-traffic)"
+container_id="$(docker compose --env-file .env.production -f "${COMPOSE_FILE}" ps -q semrush-traffic)"
 elapsed=0
 while [ "${elapsed}" -lt "${HEALTH_TIMEOUT_SECONDS}" ]; do
   status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${container_id}" 2>/dev/null || true)"
   case "${status}" in
     healthy|running)
-      docker compose -f "${COMPOSE_FILE}" ps semrush-traffic
+      docker compose --env-file .env.production -f "${COMPOSE_FILE}" ps semrush-traffic
       printf '[semrush-deploy] deployed image=%s\n' "${ALTSELFS_SEMRUSH_TRAFFIC_IMAGE}"
       exit 0
       ;;
