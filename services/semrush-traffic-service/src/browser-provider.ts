@@ -536,7 +536,8 @@ async function enterDomain(page: Page, domain: string) {
   if (!input) {
     const addButton = page.locator('button[data-ui-name="Button"]').first();
     if (!await addButton.isVisible()) throw new Error('Could not find the Add website button.');
-    await addButton.click();
+    await dismissTransientOverlays(page);
+    await addButton.click({ force: true });
     await page.locator('input:not([type="hidden"]):not([type="password"])').first()
       .waitFor({ state: 'visible', timeout: 10_000 });
     input = await findDomainInput(page);
@@ -618,7 +619,8 @@ async function clickAnalyzeIfPresent(page: Page) {
       await candidate.getAttribute('aria-label'),
     ].filter(Boolean).join(' ').trim();
     if (/^(analy[sz]e|search|save|add|应用|查询|分析|保存|添加)$/i.test(text) && await candidate.isVisible()) {
-      await candidate.click();
+      await dismissTransientOverlays(page);
+      await candidate.click({ force: true });
       return;
     }
   }
@@ -744,11 +746,11 @@ function escapeRegExp(value: string) {
 }
 
 async function dismissTransientOverlays(page: Page) {
-  await page.mouse.move(1, 1).catch(() => undefined);
   await page.keyboard.press('Escape').catch(() => undefined);
-  await page.locator('[data-ui-name="Tooltip.Popper"]:visible').waitFor({
-    state: 'hidden',
-    timeout: 1_000,
+  await page.locator('[data-ui-name="Tooltip.Popper"]').evaluateAll((elements) => {
+    for (const element of elements) {
+      (element as HTMLElement).style.pointerEvents = 'none';
+    }
   }).catch(() => undefined);
 }
 
