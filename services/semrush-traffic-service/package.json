@@ -1,0 +1,26 @@
+{
+  "name": "@altselfs/semrush-traffic-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "auth:browser": "node scripts/auth-browser.mjs",
+    "diagnose:3ue": "node scripts/diagnose-3ue.mjs",
+    "inspect:cdp": "node scripts/inspect-cdp.mjs",
+    "set:single-domain": "node scripts/set-single-domain.mjs",
+    "inspect:page": "node scripts/inspect-page.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/start.js"
+  },
+  "dependencies": {
+    "playwright": "1.62.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0"
+  }
+}

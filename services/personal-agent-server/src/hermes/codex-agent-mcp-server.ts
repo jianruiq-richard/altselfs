@@ -38,6 +38,11 @@ import {
   isPersonalDatatool,
   runPersonalDatatool,
 } from '../tools/personal-data.js';
+import {
+  createSemrushTrafficDynamictool,
+  isSemrushTraffictool,
+  runSemrushTraffictool,
+} from '../tools/semrush-traffic.js';
 import { buildConnectorToolScopeInstruction } from '../connector-tool-scope.js';
 import { isRecord, nowIso, truncate } from '../util.js';
 import {
@@ -527,6 +532,9 @@ async function buildDynamicTools(config: ServerConfig, runtime: RuntimeEnv, sele
   if (config.sandboxExecEnabled && process.env.ALTSELFS_CODEX_SANDBOX_EXEC_DYNAMIC_TOOL !== '0') {
     tools.push(createSandboxExecDynamictool());
   }
+  if (config.semrushTrafficToolEnabled) {
+    tools.push(createSemrushTrafficDynamictool());
+  }
   if (process.env[config.openRouterApiKeyEnv]?.trim()) {
     tools.push(createPdfOpenRouterParserDynamictool());
   }
@@ -592,6 +600,14 @@ async function handleCodexServerRequest(
       }
       const resultText = await runRapidApiCompetitortool(tool, params.arguments, config);
       client.respond(requestId, { contentItems: [{ type: 'inputText', text: resultText }], success: true });
+      return;
+    }
+    if (!namespace && isSemrushTraffictool(tool)) {
+      const resultText = await runSemrushTraffictool(params.arguments, config);
+      client.respond(requestId, {
+        contentItems: [{ type: 'inputText', text: resultText }],
+        success: !resultText.includes('"error"'),
+      });
       return;
     }
     if (!namespace && isPersonalDatatool(tool)) {

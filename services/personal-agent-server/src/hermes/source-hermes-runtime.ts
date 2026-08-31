@@ -1287,6 +1287,10 @@ function buildCodexMcpEnvEntries(config: ServerConfig, selection: CodexModelSele
   set('OPENROUTER_APP_TITLE', config.openRouterAppTitle);
   set('RAPIDAPI_KEY_ENV', config.rapidApiKeyEnv);
   set('RAPIDAPI_REQUEST_TIMEOUT_MS', String(config.rapidApiRequestTimeoutMs));
+  set('SEMRUSH_TRAFFIC_TOOL_ENABLED', config.semrushTrafficToolEnabled ? 'true' : 'false');
+  set('SEMRUSH_TRAFFIC_SERVICE_URL', config.semrushTrafficServiceUrl);
+  set('SEMRUSH_TRAFFIC_SERVICE_TOKEN_ENV', config.semrushTrafficServiceTokenEnv);
+  set('SEMRUSH_TRAFFIC_REQUEST_TIMEOUT_MS', String(config.semrushTrafficRequestTimeoutMs));
   set('SERPAPI_API_KEY_ENV', config.serpApiKeyEnv);
   set('SERPER_API_KEY_ENV', config.serperApiKeyEnv);
   set('GOOGLE_CSE_API_KEY_ENV', config.googleCseApiKeyEnv);
@@ -1317,6 +1321,7 @@ function buildCodexMcpEnvEntries(config: ServerConfig, selection: CodexModelSele
   refIfPresent(config.codexApiYiApiKeyEnv);
   refIfPresent(config.openRouterApiKeyEnv);
   refIfPresent(config.rapidApiKeyEnv);
+  refIfPresent(config.semrushTrafficServiceTokenEnv);
   refIfPresent(config.serpApiKeyEnv);
   refIfPresent(config.serperApiKeyEnv);
   refIfPresent(config.googleCseApiKeyEnv);

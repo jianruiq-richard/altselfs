@@ -12,6 +12,9 @@ services:
     volumes:
       - /data/altselfs-agent:/data/altselfs-agent
       - ${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}:${SANDBOX_DOCKER_SOCKET_PATH:-/var/run/docker.sock}
+    depends_on:
+      semrush-traffic:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -24,3 +27,31 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  semrush-traffic:
+    image: ${SEMRUSH_TRAFFIC_IMAGE:-altselfs/semrush-traffic-service:local}
+    build:
+      context: ../semrush-traffic-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    expose:
+      - "8791"
+    ports:
+      - "127.0.0.1:${SEMRUSH_NOVNC_HOST_PORT:-6080}:6080"
+    volumes:
+      - /data/semrush-traffic:/data
+    shm_size: 1gb
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8791/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

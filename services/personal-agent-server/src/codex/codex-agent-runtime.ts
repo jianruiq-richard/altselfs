@@ -32,6 +32,11 @@ import {
   runPersonalDatatool,
 } from '../tools/personal-data.js';
 import {
+  createSemrushTrafficDynamictool,
+  isSemrushTraffictool,
+  runSemrushTraffictool,
+} from '../tools/semrush-traffic.js';
+import {
   CodexOpenAiAuthHealthError,
   ensureCodexOpenAiAuthHealthy,
   isCodexOpenAiAuthFailure,
@@ -379,6 +384,7 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
   private async buildDynamictools(input: ChildAgentRunInput, selection: CodexModelSelection) {
     const tools: unknown[] = selection.provider === 'openai' ? [] : [createWebSearchDynamictool()];
     if (this.config.sandboxExecEnabled) tools.push(createSandboxExecDynamictool());
+    if (this.config.semrushTrafficToolEnabled) tools.push(createSemrushTrafficDynamictool());
     if (process.env[this.config.openRouterApiKeyEnv]?.trim()) tools.push(createPdfOpenRouterParserDynamictool());
     if (input.profileId === 'codex-competitive-intelligence') {
       const connectorScope = getConnectorScope(input.metadata);
@@ -426,6 +432,14 @@ export class CodexAgentRuntime implements ChildAgentRuntime {
         client.respond(requestId, {
           contentItems: [{ type: 'inputText', text: resultText }],
           success: true,
+        });
+        return 'handled';
+      }
+      if (!namespace && isSemrushTraffictool(tool)) {
+        const resultText = await runSemrushTraffictool(params.arguments, this.config);
+        client.respond(requestId, {
+          contentItems: [{ type: 'inputText', text: resultText }],
+          success: !resultText.includes('"error"'),
         });
         return 'handled';
       }

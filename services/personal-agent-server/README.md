@@ -208,6 +208,38 @@ BING_SEARCH_ENDPOINT=https://api.bing.microsoft.com/v7.0/search
 When `WEB_SEARCH_PROVIDER=auto`, the server chooses `serpapi` first, then
 `serper`, then `google_cse`, then `bing`, then `duckduckgo`.
 
+### Semrush payment destinations
+
+Set `SEMRUSH_TRAFFIC_TOOL_ENABLED=true` to expose
+`altselfs_semrush_payment_destinations` to both `codex-general` and
+`codex-competitive-intelligence`. The tool calls the colocated
+`semrush-traffic` browser worker and always requests the last six completed
+months. It returns per-month values plus rolling six-, three-, and one-month
+totals. Its single-target check rejects Semrush comparison groups so a traffic
+percentage cannot be mistaken for absolute visits. Set
+`SEMRUSH_TRAFFIC_REQUEST_TIMEOUT_MS=600000` for the measured browser runtime.
+The worker runs one domain query at a time and keeps at most three additional
+requests waiting; a fifth simultaneous request receives HTTP `429` immediately.
+
+The ECS Compose setup keeps the browser profile at `/data/semrush-traffic` and
+binds the login-only noVNC page to host loopback. After the first deployment:
+
+```bash
+ssh -L 6080:127.0.0.1:6080 root@YOUR_ECS_HOST
+```
+
+Open `http://127.0.0.1:6080/vnc.html` and finish the 3ue/Semrush login in the
+dedicated browser profile. The worker selects an available 3ue node at runtime
+and initializes a node-specific single-domain list; no fixed Semrush `lid` is
+required. See
+[`../semrush-traffic-service/README.md`](../semrush-traffic-service/README.md)
+for session, list-isolation, and security details.
+
+The browser worker has an independent release lifecycle. Deploy or update it
+explicitly with `infra/aliyun/ecs/deploy-semrush-traffic-service.sh`. Routine
+`deploy-personal-agent-server.sh` releases do not pull, recreate, or restart the
+Semrush container, so its warm browser and authenticated profile stay alive.
+
 ### Local Hermes + Codex Smoke Test
 
 From the repository root:

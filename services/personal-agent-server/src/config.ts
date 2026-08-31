@@ -46,6 +46,10 @@ export type ServerConfig = {
   webSearchTimeoutMs: number;
   rapidApiKeyEnv: string;
   rapidApiRequestTimeoutMs: number;
+  semrushTrafficToolEnabled: boolean;
+  semrushTrafficServiceUrl: string;
+  semrushTrafficServiceTokenEnv: string;
+  semrushTrafficRequestTimeoutMs: number;
   larkCliBin: string;
   larkCliHomeRoot: string;
   larkCliTimeoutMs: number;
@@ -527,6 +531,10 @@ export function loadConfig(): ServerConfig {
     webSearchTimeoutMs: readIntEnv('WEB_SEARCH_TIMEOUT_MS', 30_000),
     rapidApiKeyEnv: readEnv('RAPIDAPI_KEY_ENV', 'RAPIDAPI_KEY'),
     rapidApiRequestTimeoutMs: readIntEnv('RAPIDAPI_REQUEST_TIMEOUT_MS', 30_000),
+    semrushTrafficToolEnabled: readBoolEnv('SEMRUSH_TRAFFIC_TOOL_ENABLED', false),
+    semrushTrafficServiceUrl: readEnv('SEMRUSH_TRAFFIC_SERVICE_URL', 'http://semrush-traffic:8791'),
+    semrushTrafficServiceTokenEnv: readEnv('SEMRUSH_TRAFFIC_SERVICE_TOKEN_ENV', 'SEMRUSH_SERVICE_TOKEN'),
+    semrushTrafficRequestTimeoutMs: readIntEnv('SEMRUSH_TRAFFIC_REQUEST_TIMEOUT_MS', 600_000),
     larkCliBin: readEnv('LARK_CLI_BIN', 'lark-cli'),
     larkCliHomeRoot: path.resolve(readEnv('LARK_CLI_HOME_ROOT', '/data/altselfs-agent/lark-cli-runtime')),
     larkCliTimeoutMs: readIntEnv('LARK_CLI_TIMEOUT_MS', 60_000),

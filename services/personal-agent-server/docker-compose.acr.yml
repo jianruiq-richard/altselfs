@@ -23,6 +23,31 @@ x-agent-healthcheck: &agent-healthcheck
   start_period: 20s
 
 services:
+  semrush-traffic:
+    image: ${ALTSELFS_SEMRUSH_TRAFFIC_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/semrush-traffic-service:latest}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    expose:
+      - "8791"
+    ports:
+      - "127.0.0.1:${SEMRUSH_NOVNC_HOST_PORT:-6080}:6080"
+    volumes:
+      - ${SEMRUSH_TRAFFIC_DATA_DIR:-/data/semrush-traffic}:/data
+    shm_size: 1gb
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8791/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   personal-agent-gateway:
     image: ${ALTSELFS_PERSONAL_AGENT_GATEWAY_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server:latest}
     restart: unless-stopped

@@ -9,6 +9,7 @@ ACR Personal Edition repositories:
 - `crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/codex-app-server`
 - `crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/hermes-runtime`
 - `crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/sandbox-exec-runtime`
+- `crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/semrush-traffic-service`
 - `crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server`
 
 ## Build Order
@@ -18,7 +19,8 @@ Build in this order:
 1. `codex-app-server`
 2. `hermes-runtime`
 3. `sandbox-exec-runtime`
-4. `personal-agent-server`
+4. `semrush-traffic-service`
+5. `personal-agent-server`
 
 The `personal-agent-server` image copies runtime artifacts from `codex-app-server`
 and `hermes-runtime`. The `sandbox-exec-runtime` image is not copied into the
@@ -94,6 +96,21 @@ ACR build rule:
 - Build context: `/`
 - Image tag: `latest`
 
+### semrush-traffic-service
+
+Use the Dockerfile in the main Altselfs repository:
+
+```text
+services/semrush-traffic-service/Dockerfile
+```
+
+ACR build rule:
+
+- Source repository: `jianruiq-richard/altselfs`
+- Dockerfile path: `/Dockerfile`
+- Build context: `/services/semrush-traffic-service/`
+- Image tag: `latest`
+
 ## ECS Deploy
 
 Login once on the ECS host:
@@ -113,7 +130,18 @@ Upload:
 ```text
 services/personal-agent-server/docker-compose.acr.yml
 infra/aliyun/ecs/deploy-personal-agent-server.sh
+infra/aliyun/ecs/deploy-semrush-traffic-service.sh
 ```
+
+Deploy the Semrush browser worker independently when its image changes:
+
+```bash
+cd /opt/altselfs/personal-agent-server-docker
+IMAGE_TAG=YOUR_SEMRUSH_IMAGE_TAG bash deploy-semrush-traffic-service.sh
+```
+
+Routine `deploy-personal-agent-server.sh` runs deliberately leave the Semrush
+container untouched so its authenticated, warm Chrome session remains alive.
 
 Run:
 
@@ -166,4 +194,13 @@ Set this in `.env.production`:
 
 ```text
 SANDBOX_EXEC_IMAGE=crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/sandbox-exec-runtime:latest
+```
+
+The independent Semrush deployment script pulls and starts
+`semrush-traffic-service`. Configure the Semrush variables from
+`services/personal-agent-server/env.production.example`, then use an SSH tunnel
+to the loopback-only noVNC port for the first login:
+
+```bash
+ssh -L 6080:127.0.0.1:6080 root@YOUR_ECS_HOST
 ```

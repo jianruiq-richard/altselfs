@@ -1,0 +1,121 @@
+import { buildPaymentPlatformRegistry, matchPaymentPlatform } from './payment-platforms.js';
+import type { DestinationProviderResult, QueryInput } from './types.js';
+
+export function aggregatePaymentDestinations(
+  input: QueryInput,
+  displayDates: string[],
+  providerResult: DestinationProviderResult,
+) {
+  const registry = buildPaymentPlatformRegistry(input.paymentDomains);
+  const monthly = new Map(displayDates.map((displayDate) => [displayDate, {
+    displayDate,
+    paymentOutboundVisits: 0,
+    matchedRows: 0,
+  }]));
+  const destinations = new Map<string, {
+    destination: string;
+    platform: string;
+    matchedBy: string;
+    visits: number;
+    trafficShareSamples: number[];
+    categories: Set<string>;
+    months: Set<string>;
+  }>();
+
+  for (const observation of providerResult.observations) {
+    let match;
+    try {
+      match = matchPaymentPlatform(observation.destination, registry);
+    } catch {
+      continue;
+    }
+    if (!match) continue;
+    const month = providerResult.granularity === 'month'
+      ? monthly.get(observation.displayDate)
+      : undefined;
+    if (month) {
+      month.paymentOutboundVisits += observation.traffic;
+      month.matchedRows += 1;
+    }
+    const aggregate = destinations.get(observation.destination) || {
+      destination: observation.destination,
+      platform: match.platform,
+      matchedBy: match.matchedBy,
+      visits: 0,
+      trafficShareSamples: [],
+      categories: new Set<string>(),
+      months: new Set<string>(),
+    };
+    aggregate.visits += observation.traffic;
+    if (observation.trafficShare !== null) aggregate.trafficShareSamples.push(observation.trafficShare);
+    for (const category of observation.categories) aggregate.categories.add(category);
+    if (providerResult.granularity === 'month') aggregate.months.add(observation.displayDate);
+    destinations.set(observation.destination, aggregate);
+  }
+
+  const paymentDestinations = Array.from(destinations.values())
+    .map((entry) => ({
+      destination: entry.destination,
+      platform: entry.platform,
+      matchedBy: entry.matchedBy,
+      visits: Math.round(entry.visits),
+      averageReportedTrafficShare: entry.trafficShareSamples.length
+        ? entry.trafficShareSamples.reduce((sum, value) => sum + value, 0) / entry.trafficShareSamples.length
+        : null,
+      categories: Array.from(entry.categories).sort(),
+      observedMonths: providerResult.granularity === 'month'
+        ? Array.from(entry.months).sort()
+        : displayDates,
+    }))
+    .sort((a, b) => b.visits - a.visits);
+  const paymentOutboundVisits = paymentDestinations.reduce((sum, item) => sum + item.visits, 0);
+  const monthlyValues = Array.from(monthly.values()).map((entry) => ({
+    ...entry,
+    paymentOutboundVisits: Math.round(entry.paymentOutboundVisits),
+  }));
+  const monthlyWindowTotal = (count: number) => monthlyValues
+    .slice(-count)
+    .reduce((sum, entry) => sum + entry.paymentOutboundVisits, 0);
+  const periodTotals = providerResult.granularity === 'month'
+    ? {
+      last6MonthsPaymentOutboundVisits: displayDates.length >= 6 ? monthlyWindowTotal(6) : null,
+      last3MonthsPaymentOutboundVisits: monthlyWindowTotal(3),
+      last1MonthPaymentOutboundVisits: monthlyWindowTotal(1),
+    }
+    : {
+      last6MonthsPaymentOutboundVisits: null,
+      last3MonthsPaymentOutboundVisits: input.months === 3 ? paymentOutboundVisits : null,
+      last1MonthPaymentOutboundVisits: null,
+    };
+
+  return {
+    source: providerResult.provider,
+    fetchedAt: new Date().toISOString(),
+    input: {
+      domain: input.domain,
+      months: input.months,
+      country: input.country || 'GLOBAL',
+      displayDates,
+    },
+    data: {
+      paymentOutboundVisits,
+      averageMonthlyPaymentOutboundVisits: Math.round(paymentOutboundVisits / displayDates.length),
+      ...periodTotals,
+      paymentDestinations,
+      monthly: providerResult.granularity === 'month'
+        ? monthlyValues
+        : null,
+    },
+    confidence: providerResult.provider === 'semrush-trends-api' ? 'high' : 'medium',
+    definition: {
+      metric: providerResult.granularity === 'month'
+        ? 'Sum of Semrush destination traffic for matched payment-platform domains across the last completed months.'
+        : 'Semrush destination traffic for matched payment-platform domains over the selected completed-month range.',
+      granularity: providerResult.granularity,
+      paymentDomainRoots: registry.map((entry) => entry.rootDomain),
+      currentMonthExcluded: true,
+    },
+    warnings: providerResult.warnings,
+    ...(providerResult.diagnostics ? { diagnostics: providerResult.diagnostics } : {}),
+  };
+}
