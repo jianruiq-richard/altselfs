@@ -39,6 +39,7 @@ import {
   runPersonalDatatool,
 } from '../tools/personal-data.js';
 import {
+  SEMRUSH_PAYMENT_DESTINATIONS_TOOL_NAME,
   createSemrushTrafficDynamictool,
   isSemrushTraffictool,
   runSemrushTraffictool,
@@ -308,6 +309,11 @@ async function runCodexAgentTool(argumentsValue: unknown) {
     }
 
     const dynamicTools = await buildDynamicTools(config, runtime, modelSelection);
+    const enabledConnectorToolNames = [
+      ...(config.semrushTrafficToolEnabled ? [SEMRUSH_PAYMENT_DESTINATIONS_TOOL_NAME] : []),
+      ...dynamicTools.competitorNames,
+      ...dynamicTools.personalNames,
+    ];
 
     client = new CodexJsonRpcClient({
       codexBin: config.codexBin,
@@ -483,7 +489,7 @@ async function runCodexAgentTool(argumentsValue: unknown) {
           text: buildCodexTaskPrompt(
             toolArgs,
             runtime,
-            [...dynamicTools.competitorNames, ...dynamicTools.personalNames]
+            enabledConnectorToolNames
           ),
         }],
         cwd: runtime.workspace,

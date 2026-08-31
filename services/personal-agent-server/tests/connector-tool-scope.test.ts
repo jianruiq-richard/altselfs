@@ -6,6 +6,7 @@ import {
   buildConnectorToolScopeInstruction,
   normalizeToolNameList,
 } from '../src/connector-tool-scope.js';
+import { SEMRUSH_PAYMENT_DESTINATIONS_TOOL_NAME } from '../src/tools/semrush-traffic.js';
 import {
   cancelActiveRun,
   clearRunCancellation,
@@ -107,6 +108,15 @@ test('Codex receives an explicit none instruction when connector tools are disab
   assert.match(instruction, /for this turn: none/);
   assert.match(instruction, /older resumed Codex session/);
   assert.match(instruction, /report the missing connector requirement to Hermes/);
+});
+
+test('Codex connector scope can explicitly enable Semrush payment destinations', () => {
+  const instruction = buildConnectorToolScopeInstruction([
+    SEMRUSH_PAYMENT_DESTINATIONS_TOOL_NAME,
+    'altselfs_similarweb_api1',
+  ]);
+  assert.match(instruction, /altselfs_semrush_payment_destinations/);
+  assert.match(instruction, /altselfs_similarweb_api1/);
 });
 
 test('bridge connector scope treats a missing or empty list as no enabled tools', () => {
