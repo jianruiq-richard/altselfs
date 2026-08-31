@@ -36,6 +36,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.production
+    environment:
+      PORT: "8791"
     expose:
       - "8791"
     ports:
