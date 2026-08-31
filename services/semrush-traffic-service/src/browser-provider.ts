@@ -488,9 +488,10 @@ async function assertAuthenticated(page: Page) {
 }
 
 async function selectDestinationsTab(page: Page) {
+  await dismissTransientOverlays(page);
   const namedTab = await waitForVisibleExactText(page, /^(destinations?|目标)$/i, 60_000);
   if (namedTab) {
-    await namedTab.click();
+    await namedTab.click({ force: true });
     return;
   }
   // Fall through to a broader markup scan for Semrush UI variants.
@@ -500,7 +501,7 @@ async function selectDestinationsTab(page: Page) {
     const candidate = candidates.nth(index);
     const text = (await candidate.innerText().catch(() => '')).trim();
     if (/^(destinations?|目标|去向)$/i.test(text) && await candidate.isVisible()) {
-      await candidate.click();
+      await candidate.click({ force: true });
       return;
     }
   }
@@ -716,7 +717,8 @@ async function switchToSingleMonth(page: Page, displayDate: string) {
   const previousRows = await destinationRowsFingerprint(page);
   const year = Number(match[1]);
   const month = Number(match[2]);
-  await page.getByTestId('history-selector-trigger').click();
+  await dismissTransientOverlays(page);
+  await page.getByTestId('history-selector-trigger').click({ force: true });
   const dialog = page.getByRole('dialog');
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   const chineseLabel = `${year}年${month}月`;
@@ -730,7 +732,7 @@ async function switchToSingleMonth(page: Page, displayDate: string) {
   }).first();
   await localizedCell.waitFor({ state: 'visible', timeout: 10_000 });
   await localizedCell.click();
-  await page.getByTestId('selector-apply').click();
+  await page.getByTestId('selector-apply').click({ force: true });
   await page.waitForURL((url) => singleMonthFromReportUrl(url.toString()) === displayDate, {
     timeout: 30_000,
   });
@@ -739,6 +741,15 @@ async function switchToSingleMonth(page: Page, displayDate: string) {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function dismissTransientOverlays(page: Page) {
+  await page.mouse.move(1, 1).catch(() => undefined);
+  await page.keyboard.press('Escape').catch(() => undefined);
+  await page.locator('[data-ui-name="Tooltip.Popper"]:visible').waitFor({
+    state: 'hidden',
+    timeout: 1_000,
+  }).catch(() => undefined);
 }
 
 async function goToFirstPage(page: Page) {
@@ -812,6 +823,7 @@ async function readPaymentDestinationRowsAcrossPages(
         await tooltip.waitFor({ state: 'visible', timeout: 5_000 });
         const metrics = await tooltip.locator('span[data-ui-name="Text"]').allTextContents();
         traffic = parseTargetTrafficFromTooltip(metrics, targetIndex);
+        await dismissTransientOverlays(page);
       }
       if (traffic === null) {
         const cellTexts = await row.locator('[role="gridcell"]').allTextContents().catch(() => []);
