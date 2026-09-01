@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { AstromarLandingPage } from "@/components/astromar-landing-page";
+import { appendCampaignParams, type CampaignSearchParams } from "@/lib/analytics/campaign";
 import { productBrand } from "@/lib/brand";
 
 const homepageDescription =
@@ -36,11 +37,15 @@ const structuredData = [
   },
 ];
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<CampaignSearchParams>;
+}) {
   const { userId } = await auth();
 
   if (userId) {
-    redirect("/investor/chat/100");
+    redirect(appendCampaignParams("/investor/chat/100", await searchParams));
   }
 
   return (

@@ -114,20 +114,35 @@ export function analyticsRoute(pathname: string) {
   return { routeName: 'other', pagePath: pathname };
 }
 
-export function trackPageView(pathname: string) {
-  if (typeof window === 'undefined') return;
+export function buildPageViewParams(
+  pathname: string,
+  pageLocation: string,
+  pageTitle: string,
+): AnalyticsParams {
   const route = analyticsRoute(pathname);
-  trackEvent('page_view', {
+  return {
     app_area: route.routeName === 'landing' || route.routeName === 'pricing' || route.routeName.startsWith('blog_')
       ? 'marketing'
       : route.routeName === 'sign_in' || route.routeName === 'sign_up' || route.routeName === 'sso_callback'
         ? 'authentication'
         : 'product',
     route_name: route.routeName,
-    page_location: `${window.location.origin}${route.pagePath}`,
+    // GA4 derives first-user and session acquisition from campaign parameters in
+    // the full page location. Keep the query string here while retaining the
+    // normalized page_path below for low-cardinality route reporting.
+    page_location: pageLocation,
     page_path: route.pagePath,
-    page_title: document.title,
-  });
+    page_title: pageTitle,
+  };
+}
+
+export function trackPageView(pathname: string) {
+  if (typeof window === 'undefined') return;
+  trackEvent('page_view', buildPageViewParams(
+    pathname,
+    window.location.href,
+    document.title,
+  ));
 }
 
 export function startAuthFlow(flow: AuthFlow, method: AuthMethod) {

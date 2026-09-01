@@ -44,6 +44,16 @@ Do not expose `GA4_API_SECRET` to the browser. With no Measurement ID, analytics
 4. Use DebugView with `NEXT_PUBLIC_GA4_DEBUG=true` in a non-production environment, then turn it off after validation.
 5. Optionally link BigQuery before launch if raw event analysis and long-term retention are important.
 
+## Campaign links
+
+Use standard UTM parameters on inbound links. For example:
+
+```text
+https://minaco.ai/?utm_source=xiaohongshu&utm_medium=organic_social&utm_campaign=september_launch
+```
+
+The first page view sends the complete landing URL to GA4, while `page_path` remains normalized for route reporting. Standard UTM parameters are also preserved when an already-signed-in visitor is redirected from the homepage into the workspace. Use GA4's **First user source / medium** dimensions for first-touch acquisition reporting.
+
 Keep event names and parameter meanings stable. Add a new parameter or increment the `schema_version` before changing an existing definition.
 
 ## Microsoft Clarity session replay
