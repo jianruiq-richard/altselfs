@@ -785,7 +785,12 @@ async function switchToSingleMonth(page: Page, displayDate: string) {
     name: new RegExp(`^(?:${escapeRegExp(chineseLabel)}|${escapeRegExp(englishLabel)})$`, 'i'),
   }).first();
   await localizedCell.waitFor({ state: 'visible', timeout: 10_000 });
-  await localizedCell.click();
+  const ariaDisabled = await localizedCell.getAttribute('aria-disabled', { timeout: 250 }).catch(() => null);
+  const enabled = await localizedCell.isEnabled({ timeout: 250 }).catch(() => false);
+  if (ariaDisabled === 'true' || !enabled) {
+    throw new Error(`Semrush month ${displayDate} is unavailable in the date picker.`);
+  }
+  await localizedCell.click({ timeout: 10_000 });
   await page.getByTestId('selector-apply').click({ force: true, timeout: 10_000 });
   await page.waitForURL((url) => singleMonthFromReportUrl(url.toString()) === displayDate, {
     timeout: 30_000,
