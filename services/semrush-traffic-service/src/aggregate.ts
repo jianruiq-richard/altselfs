@@ -7,6 +7,11 @@ export function aggregatePaymentDestinations(
   providerResult: DestinationProviderResult,
 ) {
   const registry = buildPaymentPlatformRegistry(input.paymentDomains);
+  const failedDisplayDates = new Set(
+    providerResult.granularity === 'month'
+      ? (providerResult.failedDisplayDates || []).filter((displayDate) => displayDates.includes(displayDate))
+      : [],
+  );
   const monthly = new Map(displayDates.map((displayDate) => [displayDate, {
     displayDate,
     paymentOutboundVisits: 0,
@@ -68,14 +73,27 @@ export function aggregatePaymentDestinations(
         : displayDates,
     }))
     .sort((a, b) => b.visits - a.visits);
-  const paymentOutboundVisits = paymentDestinations.reduce((sum, item) => sum + item.visits, 0);
-  const monthlyValues = Array.from(monthly.values()).map((entry) => ({
-    ...entry,
-    paymentOutboundVisits: Math.round(entry.paymentOutboundVisits),
-  }));
-  const monthlyWindowTotal = (count: number) => monthlyValues
-    .slice(-count)
-    .reduce((sum, entry) => sum + entry.paymentOutboundVisits, 0);
+  const observedPaymentOutboundVisits = paymentDestinations.reduce((sum, item) => sum + item.visits, 0);
+  const monthlyValues = Array.from(monthly.values()).map((entry) => failedDisplayDates.has(entry.displayDate)
+    ? {
+      displayDate: entry.displayDate,
+      paymentOutboundVisits: null,
+      matchedRows: null,
+      status: 'failed' as const,
+    }
+    : {
+      ...entry,
+      paymentOutboundVisits: Math.round(entry.paymentOutboundVisits),
+      status: 'available' as const,
+    });
+  const monthlyWindowTotal = (count: number) => {
+    const window = monthlyValues.slice(-count);
+    return window.some((entry) => entry.paymentOutboundVisits === null)
+      ? null
+      : window.reduce((sum, entry) => sum + (entry.paymentOutboundVisits ?? 0), 0);
+  };
+  const successfulDisplayDates = displayDates.filter((displayDate) => !failedDisplayDates.has(displayDate));
+  const hasPartialMonthlyCoverage = providerResult.granularity === 'month' && failedDisplayDates.size > 0;
   const periodTotals = providerResult.granularity === 'month'
     ? {
       last6MonthsPaymentOutboundVisits: displayDates.length >= 6 ? monthlyWindowTotal(6) : null,
@@ -84,7 +102,7 @@ export function aggregatePaymentDestinations(
     }
     : {
       last6MonthsPaymentOutboundVisits: null,
-      last3MonthsPaymentOutboundVisits: input.months === 3 ? paymentOutboundVisits : null,
+      last3MonthsPaymentOutboundVisits: input.months === 3 ? observedPaymentOutboundVisits : null,
       last1MonthPaymentOutboundVisits: null,
     };
 
@@ -98,18 +116,31 @@ export function aggregatePaymentDestinations(
       displayDates,
     },
     data: {
-      paymentOutboundVisits,
-      averageMonthlyPaymentOutboundVisits: Math.round(paymentOutboundVisits / displayDates.length),
+      paymentOutboundVisits: hasPartialMonthlyCoverage ? null : observedPaymentOutboundVisits,
+      ...(hasPartialMonthlyCoverage ? { successfulMonthsPaymentOutboundVisits: observedPaymentOutboundVisits } : {}),
+      averageMonthlyPaymentOutboundVisits: hasPartialMonthlyCoverage
+        ? null
+        : Math.round(observedPaymentOutboundVisits / displayDates.length),
       ...periodTotals,
       paymentDestinations,
       monthly: providerResult.granularity === 'month'
         ? monthlyValues
         : null,
+      coverage: providerResult.granularity === 'month'
+        ? {
+          complete: failedDisplayDates.size === 0,
+          requestedMonths: displayDates,
+          successfulMonths: successfulDisplayDates,
+          failedMonths: Array.from(failedDisplayDates),
+        }
+        : null,
     },
     confidence: providerResult.provider === 'semrush-trends-api' ? 'high' : 'medium',
     definition: {
       metric: providerResult.granularity === 'month'
-        ? 'Sum of Semrush destination traffic for matched payment-platform domains across the last completed months.'
+        ? hasPartialMonthlyCoverage
+          ? 'Partial sum of Semrush destination traffic for matched payment-platform domains across successfully queried completed months; failed months are unavailable, not zero.'
+          : 'Sum of Semrush destination traffic for matched payment-platform domains across the last completed months.'
         : 'Semrush destination traffic for matched payment-platform domains over the selected completed-month range.',
       granularity: providerResult.granularity,
       paymentDomainRoots: registry.map((entry) => entry.rootDomain),

@@ -21,12 +21,16 @@ The six-month browser path uses a speed-first scan: it reads only the first
 destination-table page for each month. If that page has no registered payment
 platform, the month is reported as zero. Payment destinations that appear only
 on later pages are intentionally omitted. A month that fails to render because
-of a transient 3ue load issue is retried once in a fresh tab.
+of a transient 3ue load issue is retried once in a fresh tab. If both attempts
+fail, that month is marked unavailable and the worker continues through the
+remaining older months. Failed months are returned as `null`, never as zero;
+rolling totals that include a failed month are also `null`. If every requested
+month fails, the request fails.
 
 It deliberately does not call an undocumented private endpoint. Browser actions
 are serialized at the request level because they share one persistent Chrome
-profile and active node-specific Semrush list. Within one six-month request,
-independent month tabs use bounded concurrency.
+profile and active node-specific Semrush list. Months within a request are read
+sequentially from newest to oldest on one warmed report tab.
 
 ## Required browser setup
 

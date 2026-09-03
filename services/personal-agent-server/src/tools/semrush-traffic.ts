@@ -8,7 +8,7 @@ export function createSemrushTrafficDynamictool() {
     namespace: null,
     name: SEMRUSH_PAYMENT_DESTINATIONS_TOOL_NAME,
     description:
-      'Read Semrush Traffic & Market > Sources & Destinations > Destinations for one target domain. Returns each of the last six completed calendar months plus rolling six-, three-, and one-month totals of absolute outbound visits to registered payment-platform domains. Speed mode scans only the first destination-table page per month, so later-page payment destinations are omitted. The browser worker requires an active authorized Semrush web session, processes one domain at a time, permits at most three waiting requests, and rejects comparison groups containing non-target sites.',
+      'Read Semrush Traffic & Market > Sources & Destinations > Destinations for one target domain. Returns each available one of the last six completed calendar months plus rolling six-, three-, and one-month totals of absolute outbound visits to registered payment-platform domains. A month that still fails after one retry is marked unavailable while older months continue; failed months and rolling windows containing them are null, not zero. Speed mode scans only the first destination-table page per month, so later-page payment destinations are omitted. The browser worker requires an active authorized Semrush web session, processes one domain at a time, permits at most three waiting requests, and rejects comparison groups containing non-target sites.',
     inputSchema: {
       type: 'object',
       properties: {

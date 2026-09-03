@@ -6,6 +6,7 @@ import {
   buildReportUrl,
   chooseUsableNodeText,
   isDestinationEmptyStateText,
+  isDestinationLoadErrorText,
   parseHumanNumber,
   parseRenderedDestinationRow,
   parseTargetTrafficFromTooltip,
@@ -75,8 +76,46 @@ test('recognizes Semrush explicit empty states and starts monthly scans from the
   assert.equal(isDestinationEmptyStateText('stripe.com Payments 123'), false);
   assert.deepEqual(
     buildMonthlyQueryOrder(['2026-02-01', '2026-03-01', '2026-04-01']),
-    ['2026-04-01', '2026-02-01', '2026-03-01'],
+    ['2026-04-01', '2026-03-01', '2026-02-01'],
   );
+});
+
+test('recognizes transient destination load failures without treating them as empty data', () => {
+  assert.equal(isDestinationLoadErrorText('Something went wrong'), true);
+  assert.equal(isDestinationLoadErrorText('Something went wrong. Please try again.'), true);
+  assert.equal(isDestinationLoadErrorText('加载失败，请重试'), true);
+  assert.equal(isDestinationLoadErrorText('No data'), false);
+});
+
+test('marks failed monthly coverage unavailable instead of zero while retaining older months', () => {
+  const displayDates = ['2026-06-01', '2026-07-01', '2026-08-01'];
+  const result = aggregatePaymentDestinations(
+    { domain: 'tapnow.ai', months: 3 },
+    displayDates,
+    {
+      provider: 'semrush-browser-ui',
+      granularity: 'month',
+      warnings: ['2026-08-01 failed and was skipped.'],
+      failedDisplayDates: ['2026-08-01'],
+      observations: [
+        { displayDate: '2026-06-01', destination: 'stripe.com', traffic: 100, trafficShare: null, categories: ['Payments'] },
+      ],
+    },
+  );
+
+  assert.deepEqual(result.data.monthly.map((month) => month.paymentOutboundVisits), [100, 0, null]);
+  assert.deepEqual(result.data.monthly.map((month) => month.status), ['available', 'available', 'failed']);
+  assert.equal(result.data.paymentOutboundVisits, null);
+  assert.equal(result.data.successfulMonthsPaymentOutboundVisits, 100);
+  assert.equal(result.data.averageMonthlyPaymentOutboundVisits, null);
+  assert.equal(result.data.last3MonthsPaymentOutboundVisits, null);
+  assert.equal(result.data.last1MonthPaymentOutboundVisits, null);
+  assert.deepEqual(result.data.coverage, {
+    complete: false,
+    requestedMonths: displayDates,
+    successfulMonths: ['2026-06-01', '2026-07-01'],
+    failedMonths: ['2026-08-01'],
+  });
 });
 
 test('normalizes a caller URL into a Semrush target domain', () => {

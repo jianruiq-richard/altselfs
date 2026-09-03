@@ -11,6 +11,7 @@ export type DestinationProviderResult = {
   granularity: 'month' | 'range';
   observations: DestinationObservation[];
   warnings: string[];
+  failedDisplayDates?: string[];
   diagnostics?: Record<string, unknown>;
 };
 

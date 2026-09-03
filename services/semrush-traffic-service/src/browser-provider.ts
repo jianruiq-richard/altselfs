@@ -99,13 +99,17 @@ export class SemrushBrowserProvider implements DestinationProvider {
             'Six completed months are queried sequentially through the date picker on one warmed report tab.',
             'Speed mode scans only the first destination-table page for each month; payment destinations on later pages are not counted.',
             'The browser parser must be revalidated after Semrush UI changes.',
-            ...(monthlyResult.rowsScanned === 0
+            ...(monthlyResult.failedDisplayDates.length > 0
+              ? [`Monthly queries that failed after two attempts were skipped instead of stopping the remaining months: ${monthlyResult.failedDisplayDates.join(', ')}. Failed months are unavailable, not zero.`]
+              : []),
+            ...(monthlyResult.rowsScanned === 0 && monthlyResult.failedDisplayDates.length === 0
               ? ['All requested monthly destination tables returned an explicit empty state.']
               : []),
             ...(monthlyResult.observations.length === 0
-              ? ['No registered payment-platform destination appeared in the scanned rows.']
+              ? ['No registered payment-platform destination appeared in the successfully scanned rows.']
               : []),
           ],
+          failedDisplayDates: monthlyResult.failedDisplayDates,
           diagnostics: {
             reportUrl: redactQuery(reportUrl),
             parsedRows: monthlyResult.observations.length,
@@ -178,6 +182,13 @@ export class SemrushBrowserProvider implements DestinationProvider {
       attempts: number;
       elapsedMs: number;
     }>();
+    const failedByDisplayDate = new Map<string, {
+      displayDate: string;
+      attempts: number;
+      elapsedMs: number;
+      error: string;
+      screenshot: string;
+    }>();
     for (const displayDate of queryOrder) {
         const monthStartedAt = Date.now();
         const logStage = (stage: string, extra = '') => {
@@ -246,27 +257,53 @@ export class SemrushBrowserProvider implements DestinationProvider {
           }
         }
         if (lastError) {
-          throw new Error(
-            `Monthly query ${displayDate} failed after 2 attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}; screenshot=${lastArtifactPath}`,
-          );
+          failedByDisplayDate.set(displayDate, {
+            displayDate,
+            attempts: 2,
+            elapsedMs: Date.now() - monthStartedAt,
+            error: lastError instanceof Error ? lastError.message : String(lastError),
+            screenshot: lastArtifactPath,
+          });
+          logStage('continuing-after-failure', 'next=older-months');
         }
     }
-    const results = displayDates.map((displayDate) => {
+    const results = displayDates.flatMap((displayDate) => {
       const result = byDisplayDate.get(displayDate);
-      if (!result) throw new Error(`Monthly query ${displayDate} did not produce a result`);
-      return result;
+      return result ? [result] : [];
     });
+    if (results.length === 0) {
+      const failures = displayDates
+        .map((displayDate) => failedByDisplayDate.get(displayDate))
+        .filter((failure) => failure !== undefined);
+      throw new Error(`All requested monthly queries failed: ${failures
+        .map((failure) => `${failure.displayDate}: ${failure.error}`)
+        .join('; ')}`);
+    }
+    const failedDisplayDates = displayDates.filter((displayDate) => failedByDisplayDate.has(displayDate));
     return {
       observations: results.flatMap((result) => result.observations),
       rowsScanned: results.reduce((sum, result) => sum + result.rowsScanned, 0),
       pagesScanned: results.reduce((sum, result) => sum + result.pagesScanned, 0),
-      monthlyQueries: results.map(({ displayDate, rowsScanned, pagesScanned, attempts, elapsedMs }) => ({
-        displayDate,
-        rowsScanned,
-        pagesScanned,
-        attempts,
-        elapsedMs,
-      })),
+      failedDisplayDates,
+      monthlyQueries: displayDates.map((displayDate) => {
+        const result = byDisplayDate.get(displayDate);
+        if (result) {
+          const { rowsScanned, pagesScanned, attempts, elapsedMs } = result;
+          return { displayDate, status: 'succeeded', rowsScanned, pagesScanned, attempts, elapsedMs };
+        }
+        const failure = failedByDisplayDate.get(displayDate);
+        if (!failure) throw new Error(`Monthly query ${displayDate} did not produce a result or failure`);
+        return {
+          displayDate,
+          status: 'failed',
+          rowsScanned: null,
+          pagesScanned: null,
+          attempts: failure.attempts,
+          elapsedMs: failure.elapsedMs,
+          error: failure.error,
+          screenshot: failure.screenshot,
+        };
+      }),
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -633,9 +670,22 @@ export function isDestinationEmptyStateText(value: string) {
   return /(?:^|\s)(?:nothing found|no data|no results|未找到(?:任何)?(?:结果|数据)?|没有(?:找到)?(?:结果|数据)|暂无数据|无结果)(?:\s|$)/i.test(normalized);
 }
 
+export function isDestinationLoadErrorText(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return /^(?:something went wrong|出了点问题|出了问题|出错了|发生错误|加载失败)(?:[.!。！,，:：;；]|\s|$)/i.test(normalized);
+}
+
+async function visibleDestinationLoadErrorText(page: Page) {
+  const errorState = page.getByText(
+    /^(?:Something went wrong|出了点问题|出了问题|出错了|发生错误|加载失败)(?:[.!。！,，:：;；]|\s|$)/i,
+  ).filter({ visible: true }).first();
+  if (!await errorState.count().catch(() => 0)) return null;
+  const text = await errorState.innerText({ timeout: 250 }).catch(() => 'Something went wrong');
+  return isDestinationLoadErrorText(text) ? text.replace(/\s+/g, ' ').trim() : null;
+}
+
 export function buildMonthlyQueryOrder(displayDates: string[]) {
-  const latest = displayDates.at(-1);
-  return latest ? [latest, ...displayDates.filter((displayDate) => displayDate !== latest)] : [];
+  return [...displayDates].reverse();
 }
 
 async function hasEmptyDestinationState(page: Page) {
@@ -655,6 +705,8 @@ async function waitForRows(page: Page, timeoutMs = 90_000): Promise<DestinationT
   const deadline = Date.now() + timeoutMs;
   let emptySince = 0;
   while (Date.now() < deadline) {
+    const loadError = await visibleDestinationLoadErrorText(page);
+    if (loadError) throw new Error(`Semrush destination report displayed a load error: ${loadError}`);
     const texts = await rows.allTextContents().catch(() => []);
     if (texts.some((text) => /[a-z0-9-]+\.[a-z]{2,}/i.test(text))) return 'rows';
     if (await hasEmptyDestinationState(page)) {
@@ -683,6 +735,8 @@ async function waitForRowsToRefresh(page: Page, previousFingerprint: string, tim
   let stableSince = 0;
   let emptySince = 0;
   while (Date.now() - startedAt < timeoutMs) {
+    const loadError = await visibleDestinationLoadErrorText(page);
+    if (loadError) throw new Error(`Semrush destination report displayed a load error: ${loadError}`);
     const fingerprint = await destinationRowsFingerprint(page);
     if (fingerprint && fingerprint !== previousFingerprint) {
       if (fingerprint !== candidateFingerprint) {
