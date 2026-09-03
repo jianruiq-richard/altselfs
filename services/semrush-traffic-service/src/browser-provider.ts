@@ -632,13 +632,13 @@ async function findDomainInput(page: Page): Promise<Locator | null> {
   let fallback: Locator | null = null;
   for (let index = 0; index < Math.min(count, 100); index += 1) {
     const input = inputs.nth(index);
-    if (!await input.isVisible()) continue;
-    const metadata = [
-      await input.getAttribute('placeholder'),
-      await input.getAttribute('aria-label'),
-      await input.getAttribute('name'),
-      await input.getAttribute('data-ui-name'),
-    ].filter(Boolean).join(' ');
+    if (!await input.isVisible().catch(() => false)) continue;
+    const metadata = (await Promise.all([
+      input.getAttribute('placeholder', { timeout: 250 }).catch(() => null),
+      input.getAttribute('aria-label', { timeout: 250 }).catch(() => null),
+      input.getAttribute('name', { timeout: 250 }).catch(() => null),
+      input.getAttribute('data-ui-name', { timeout: 250 }).catch(() => null),
+    ])).filter(Boolean).join(' ');
     if (/pagination/i.test(metadata)) continue;
     fallback ||= input;
     if (/domain|website|site|competitor|网站|域名|竞争对手/i.test(metadata)) return input;
@@ -651,11 +651,12 @@ async function clickAnalyzeIfPresent(page: Page) {
   const count = await candidates.count();
   for (let index = 0; index < Math.min(count, 100); index += 1) {
     const candidate = candidates.nth(index);
-    const text = [
-      await candidate.innerText().catch(() => ''),
-      await candidate.getAttribute('aria-label'),
-    ].filter(Boolean).join(' ').trim();
-    if (/^(analy[sz]e|search|save|add|应用|查询|分析|保存|添加)$/i.test(text) && await candidate.isVisible()) {
+    const text = (await Promise.all([
+      candidate.innerText({ timeout: 250 }).catch(() => ''),
+      candidate.getAttribute('aria-label', { timeout: 250 }).catch(() => null),
+    ])).filter(Boolean).join(' ').trim();
+    if (/^(analy[sz]e|search|save|add|应用|查询|分析|保存|添加)$/i.test(text)
+      && await candidate.isVisible().catch(() => false)) {
       await dismissTransientOverlays(page);
       await candidate.click({ force: true });
       return;
