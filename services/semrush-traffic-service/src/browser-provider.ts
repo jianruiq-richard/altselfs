@@ -203,7 +203,7 @@ export class SemrushBrowserProvider implements DestinationProvider {
             if (attempt > 1) {
               await page.reload({ waitUntil: 'domcontentloaded', timeout: this.config.timeoutMs });
               await assertAuthenticated(page);
-              await ensureReportForDomain(page, input.domain);
+              await ensureReportForDomain(page, input.domain, 15_000);
               await selectDestinationsTab(page);
               await enterDomain(page, input.domain);
               if (this.config.manageSelectedDomains) {
@@ -389,11 +389,11 @@ function preferActiveReportUrl(currentValue: string, configuredValue: string) {
   return configuredValue;
 }
 
-async function ensureReportForDomain(page: Page, domain: string) {
+async function ensureReportForDomain(page: Page, domain: string, timeoutMs = 60_000) {
   const landingInput = page.getByPlaceholder(
     /输入域名|域名、子域名|enter.*domain|domain.*subdomain|website/i,
   ).first();
-  const deadline = Date.now() + 60_000;
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await findVisibleExactText(page, /^(destinations?|目标)$/i)) return;
     if (await landingInput.isVisible().catch(() => false)) break;
@@ -772,7 +772,7 @@ async function switchToSingleMonth(page: Page, displayDate: string) {
   const year = Number(match[1]);
   const month = Number(match[2]);
   await dismissTransientOverlays(page);
-  await page.getByTestId('history-selector-trigger').click({ force: true });
+  await page.getByTestId('history-selector-trigger').click({ force: true, timeout: 10_000 });
   const dialog = page.getByRole('dialog');
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   const chineseLabel = `${year}年${month}月`;
@@ -786,7 +786,7 @@ async function switchToSingleMonth(page: Page, displayDate: string) {
   }).first();
   await localizedCell.waitFor({ state: 'visible', timeout: 10_000 });
   await localizedCell.click();
-  await page.getByTestId('selector-apply').click({ force: true });
+  await page.getByTestId('selector-apply').click({ force: true, timeout: 10_000 });
   await page.waitForURL((url) => singleMonthFromReportUrl(url.toString()) === displayDate, {
     timeout: 30_000,
   });
