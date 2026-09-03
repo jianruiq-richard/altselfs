@@ -77,13 +77,6 @@ export class SemrushBrowserProvider implements DestinationProvider {
         domainsRemoved = await removeExtraDomains(page, input.domain);
       }
       await assertExclusiveDomain(page, input.domain);
-      if (domainAdded || domainsRemoved) {
-        await waitForRowsToRefresh(page, previousRows);
-      } else {
-        await waitForRows(page);
-      }
-      await goToFirstPage(page);
-      await waitForRows(page);
       if (useWarmMonthlyPage) {
         const monthlyResult = await this.readMonthlyOnWarmPage(
           page,
@@ -124,6 +117,13 @@ export class SemrushBrowserProvider implements DestinationProvider {
           },
         };
       }
+      if (domainAdded || domainsRemoved) {
+        await waitForRowsToRefresh(page, previousRows);
+      } else {
+        await waitForRows(page);
+      }
+      await goToFirstPage(page);
+      await waitForRows(page);
       const rangePageLimit = input.rangeMode ? 1 : 100;
       const readResult = await readPaymentDestinationRowsAcrossPages(
         page,
