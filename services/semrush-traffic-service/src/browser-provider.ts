@@ -200,6 +200,18 @@ export class SemrushBrowserProvider implements DestinationProvider {
         for (let attempt = 1; attempt <= 2; attempt += 1) {
           try {
             logStage('start', `attempt=${attempt}`);
+            if (attempt > 1) {
+              await page.reload({ waitUntil: 'domcontentloaded', timeout: this.config.timeoutMs });
+              await assertAuthenticated(page);
+              await ensureReportForDomain(page, input.domain);
+              await selectDestinationsTab(page);
+              await enterDomain(page, input.domain);
+              if (this.config.manageSelectedDomains) {
+                await removeExtraDomains(page, input.domain);
+              }
+              await assertExclusiveDomain(page, input.domain);
+              logStage('recovered', `attempt=${attempt}`);
+            }
             await switchToSingleMonth(page, displayDate);
             logStage('month-selected', `attempt=${attempt}`);
             await assertAuthenticated(page);
@@ -238,22 +250,6 @@ export class SemrushBrowserProvider implements DestinationProvider {
               `attempt=${attempt} error=${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
             );
             await page.keyboard.press('Escape').catch(() => undefined);
-            if (attempt < 2) {
-              await page.reload({ waitUntil: 'domcontentloaded', timeout: this.config.timeoutMs });
-              await assertAuthenticated(page);
-              await ensureReportForDomain(page, input.domain);
-              await selectDestinationsTab(page);
-              const previousRows = await destinationRowsFingerprint(page);
-              const domainAdded = await enterDomain(page, input.domain);
-              let domainsRemoved = false;
-              if (this.config.manageSelectedDomains) {
-                domainsRemoved = await removeExtraDomains(page, input.domain);
-              }
-              await assertExclusiveDomain(page, input.domain);
-              if (domainAdded || domainsRemoved) {
-                await waitForRowsToRefresh(page, previousRows);
-              }
-            }
           }
         }
         if (lastError) {
