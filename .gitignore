@@ -59,6 +59,10 @@ Altselfsfigma/
 
 # log
 docs/
+!services/personal-agent-server/docs/
+services/personal-agent-server/docs/*
+!services/personal-agent-server/docs/market-intelligence-schema.sql
+!services/personal-agent-server/docs/market-intelligence-mock-seed.sql
 
 # local secrets
 .secrets/

@@ -3,6 +3,7 @@
 import { SignOutButton, useUser } from '@clerk/nextjs';
 import {
   ChevronRight,
+  Database,
   LogOut,
   Menu,
   MessagesSquare,
@@ -18,13 +19,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { WorkspaceDiscordLink } from '@/components/workspace-discord-link';
 import { productBrand } from '@/lib/brand';
+import { hasProductIntelligenceAccess } from '@/lib/product-intelligence-access';
 import {
   prefetchWorkspaceBootstrap,
   prefetchWorkspaceRouteData,
   resetWorkspaceClientCache,
 } from '@/lib/workspace-client-cache';
 
-type WorkspaceNavKey = 'discussion' | 'connectors' | 'settings';
+type WorkspaceNavKey = 'product-intelligence' | 'discussion' | 'connectors' | 'settings';
 type SidebarLocation = 'desktop' | 'mobile';
 
 type AstromarWorkspaceShellProps = {
@@ -41,6 +43,7 @@ type AstromarWorkspaceShellProps = {
 const DEFAULT_WORKSPACE_ENTRY_HREF = '/investor/chat/100';
 
 const navItems = [
+  { key: 'product-intelligence' as const, name: 'Product Intelligence', href: '/product-intelligence', icon: Database },
   { key: 'discussion' as const, name: 'Discussion', href: DEFAULT_WORKSPACE_ENTRY_HREF, icon: MessagesSquare },
   { key: 'connectors' as const, name: 'Connectors', href: '/connectors', icon: Plug },
   { key: 'settings' as const, name: 'Settings', href: '/profile', icon: Settings },
@@ -57,6 +60,7 @@ function buildSignInRedirectUrl() {
 }
 
 function activeNavKey(pathname: string): WorkspaceNavKey | null {
+  if (pathname.startsWith('/product-intelligence')) return 'product-intelligence';
   if (pathname.startsWith('/investor/chat')) return 'discussion';
   if (pathname.startsWith('/connectors')) return 'connectors';
   if (pathname.startsWith('/pricing')) return null;
@@ -79,6 +83,10 @@ export function AstromarWorkspaceShell({
   const { isLoaded, isSignedIn, user } = useUser();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const activeKey = useMemo(() => activeNavKey(pathname), [pathname]);
+  const canAccessProductIntelligence = hasProductIntelligenceAccess(user?.primaryEmailAddress?.emailAddress);
+  const visibleNavItems = canAccessProductIntelligence
+    ? navItems
+    : navItems.filter((item) => item.key !== 'product-intelligence');
 
   useEffect(() => {
     if (!isLoaded || isSignedIn) return;
@@ -89,7 +97,12 @@ export function AstromarWorkspaceShell({
     if (!isLoaded || !isSignedIn) return;
     const prefetchCommonRoutes = () => {
       prefetchWorkspaceBootstrap();
-      ['/investor/chat/100', '/connectors', '/profile'].forEach((href) => {
+      [
+        ...(canAccessProductIntelligence ? ['/product-intelligence'] : []),
+        '/investor/chat/100',
+        '/connectors',
+        '/profile',
+      ].forEach((href) => {
         router.prefetch(href);
         prefetchWorkspaceRouteData(href);
       });
@@ -100,7 +113,7 @@ export function AstromarWorkspaceShell({
     }
     const timeout = globalThis.setTimeout(prefetchCommonRoutes, 1200);
     return () => globalThis.clearTimeout(timeout);
-  }, [isLoaded, isSignedIn, router]);
+  }, [canAccessProductIntelligence, isLoaded, isSignedIn, router]);
 
   if (!isLoaded || !isSignedIn) {
     return (
@@ -173,7 +186,7 @@ export function AstromarWorkspaceShell({
       )}
 
       <nav className="grid shrink-0 gap-0.5 border-b border-white/[0.09] px-2.5 pb-3" aria-label="Workspace navigation">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           const active = item.key === activeKey;
           return (

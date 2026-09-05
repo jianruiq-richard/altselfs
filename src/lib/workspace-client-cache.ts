@@ -154,6 +154,7 @@ export const WORKSPACE_CACHE_KEYS = {
   billingDetails: 'workspace:billing-details',
   billingSummary: 'workspace:billing-summary',
   userProfile: 'workspace:user-profile',
+  productIntelligence: 'workspace:product-intelligence',
   archivedSessions: 'workspace:archived-sessions',
   personalAgentSessions: 'workspace:personal-agent:sessions',
   personalAgentDefault: 'workspace:personal-agent:default',
@@ -291,6 +292,16 @@ export function prefetchWorkspaceRouteData(href: string) {
   if (url.origin !== window.location.origin) return;
 
   const pathname = url.pathname;
+  if (pathname.startsWith('/product-intelligence')) {
+    prefetchWorkspaceJson<{ products?: unknown[] }>(
+      WORKSPACE_CACHE_KEYS.productIntelligence,
+      '/api/product-intelligence/products?limit=100',
+      {},
+      { ttlMs: 60_000 },
+    );
+    return;
+  }
+
   if (pathname.startsWith('/connectors')) {
     prefetchWorkspaceJson<{ connectors?: unknown[] }>(
       WORKSPACE_CACHE_KEYS.connectors,

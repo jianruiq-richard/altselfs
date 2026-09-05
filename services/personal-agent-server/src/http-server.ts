@@ -79,6 +79,10 @@ import {
   syncCurrentStripeSubscription,
 } from './stripe-billing.js';
 import { releaseRunCredits } from './credit-settlement.js';
+import {
+  listMarketProducts,
+  type MarketProductSort,
+} from './market-intelligence-store.js';
 import { getActiveRuntoolScope, isAgentRunCancelledError } from './run-control.js';
 import { normalizeToolNameList } from './connector-tool-scope.js';
 import { calculateDirectoryBytes, sanitizePathSegment } from './sandbox-runtime.js';
@@ -161,6 +165,23 @@ export function createHttpServer(
         const jobs = memoryReviewQueue ? await memoryReviewQueue.listRecent(100) : [];
         const includeUserResources = url.searchParams.get('includeUserResources') !== 'false';
         return json(res, 200, await buildOpsSnapshot(config, jobs, { includeUserResources }));
+      }
+
+      if (req.method === 'GET' && url.pathname === '/internal/market-intelligence/products') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        try {
+          const sort = url.searchParams.get('sort')?.trim() as MarketProductSort | undefined;
+          return json(res, 200, await listMarketProducts(config, {
+            query: url.searchParams.get('q') || undefined,
+            category: url.searchParams.get('category') || undefined,
+            sort,
+            limit: Number(url.searchParams.get('limit') || 50),
+          }));
+        } catch (error) {
+          console.error('[market-intelligence] failed to list products', error);
+          return json(res, 503, { error: 'Product intelligence is temporarily unavailable.' });
+        }
       }
 
       if (req.method === 'GET' && url.pathname === '/internal/admin/resources/user') {

@@ -40,6 +40,7 @@ const RIGHT_RAIL_SLOT_ID = 'astromar-workspace-right-rail-slot';
 const NAVIGATION_START_EVENT = 'astromar:workspace-navigation-start';
 
 function defaultMobileTitle(pathname: string) {
+  if (pathname.startsWith('/product-intelligence')) return 'Product Intelligence';
   if (pathname.startsWith('/investor/chat')) return 'Discussion';
   if (pathname.startsWith('/connectors')) return 'Connectors';
   if (pathname.startsWith('/profile')) return 'Settings';
