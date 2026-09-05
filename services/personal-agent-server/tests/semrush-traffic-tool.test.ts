@@ -14,6 +14,8 @@ test('exposes the Semrush payment destinations dynamic tool', () => {
   assert.equal(tool.name, SEMRUSH_PAYMENT_DESTINATIONS_TOOL_NAME);
   assert.deepEqual(tool.inputSchema.required, ['domain']);
   assert.deepEqual(tool.inputSchema.properties.months.enum, [6]);
+  assert.equal(tool.inputSchema.properties.month.pattern, '^\\d{4}-(?:0[1-9]|1[0-2])$');
+  assert.match(tool.description, /specific calendar month/);
 });
 
 test('advertises the Semrush tool on both non-local Codex profiles', () => {
@@ -25,14 +27,14 @@ test('advertises the Semrush tool on both non-local Codex profiles', () => {
   }
 });
 
-test('proxies a fixed six-month request to the browser worker', async (t) => {
-  let receivedBody: unknown;
+test('proxies default six-month and specified-month requests to the browser worker', async (t) => {
+  const receivedBodies: unknown[] = [];
   let receivedAuthorization = '';
   const server = http.createServer(async (req, res) => {
     receivedAuthorization = req.headers.authorization || '';
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    receivedBody = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    receivedBodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ source: 'semrush-browser-ui', data: { paymentOutboundVisits: 28_000 } }));
   });
@@ -53,5 +55,20 @@ test('proxies a fixed six-month request to the browser worker', async (t) => {
   const result = JSON.parse(await runSemrushTraffictool({ domain: 'tapnow.ai', months: 1 }, config));
   assert.equal(result.data.paymentOutboundVisits, 28_000);
   assert.equal(receivedAuthorization, 'Bearer test-token');
-  assert.deepEqual(receivedBody, { domain: 'tapnow.ai', months: 6 });
+  assert.deepEqual(receivedBodies[0], { domain: 'tapnow.ai', months: 6 });
+
+  const exactMonthResult = JSON.parse(await runSemrushTraffictool({
+    domain: 'tapnow.ai',
+    month: '2026-05',
+  }, config));
+  assert.equal(exactMonthResult.data.paymentOutboundVisits, 28_000);
+  assert.deepEqual(receivedBodies[1], { domain: 'tapnow.ai', month: '2026-05' });
+
+  const invalidCombination = JSON.parse(await runSemrushTraffictool({
+    domain: 'tapnow.ai',
+    month: '2026-05',
+    months: 6,
+  }, config));
+  assert.equal(invalidCombination.error, 'month cannot be combined with months');
+  assert.equal(receivedBodies.length, 2);
 });

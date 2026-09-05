@@ -10,6 +10,16 @@ Content-Type: application/json
 {"domain":"tapnow.ai","months":6}
 ```
 
+To query one exact calendar month while keeping the first-page-only scan:
+
+```http
+POST /v1/payment-destinations
+Authorization: Bearer $SEMRUSH_SERVICE_TOKEN
+Content-Type: application/json
+
+{"domain":"tapnow.ai","month":"2026-05"}
+```
+
 The production path uses the authorized Semrush web interface. It selects the
 last six completed calendar months, opens **Traffic & Market → Sources &
 Destinations → Destinations**, enforces a single target website, reads the
@@ -17,8 +27,14 @@ absolute **Visits** column, and returns monthly values plus
 rolling six-, three-, and one-month totals for destinations matched by the
 explicit payment-platform domain registry.
 
-The six-month browser path uses a speed-first scan: it reads only the first
-destination-table page for each month. If that page has no registered payment
+When `month` is supplied, it must use `YYYY-MM` format and must not be combined
+with `months`. The response contains one `monthly` entry for that exact calendar
+month. Rolling `last6Months`, `last3Months`, and `last1Month` fields are `null`
+because an explicitly selected historical month is not a rolling latest-month
+window. `paymentOutboundVisits` contains the selected month's total.
+
+The six-month and exact-month browser paths use a speed-first scan: they read
+only the first destination-table page for each month. If that page has no registered payment
 platform, the month is reported as zero. Payment destinations that appear only
 on later pages are intentionally omitted. A month that fails to render because
 of a transient 3ue load issue is retried once in a fresh tab. If both attempts
@@ -94,6 +110,8 @@ npm run build
 ```
 
 Real-account smoke tests are required after Semrush changes its rendered table.
-Six-month responses query each completed month separately. Legacy three-month
+Six-month responses query each completed month separately. Exact-month responses
+query the requested calendar month separately and retain the same first-page-only
+scan. Legacy three-month
 range-mode responses intentionally return `monthly: null`: the UI supplies one
 range total, so the service does not invent per-month values.

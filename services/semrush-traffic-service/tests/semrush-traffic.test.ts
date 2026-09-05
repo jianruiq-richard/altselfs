@@ -15,7 +15,7 @@ import {
 import { normalizeTargetDomain } from '../src/domains.js';
 import { lastCompletedMonthStarts } from '../src/months.js';
 import { parseSemrushDestinationsCsv } from '../src/semrush-api-provider.js';
-import { normalizeQueryInput } from '../src/service.js';
+import { normalizeQueryInput, queryPaymentDestinations } from '../src/service.js';
 
 test('lastCompletedMonthStarts excludes the current partial month', () => {
   assert.deepEqual(
@@ -134,6 +134,62 @@ test('allows one-month diagnostic range queries without changing the normal tool
     () => normalizeQueryInput({ domain: 'tapnow.ai', months: 1 }),
     /months must be either 3 or 6/,
   );
+});
+
+test('normalizes an exact calendar month without diagnostic range mode', () => {
+  assert.deepEqual(normalizeQueryInput({ domain: 'tapnow.ai', month: '2026-05' }), {
+    domain: 'tapnow.ai',
+    months: 1,
+    month: '2026-05',
+    rangeMode: false,
+    country: undefined,
+    paymentDomains: undefined,
+  });
+  assert.throws(
+    () => normalizeQueryInput({ domain: 'tapnow.ai', month: '2026-13' }),
+    /month must use YYYY-MM format/,
+  );
+  assert.throws(
+    () => normalizeQueryInput({ domain: 'tapnow.ai', month: '2026-05', months: 6 }),
+    /month cannot be combined with months/,
+  );
+  assert.throws(
+    () => normalizeQueryInput({ domain: 'tapnow.ai', month: '2026-05', rangeMode: true }),
+    /month cannot be combined with diagnostic range mode/,
+  );
+});
+
+test('queries and aggregates only the explicitly requested calendar month', async () => {
+  let receivedDisplayDates: string[] = [];
+  let receivedMonth: string | undefined;
+  const result = await queryPaymentDestinations({
+    async query(input, displayDates) {
+      receivedMonth = input.month;
+      receivedDisplayDates = displayDates;
+      return {
+        provider: 'semrush-browser-ui' as const,
+        granularity: 'month' as const,
+        warnings: [],
+        observations: [{
+          displayDate: displayDates[0],
+          destination: 'stripe.com',
+          traffic: 1_234,
+          trafficShare: null,
+          categories: ['Payments'],
+        }],
+      };
+    },
+  }, { domain: 'tapnow.ai', month: '2026-05' });
+
+  assert.equal(receivedMonth, '2026-05');
+  assert.deepEqual(receivedDisplayDates, ['2026-05-01']);
+  assert.equal(result.input.month, '2026-05');
+  assert.equal(result.data.paymentOutboundVisits, 1_234);
+  assert.deepEqual(result.data.monthly?.map((entry) => entry.displayDate), ['2026-05-01']);
+  assert.equal(result.data.last6MonthsPaymentOutboundVisits, null);
+  assert.equal(result.data.last3MonthsPaymentOutboundVisits, null);
+  assert.equal(result.data.last1MonthPaymentOutboundVisits, null);
+  assert.equal(result.definition.currentMonthExcluded, false);
 });
 
 test('parses Semrush Traffic Destinations CSV', () => {

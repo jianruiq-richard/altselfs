@@ -50,7 +50,7 @@ export class SemrushBrowserProvider implements DestinationProvider {
     const page = await this.getReportPage(context);
     page.setDefaultTimeout(this.config.timeoutMs);
     try {
-      const useWarmMonthlyPage = input.months === 6 && !input.rangeMode;
+      const useWarmMonthlyPage = !input.rangeMode && (input.months === 6 || Boolean(input.month));
       let reportUrl = buildReportUrl(
         this.config.reportUrl,
         useWarmMonthlyPage ? [displayDates.at(-1) || displayDates[0]] : displayDates,
@@ -89,7 +89,9 @@ export class SemrushBrowserProvider implements DestinationProvider {
           observations: monthlyResult.observations,
           warnings: [
             'Browser mode reads the rendered single-domain destination table and its absolute Visits column.',
-            'Six completed months are queried sequentially through the date picker on one warmed report tab.',
+            input.month
+              ? `The specified calendar month ${input.month} is queried through the date picker.`
+              : 'Six completed months are queried sequentially through the date picker on one warmed report tab.',
             'Speed mode scans only the first destination-table page for each month; payment destinations on later pages are not counted.',
             'The browser parser must be revalidated after Semrush UI changes.',
             ...(monthlyResult.failedDisplayDates.length > 0

@@ -8,7 +8,7 @@ export function createSemrushTrafficDynamictool() {
     namespace: null,
     name: SEMRUSH_PAYMENT_DESTINATIONS_TOOL_NAME,
     description:
-      'Read Semrush Traffic & Market > Sources & Destinations > Destinations for one target domain. Returns each available one of the last six completed calendar months plus rolling six-, three-, and one-month totals of absolute outbound visits to registered payment-platform domains. A month that still fails after one retry is marked unavailable while older months continue; failed months and rolling windows containing them are null, not zero. Speed mode scans only the first destination-table page per month, so later-page payment destinations are omitted. The browser worker requires an active authorized Semrush web session, processes one domain at a time, permits at most three waiting requests, and rejects comparison groups containing non-target sites.',
+      'Read Semrush Traffic & Market > Sources & Destinations > Destinations for one target domain. By default, returns each available one of the last six completed calendar months plus rolling six-, three-, and one-month totals of absolute outbound visits to registered payment-platform domains. To query one specific calendar month instead, pass month in YYYY-MM format and omit months. A month that still fails after one retry is marked unavailable; failed months and rolling windows containing them are null, not zero. Speed mode scans only the first destination-table page per month, so later-page payment destinations are omitted. The browser worker requires an active authorized Semrush web session, processes one domain at a time, permits at most three waiting requests, and rejects comparison groups containing non-target sites.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -19,7 +19,12 @@ export function createSemrushTrafficDynamictool() {
         months: {
           type: 'integer',
           enum: [6],
-          description: 'Fixed at six completed calendar months.',
+          description: 'Optional legacy selector fixed at 6. Omit it when month is provided.',
+        },
+        month: {
+          type: 'string',
+          pattern: '^\\d{4}-(?:0[1-9]|1[0-2])$',
+          description: 'Optional exact calendar month in YYYY-MM format, for example 2026-05. Do not combine with months.',
         },
         paymentDomains: {
           type: 'array',
@@ -43,6 +48,14 @@ export async function runSemrushTraffictool(argumentsValue: unknown, config: Ser
   const args = isRecord(argumentsValue) ? argumentsValue : {};
   const domain = typeof args.domain === 'string' ? args.domain.trim() : '';
   if (!domain) return JSON.stringify({ source: 'semrush-browser-ui', error: 'domain is required' });
+  const hasMonth = args.month !== undefined;
+  const month = typeof args.month === 'string' ? args.month.trim() : '';
+  if (hasMonth && !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) {
+    return JSON.stringify({ source: 'semrush-browser-ui', error: 'month must use YYYY-MM format' });
+  }
+  if (hasMonth && args.months !== undefined) {
+    return JSON.stringify({ source: 'semrush-browser-ui', error: 'month cannot be combined with months' });
+  }
   if (!config.semrushTrafficToolEnabled) {
     return JSON.stringify({ source: 'semrush-browser-ui', error: 'Semrush traffic browser tool is disabled' });
   }
@@ -61,7 +74,7 @@ export async function runSemrushTraffictool(argumentsValue: unknown, config: Ser
       },
       body: JSON.stringify({
         domain,
-        months: 6,
+        ...(hasMonth ? { month } : { months: 6 }),
         ...(Array.isArray(args.paymentDomains) ? { paymentDomains: args.paymentDomains } : {}),
       }),
       signal: controller.signal,

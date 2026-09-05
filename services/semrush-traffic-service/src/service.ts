@@ -25,20 +25,31 @@ export async function queryPaymentDestinations(
   referenceDate = new Date(),
 ) {
   const input = normalizeQueryInput(value);
-  const displayDates = lastCompletedMonthStarts(referenceDate, input.months);
+  const displayDates = input.month
+    ? [`${input.month}-01`]
+    : lastCompletedMonthStarts(referenceDate, input.months);
   const providerResult = await provider.query(input, displayDates);
   return aggregatePaymentDestinations(input, displayDates, providerResult);
 }
 
 export function normalizeQueryInput(value: unknown): QueryInput {
   const record = isRecord(value) ? value : {};
-  const months = record.months === undefined ? 6 : Number(record.months);
+  const month = normalizeRequestedMonth(record.month);
   const rangeMode = record.rangeMode === true;
-  const validMonths = rangeMode ? [1, 3, 6] : [3, 6];
-  if (!validMonths.includes(months)) {
-    throw new Error(rangeMode
-      ? 'months must be 1, 3, or 6 in diagnostic range mode'
-      : 'months must be either 3 or 6 for this tool');
+  if (month && record.months !== undefined) {
+    throw new Error('month cannot be combined with months');
+  }
+  if (month && rangeMode) {
+    throw new Error('month cannot be combined with diagnostic range mode');
+  }
+  const months = month ? 1 : record.months === undefined ? 6 : Number(record.months);
+  if (!month) {
+    const validMonths = rangeMode ? [1, 3, 6] : [3, 6];
+    if (!validMonths.includes(months)) {
+      throw new Error(rangeMode
+        ? 'months must be 1, 3, or 6 in diagnostic range mode'
+        : 'months must be either 3 or 6 for this tool');
+    }
   }
   const country = typeof record.country === 'string' && record.country.trim()
     ? record.country.trim().toUpperCase()
@@ -51,10 +62,19 @@ export function normalizeQueryInput(value: unknown): QueryInput {
   return {
     domain: normalizeTargetDomain(record.domain),
     months,
+    ...(month ? { month } : {}),
     rangeMode,
     country,
     paymentDomains,
   };
+}
+
+function normalizeRequestedMonth(value: unknown) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(value.trim())) {
+    throw new Error('month must use YYYY-MM format');
+  }
+  return value.trim();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -18,6 +18,7 @@ export type DestinationProviderResult = {
 export type QueryInput = {
   domain: string;
   months: number;
+  month?: string;
   rangeMode?: boolean;
   country?: string;
   paymentDomains?: string[];

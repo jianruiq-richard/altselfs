@@ -213,9 +213,12 @@ When `WEB_SEARCH_PROVIDER=auto`, the server chooses `serpapi` first, then
 Set `SEMRUSH_TRAFFIC_TOOL_ENABLED=true` to expose
 `altselfs_semrush_payment_destinations` to both `codex-general` and
 `codex-competitive-intelligence`. The tool calls the colocated
-`semrush-traffic` browser worker and always requests the last six completed
-months. It returns per-month values plus rolling six-, three-, and one-month
-totals. Its single-target check rejects Semrush comparison groups so a traffic
+`semrush-traffic` browser worker. With only `domain`, it requests the last six
+completed months and returns per-month values plus rolling six-, three-, and
+one-month totals. With `month` in `YYYY-MM` format, it requests that exact
+calendar month and returns its payment outbound total; `month` must not be
+combined with `months`. Both modes scan only the first destination-table page.
+Its single-target check rejects Semrush comparison groups so a traffic
 percentage cannot be mistaken for absolute visits. Set
 `SEMRUSH_TRAFFIC_REQUEST_TIMEOUT_MS=600000` for the measured browser runtime.
 The worker runs one domain query at a time and keeps at most three additional

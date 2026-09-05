@@ -94,7 +94,13 @@ export function aggregatePaymentDestinations(
   };
   const successfulDisplayDates = displayDates.filter((displayDate) => !failedDisplayDates.has(displayDate));
   const hasPartialMonthlyCoverage = providerResult.granularity === 'month' && failedDisplayDates.size > 0;
-  const periodTotals = providerResult.granularity === 'month'
+  const periodTotals = input.month
+    ? {
+      last6MonthsPaymentOutboundVisits: null,
+      last3MonthsPaymentOutboundVisits: null,
+      last1MonthPaymentOutboundVisits: null,
+    }
+    : providerResult.granularity === 'month'
     ? {
       last6MonthsPaymentOutboundVisits: displayDates.length >= 6 ? monthlyWindowTotal(6) : null,
       last3MonthsPaymentOutboundVisits: monthlyWindowTotal(3),
@@ -112,6 +118,7 @@ export function aggregatePaymentDestinations(
     input: {
       domain: input.domain,
       months: input.months,
+      ...(input.month ? { month: input.month } : {}),
       country: input.country || 'GLOBAL',
       displayDates,
     },
@@ -140,11 +147,13 @@ export function aggregatePaymentDestinations(
       metric: providerResult.granularity === 'month'
         ? hasPartialMonthlyCoverage
           ? 'Partial sum of Semrush destination traffic for matched payment-platform domains across successfully queried completed months; failed months are unavailable, not zero.'
-          : 'Sum of Semrush destination traffic for matched payment-platform domains across the last completed months.'
+          : input.month
+            ? `Semrush destination traffic for matched payment-platform domains during ${input.month}.`
+            : 'Sum of Semrush destination traffic for matched payment-platform domains across the last completed months.'
         : 'Semrush destination traffic for matched payment-platform domains over the selected completed-month range.',
       granularity: providerResult.granularity,
       paymentDomainRoots: registry.map((entry) => entry.rootDomain),
-      currentMonthExcluded: true,
+      currentMonthExcluded: !input.month,
     },
     warnings: providerResult.warnings,
     ...(providerResult.diagnostics ? { diagnostics: providerResult.diagnostics } : {}),
