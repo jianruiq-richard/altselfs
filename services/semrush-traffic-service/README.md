@@ -46,7 +46,11 @@ month fails, the request fails.
 It deliberately does not call an undocumented private endpoint. Browser actions
 are serialized at the request level because they share one persistent Chrome
 profile and active node-specific Semrush list. Months within a request are read
-sequentially from newest to oldest on one warmed report tab.
+sequentially from newest to oldest on one warmed report tab. The worker adds
+20%-jittered pacing after product and month changes, between months and requests,
+and before retries. Semrush load/frequency messages such as `Something went
+wrong` use the longer rate-limit cooldown. Pacing waits are logged with a
+`pacing stage=... delayMs=...` entry for production diagnosis.
 
 ## Required browser setup
 
@@ -92,6 +96,12 @@ subscribed account.
 - `SEMRUSH_BROWSER_ARTIFACT_DIR` (default `/data/semrush-browser-artifacts`)
 - `SEMRUSH_BROWSER_MANAGE_FILTERS` (enable only for the dedicated list)
 - Monthly reports reuse one warmed browser tab and switch months through the date picker.
+- `SEMRUSH_BROWSER_ACTION_DELAY_MS` (default `2500`; base product-change settling delay)
+- `SEMRUSH_BROWSER_MONTH_SWITCH_DELAY_MS` (default `2500`; base post-month-switch settling delay)
+- `SEMRUSH_BROWSER_MONTH_GAP_DELAY_MS` (default `4000`; base delay between monthly scans)
+- `SEMRUSH_BROWSER_REQUEST_GAP_DELAY_MS` (default `6000`; base gap between queued website requests)
+- `SEMRUSH_BROWSER_RETRY_DELAY_MS` (default `12000`; base delay before an ordinary retry)
+- `SEMRUSH_BROWSER_RATE_LIMIT_DELAY_MS` (default `35000`; base delay before a frequency/load-error retry and before continuing after a repeated frequency/load error)
 - `SEMRUSH_QUEUE_MAX_WAITING` (default `3`; one request runs and at most three wait; additional requests receive HTTP `429`)
 - `SEMRUSH_BROWSER_TIMEOUT_MS` (default `90000`)
 - `SEMRUSH_BROWSER_HEADLESS` (keep `false` for the managed ECS browser)

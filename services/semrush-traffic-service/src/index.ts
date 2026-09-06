@@ -69,6 +69,14 @@ function loadConfig(): ServiceConfig {
       manageSelectedDomains: readBool('SEMRUSH_BROWSER_MANAGE_FILTERS', false),
       timeoutMs: readPositiveInt('SEMRUSH_BROWSER_TIMEOUT_MS', 90_000),
       artifactDir: path.resolve(process.env.SEMRUSH_BROWSER_ARTIFACT_DIR?.trim() || '/data/semrush-browser-artifacts'),
+      pacing: {
+        actionDelayMs: readNonNegativeInt('SEMRUSH_BROWSER_ACTION_DELAY_MS', 2_500),
+        monthSwitchDelayMs: readNonNegativeInt('SEMRUSH_BROWSER_MONTH_SWITCH_DELAY_MS', 2_500),
+        monthGapDelayMs: readNonNegativeInt('SEMRUSH_BROWSER_MONTH_GAP_DELAY_MS', 4_000),
+        requestGapDelayMs: readNonNegativeInt('SEMRUSH_BROWSER_REQUEST_GAP_DELAY_MS', 6_000),
+        retryDelayMs: readNonNegativeInt('SEMRUSH_BROWSER_RETRY_DELAY_MS', 12_000),
+        rateLimitDelayMs: readNonNegativeInt('SEMRUSH_BROWSER_RATE_LIMIT_DELAY_MS', 35_000),
+      },
     },
   };
 }

@@ -26,21 +26,65 @@ export type BrowserProviderConfig = {
   manageSelectedDomains: boolean;
   timeoutMs: number;
   artifactDir: string;
+  pacing: BrowserPacingConfig;
 };
+
+export type BrowserPacingConfig = {
+  actionDelayMs: number;
+  monthSwitchDelayMs: number;
+  monthGapDelayMs: number;
+  requestGapDelayMs: number;
+  retryDelayMs: number;
+  rateLimitDelayMs: number;
+};
+
+const PACING_JITTER_RATIO = 0.2;
 
 export class SemrushBrowserProvider implements DestinationProvider {
   private queue: Promise<void> = Promise.resolve();
   private cdpConnection?: Promise<{ browser: Browser; context: BrowserContext }>;
+  private lastQueryFinishedAt = 0;
 
   constructor(private readonly config: BrowserProviderConfig) {}
 
   async query(input: QueryInput, displayDates: string[]): Promise<DestinationProviderResult> {
+    const execute = async () => {
+      await this.waitForRequestGap(input.domain);
+      try {
+        return await this.querySerial(input, displayDates);
+      } finally {
+        this.lastQueryFinishedAt = Date.now();
+      }
+    };
     const run = this.queue.then(
-      () => this.querySerial(input, displayDates),
-      () => this.querySerial(input, displayDates),
+      execute,
+      execute,
     );
     this.queue = run.then(() => undefined, () => undefined);
     return run;
+  }
+
+  private async waitForRequestGap(domain: string) {
+    if (this.lastQueryFinishedAt === 0) return;
+    const targetDelayMs = jitteredPacingDelayMs(this.config.pacing.requestGapDelayMs);
+    const remainingMs = Math.max(0, this.lastQueryFinishedAt + targetDelayMs - Date.now());
+    if (remainingMs === 0) return;
+    console.log(`[semrush-traffic] pacing stage=between-requests delayMs=${remainingMs} domain=${domain}`);
+    await sleep(remainingMs);
+  }
+
+  private async waitForPacing(
+    page: Page,
+    stage: string,
+    baseDelayMs: number,
+    details = '',
+  ) {
+    const delayMs = jitteredPacingDelayMs(baseDelayMs);
+    if (delayMs === 0) return 0;
+    const suffix = details ? ` ${details}` : '';
+    console.log(`[semrush-traffic] pacing stage=${stage} delayMs=${delayMs}${suffix}`);
+    await page.waitForTimeout(delayMs);
+    return delayMs;
   }
 
   private async querySerial(input: QueryInput, displayDates: string[]): Promise<DestinationProviderResult> {
@@ -77,6 +121,12 @@ export class SemrushBrowserProvider implements DestinationProvider {
         domainsRemoved = await removeExtraDomains(page, input.domain);
       }
       await assertExclusiveDomain(page, input.domain);
+      await this.waitForPacing(
+        page,
+        'product-settle',
+        this.config.pacing.actionDelayMs,
+        `domain=${input.domain}`,
+      );
       if (useWarmMonthlyPage) {
         const monthlyResult = await this.readMonthlyOnWarmPage(
           page,
@@ -89,6 +139,7 @@ export class SemrushBrowserProvider implements DestinationProvider {
           observations: monthlyResult.observations,
           warnings: [
             'Browser mode reads the rendered single-domain destination table and its absolute Visits column.',
+            'Browser actions use jittered pacing between product changes, month changes, requests, and retries to reduce Semrush frequency-limit failures.',
             input.month
               ? `The specified calendar month ${input.month} is queried through the date picker.`
               : 'Six completed months are queried sequentially through the date picker on one warmed report tab.',
@@ -113,6 +164,7 @@ export class SemrushBrowserProvider implements DestinationProvider {
             monthlyConcurrency: 1,
             scanMode: 'single-warm-tab-first-page-only',
             monthlyPageLimit: 1,
+            pacing: pacingDiagnostics(this.config.pacing),
             monthlyQueries: monthlyResult.monthlyQueries,
             browserElapsedMs: monthlyResult.elapsedMs,
             connectionMode: this.config.connectionMode,
@@ -145,6 +197,7 @@ export class SemrushBrowserProvider implements DestinationProvider {
         observations,
         warnings: [
           'Browser mode reads the rendered single-domain destination table and its absolute Visits column.',
+          'Browser actions use jittered pacing between product changes, requests, and retries to reduce Semrush frequency-limit failures.',
           'The browser parser must be revalidated after Semrush UI changes.',
           ...(observations.length === 0 ? ['No registered payment-platform destination appeared in the scanned rows.'] : []),
         ],
@@ -157,6 +210,7 @@ export class SemrushBrowserProvider implements DestinationProvider {
             scanMode: 'diagnostic-range-first-page-only',
             rangePageLimit,
           } : {}),
+          pacing: pacingDiagnostics(this.config.pacing),
           connectionMode: this.config.connectionMode,
         },
       };
@@ -191,7 +245,17 @@ export class SemrushBrowserProvider implements DestinationProvider {
       error: string;
       screenshot: string;
     }>();
-    for (const displayDate of queryOrder) {
+    let nextMonthGapDelayMs = this.config.pacing.monthGapDelayMs;
+    for (const [monthIndex, displayDate] of queryOrder.entries()) {
+        if (monthIndex > 0) {
+          await this.waitForPacing(
+            page,
+            'between-months',
+            nextMonthGapDelayMs,
+            `nextMonth=${displayDate}`,
+          );
+        }
+        nextMonthGapDelayMs = this.config.pacing.monthGapDelayMs;
         const monthStartedAt = Date.now();
         const logStage = (stage: string, extra = '') => {
           const suffix = extra ? ` ${extra}` : '';
@@ -212,9 +276,21 @@ export class SemrushBrowserProvider implements DestinationProvider {
                 await removeExtraDomains(page, input.domain);
               }
               await assertExclusiveDomain(page, input.domain);
+              await this.waitForPacing(
+                page,
+                'product-settle-after-reload',
+                this.config.pacing.actionDelayMs,
+                `domain=${input.domain}`,
+              );
               logStage('recovered', `attempt=${attempt}`);
             }
             await switchToSingleMonth(page, displayDate);
+            await this.waitForPacing(
+              page,
+              'month-switch-settle',
+              this.config.pacing.monthSwitchDelayMs,
+              `month=${displayDate}`,
+            );
             logStage('month-selected', `attempt=${attempt}`);
             await assertAuthenticated(page);
             const previousRows = await destinationRowsFingerprint(page);
@@ -226,6 +302,12 @@ export class SemrushBrowserProvider implements DestinationProvider {
             await assertExclusiveDomain(page, input.domain);
             if (domainAdded || domainsRemoved) {
               await waitForRowsToRefresh(page, previousRows);
+              await this.waitForPacing(
+                page,
+                'product-settle',
+                this.config.pacing.actionDelayMs,
+                `domain=${input.domain}`,
+              );
             }
             logStage('domain-verified', `attempt=${attempt}`);
             await goToFirstPage(page);
@@ -242,6 +324,7 @@ export class SemrushBrowserProvider implements DestinationProvider {
             break;
           } catch (error) {
             lastError = error;
+            const rateLimited = isLikelySemrushRateLimitError(error);
             lastArtifactPath = path.join(
               this.config.artifactDir,
               `month-${displayDate}-attempt-${attempt}-${Date.now()}.png`,
@@ -249,9 +332,21 @@ export class SemrushBrowserProvider implements DestinationProvider {
             await page.screenshot({ path: lastArtifactPath, fullPage: true }).catch(() => undefined);
             logStage(
               attempt < 2 ? 'retrying' : 'failed',
-              `attempt=${attempt} error=${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
+              `attempt=${attempt} rateLimited=${rateLimited} error=${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
             );
             await page.keyboard.press('Escape').catch(() => undefined);
+            if (attempt < 2) {
+              await this.waitForPacing(
+                page,
+                rateLimited ? 'rate-limit-retry' : 'retry',
+                rateLimited
+                  ? this.config.pacing.rateLimitDelayMs
+                  : this.config.pacing.retryDelayMs,
+                `month=${displayDate} nextAttempt=${attempt + 1}`,
+              );
+            } else if (rateLimited) {
+              nextMonthGapDelayMs = this.config.pacing.rateLimitDelayMs;
+            }
           }
         }
         if (lastError) {
@@ -371,6 +466,29 @@ export class SemrushBrowserProvider implements DestinationProvider {
     await popup.waitForLoadState('domcontentloaded', { timeout: this.config.timeoutMs }).catch(() => undefined);
     return popup;
   }
+}
+
+export function jitteredPacingDelayMs(baseDelayMs: number, randomValue = Math.random()) {
+  if (!Number.isFinite(baseDelayMs) || baseDelayMs <= 0) return 0;
+  const boundedRandom = Math.min(1, Math.max(0, randomValue));
+  const multiplier = (1 - PACING_JITTER_RATIO) + boundedRandom * PACING_JITTER_RATIO * 2;
+  return Math.max(1, Math.round(baseDelayMs * multiplier));
+}
+
+export function isLikelySemrushRateLimitError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(?:something went wrong|try again later|too many requests|rate.?limit|操作.{0,8}(?:频率|频繁)|请求.{0,8}频繁|稍后重试|出了点问题|出了问题|出错了|发生错误|加载失败)/i.test(message);
+}
+
+function pacingDiagnostics(pacing: BrowserPacingConfig) {
+  return {
+    ...pacing,
+    jitterRatio: PACING_JITTER_RATIO,
+  };
+}
+
+function sleep(delayMs: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, delayMs));
 }
 
 function isSourcesDestinationsPage(value: string) {

@@ -7,6 +7,8 @@ import {
   chooseUsableNodeText,
   isDestinationEmptyStateText,
   isDestinationLoadErrorText,
+  isLikelySemrushRateLimitError,
+  jitteredPacingDelayMs,
   parseHumanNumber,
   parseRenderedDestinationRow,
   parseTargetTrafficFromTooltip,
@@ -85,6 +87,17 @@ test('recognizes transient destination load failures without treating them as em
   assert.equal(isDestinationLoadErrorText('Something went wrong. Please try again.'), true);
   assert.equal(isDestinationLoadErrorText('加载失败，请重试'), true);
   assert.equal(isDestinationLoadErrorText('No data'), false);
+});
+
+test('adds bounded pacing jitter and recognizes errors that require a longer cooldown', () => {
+  assert.equal(jitteredPacingDelayMs(1_000, 0), 800);
+  assert.equal(jitteredPacingDelayMs(1_000, 0.5), 1_000);
+  assert.equal(jitteredPacingDelayMs(1_000, 1), 1_200);
+  assert.equal(jitteredPacingDelayMs(0, 0.5), 0);
+  assert.equal(isLikelySemrushRateLimitError(new Error('Something went wrong. Please try again.')), true);
+  assert.equal(isLikelySemrushRateLimitError('网页监控提示：操作频率过快，请稍后重试'), true);
+  assert.equal(isLikelySemrushRateLimitError(new Error('Destination table did not refresh')), false);
+  assert.equal(isLikelySemrushRateLimitError(new Error('Semrush month 2026-08-01 is unavailable')), false);
 });
 
 test('marks failed monthly coverage unavailable instead of zero while retaining older months', () => {
