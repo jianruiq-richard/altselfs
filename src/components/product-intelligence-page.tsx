@@ -183,6 +183,11 @@ function metricTitle(metric: MetricValue) {
 function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
   const audienceLabel = product.lastMonthAudience.kind === 'app_downloads' ? 'APP downloads' : 'Registered users';
   const usesPaymentTraffic = product.lastMonthRevenue.source?.includes('Semrush payment traffic') ?? false;
+  const usesApparkRevenue = product.lastMonthRevenue.source === 'Appark estimate';
+  const revenueMarker = usesApparkRevenue ? '**' : usesPaymentTraffic ? '*' : '';
+  const revenueMarkerLabel = usesApparkRevenue
+    ? 'Revenue estimate provided by Appark'
+    : 'Estimated using payment-platform traffic';
   return (
     <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/9 bg-[#080909]">
       <div className="flex min-h-[39px] items-center justify-between gap-3 border-b border-[#fffaf0]/8 bg-[#78c889]/[0.055] px-3" title={metricTitle(product.lastMonthAudience)}>
@@ -201,7 +206,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
         </span>
         <strong className={`text-[13px] font-semibold tabular-nums ${product.lastMonthRevenue.value === null ? 'text-[#fffaf0]/28' : 'text-[#f2c36b]'}`}>
           {formatMetric(product.lastMonthRevenue.value, true)}
-          {usesPaymentTraffic ? <sup className="ml-0.5 text-[7px] font-black text-[#f8dfaa]" aria-label="Estimated using payment-platform traffic">*</sup> : null}
+          {revenueMarker ? <sup className="ml-0.5 text-[7px] font-black tracking-[-0.08em] text-[#f8dfaa]" aria-label={revenueMarkerLabel}>{revenueMarker}</sup> : null}
         </strong>
       </div>
     </div>
@@ -502,7 +507,7 @@ export function ProductIntelligencePage() {
           ) : null}
 
           <div className="flex min-h-[54px] flex-wrap items-center justify-between gap-3 border-t border-[#fffaf0]/10 bg-[#0d0e0e] px-4">
-            <span className="text-[9px] text-[#fffaf0]/34">Website registrations and revenue are Minaco estimates; APP metrics are Appark estimates. * Revenue estimate uses observed payment-platform traffic. Hover a value for its source and range.</span>
+            <span className="text-[9px] text-[#fffaf0]/34">Website registrations and revenue are Minaco estimates. * Uses observed payment-platform traffic. ** App revenue estimate provided by Appark. Hover a value for its source and range.</span>
             <div className="flex items-center gap-2">
               <button type="button" disabled={page === 0 || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.max(0, current - 1)); }} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#fffaf0]/10 px-2.5 text-[9px] font-semibold text-[#fffaf0]/52 hover:bg-[#fffaf0]/5 disabled:cursor-not-allowed disabled:opacity-30"><ArrowLeft className="h-3 w-3" /> Previous</button>
               <span className="min-w-[74px] text-center font-mono text-[9px] tabular-nums text-[#fffaf0]/38">{page + 1} / {totalPages}</span>
