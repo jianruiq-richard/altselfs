@@ -10,7 +10,6 @@ import {
   ExternalLink,
   Search,
   SlidersHorizontal,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -101,9 +100,9 @@ const compactNumber = new Intl.NumberFormat('en-US', {
 const fullNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
 function formatLaunchDate(value: string) {
-  if (!value) return '暂缺';
+  if (!value) return 'Not available';
   const parsed = new Date(value);
-  if (!Number.isFinite(parsed.getTime())) return '暂缺';
+  if (!Number.isFinite(parsed.getTime())) return 'Not available';
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: '2-digit',
@@ -112,7 +111,7 @@ function formatLaunchDate(value: string) {
 }
 
 function formatMetric(value: number | null, currency = false) {
-  if (value === null || !Number.isFinite(value)) return '暂缺';
+  if (value === null || !Number.isFinite(value)) return 'Not available';
   return `${currency ? '$' : ''}${compactNumber.format(value)}`;
 }
 
@@ -183,6 +182,7 @@ function metricTitle(metric: MetricValue) {
 
 function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
   const audienceLabel = product.lastMonthAudience.kind === 'app_downloads' ? 'APP downloads' : 'Registered users';
+  const usesPaymentTraffic = product.lastMonthRevenue.source?.includes('Semrush payment traffic') ?? false;
   return (
     <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/9 bg-[#080909]">
       <div className="flex min-h-[39px] items-center justify-between gap-3 border-b border-[#fffaf0]/8 bg-[#78c889]/[0.055] px-3" title={metricTitle(product.lastMonthAudience)}>
@@ -201,6 +201,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
         </span>
         <strong className={`text-[13px] font-semibold tabular-nums ${product.lastMonthRevenue.value === null ? 'text-[#fffaf0]/28' : 'text-[#f2c36b]'}`}>
           {formatMetric(product.lastMonthRevenue.value, true)}
+          {usesPaymentTraffic ? <sup className="ml-0.5 text-[7px] font-black text-[#f8dfaa]" aria-label="Estimated using payment-platform traffic">*</sup> : null}
         </strong>
       </div>
     </div>
@@ -210,7 +211,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
 function TrafficTrend({ product }: { product: MarketProductApiRecord }) {
   const metrics = product.trafficTrend.filter((metric) => metric.value !== null);
   if (metrics.length < 2) {
-    return <span className="text-[10px] font-medium text-[#fffaf0]/28">暂缺</span>;
+    return <span className="text-[10px] font-medium text-[#fffaf0]/28">Not available</span>;
   }
 
   const width = 150;
@@ -247,7 +248,7 @@ function TrafficTrend({ product }: { product: MarketProductApiRecord }) {
 }
 
 function TagList({ values, tone = 'neutral' }: { values: string[]; tone?: 'neutral' | 'gold' }) {
-  if (values.length === 0) return <span className="text-[10px] text-[#fffaf0]/28">暂缺</span>;
+  if (values.length === 0) return <span className="text-[10px] text-[#fffaf0]/28">Not available</span>;
   const shown = values.slice(0, 3);
   return (
     <div className="flex max-w-full flex-wrap gap-1.5">
@@ -276,7 +277,6 @@ export function ProductIntelligencePage() {
   const [totalProducts, setTotalProducts] = useState(0);
   const [filterOptions, setFilterOptions] = useState<MarketProductApiResponse['filterOptions']>({ topics: [], productTypes: [] });
   const [datasetStatus, setDatasetStatus] = useState<'loading' | 'rds' | 'error'>('loading');
-  const [datasetUpdatedAt, setDatasetUpdatedAt] = useState<string | null>(null);
   const [watchlisted, setWatchlisted] = useState(() => new Set<string>());
 
   useEffect(() => {
@@ -300,7 +300,6 @@ export function ProductIntelligencePage() {
         setProductRows(payload.products);
         setTotalProducts(Number(payload.total) || 0);
         setFilterOptions(payload.filterOptions || { topics: [], productTypes: [] });
-        setDatasetUpdatedAt(payload.generatedAt || null);
         setDatasetStatus('rds');
       })
       .catch((error) => {
@@ -351,32 +350,11 @@ export function ProductIntelligencePage() {
   return (
     <main className="h-full min-h-0 overflow-y-auto bg-[#090a0a] text-[#fffaf0]">
       <div className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-        <header className="flex flex-col gap-4 border-b border-[#fffaf0]/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#f2c36b]/20 bg-[#f2c36b]/[0.07] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f2c36b]">
-                <Sparkles className="h-3 w-3" />
-                {datasetStatus === 'rds' ? 'Alibaba RDS · Product Hunt 2026' : datasetStatus === 'loading' ? 'Loading intelligence index' : 'Data service unavailable'}
-              </span>
-              <span className="text-[10px] font-medium text-[#fffaf0]/34">
-                {datasetUpdatedAt ? `Updated ${new Date(datasetUpdatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}` : 'Current enrichment snapshot'}
-              </span>
-            </div>
-            <h1 className="text-[24px] font-semibold tracking-[-0.04em] text-[#fffaf0] sm:text-[28px]">Product Intelligence</h1>
-            <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[#fffaf0]/48 sm:text-[13px]">
-              Every tracked Product Hunt launch, enriched with Minaco registration and revenue estimates, Similarweb momentum, and product taxonomy.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="rounded-[8px] border border-[#fffaf0]/10 bg-[#fffaf0]/[0.025] px-3 py-2 text-right">
-              <strong className="block text-[14px] font-semibold tabular-nums text-[#fffaf0]">{totalProducts.toLocaleString()}</strong>
-              <span className="block text-[9px] uppercase tracking-[0.14em] text-[#fffaf0]/35">Tracked products</span>
-            </div>
-            <div className="rounded-[8px] border border-[#78c889]/15 bg-[#78c889]/[0.035] px-3 py-2 text-right">
-              <strong className="block text-[14px] font-semibold tabular-nums text-[#78c889]">{PAGE_SIZE}</strong>
-              <span className="block text-[9px] uppercase tracking-[0.14em] text-[#fffaf0]/35">Per page</span>
-            </div>
-          </div>
+        <header className="border-b border-[#fffaf0]/10 pb-5">
+          <h1 className="text-[24px] font-semibold tracking-[-0.04em] text-[#fffaf0] sm:text-[28px]">Minaco Business Database</h1>
+          <p className="mt-2 max-w-5xl text-[12px] leading-5 text-[#fffaf0]/48 sm:text-[13px]">
+            Minaco continuously tracks the user and revenue performance of new products launched on Product Hunt every day. Revenue performance is not derived from official PR or press releases; it is estimated from observed payment-platform traffic, user retention, industry benchmarks, and thousands of real-world business cases. If you cannot find the product you are looking for, start a Discussion with Minaco for an on-demand search and analysis.
+          </p>
         </header>
 
         <section className="mt-5 rounded-[12px] border border-[#fffaf0]/10 bg-[#0d0e0e] p-4 shadow-[0_16px_50px_rgba(0,0,0,.18)]" aria-labelledby="product-filters-heading">
@@ -495,7 +473,7 @@ export function ProductIntelligencePage() {
                             <a href={product.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex w-fit max-w-[185px] items-center gap-1 truncate font-mono text-[10px] text-[#f2c36b]/72 hover:text-[#f2c36b]">
                               <span className="truncate">{product.domain || product.websiteUrl}</span><ExternalLink className="h-2.5 w-2.5 shrink-0" />
                             </a>
-                          ) : <span className="text-[10px] text-[#fffaf0]/28">官网：暂缺</span>}
+                          ) : <span className="text-[10px] text-[#fffaf0]/28">Website not available</span>}
                           {product.productHuntUrl ? <a href={product.productHuntUrl} target="_blank" rel="noreferrer" className="w-fit text-[8px] font-bold uppercase tracking-[0.11em] text-[#fffaf0]/28 hover:text-[#fffaf0]/55">Product Hunt ↗</a> : null}
                         </span>
                       </div>
@@ -505,7 +483,7 @@ export function ProductIntelligencePage() {
                     <td className="px-4 align-middle"><TrafficTrend product={product} /></td>
                     <td className="px-4 align-middle"><TagList values={product.topics} /></td>
                     <td className="px-4 align-middle"><TagList values={product.productTypes} tone="gold" /></td>
-                    <td className="px-4 pr-6 align-middle"><p className="line-clamp-3 max-w-[390px] text-[10px] leading-[1.55] text-[#fffaf0]/45 group-hover:text-[#fffaf0]/62">{product.description || product.tagline || '暂缺'}</p></td>
+                    <td className="px-4 pr-6 align-middle"><p className="line-clamp-3 max-w-[390px] text-[10px] leading-[1.55] text-[#fffaf0]/45 group-hover:text-[#fffaf0]/62">{product.description || product.tagline || 'Not available'}</p></td>
                   </tr>
                 ))}
               </tbody>
@@ -524,7 +502,7 @@ export function ProductIntelligencePage() {
           ) : null}
 
           <div className="flex min-h-[54px] flex-wrap items-center justify-between gap-3 border-t border-[#fffaf0]/10 bg-[#0d0e0e] px-4">
-            <span className="text-[9px] text-[#fffaf0]/34">Website registrations and revenue are Minaco estimates; APP metrics are Appark estimates. Hover a value for its source and range.</span>
+            <span className="text-[9px] text-[#fffaf0]/34">Website registrations and revenue are Minaco estimates; APP metrics are Appark estimates. * Revenue estimate uses observed payment-platform traffic. Hover a value for its source and range.</span>
             <div className="flex items-center gap-2">
               <button type="button" disabled={page === 0 || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.max(0, current - 1)); }} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#fffaf0]/10 px-2.5 text-[9px] font-semibold text-[#fffaf0]/52 hover:bg-[#fffaf0]/5 disabled:cursor-not-allowed disabled:opacity-30"><ArrowLeft className="h-3 w-3" /> Previous</button>
               <span className="min-w-[74px] text-center font-mono text-[9px] tabular-nums text-[#fffaf0]/38">{page + 1} / {totalPages}</span>
