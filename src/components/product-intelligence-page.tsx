@@ -173,7 +173,7 @@ function metricTitle(metric: MetricValue) {
 }
 
 function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
-  const audienceLabel = product.lastMonthAudience.kind === 'app_downloads' ? 'APP downloads' : 'Registered users';
+  const audienceLabel = product.lastMonthAudience.kind === 'app_downloads' ? 'APP downloads' : 'Estimated new registrations';
   const usesPaymentTraffic = product.lastMonthRevenue.source?.includes('Semrush payment traffic') ?? false;
   const usesApparkRevenue = product.lastMonthRevenue.source === 'Appark estimate';
   const revenueMarker = usesApparkRevenue ? '**' : usesPaymentTraffic ? '*' : '';
@@ -183,7 +183,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
   return (
     <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/14 bg-[#080909]">
       <div className="flex min-h-[47px] items-center justify-between gap-3 border-b border-[#fffaf0]/12 bg-[#78c889]/[0.075] px-3.5" title={metricTitle(product.lastMonthAudience)}>
-        <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#8bd09a]">{audienceLabel}</span>
+        <span className="max-w-[118px] text-[11px] font-bold uppercase leading-4 tracking-[0.06em] text-[#8bd09a]">{audienceLabel}</span>
         <strong className={`text-[17px] font-semibold tabular-nums ${product.lastMonthAudience.value === null ? 'text-[#fffaf0]/48' : 'text-[#8bd09a]'}`}>
           {formatMetric(product.lastMonthAudience.value)}
         </strong>
@@ -441,13 +441,22 @@ export function ProductIntelligencePage() {
                       <div className="flex items-center gap-3">
                         <ProductLogo product={product} />
                         <span className="grid min-w-0 gap-0.5">
-                          <strong className="truncate text-[14px] font-semibold text-[#fffaf0]">{product.name}</strong>
+                          {product.productHuntUrl ? (
+                            <a
+                              href={product.productHuntUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={`View ${product.name} on Product Hunt`}
+                              className="truncate text-[14px] font-semibold text-[#fffaf0] transition hover:text-[#f2c36b]"
+                            >
+                              {product.name}
+                            </a>
+                          ) : <strong className="truncate text-[14px] font-semibold text-[#fffaf0]">{product.name}</strong>}
                           {product.websiteUrl ? (
                             <a href={product.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex w-fit max-w-[185px] items-center gap-1 truncate font-mono text-[12px] text-[#f2c36b]/90 hover:text-[#f8dfaa]">
                               <span className="truncate">{product.domain || product.websiteUrl}</span><ExternalLink className="h-3 w-3 shrink-0" />
                             </a>
                           ) : <span className="text-[12px] text-[#fffaf0]/52">Website not available</span>}
-                          {product.productHuntUrl ? <a href={product.productHuntUrl} target="_blank" rel="noreferrer" className="w-fit text-[10px] font-bold uppercase tracking-[0.09em] text-[#fffaf0]/58 hover:text-[#fffaf0]/82">Product Hunt ↗</a> : null}
                         </span>
                       </div>
                     </td>
