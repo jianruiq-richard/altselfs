@@ -168,7 +168,7 @@ function metricTitle(metric: MetricValue) {
   if (metric.value === null) {
     if (metric.source === 'Open Source') return 'Open-source product with no verified product-level paid revenue evidence.';
     if (metric.source === 'Free') return 'Free product with no verified product-level paid revenue evidence.';
-    if (metric.source === 'Not available') return 'No material product-level revenue signal was detected.';
+    if (metric.source === 'Not available') return 'No reliable product-level revenue estimate is available.';
     return 'No verified product-level revenue estimate is available yet.';
   }
   const range = metric.low !== null && metric.high !== null
@@ -185,10 +185,13 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
   const revenueMarkerLabel = usesApparkRevenue
     ? 'Revenue estimate provided by Appark'
     : 'Estimated using payment-platform traffic';
+  const revenueIsAlmostNone = product.lastMonthRevenue.value === null
+    && product.lastMonthRevenue.source === 'Not available'
+    && product.estimateMethodVersion?.endsWith(':no-positive-revenue-evidence');
   const revenueStatus = product.lastMonthRevenue.value === null
     ? product.lastMonthRevenue.source === 'Open Source' || product.lastMonthRevenue.source === 'Free'
       ? product.lastMonthRevenue.source
-      : 'Almost none'
+      : revenueIsAlmostNone ? 'Almost none' : 'Not available'
     : null;
   return (
     <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/14 bg-[#080909]">
@@ -198,7 +201,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
           {formatMetric(product.lastMonthAudience.value)}
         </strong>
       </div>
-      <div className="flex min-h-[47px] items-center justify-between gap-3 bg-[#f2c36b]/[0.075] px-3.5" title={metricTitle(product.lastMonthRevenue)}>
+      <div className="flex min-h-[47px] items-center justify-between gap-3 bg-[#f2c36b]/[0.075] px-3.5" title={revenueIsAlmostNone ? 'No material positive revenue signal was detected.' : metricTitle(product.lastMonthRevenue)}>
         <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#f2c36b]">Last month revenue</span>
         <strong className={`${revenueStatus ? 'text-[13px] uppercase tracking-[0.04em]' : 'text-[17px] tabular-nums'} font-semibold ${product.lastMonthRevenue.value === null ? revenueStatus ? 'text-[#f2c36b]' : 'text-[#fffaf0]/48' : 'text-[#f2c36b]'}`}>
           {revenueStatus || formatMetric(product.lastMonthRevenue.value, true)}
