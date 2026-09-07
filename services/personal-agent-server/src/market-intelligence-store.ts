@@ -190,7 +190,7 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
   const category = input.category?.trim().slice(0, 100) || '';
   const productType = input.productType?.trim().slice(0, 100) || '';
   const dataset = normalizeDataset(input.dataset);
-  const sort = input.sort && input.sort in SORT_SQL ? input.sort : 'rank';
+  const sort = input.sort && input.sort in SORT_SQL ? input.sort : 'revenue';
   const limit = Math.max(1, Math.min(100, Math.floor(input.limit || 50)));
   const offset = Math.max(0, Math.min(100_000, Math.floor(input.offset || 0)));
   const datasetSql = dataset === 'all'

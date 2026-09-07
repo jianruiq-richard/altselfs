@@ -19,7 +19,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { WorkspaceDiscordLink } from '@/components/workspace-discord-link';
 import { productBrand } from '@/lib/brand';
-import { hasProductIntelligenceAccess } from '@/lib/product-intelligence-access';
 import {
   prefetchWorkspaceBootstrap,
   prefetchWorkspaceRouteData,
@@ -83,10 +82,6 @@ export function AstromarWorkspaceShell({
   const { isLoaded, isSignedIn, user } = useUser();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const activeKey = useMemo(() => activeNavKey(pathname), [pathname]);
-  const canAccessProductIntelligence = hasProductIntelligenceAccess(user?.primaryEmailAddress?.emailAddress);
-  const visibleNavItems = canAccessProductIntelligence
-    ? navItems
-    : navItems.filter((item) => item.key !== 'product-intelligence');
 
   useEffect(() => {
     if (!isLoaded || isSignedIn) return;
@@ -98,7 +93,7 @@ export function AstromarWorkspaceShell({
     const prefetchCommonRoutes = () => {
       prefetchWorkspaceBootstrap();
       [
-        ...(canAccessProductIntelligence ? ['/product-intelligence'] : []),
+        '/product-intelligence',
         '/investor/chat/100',
         '/connectors',
         '/profile',
@@ -113,7 +108,7 @@ export function AstromarWorkspaceShell({
     }
     const timeout = globalThis.setTimeout(prefetchCommonRoutes, 1200);
     return () => globalThis.clearTimeout(timeout);
-  }, [canAccessProductIntelligence, isLoaded, isSignedIn, router]);
+  }, [isLoaded, isSignedIn, router]);
 
   if (!isLoaded || !isSignedIn) {
     return (
@@ -186,7 +181,7 @@ export function AstromarWorkspaceShell({
       )}
 
       <nav className="grid shrink-0 gap-0.5 border-b border-white/[0.09] px-2.5 pb-3" aria-label="Workspace navigation">
-        {visibleNavItems.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           const active = item.key === activeKey;
           return (

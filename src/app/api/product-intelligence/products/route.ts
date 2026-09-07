@@ -1,6 +1,5 @@
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
-import { hasProductIntelligenceAccess } from '@/lib/product-intelligence-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,9 +11,6 @@ export async function GET(request: Request) {
   if (!developmentPreview) {
     const investor = await getInvestorOrNull();
     if (!investor) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!hasProductIntelligenceAccess(investor.email)) {
-      return Response.json({ error: 'Not found' }, { status: 404 });
-    }
   }
 
   const upstreamQuery = new URLSearchParams();

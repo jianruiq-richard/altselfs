@@ -89,7 +89,7 @@ const initialFilters: FilterState = {
   query: '',
   category: 'all',
   productType: 'all',
-  sort: 'rank',
+  sort: 'revenue',
 };
 
 const compactNumber = new Intl.NumberFormat('en-US', {
@@ -168,6 +168,7 @@ function metricTitle(metric: MetricValue) {
   if (metric.value === null) {
     if (metric.source === 'Open Source') return 'Open-source product with no verified product-level paid revenue evidence.';
     if (metric.source === 'Free') return 'Free product with no verified product-level paid revenue evidence.';
+    if (metric.source === 'Not available') return 'No material product-level revenue signal was detected.';
     return 'No verified product-level revenue estimate is available yet.';
   }
   const range = metric.low !== null && metric.high !== null
@@ -185,8 +186,9 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
     ? 'Revenue estimate provided by Appark'
     : 'Estimated using payment-platform traffic';
   const revenueStatus = product.lastMonthRevenue.value === null
-    && (product.lastMonthRevenue.source === 'Open Source' || product.lastMonthRevenue.source === 'Free')
-    ? product.lastMonthRevenue.source
+    ? product.lastMonthRevenue.source === 'Open Source' || product.lastMonthRevenue.source === 'Free'
+      ? product.lastMonthRevenue.source
+      : 'Almost none'
     : null;
   return (
     <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/14 bg-[#080909]">
