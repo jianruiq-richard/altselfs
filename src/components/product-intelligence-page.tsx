@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUpDown,
-  Bookmark,
   ChevronDown,
   ExternalLink,
   Search,
@@ -269,7 +268,6 @@ export function ProductIntelligencePage() {
   const [totalProducts, setTotalProducts] = useState(0);
   const [filterOptions, setFilterOptions] = useState<MarketProductApiResponse['filterOptions']>({ topics: [], productTypes: [] });
   const [datasetStatus, setDatasetStatus] = useState<'loading' | 'rds' | 'error'>('loading');
-  const [watchlisted, setWatchlisted] = useState(() => new Set<string>());
 
   useEffect(() => {
     let active = true;
@@ -329,15 +327,6 @@ export function ProductIntelligencePage() {
     setDraftFilters(initialFilters);
     setPage(0);
     setFilters({ ...initialFilters });
-  };
-
-  const toggleWatchlist = (id: string) => {
-    setWatchlisted((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   };
 
   return (
@@ -452,12 +441,7 @@ export function ProductIntelligencePage() {
                       <div className="flex items-center gap-3">
                         <ProductLogo product={product} />
                         <span className="grid min-w-0 gap-0.5">
-                          <span className="flex items-center gap-1.5">
-                            <strong className="truncate text-[14px] font-semibold text-[#fffaf0]">{product.name}</strong>
-                            <button type="button" onClick={() => toggleWatchlist(product.id)} className={`grid h-7 w-7 shrink-0 place-items-center rounded-[6px] transition ${watchlisted.has(product.id) ? 'text-[#f2c36b]' : 'text-[#fffaf0]/45 hover:bg-[#fffaf0]/7 hover:text-[#fffaf0]/80'}`} aria-label={`${watchlisted.has(product.id) ? 'Remove' : 'Add'} ${product.name} ${watchlisted.has(product.id) ? 'from' : 'to'} watchlist`} aria-pressed={watchlisted.has(product.id)}>
-                              <Bookmark className="h-3.5 w-3.5" fill={watchlisted.has(product.id) ? 'currentColor' : 'none'} />
-                            </button>
-                          </span>
+                          <strong className="truncate text-[14px] font-semibold text-[#fffaf0]">{product.name}</strong>
                           {product.websiteUrl ? (
                             <a href={product.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex w-fit max-w-[185px] items-center gap-1 truncate font-mono text-[12px] text-[#f2c36b]/90 hover:text-[#f8dfaa]">
                               <span className="truncate">{product.domain || product.websiteUrl}</span><ExternalLink className="h-3 w-3 shrink-0" />
@@ -472,7 +456,14 @@ export function ProductIntelligencePage() {
                     <td className="px-4 align-middle"><TrafficTrend product={product} /></td>
                     <td className="px-4 align-middle"><TagList values={product.topics} /></td>
                     <td className="px-4 align-middle"><TagList values={product.productTypes} tone="gold" /></td>
-                    <td className="px-4 pr-6 align-middle"><p className="line-clamp-3 max-w-[390px] text-[12px] leading-[1.6] text-[#fffaf0]/68 group-hover:text-[#fffaf0]/84">{product.description || product.tagline || 'Not available'}</p></td>
+                    <td className="px-4 pr-6 align-middle">
+                      <p
+                        className="line-clamp-3 max-w-[390px] cursor-help text-[12px] leading-[1.6] text-[#fffaf0]/68 group-hover:text-[#fffaf0]/84"
+                        title={product.description || product.tagline || 'Not available'}
+                      >
+                        {product.description || product.tagline || 'Not available'}
+                      </p>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -502,7 +493,27 @@ export function ProductIntelligencePage() {
             <span className="text-[11px] leading-5 text-[#fffaf0]/62">Website registrations and revenue are Minaco estimates. * Uses observed payment-platform traffic. ** App revenue estimate provided by Appark. Hover a value for its source and range.</span>
             <div className="flex items-center gap-2">
               <button type="button" disabled={page === 0 || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.max(0, current - 1)); }} className="inline-flex h-9 items-center gap-1 rounded-[7px] border border-[#fffaf0]/16 px-3 text-[11px] font-semibold text-[#fffaf0]/72 hover:bg-[#fffaf0]/7 disabled:cursor-not-allowed disabled:opacity-40"><ArrowLeft className="h-3.5 w-3.5" /> Previous</button>
-              <span className="min-w-[74px] text-center font-mono text-[11px] font-medium tabular-nums text-[#fffaf0]/58">{page + 1} / {totalPages}</span>
+              <label className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#fffaf0]/16 bg-[#090a0a] pl-3 pr-2 text-[11px] font-medium text-[#fffaf0]/62">
+                <span>Page</span>
+                <span className="relative">
+                  <select
+                    aria-label="Go to page"
+                    value={page}
+                    disabled={datasetStatus === 'loading'}
+                    onChange={(event) => {
+                      setDatasetStatus('loading');
+                      setPage(Number(event.target.value));
+                    }}
+                    className="h-7 min-w-[50px] appearance-none rounded-[5px] border border-[#fffaf0]/14 bg-[#111212] pl-2 pr-6 font-mono text-[11px] font-semibold tabular-nums text-[#fffaf0] outline-none hover:border-[#fffaf0]/28 focus:border-[#f2c36b]/65 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {Array.from({ length: totalPages }, (_, index) => (
+                      <option key={index} value={index}>{index + 1}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[#fffaf0]/55" />
+                </span>
+                <span>of {totalPages}</span>
+              </label>
               <button type="button" disabled={page + 1 >= totalPages || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.min(totalPages - 1, current + 1)); }} className="inline-flex h-9 items-center gap-1 rounded-[7px] border border-[#fffaf0]/16 px-3 text-[11px] font-semibold text-[#fffaf0]/72 hover:bg-[#fffaf0]/7 disabled:cursor-not-allowed disabled:opacity-40">Next <ArrowRight className="h-3.5 w-3.5" /></button>
             </div>
           </div>
