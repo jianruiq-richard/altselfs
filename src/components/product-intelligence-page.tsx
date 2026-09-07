@@ -173,7 +173,7 @@ function metricTitle(metric: MetricValue) {
 }
 
 function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
-  const audienceLabel = product.lastMonthAudience.kind === 'app_downloads' ? 'APP downloads' : 'Estimated new registrations';
+  const audienceLabel = product.lastMonthAudience.kind === 'app_downloads' ? 'APP downloads' : 'New registrations';
   const usesPaymentTraffic = product.lastMonthRevenue.source?.includes('Semrush payment traffic') ?? false;
   const usesApparkRevenue = product.lastMonthRevenue.source === 'Appark estimate';
   const revenueMarker = usesApparkRevenue ? '**' : usesPaymentTraffic ? '*' : '';
