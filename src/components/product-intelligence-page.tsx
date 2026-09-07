@@ -5,7 +5,6 @@ import {
   ArrowRight,
   ArrowUpDown,
   Bookmark,
-  CalendarDays,
   ChevronDown,
   ExternalLink,
   Search,
@@ -117,14 +116,6 @@ function formatMetric(value: number | null, currency = false) {
   return `${currency ? '$' : ''}${compactNumber.format(value)}`;
 }
 
-function formatPeriod(value: string | null) {
-  if (!value) return '';
-  if (value === 'rolling-30d') return 'last 30D';
-  const parsed = new Date(`${value}-01T00:00:00Z`);
-  if (!Number.isFinite(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }).format(parsed);
-}
-
 function SelectField({
   label,
   value,
@@ -138,16 +129,16 @@ function SelectField({
 }) {
   return (
     <label className="grid min-w-0 gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#fffaf0]/45">{label}</span>
+      <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-[#fffaf0]/72">{label}</span>
       <span className="relative block">
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-10 w-full appearance-none rounded-[8px] border border-[#fffaf0]/10 bg-[#0b0c0c] px-3 pr-9 text-[12px] font-medium text-[#fffaf0]/82 outline-none transition hover:border-[#fffaf0]/18 focus:border-[#f2c36b]/55 focus:ring-2 focus:ring-[#f2c36b]/10"
+          className="h-11 w-full appearance-none rounded-[8px] border border-[#fffaf0]/16 bg-[#0b0c0c] px-3 pr-9 text-[14px] font-medium text-[#fffaf0]/92 outline-none transition hover:border-[#fffaf0]/28 focus:border-[#f2c36b]/65 focus:ring-2 focus:ring-[#f2c36b]/12"
         >
           {children}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#fffaf0]/35" />
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#fffaf0]/55" />
       </span>
     </label>
   );
@@ -191,24 +182,18 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
     ? 'Revenue estimate provided by Appark'
     : 'Estimated using payment-platform traffic';
   return (
-    <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/9 bg-[#080909]">
-      <div className="flex min-h-[39px] items-center justify-between gap-3 border-b border-[#fffaf0]/8 bg-[#78c889]/[0.055] px-3" title={metricTitle(product.lastMonthAudience)}>
-        <span className="grid gap-0.5">
-          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-[#78c889]/75">{audienceLabel}</span>
-          <span className="text-[8px] text-[#fffaf0]/28">{formatPeriod(product.lastMonthAudience.period) || 'No period'}</span>
-        </span>
-        <strong className={`text-[13px] font-semibold tabular-nums ${product.lastMonthAudience.value === null ? 'text-[#fffaf0]/28' : 'text-[#8bd09a]'}`}>
+    <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/14 bg-[#080909]">
+      <div className="flex min-h-[47px] items-center justify-between gap-3 border-b border-[#fffaf0]/12 bg-[#78c889]/[0.075] px-3.5" title={metricTitle(product.lastMonthAudience)}>
+        <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#8bd09a]">{audienceLabel}</span>
+        <strong className={`text-[17px] font-semibold tabular-nums ${product.lastMonthAudience.value === null ? 'text-[#fffaf0]/48' : 'text-[#8bd09a]'}`}>
           {formatMetric(product.lastMonthAudience.value)}
         </strong>
       </div>
-      <div className="flex min-h-[39px] items-center justify-between gap-3 bg-[#f2c36b]/[0.055] px-3" title={metricTitle(product.lastMonthRevenue)}>
-        <span className="grid gap-0.5">
-          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-[#f2c36b]/78">Last month revenue</span>
-          <span className="text-[8px] text-[#fffaf0]/28">{formatPeriod(product.lastMonthRevenue.period) || 'No period'}</span>
-        </span>
-        <strong className={`text-[13px] font-semibold tabular-nums ${product.lastMonthRevenue.value === null ? 'text-[#fffaf0]/28' : 'text-[#f2c36b]'}`}>
+      <div className="flex min-h-[47px] items-center justify-between gap-3 bg-[#f2c36b]/[0.075] px-3.5" title={metricTitle(product.lastMonthRevenue)}>
+        <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#f2c36b]">Last month revenue</span>
+        <strong className={`text-[17px] font-semibold tabular-nums ${product.lastMonthRevenue.value === null ? 'text-[#fffaf0]/48' : 'text-[#f2c36b]'}`}>
           {formatMetric(product.lastMonthRevenue.value, true)}
-          {revenueMarker ? <sup className="ml-0.5 text-[7px] font-black tracking-[-0.08em] text-[#f8dfaa]" aria-label={revenueMarkerLabel}>{revenueMarker}</sup> : null}
+          {revenueMarker ? <sup className="ml-0.5 text-[8px] font-black tracking-[-0.08em] text-[#fff0c7]" aria-label={revenueMarkerLabel}>{revenueMarker}</sup> : null}
         </strong>
       </div>
     </div>
@@ -218,7 +203,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
 function TrafficTrend({ product }: { product: MarketProductApiRecord }) {
   const metrics = product.trafficTrend.filter((metric) => metric.value !== null);
   if (metrics.length < 2) {
-    return <span className="text-[10px] font-medium text-[#fffaf0]/28">Not available</span>;
+    return <span className="text-[12px] font-medium text-[#fffaf0]/52">Not available</span>;
   }
 
   const width = 150;
@@ -241,13 +226,13 @@ function TrafficTrend({ product }: { product: MarketProductApiRecord }) {
   return (
     <div className="grid min-w-[168px] gap-1.5" title="Similarweb monthly website traffic trend">
       <svg viewBox={`0 0 ${width} ${height}`} className="h-[48px] w-[150px] overflow-visible" role="img" aria-label="Three month Similarweb traffic trend">
-        <line x1="0" x2={width} y1={height - 4} y2={height - 4} stroke="rgba(255,250,240,.08)" />
-        <polyline points={pointString} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+        <line x1="0" x2={width} y1={height - 4} y2={height - 4} stroke="rgba(255,250,240,.16)" />
+        <polyline points={pointString} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
         {points.map((point, index) => (
           <circle key={`${product.id}-trend-${index}`} cx={point.x} cy={point.y} r={index === points.length - 1 ? 2.8 : 1.7} fill="#0b0c0c" stroke={color} strokeWidth="1.5" />
         ))}
       </svg>
-      <span className="flex w-[150px] justify-between font-mono text-[8px] uppercase text-[#fffaf0]/27">
+      <span className="flex w-[150px] justify-between font-mono text-[10px] font-medium uppercase text-[#fffaf0]/58">
         {metrics.map((metric) => <span key={metric.month}>{metric.month.slice(5)}</span>)}
       </span>
     </div>
@@ -255,20 +240,20 @@ function TrafficTrend({ product }: { product: MarketProductApiRecord }) {
 }
 
 function TagList({ values, tone = 'neutral' }: { values: string[]; tone?: 'neutral' | 'gold' }) {
-  if (values.length === 0) return <span className="text-[10px] text-[#fffaf0]/28">Not available</span>;
+  if (values.length === 0) return <span className="text-[12px] text-[#fffaf0]/52">Not available</span>;
   const shown = values.slice(0, 3);
   return (
     <div className="flex max-w-full flex-wrap gap-1.5">
       {shown.map((value) => (
         <span
           key={value}
-          className={`inline-flex max-w-full truncate rounded-full border px-2 py-1 text-[8px] font-semibold ${tone === 'gold' ? 'border-[#f2c36b]/18 bg-[#f2c36b]/[0.055] text-[#f2c36b]/78' : 'border-[#fffaf0]/9 bg-[#fffaf0]/[0.035] text-[#fffaf0]/52'}`}
+          className={`inline-flex max-w-full truncate rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tone === 'gold' ? 'border-[#f2c36b]/28 bg-[#f2c36b]/[0.08] text-[#f2c36b]/92' : 'border-[#fffaf0]/16 bg-[#fffaf0]/[0.05] text-[#fffaf0]/72'}`}
         >
           {value}
         </span>
       ))}
       {values.length > shown.length ? (
-        <span className="inline-flex rounded-full border border-[#fffaf0]/8 px-2 py-1 text-[8px] font-semibold text-[#fffaf0]/30">+{values.length - shown.length}</span>
+        <span className="inline-flex rounded-full border border-[#fffaf0]/14 px-2.5 py-1 text-[11px] font-semibold text-[#fffaf0]/62">+{values.length - shown.length}</span>
       ) : null}
     </div>
   );
@@ -360,18 +345,18 @@ export function ProductIntelligencePage() {
       <div className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
         <header className="border-b border-[#fffaf0]/10 pb-5">
           <h1 className="text-[24px] font-semibold tracking-[-0.04em] text-[#fffaf0] sm:text-[28px]">Minaco Business Database</h1>
-          <p className="mt-2 max-w-5xl text-[12px] leading-5 text-[#fffaf0]/48 sm:text-[13px]">
+          <p className="mt-2 max-w-6xl text-[14px] leading-6 text-[#fffaf0]/68 sm:text-[15px]">
             Minaco continuously tracks the user and revenue performance of new products launched on Product Hunt every day. Revenue performance is not derived from official PR or press releases; it is estimated from observed payment-platform traffic, user retention, industry benchmarks, and thousands of real-world business cases. If you cannot find the product you are looking for, start a Discussion with Minaco for an on-demand search and analysis.
           </p>
         </header>
 
         <section className="mt-5 rounded-[12px] border border-[#fffaf0]/10 bg-[#0d0e0e] p-4 shadow-[0_16px_50px_rgba(0,0,0,.18)]" aria-labelledby="product-filters-heading">
           <div className="mb-3 flex items-center justify-between">
-            <h2 id="product-filters-heading" className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#fffaf0]/55">
-              <SlidersHorizontal className="h-3.5 w-3.5 text-[#f2c36b]" />
+            <h2 id="product-filters-heading" className="inline-flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.12em] text-[#fffaf0]/80">
+              <SlidersHorizontal className="h-4 w-4 text-[#f2c36b]" />
               Explore products
             </h2>
-            {activeFilterCount > 0 ? <span className="rounded-full bg-[#f2c36b]/10 px-2 py-1 text-[9px] font-bold text-[#f2c36b]">{activeFilterCount} active</span> : null}
+            {activeFilterCount > 0 ? <span className="rounded-full bg-[#f2c36b]/12 px-2.5 py-1 text-[11px] font-bold text-[#f2c36b]">{activeFilterCount} active</span> : null}
           </div>
           <form
             className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.8fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(170px,1fr)_auto] xl:items-end"
@@ -381,17 +366,17 @@ export function ProductIntelligencePage() {
             }}
           >
             <label className="grid min-w-0 gap-1.5 md:col-span-2 xl:col-span-1">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#fffaf0]/45">Name or keyword</span>
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-[#fffaf0]/72">Name or keyword</span>
               <span className="relative block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#fffaf0]/35" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#fffaf0]/55" />
                 <input
                   value={draftFilters.query}
                   onChange={(event) => updateDraft('query', event.target.value)}
                   placeholder="Search names, domains, topics, descriptions..."
-                  className="h-10 w-full rounded-[8px] border border-[#fffaf0]/10 bg-[#0b0c0c] pl-9 pr-9 text-[12px] text-[#fffaf0] outline-none placeholder:text-[#fffaf0]/25 hover:border-[#fffaf0]/18 focus:border-[#f2c36b]/55 focus:ring-2 focus:ring-[#f2c36b]/10"
+                  className="h-11 w-full rounded-[8px] border border-[#fffaf0]/16 bg-[#0b0c0c] pl-9 pr-9 text-[14px] text-[#fffaf0] outline-none placeholder:text-[#fffaf0]/48 hover:border-[#fffaf0]/28 focus:border-[#f2c36b]/65 focus:ring-2 focus:ring-[#f2c36b]/12"
                 />
                 {draftFilters.query ? (
-                  <button type="button" onClick={() => updateDraft('query', '')} className="absolute right-2.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-[6px] text-[#fffaf0]/35 hover:bg-[#fffaf0]/5 hover:text-[#fffaf0]" aria-label="Clear search">
+                  <button type="button" onClick={() => updateDraft('query', '')} className="absolute right-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-[6px] text-[#fffaf0]/55 hover:bg-[#fffaf0]/8 hover:text-[#fffaf0]" aria-label="Clear search">
                     <X className="h-3.5 w-3.5" />
                   </button>
                 ) : null}
@@ -413,8 +398,8 @@ export function ProductIntelligencePage() {
               <option value="newest">Newest launch</option>
             </SelectField>
             <div className="flex gap-2 md:col-span-2 xl:col-span-1">
-              <button type="button" onClick={resetFilters} className="h-10 rounded-[8px] border border-[#fffaf0]/12 px-3 text-[11px] font-semibold text-[#fffaf0]/60 transition hover:border-[#fffaf0]/25 hover:bg-[#fffaf0]/5 hover:text-[#fffaf0]">Reset</button>
-              <button type="submit" className="h-10 rounded-[8px] border border-[#f2c36b]/60 bg-[#f2c36b] px-4 text-[11px] font-bold text-[#100e0c] shadow-[0_8px_24px_rgba(242,195,107,.12)] transition hover:bg-[#f8dfaa]">Apply</button>
+              <button type="button" onClick={resetFilters} className="h-11 rounded-[8px] border border-[#fffaf0]/18 px-3.5 text-[13px] font-semibold text-[#fffaf0]/78 transition hover:border-[#fffaf0]/30 hover:bg-[#fffaf0]/7 hover:text-[#fffaf0]">Reset</button>
+              <button type="submit" className="h-11 rounded-[8px] border border-[#f2c36b]/70 bg-[#f2c36b] px-5 text-[13px] font-bold text-[#100e0c] shadow-[0_8px_24px_rgba(242,195,107,.15)] transition hover:bg-[#f8dfaa]">Apply</button>
             </div>
           </form>
         </section>
@@ -422,14 +407,10 @@ export function ProductIntelligencePage() {
         <section className="mt-4 overflow-hidden rounded-[12px] border border-[#fffaf0]/10 bg-[#0b0c0c] shadow-[0_18px_60px_rgba(0,0,0,.22)]" aria-label="Product intelligence results">
           <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-3 border-b border-[#fffaf0]/10 px-4">
             <div className="flex items-center gap-3">
-              <strong className="text-[12px] font-semibold text-[#fffaf0]">All products</strong>
-              <span className="rounded-full border border-[#fffaf0]/10 bg-[#fffaf0]/[0.03] px-2 py-0.5 text-[9px] font-semibold tabular-nums text-[#fffaf0]/42" aria-live="polite">
+              <strong className="text-[14px] font-semibold text-[#fffaf0]">All products</strong>
+              <span className="rounded-full border border-[#fffaf0]/16 bg-[#fffaf0]/[0.045] px-2.5 py-1 text-[12px] font-semibold tabular-nums text-[#fffaf0]/68" aria-live="polite">
                 {startRow.toLocaleString()}–{endRow.toLocaleString()} of {totalProducts.toLocaleString()}
               </span>
-            </div>
-            <div className="flex items-center gap-1 text-[10px] text-[#fffaf0]/35">
-              <CalendarDays className="h-3.5 w-3.5" />
-              <span>May–Jul 2026 Similarweb window</span>
             </div>
           </div>
 
@@ -446,7 +427,7 @@ export function ProductIntelligencePage() {
                 <col />
               </colgroup>
               <thead className="bg-[#121312]">
-                <tr className="h-11 border-b border-[#fffaf0]/10">
+                <tr className="h-12 border-b border-[#fffaf0]/14">
                   {[
                     ['Rank', true],
                     ['Product', false],
@@ -457,41 +438,41 @@ export function ProductIntelligencePage() {
                     ['Product type', false],
                     ['Product introduction', false],
                   ].map(([label, sortable]) => (
-                    <th key={String(label)} className="px-4 text-[9px] font-bold uppercase tracking-[0.13em] text-[#fffaf0]/38">
-                      <span className="inline-flex items-center gap-1.5">{label}{sortable ? <ArrowUpDown className="h-3 w-3 text-[#fffaf0]/20" /> : null}</span>
+                    <th key={String(label)} className="px-4 text-[11px] font-bold uppercase tracking-[0.1em] text-[#fffaf0]/68">
+                      <span className="inline-flex items-center gap-1.5">{label}{sortable ? <ArrowUpDown className="h-3.5 w-3.5 text-[#fffaf0]/42" /> : null}</span>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {productRows.map((product) => (
-                  <tr key={product.id} className="group h-[112px] border-b border-[#fffaf0]/[0.075] transition-colors last:border-0 hover:bg-[#fffaf0]/[0.025]">
-                    <td className="px-4 align-middle"><span className="font-mono text-[11px] font-semibold tabular-nums text-[#fffaf0]/54">#{product.rank.toLocaleString()}</span></td>
+                  <tr key={product.id} className="group h-[124px] border-b border-[#fffaf0]/[0.1] transition-colors last:border-0 hover:bg-[#fffaf0]/[0.035]">
+                    <td className="px-4 align-middle"><span className="font-mono text-[13px] font-semibold tabular-nums text-[#fffaf0]/72">#{product.rank.toLocaleString()}</span></td>
                     <td className="px-4 align-middle">
                       <div className="flex items-center gap-3">
                         <ProductLogo product={product} />
                         <span className="grid min-w-0 gap-0.5">
                           <span className="flex items-center gap-1.5">
-                            <strong className="truncate text-[13px] font-semibold text-[#fffaf0]">{product.name}</strong>
-                            <button type="button" onClick={() => toggleWatchlist(product.id)} className={`grid h-6 w-6 shrink-0 place-items-center rounded-[6px] transition ${watchlisted.has(product.id) ? 'text-[#f2c36b]' : 'text-[#fffaf0]/22 hover:bg-[#fffaf0]/5 hover:text-[#fffaf0]/65'}`} aria-label={`${watchlisted.has(product.id) ? 'Remove' : 'Add'} ${product.name} ${watchlisted.has(product.id) ? 'from' : 'to'} watchlist`} aria-pressed={watchlisted.has(product.id)}>
+                            <strong className="truncate text-[14px] font-semibold text-[#fffaf0]">{product.name}</strong>
+                            <button type="button" onClick={() => toggleWatchlist(product.id)} className={`grid h-7 w-7 shrink-0 place-items-center rounded-[6px] transition ${watchlisted.has(product.id) ? 'text-[#f2c36b]' : 'text-[#fffaf0]/45 hover:bg-[#fffaf0]/7 hover:text-[#fffaf0]/80'}`} aria-label={`${watchlisted.has(product.id) ? 'Remove' : 'Add'} ${product.name} ${watchlisted.has(product.id) ? 'from' : 'to'} watchlist`} aria-pressed={watchlisted.has(product.id)}>
                               <Bookmark className="h-3.5 w-3.5" fill={watchlisted.has(product.id) ? 'currentColor' : 'none'} />
                             </button>
                           </span>
                           {product.websiteUrl ? (
-                            <a href={product.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex w-fit max-w-[185px] items-center gap-1 truncate font-mono text-[10px] text-[#f2c36b]/72 hover:text-[#f2c36b]">
-                              <span className="truncate">{product.domain || product.websiteUrl}</span><ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                            <a href={product.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex w-fit max-w-[185px] items-center gap-1 truncate font-mono text-[12px] text-[#f2c36b]/90 hover:text-[#f8dfaa]">
+                              <span className="truncate">{product.domain || product.websiteUrl}</span><ExternalLink className="h-3 w-3 shrink-0" />
                             </a>
-                          ) : <span className="text-[10px] text-[#fffaf0]/28">Website not available</span>}
-                          {product.productHuntUrl ? <a href={product.productHuntUrl} target="_blank" rel="noreferrer" className="w-fit text-[8px] font-bold uppercase tracking-[0.11em] text-[#fffaf0]/28 hover:text-[#fffaf0]/55">Product Hunt ↗</a> : null}
+                          ) : <span className="text-[12px] text-[#fffaf0]/52">Website not available</span>}
+                          {product.productHuntUrl ? <a href={product.productHuntUrl} target="_blank" rel="noreferrer" className="w-fit text-[10px] font-bold uppercase tracking-[0.09em] text-[#fffaf0]/58 hover:text-[#fffaf0]/82">Product Hunt ↗</a> : null}
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 align-middle"><time dateTime={product.launchedAt} className="font-mono text-[10px] tabular-nums text-[#fffaf0]/52">{formatLaunchDate(product.launchedAt)}</time></td>
+                    <td className="px-4 align-middle"><time dateTime={product.launchedAt} className="font-mono text-[12px] font-medium tabular-nums text-[#fffaf0]/68">{formatLaunchDate(product.launchedAt)}</time></td>
                     <td className="px-4 align-middle"><LastMonthMetric product={product} /></td>
                     <td className="px-4 align-middle"><TrafficTrend product={product} /></td>
                     <td className="px-4 align-middle"><TagList values={product.topics} /></td>
                     <td className="px-4 align-middle"><TagList values={product.productTypes} tone="gold" /></td>
-                    <td className="px-4 pr-6 align-middle"><p className="line-clamp-3 max-w-[390px] text-[10px] leading-[1.55] text-[#fffaf0]/45 group-hover:text-[#fffaf0]/62">{product.description || product.tagline || 'Not available'}</p></td>
+                    <td className="px-4 pr-6 align-middle"><p className="line-clamp-3 max-w-[390px] text-[12px] leading-[1.6] text-[#fffaf0]/68 group-hover:text-[#fffaf0]/84">{product.description || product.tagline || 'Not available'}</p></td>
                   </tr>
                 ))}
               </tbody>
@@ -502,12 +483,12 @@ export function ProductIntelligencePage() {
             <div className="grid min-h-64 place-items-center px-6 py-12 text-center">
               <div>
                 <Search className="mx-auto h-6 w-6 text-[#fffaf0]/22" />
-                <h3 className="mt-3 text-[13px] font-semibold text-[#fffaf0]">{datasetStatus === 'error' ? 'Product data is temporarily unavailable' : "No products in Minaco's tracking database match these filters"}</h3>
-                <p className="mt-1 text-[11px] text-[#fffaf0]/42">{datasetStatus === 'error' ? 'Please retry after the data service reconnects.' : 'Ask Minaco to research this product for you now.'}</p>
+                <h3 className="mt-3 text-[15px] font-semibold text-[#fffaf0]">{datasetStatus === 'error' ? 'Product data is temporarily unavailable' : "No products in Minaco's tracking database match these filters"}</h3>
+                <p className="mt-1.5 text-[13px] text-[#fffaf0]/65">{datasetStatus === 'error' ? 'Please retry after the data service reconnects.' : 'Ask Minaco to research this product for you now.'}</p>
                 {datasetStatus !== 'error' ? (
                   <Link
                     href={askMinacoHref}
-                    className="mx-auto mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-[9px] border border-[#f6d993]/70 bg-[#e9b85a] px-4 text-[11px] font-bold text-[#171107] shadow-[0_10px_30px_rgba(233,184,90,.18)] transition hover:border-[#ffe7ad] hover:bg-[#f2c36b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2c36b]/45"
+                    className="mx-auto mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-[9px] border border-[#f6d993]/70 bg-[#e9b85a] px-5 text-[13px] font-bold text-[#171107] shadow-[0_10px_30px_rgba(233,184,90,.18)] transition hover:border-[#ffe7ad] hover:bg-[#f2c36b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2c36b]/45"
                   >
                     <MinacoBrandMark className="block h-5 w-5 shrink-0 overflow-hidden rounded-[5px]" imageClassName="h-full w-full object-contain" decorative={false} />
                     Ask Minaco about this product
@@ -517,12 +498,12 @@ export function ProductIntelligencePage() {
             </div>
           ) : null}
 
-          <div className="flex min-h-[54px] flex-wrap items-center justify-between gap-3 border-t border-[#fffaf0]/10 bg-[#0d0e0e] px-4">
-            <span className="text-[9px] text-[#fffaf0]/34">Website registrations and revenue are Minaco estimates. * Uses observed payment-platform traffic. ** App revenue estimate provided by Appark. Hover a value for its source and range.</span>
+          <div className="flex min-h-[60px] flex-wrap items-center justify-between gap-3 border-t border-[#fffaf0]/12 bg-[#0d0e0e] px-4">
+            <span className="text-[11px] leading-5 text-[#fffaf0]/62">Website registrations and revenue are Minaco estimates. * Uses observed payment-platform traffic. ** App revenue estimate provided by Appark. Hover a value for its source and range.</span>
             <div className="flex items-center gap-2">
-              <button type="button" disabled={page === 0 || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.max(0, current - 1)); }} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#fffaf0]/10 px-2.5 text-[9px] font-semibold text-[#fffaf0]/52 hover:bg-[#fffaf0]/5 disabled:cursor-not-allowed disabled:opacity-30"><ArrowLeft className="h-3 w-3" /> Previous</button>
-              <span className="min-w-[74px] text-center font-mono text-[9px] tabular-nums text-[#fffaf0]/38">{page + 1} / {totalPages}</span>
-              <button type="button" disabled={page + 1 >= totalPages || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.min(totalPages - 1, current + 1)); }} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#fffaf0]/10 px-2.5 text-[9px] font-semibold text-[#fffaf0]/52 hover:bg-[#fffaf0]/5 disabled:cursor-not-allowed disabled:opacity-30">Next <ArrowRight className="h-3 w-3" /></button>
+              <button type="button" disabled={page === 0 || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.max(0, current - 1)); }} className="inline-flex h-9 items-center gap-1 rounded-[7px] border border-[#fffaf0]/16 px-3 text-[11px] font-semibold text-[#fffaf0]/72 hover:bg-[#fffaf0]/7 disabled:cursor-not-allowed disabled:opacity-40"><ArrowLeft className="h-3.5 w-3.5" /> Previous</button>
+              <span className="min-w-[74px] text-center font-mono text-[11px] font-medium tabular-nums text-[#fffaf0]/58">{page + 1} / {totalPages}</span>
+              <button type="button" disabled={page + 1 >= totalPages || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.min(totalPages - 1, current + 1)); }} className="inline-flex h-9 items-center gap-1 rounded-[7px] border border-[#fffaf0]/16 px-3 text-[11px] font-semibold text-[#fffaf0]/72 hover:bg-[#fffaf0]/7 disabled:cursor-not-allowed disabled:opacity-40">Next <ArrowRight className="h-3.5 w-3.5" /></button>
             </div>
           </div>
         </section>

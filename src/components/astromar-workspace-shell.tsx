@@ -158,7 +158,7 @@ export function AstromarWorkspaceShell({
         >
           <X className="h-4 w-4" />
         </button>
-        <PanelLeftClose className="hidden h-4 w-4 text-zinc-600 md:block" />
+        <PanelLeftClose className="hidden h-4 w-4 text-zinc-500 md:block" />
       </div>
 
       {onNewDiscussion ? (
@@ -198,7 +198,7 @@ export function AstromarWorkspaceShell({
               onFocus={() => handleNavigationIntent(item.href)}
               onClick={() => setMobileSidebarOpen(false)}
               className={`flex min-h-[38px] items-center gap-2.5 rounded-[7px] px-3 text-[13px] transition-colors ${
-                active ? 'bg-white/[0.085] text-white' : 'text-zinc-400 hover:bg-white/[0.045] hover:text-white'
+                active ? 'bg-white/[0.085] text-white' : 'text-zinc-300 hover:bg-white/[0.045] hover:text-white'
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -220,7 +220,7 @@ export function AstromarWorkspaceShell({
           <span className="grid h-[38px] w-[38px] place-items-center rounded-[7px] bg-[#d9dce1] text-[11px] font-extrabold text-[#161616]">{initials}</span>
           <span className="grid min-w-0">
             <strong className="truncate text-xs text-white">{displayName}</strong>
-            <span className="truncate text-[10px] text-zinc-500">{email}</span>
+            <span className="truncate text-[11px] text-zinc-400">{email}</span>
           </span>
           <ChevronRight className="h-3.5 w-3.5 text-zinc-600" />
         </Link>
@@ -228,7 +228,7 @@ export function AstromarWorkspaceShell({
           <button
             type="button"
             onClick={resetWorkspaceClientCache}
-            className="mt-1.5 flex min-h-9 w-full items-center gap-2 rounded-[7px] px-2.5 text-left text-[11px] font-semibold text-zinc-400 hover:bg-red-400/[0.065] hover:text-red-300"
+            className="mt-1.5 flex min-h-9 w-full items-center gap-2 rounded-[7px] px-2.5 text-left text-[12px] font-semibold text-zinc-300 hover:bg-red-400/[0.065] hover:text-red-300"
           >
             <LogOut className="h-3.5 w-3.5" />
             Sign out
