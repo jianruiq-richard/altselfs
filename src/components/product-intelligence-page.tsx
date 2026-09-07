@@ -12,9 +12,11 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
+import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { fetchWorkspaceJson, WORKSPACE_CACHE_KEYS } from '@/lib/workspace-client-cache';
 
 const PAGE_SIZE = 50;
@@ -325,6 +327,9 @@ export function ProductIntelligencePage() {
   const endRow = Math.min(totalProducts, page * PAGE_SIZE + productRows.length);
   const totalPages = Math.max(1, Math.ceil(totalProducts / PAGE_SIZE));
   const categoryOptions = useMemo(() => filterOptions.topics.slice(0, 80), [filterOptions.topics]);
+  const askMinacoParams = new URLSearchParams({ newDiscussion: '1' });
+  if (filters.query.trim()) askMinacoParams.set('prompt', `Research ${filters.query.trim()}`);
+  const askMinacoHref = `/investor/chat/100?${askMinacoParams.toString()}`;
 
   const updateDraft = <Key extends keyof FilterState>(key: Key, value: FilterState[Key]) => {
     setDraftFilters((current) => ({ ...current, [key]: value }));
@@ -499,9 +504,17 @@ export function ProductIntelligencePage() {
             <div className="grid min-h-64 place-items-center px-6 py-12 text-center">
               <div>
                 <Search className="mx-auto h-6 w-6 text-[#fffaf0]/22" />
-                <h3 className="mt-3 text-[13px] font-semibold text-[#fffaf0]">{datasetStatus === 'error' ? 'Product data is temporarily unavailable' : 'No products match these filters'}</h3>
-                <p className="mt-1 text-[11px] text-[#fffaf0]/42">{datasetStatus === 'error' ? 'Please retry after the data service reconnects.' : 'Try a broader keyword, topic, or product type.'}</p>
-                {datasetStatus !== 'error' ? <button type="button" onClick={resetFilters} className="mt-4 rounded-[8px] border border-[#fffaf0]/12 px-3 py-2 text-[11px] font-semibold text-[#fffaf0]/65 hover:bg-[#fffaf0]/5 hover:text-[#fffaf0]">Clear all filters</button> : null}
+                <h3 className="mt-3 text-[13px] font-semibold text-[#fffaf0]">{datasetStatus === 'error' ? 'Product data is temporarily unavailable' : "No products in Minaco's tracking database match these filters"}</h3>
+                <p className="mt-1 text-[11px] text-[#fffaf0]/42">{datasetStatus === 'error' ? 'Please retry after the data service reconnects.' : 'Ask Minaco to research this product for you now.'}</p>
+                {datasetStatus !== 'error' ? (
+                  <Link
+                    href={askMinacoHref}
+                    className="mx-auto mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-[9px] border border-[#f6d993]/70 bg-[#e9b85a] px-4 text-[11px] font-bold text-[#171107] shadow-[0_10px_30px_rgba(233,184,90,.18)] transition hover:border-[#ffe7ad] hover:bg-[#f2c36b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2c36b]/45"
+                  >
+                    <MinacoBrandMark className="block h-5 w-5 shrink-0 overflow-hidden rounded-[5px]" imageClassName="h-full w-full object-contain" decorative={false} />
+                    Ask Minaco about this product
+                  </Link>
+                ) : null}
               </div>
             </div>
           ) : null}

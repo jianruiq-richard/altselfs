@@ -2411,6 +2411,7 @@ export function InvestorAgentChatPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const startNewDiscussion = searchParams.get('newDiscussion') === '1';
   const agentId = params.agentId as string;
   const isExecutive = agentId === '100';
   const initialPersonalAgentCache = isExecutive
@@ -2493,6 +2494,7 @@ export function InvestorAgentChatPage() {
   const attachmentDragDepthRef = useRef(0);
   const connectorSelectionsByThreadRef = useRef<Map<string, string[]>>(new Map());
   const initialLoadStartedRef = useRef(false);
+  const handledNewDiscussionRef = useRef(false);
   const activeWorkDisplayRef = useRef<ActiveWorkPresentation | null>(null);
   const runAnalyticsRef = useRef(new Map<string, {
     isFirstMessage: boolean;
@@ -3589,6 +3591,13 @@ export function InvestorAgentChatPage() {
       messagesViewportRef.current?.scrollTo({ top: 0 });
     });
   }, [connectors, recoveringRunState, resetPersonalAgentRunState, selectThreadId, setThreadMessages, startingRun]);
+
+  useEffect(() => {
+    if (!startNewDiscussion || handledNewDiscussionRef.current || startingRun || recoveringRunState) return;
+    handledNewDiscussionRef.current = true;
+    createNewSession();
+    window.history.replaceState(null, '', '/investor/chat/100');
+  }, [createNewSession, recoveringRunState, startNewDiscussion, startingRun]);
 
   const switchSession = useCallback(async (targetThreadId: string) => {
     if (!targetThreadId || targetThreadId === threadId || startingRun || recoveringRunState) return;
