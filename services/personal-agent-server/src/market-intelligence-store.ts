@@ -6,17 +6,25 @@ type PgPool = {
 
 export type MarketProductSort =
   | 'rank'
+  | 'audience'
+  | 'trend'
+  | 'revenue'
+  | 'newest'
+  // Backward-compatible sort values used by the first mock UI.
   | 'traffic'
   | 'traffic-growth'
-  | 'revenue'
-  | 'revenue-growth'
-  | 'newest';
+  | 'revenue-growth';
+
+export type MarketProductDataset = 'mock' | 'actual' | 'all';
 
 export type ListMarketProductsInput = {
   query?: string;
   category?: string;
+  productType?: string;
+  dataset?: MarketProductDataset;
   sort?: MarketProductSort;
   limit?: number;
+  offset?: number;
 };
 
 let sharedPool: PgPool | null = null;
@@ -53,6 +61,16 @@ const MARKET_INTELLIGENCE_SCHEMA_SQL = `
     unique (external_source, external_id)
   );
 
+  alter table market_intelligence.products
+    add column if not exists product_hunt_url text,
+    add column if not exists product_types text[] not null default '{}',
+    add column if not exists platforms text[] not null default '{}',
+    add column if not exists is_native_app boolean not null default false,
+    add column if not exists revenue_estimate_low_usd numeric(18, 2),
+    add column if not exists revenue_estimate_high_usd numeric(18, 2),
+    add column if not exists revenue_estimate_source text,
+    add column if not exists estimate_method_version text;
+
   create table if not exists market_intelligence.product_monthly_metrics (
     product_id text not null references market_intelligence.products(id) on delete cascade,
     month date not null,
@@ -71,15 +89,49 @@ const MARKET_INTELLIGENCE_SCHEMA_SQL = `
     updated_at timestamptz not null default now(),
     primary key (product_id, month)
   );
+
+  alter table market_intelligence.product_monthly_metrics
+    add column if not exists estimated_users_low bigint,
+    add column if not exists estimated_users_high bigint,
+    add column if not exists user_estimate_source text;
+
+  create table if not exists market_intelligence.product_app_metrics (
+    product_id text not null references market_intelligence.products(id) on delete cascade,
+    observed_at timestamptz not null,
+    ios_downloads_30d bigint,
+    ios_revenue_30d numeric(18, 2),
+    android_downloads_30d bigint,
+    android_revenue_30d numeric(18, 2),
+    total_downloads_30d bigint,
+    total_revenue_30d numeric(18, 2),
+    coverage_status text,
+    source text not null default 'appark',
+    confidence text not null default 'estimated',
+    is_mock boolean not null default false,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (product_id, observed_at)
+  );
+
+  create index if not exists market_products_actual_rank_idx
+    on market_intelligence.products (is_mock, current_rank asc, id asc);
+  create index if not exists market_products_topics_idx
+    on market_intelligence.products using gin (topics);
+  create index if not exists market_products_types_idx
+    on market_intelligence.products using gin (product_types);
+  create index if not exists market_app_metrics_product_observed_idx
+    on market_intelligence.product_app_metrics (product_id, observed_at desc);
 `;
 
 const SORT_SQL: Record<MarketProductSort, string> = {
   rank: 'p.current_rank asc nulls last, p.id asc',
-  traffic: 'p.monthly_traffic desc nulls last, p.id asc',
-  'traffic-growth': 'p.traffic_growth_pct desc nulls last, p.id asc',
-  revenue: 'p.monthly_new_revenue_usd desc nulls last, p.id asc',
-  'revenue-growth': 'p.revenue_growth_pct desc nulls last, p.id asc',
-  newest: 'p.launched_at desc, p.id asc',
+  audience: 'coalesce(app.total_downloads_30d, latest_metric.estimated_monthly_users) desc nulls last, p.current_rank asc nulls last, p.id asc',
+  trend: 'p.traffic_growth_pct desc nulls last, p.current_rank asc nulls last, p.id asc',
+  revenue: 'coalesce(app.total_revenue_30d, p.monthly_new_revenue_usd) desc nulls last, p.current_rank asc nulls last, p.id asc',
+  newest: 'p.launched_at desc, p.current_rank asc nulls last, p.id asc',
+  traffic: 'coalesce(app.total_downloads_30d, latest_metric.estimated_monthly_users) desc nulls last, p.current_rank asc nulls last, p.id asc',
+  'traffic-growth': 'p.traffic_growth_pct desc nulls last, p.current_rank asc nulls last, p.id asc',
+  'revenue-growth': 'p.revenue_growth_pct desc nulls last, p.current_rank asc nulls last, p.id asc',
 };
 
 async function getMarketPool(config: ServerConfig) {
@@ -105,13 +157,26 @@ async function ensureMarketSchema(pool: PgPool) {
   await schemaReady;
 }
 
-function rowNumber(value: unknown) {
+function rowNullableNumber(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function rowNumber(value: unknown) {
+  return rowNullableNumber(value) ?? 0;
 }
 
 function rowString(value: unknown) {
   return typeof value === 'string' ? value : value instanceof Date ? value.toISOString() : '';
+}
+
+function rowStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
+}
+
+function normalizeDataset(value: MarketProductDataset | undefined): MarketProductDataset {
+  return value === 'mock' || value === 'all' ? value : 'actual';
 }
 
 export async function listMarketProducts(config: ServerConfig, input: ListMarketProductsInput = {}) {
@@ -119,9 +184,18 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
   await ensureMarketSchema(pool);
 
   const query = input.query?.trim().slice(0, 120) || '';
-  const category = input.category?.trim().slice(0, 80) || '';
+  const category = input.category?.trim().slice(0, 100) || '';
+  const productType = input.productType?.trim().slice(0, 100) || '';
+  const dataset = normalizeDataset(input.dataset);
   const sort = input.sort && input.sort in SORT_SQL ? input.sort : 'rank';
   const limit = Math.max(1, Math.min(100, Math.floor(input.limit || 50)));
+  const offset = Math.max(0, Math.min(100_000, Math.floor(input.offset || 0)));
+  const datasetSql = dataset === 'all'
+    ? 'true'
+    : dataset === 'actual'
+      ? 'p.is_mock = false'
+      : 'p.is_mock = true';
+
   const result = await pool.query(
     `
       select
@@ -130,26 +204,42 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         p.name,
         p.domain,
         p.website_url,
+        p.product_hunt_url,
         p.logo_url,
         p.launched_at,
         p.category,
+        p.topics,
+        p.product_types,
+        p.platforms,
+        p.is_native_app,
+        p.tagline,
         p.description,
         p.monthly_traffic,
         p.traffic_growth_pct,
         p.monthly_new_revenue_usd,
+        p.revenue_estimate_low_usd,
+        p.revenue_estimate_high_usd,
+        p.revenue_estimate_source,
+        p.estimate_method_version,
         p.revenue_growth_pct,
         p.data_confidence,
         p.is_mock,
         p.metrics_updated_at,
+        app.observed_at as app_observed_at,
+        app.total_downloads_30d,
+        app.total_revenue_30d,
+        app.coverage_status as app_coverage_status,
+        latest_metric.month as latest_metric_month,
+        latest_metric.estimated_monthly_users,
+        latest_metric.estimated_users_low,
+        latest_metric.estimated_users_high,
+        latest_metric.user_estimate_source,
         count(*) over() as total_count,
         coalesce((
           select jsonb_agg(jsonb_build_object(
             'month', to_char(recent.month, 'YYYY-MM'),
             'trafficVisits', recent.traffic_visits,
-            'estimatedMonthlyUsers', recent.estimated_monthly_users,
-            'estimatedNewRevenueUsd', recent.estimated_new_revenue_usd,
-            'revenueLowUsd', recent.revenue_low_usd,
-            'revenueHighUsd', recent.revenue_high_usd,
+            'trafficSource', recent.traffic_source,
             'confidence', recent.confidence
           ) order by recent.month)
           from (
@@ -157,63 +247,145 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
             from market_intelligence.product_monthly_metrics m
             where m.product_id = p.id
             order by m.month desc
-            limit 6
+            limit 3
           ) recent
-        ), '[]'::jsonb) as metrics
+        ), '[]'::jsonb) as traffic_trend
       from market_intelligence.products p
-      where (
+      left join lateral (
+        select m.*
+        from market_intelligence.product_app_metrics m
+        where m.product_id = p.id
+        order by m.observed_at desc
+        limit 1
+      ) app on true
+      left join lateral (
+        select m.*
+        from market_intelligence.product_monthly_metrics m
+        where m.product_id = p.id
+        order by m.month desc
+        limit 1
+      ) latest_metric on true
+      where ${datasetSql}
+      and (
         $1 = ''
-        or to_tsvector('simple', coalesce(p.name, '') || ' ' || coalesce(p.domain, '') || ' ' || coalesce(p.tagline, '') || ' ' || coalesce(p.description, ''))
-          @@ websearch_to_tsquery('simple', $1)
+        or to_tsvector(
+          'simple',
+          coalesce(p.name, '') || ' ' || coalesce(p.domain, '') || ' ' || coalesce(p.tagline, '') || ' ' ||
+          coalesce(p.description, '') || ' ' || array_to_string(p.topics, ' ') || ' ' || array_to_string(p.product_types, ' ')
+        ) @@ websearch_to_tsquery('simple', $1)
         or p.name ilike '%' || $1 || '%'
         or p.domain ilike '%' || $1 || '%'
       )
-      and ($2 = '' or p.category = $2)
+      and ($2 = '' or $2 = any(p.topics) or p.category = $2)
+      and ($3 = '' or $3 = any(p.product_types))
       order by ${SORT_SQL[sort]}
-      limit $3
+      limit $4 offset $5
     `,
-    [query, category, limit],
+    [query, category, productType, limit, offset],
   );
 
+  const optionsWhere = dataset === 'all'
+    ? 'true'
+    : dataset === 'actual'
+      ? 'is_mock = false'
+      : 'is_mock = true';
+  const [topicResult, typeResult] = await Promise.all([
+    pool.query(`
+      select value, count(*)::integer as count
+      from market_intelligence.products, unnest(topics) value
+      where ${optionsWhere}
+      group by value
+      order by count(*) desc, value asc
+      limit 100
+    `),
+    pool.query(`
+      select value, count(*)::integer as count
+      from market_intelligence.products, unnest(product_types) value
+      where ${optionsWhere}
+      group by value
+      order by count(*) desc, value asc
+      limit 50
+    `),
+  ]);
+
   const products = result.rows.map((row) => {
-    const metrics = Array.isArray(row.metrics) ? row.metrics : [];
+    const trafficTrend = Array.isArray(row.traffic_trend) ? row.traffic_trend : [];
+    const appDownloads = rowNullableNumber(row.total_downloads_30d);
+    const registeredUsers = rowNullableNumber(row.estimated_monthly_users);
+    const audienceKind = appDownloads !== null
+      ? 'app_downloads'
+      : registeredUsers !== null
+        ? 'registered_users_estimate'
+        : null;
+    const audienceValue = appDownloads ?? registeredUsers;
+    const appRevenue = rowNullableNumber(row.total_revenue_30d);
+    const latestTrafficMonth = trafficTrend.length > 0
+      ? rowString((trafficTrend.at(-1) as Record<string, unknown> | undefined)?.month)
+      : '';
+
     return {
       id: rowString(row.id),
       rank: rowNumber(row.current_rank),
       name: rowString(row.name),
       domain: rowString(row.domain),
-      websiteUrl: rowString(row.website_url),
+      websiteUrl: rowString(row.website_url) || null,
+      productHuntUrl: rowString(row.product_hunt_url) || null,
       logoUrl: rowString(row.logo_url) || null,
       launchedAt: rowString(row.launched_at),
       category: rowString(row.category),
+      topics: rowStringArray(row.topics),
+      productTypes: rowStringArray(row.product_types),
+      platforms: rowStringArray(row.platforms),
+      isNativeApp: Boolean(row.is_native_app),
+      tagline: rowString(row.tagline),
       description: rowString(row.description),
-      monthlyTraffic: rowNumber(row.monthly_traffic),
-      trafficGrowthPct: rowNumber(row.traffic_growth_pct),
-      monthlyNewRevenueUsd: rowNumber(row.monthly_new_revenue_usd),
-      revenueGrowthPct: rowNumber(row.revenue_growth_pct),
-      confidence: rowString(row.data_confidence),
-      isMock: Boolean(row.is_mock),
-      metricsUpdatedAt: rowString(row.metrics_updated_at),
-      metrics: metrics.map((metric) => {
+      lastMonthAudience: {
+        kind: audienceKind,
+        value: audienceValue,
+        low: audienceKind === 'app_downloads' ? null : rowNullableNumber(row.estimated_users_low),
+        high: audienceKind === 'app_downloads' ? null : rowNullableNumber(row.estimated_users_high),
+        period: audienceKind === 'app_downloads' ? 'rolling-30d' : rowString(row.latest_metric_month).slice(0, 7) || latestTrafficMonth || null,
+        source: audienceKind === 'app_downloads' ? 'Appark estimate' : rowString(row.user_estimate_source) || null,
+      },
+      lastMonthRevenue: {
+        value: appRevenue ?? rowNullableNumber(row.monthly_new_revenue_usd),
+        low: appRevenue !== null ? null : rowNullableNumber(row.revenue_estimate_low_usd),
+        high: appRevenue !== null ? null : rowNullableNumber(row.revenue_estimate_high_usd),
+        period: appRevenue !== null ? 'rolling-30d' : rowString(row.latest_metric_month).slice(0, 7) || null,
+        source: appRevenue !== null ? 'Appark estimate' : rowString(row.revenue_estimate_source) || null,
+      },
+      trafficGrowthPct: rowNullableNumber(row.traffic_growth_pct),
+      trafficTrend: trafficTrend.map((metric) => {
         const value = metric && typeof metric === 'object' ? metric as Record<string, unknown> : {};
         return {
           month: rowString(value.month),
-          trafficVisits: rowNumber(value.trafficVisits),
-          estimatedMonthlyUsers: rowNumber(value.estimatedMonthlyUsers),
-          estimatedNewRevenueUsd: rowNumber(value.estimatedNewRevenueUsd),
-          revenueLowUsd: rowNumber(value.revenueLowUsd),
-          revenueHighUsd: rowNumber(value.revenueHighUsd),
+          value: rowNullableNumber(value.trafficVisits),
+          source: rowString(value.trafficSource) || null,
           confidence: rowString(value.confidence),
         };
       }),
+      confidence: rowString(row.data_confidence),
+      isMock: Boolean(row.is_mock),
+      metricsUpdatedAt: rowString(row.metrics_updated_at),
+      appCoverageStatus: rowString(row.app_coverage_status) || null,
+      estimateMethodVersion: rowString(row.estimate_method_version) || null,
     };
   });
 
+  const total = result.rows.length ? rowNumber(result.rows[0].total_count) : 0;
   return {
     products,
-    total: result.rows.length ? rowNumber(result.rows[0].total_count) : 0,
+    total,
+    offset,
+    limit,
+    hasMore: offset + products.length < total,
     generatedAt: new Date().toISOString(),
     source: 'aliyun-rds',
+    dataset,
     mock: products.length > 0 && products.every((product) => product.isMock),
+    filterOptions: {
+      topics: topicResult.rows.map((row) => ({ value: rowString(row.value), count: rowNumber(row.count) })),
+      productTypes: typeResult.rows.map((row) => ({ value: rowString(row.value), count: rowNumber(row.count) })),
+    },
   };
 }

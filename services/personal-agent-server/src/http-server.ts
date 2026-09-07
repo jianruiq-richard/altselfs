@@ -175,8 +175,11 @@ export function createHttpServer(
           return json(res, 200, await listMarketProducts(config, {
             query: url.searchParams.get('q') || undefined,
             category: url.searchParams.get('category') || undefined,
+            productType: url.searchParams.get('productType') || undefined,
+            dataset: url.searchParams.get('dataset')?.trim() as 'mock' | 'actual' | 'all' | undefined,
             sort,
             limit: Number(url.searchParams.get('limit') || 50),
+            offset: Number(url.searchParams.get('offset') || 0),
           }));
         } catch (error) {
           console.error('[market-intelligence] failed to list products', error);

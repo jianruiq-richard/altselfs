@@ -4,7 +4,7 @@ import { hasProductIntelligenceAccess } from '@/lib/product-intelligence-access'
 
 export const dynamic = 'force-dynamic';
 
-const FORWARDED_QUERY_KEYS = ['q', 'category', 'sort', 'limit'] as const;
+const FORWARDED_QUERY_KEYS = ['q', 'category', 'productType', 'dataset', 'sort', 'limit', 'offset'] as const;
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);

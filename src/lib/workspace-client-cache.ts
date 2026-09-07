@@ -295,7 +295,7 @@ export function prefetchWorkspaceRouteData(href: string) {
   if (pathname.startsWith('/product-intelligence')) {
     prefetchWorkspaceJson<{ products?: unknown[] }>(
       WORKSPACE_CACHE_KEYS.productIntelligence,
-      '/api/product-intelligence/products?limit=100',
+      '/api/product-intelligence/products?dataset=actual&limit=50&offset=0',
       {},
       { ttlMs: 60_000 },
     );

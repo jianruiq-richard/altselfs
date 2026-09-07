@@ -13,14 +13,22 @@ create table if not exists market_intelligence.products (
   domain text,
   website_url text,
   logo_url text,
+  product_hunt_url text,
   category text not null,
   topics text[] not null default '{}',
+  product_types text[] not null default '{}',
+  platforms text[] not null default '{}',
+  is_native_app boolean not null default false,
   launched_at timestamptz not null,
   current_rank integer,
   monthly_traffic bigint,
   traffic_growth_pct numeric(8, 2),
   monthly_new_revenue_usd numeric(18, 2),
   revenue_growth_pct numeric(8, 2),
+  revenue_estimate_low_usd numeric(18, 2),
+  revenue_estimate_high_usd numeric(18, 2),
+  revenue_estimate_source text,
+  estimate_method_version text,
   data_confidence text not null default 'unknown',
   is_mock boolean not null default false,
   metrics_updated_at timestamptz,
@@ -49,6 +57,9 @@ create table if not exists market_intelligence.product_monthly_metrics (
   month date not null,
   traffic_visits bigint,
   estimated_monthly_users bigint,
+  estimated_users_low bigint,
+  estimated_users_high bigint,
+  user_estimate_source text,
   estimated_new_revenue_usd numeric(18, 2),
   revenue_low_usd numeric(18, 2),
   revenue_high_usd numeric(18, 2),
@@ -58,6 +69,37 @@ create table if not exists market_intelligence.product_monthly_metrics (
   method_version text,
   is_mock boolean not null default false,
   observed_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (product_id, month)
+);
+
+create table if not exists market_intelligence.product_app_metrics (
+  product_id text not null references market_intelligence.products(id) on delete cascade,
+  observed_at timestamptz not null,
+  ios_downloads_30d bigint,
+  ios_revenue_30d numeric(18, 2),
+  android_downloads_30d bigint,
+  android_revenue_30d numeric(18, 2),
+  total_downloads_30d bigint,
+  total_revenue_30d numeric(18, 2),
+  coverage_status text,
+  source text not null default 'Appark',
+  confidence text not null default 'estimated',
+  is_mock boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (product_id, observed_at)
+);
+
+create table if not exists market_intelligence.product_payment_metrics (
+  product_id text not null references market_intelligence.products(id) on delete cascade,
+  month date not null,
+  payment_outbound_visits bigint,
+  source text not null,
+  confidence text not null default 'medium',
+  is_mock boolean not null default false,
+  observed_at timestamptz not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (product_id, month)
@@ -94,5 +136,13 @@ create index if not exists market_products_search_idx
   );
 create index if not exists market_metrics_product_month_idx
   on market_intelligence.product_monthly_metrics (product_id, month desc);
+create index if not exists market_products_topics_idx
+  on market_intelligence.products using gin (topics);
+create index if not exists market_products_types_idx
+  on market_intelligence.products using gin (product_types);
+create index if not exists market_app_metrics_product_observed_idx
+  on market_intelligence.product_app_metrics (product_id, observed_at desc);
+create index if not exists market_payment_metrics_product_month_idx
+  on market_intelligence.product_payment_metrics (product_id, month desc);
 
 commit;
