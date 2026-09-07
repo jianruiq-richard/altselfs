@@ -12,7 +12,13 @@ const dataDirectory = resolve(dataDirectoryArgument);
 const outputFile = resolve(outputFileArgument);
 const manifest = JSON.parse(readFileSync(join(dataDirectory, 'manifest.json'), 'utf8'));
 
-const MODEL_VERSION = 'minaco-static-competitor-estimate-v1';
+const MODEL_VERSION = 'minaco-static-competitor-estimate-v2';
+
+const REVENUE_STATUS = {
+  openSource: 'Open Source',
+  free: 'Free',
+  unavailable: 'Not available',
+};
 
 const MODELS = {
   enterprise: {
@@ -120,6 +126,7 @@ const SHARED_PLATFORM_DOMAINS = new Set([
   'reddit.com',
   'replit.com',
   'slack.com',
+  'shopify.com',
   'sourceforge.net',
   'spotify.com',
   'substack.com',
@@ -190,6 +197,143 @@ function classifyModel(product, description) {
   return 'defaultSaas';
 }
 
+function normalizedBrand(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function hasDedicatedProductDomain(name, websiteUrl, metricDomain = '') {
+  try {
+    const url = new URL(String(metricDomain ? `https://${metricDomain}` : websiteUrl || ''));
+    const labels = url.hostname.toLowerCase().replace(/^www\./, '').split('.').filter(Boolean);
+    const genericLabels = new Set(['app', 'apps', 'blog', 'chat', 'community', 'developer', 'developers', 'docs', 'help', 'news', 'status', 'support']);
+    const candidates = labels.slice(0, -1).filter((label) => !genericLabels.has(label));
+    if (labels.length >= 2) candidates.push(`${labels.at(-2)}${labels.at(-1)}`);
+    const nameKey = normalizedBrand(name);
+    return candidates.some((candidate) => {
+      const candidateKey = normalizedBrand(candidate);
+      const unprefixedKey = candidateKey.replace(/^(?:get|use|try|join|with|hello|hey|my|go)(?=[a-z0-9])/, '');
+      return candidateKey === nameKey || unprefixedKey === nameKey;
+    });
+  } catch {
+    return false;
+  }
+}
+
+function hasVerifiedPricingSignal(record) {
+  if (record?.verified !== true) return false;
+  const signals = Array.isArray(record.signals) ? record.signals : [];
+  return signals.some((signal) => signal !== 'payment_link')
+    || /^(?:https:\/\/)?(?:buy|checkout)\.stripe\.com\//i.test(String(record.checkoutUrl || ''))
+    || /^(?:https:\/\/)?[^/]*(?:gumroad|lemonsqueezy|paddle|paypal)\.com\//i.test(String(record.checkoutUrl || ''));
+}
+
+function revenueEligibilityStatus(product, description, websiteUrl, metricDomain, pricingSignal) {
+  const name = String(product.name || '').trim();
+  const tagline = String(product.tagline || '').trim();
+  const topics = new Set((product.topics || []).map((value) => String(value).trim().toLowerCase()));
+  const productTypes = new Set((product.productTypes || []).map((value) => String(value).trim().toLowerCase()));
+  const text = `${name} ${tagline} ${description}`.toLowerCase();
+  const verifiedPricingEvidence = productTypes.has('saas / web service') && hasVerifiedPricingSignal(pricingSignal);
+  const commercialTextEvidence = verifiedPricingEvidence || /\b(?:annual plan|available (?:now )?on (?:all )?plans|buy once|enterprise plan|lifetime license|monthly plan|one-time (?:payment|purchase)|paid (?:plan|subscription)|pay once|premium plan|upgrade to pro)\b/i.test(text)
+    || /\b(?:costs?|from|only|priced at|starts? at|starting at|then)\s*[$€£]\s?\d/i.test(text)
+    || /[$€£]\s?\d+(?:[.,]\d+)?\s*(?:one[- ]time|per month|\/mo\b)/i.test(text);
+  const paidTierName = /\b(?:business|enterprise|premium|pro)\b/i.test(name);
+
+  if (!commercialTextEvidence && (topics.has('open source') || /\bopen[\s‐‑‒–—-]*source\b/i.test(text))) {
+    return { label: REVENUE_STATUS.openSource, method: 'open-source-without-paid-evidence' };
+  }
+
+  const explicitlyFree = topics.has('free games')
+    || /\b(?:completely|entirely|totally|truly|fully|100%) free\b/i.test(text)
+    || /\b(?:free to use|free for everyone|at no cost|zero[- ]cost|no paywall)\b/i.test(text)
+    || /\bfree(?:,|\s)+(?:desktop |mobile |web |ai |online )?(?:app|tool|software|service|platform|game|extension|library|template|resource|utility)\b/i.test(text)
+    || /^free\b(?!\s+(?:trial|plan|tier|credits?|version))/i.test(tagline);
+  if (explicitlyFree && !commercialTextEvidence && !paidTierName) {
+    return { label: REVENUE_STATUS.free, method: 'free-without-paid-evidence' };
+  }
+
+  const systemRelease = /^(?:android|ios|ipados|macos|windows|ubuntu|debian|fedora|chrome(?:os)?|firefox)\s+(?:v(?:ersion)?\s*)?\d+(?:\.\d+)*/i.test(name);
+  const namedDeveloperRelease = /(?:^|[^a-z0-9])(?:api|sdk|cli)(?:[^a-z0-9]|$)/i.test(name);
+  const versionedRelease = /(?:^|\s)(?:v\s*)?\d+(?:\.\d+)+(?:\s|$)/i.test(name);
+  const bundledOffering = /\bincluded with\b.{0,60}\b(?:membership|subscription|plan)\b|\bno (?:ads|in-app purchases)\b/i.test(text);
+  const nonStandaloneType = productTypes.has('ai model') || productTypes.has('hardware');
+  const domainAttributionRisk = Boolean(websiteUrl || metricDomain) && !hasDedicatedProductDomain(name, websiteUrl, metricDomain);
+  const governmentDomain = /\.(?:gov|mil)(?:\.[a-z]{2})?$/i.test(String(metricDomain || ''));
+
+  let nonProductSurface = false;
+  try {
+    const url = new URL(String(websiteUrl || ''));
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    const path = url.pathname.toLowerCase();
+    nonProductSurface = /^(?:blog|community|developer|developers|docs|help|news|status|support)\./.test(hostname)
+      || /\/(?:blog|changelog|docs?|documentation|news|releases?|updates?)(?:\/|$)/.test(path);
+  } catch {
+    nonProductSurface = false;
+  }
+
+  if (verifiedPricingEvidence) return null;
+
+  if (systemRelease || namedDeveloperRelease || versionedRelease || bundledOffering || nonStandaloneType || nonProductSurface || domainAttributionRisk || governmentDomain) {
+    return { label: REVENUE_STATUS.unavailable, method: 'no-product-level-paid-evidence' };
+  }
+
+  return null;
+}
+
+function appIdentityTokens(value) {
+  const ignored = new Set([
+    'ai', 'android', 'app', 'apps', 'assistant', 'by', 'for', 'ios', 'mac', 'macos', 'mail', 'mobile', 'notetaker', 'official', 'store', 'the', 'version', 'with',
+  ]);
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token && !ignored.has(token) && !/^v?\d+(?:\.\d+)*$/.test(token));
+}
+
+function apparkIdentityMatches(product, record) {
+  if (!record || !String(record.queryStatus || '').startsWith('success')) return false;
+  if (record.storeIdentitySource === 'appark_verified_cluster') return false;
+  const productTokens = appIdentityTokens(product.name);
+  const resolvedTokens = new Set(appIdentityTokens(record.resolvedAppName));
+  if (productTokens.length === 0 || resolvedTokens.size === 0) return false;
+  return productTokens.every((token) => resolvedTokens.has(token));
+}
+
+function validatedApparkMetrics(product, summary, platformRecords) {
+  if (!summary || !Array.isArray(platformRecords) || platformRecords.length === 0) return null;
+  const latestByPlatform = new Map();
+  for (const record of platformRecords.toSorted((left, right) => String(left.fetchedAt || '').localeCompare(String(right.fetchedAt || '')))) {
+    if (record.platform) latestByPlatform.set(record.platform, record);
+  }
+  const validRecords = [...latestByPlatform.values()].filter((record) => apparkIdentityMatches(product, record));
+  if (validRecords.length === 0) return null;
+
+  const uniqueClusters = new Map();
+  for (const record of validRecords) {
+    const clusterKey = record.clusterId || `${record.platform}:${record.resolvedStoreId || record.requestedStoreId || ''}`;
+    const previous = uniqueClusters.get(clusterKey);
+    if (!previous || (finiteNumber(record.revenue30d) || 0) > (finiteNumber(previous.revenue30d) || 0)) {
+      uniqueClusters.set(clusterKey, record);
+    }
+  }
+  const totalDownloads = [...uniqueClusters.values()].reduce((total, record) => total + (finiteNumber(record.downloads30d) || 0), 0);
+  const totalRevenue = [...uniqueClusters.values()].reduce((total, record) => total + (finiteNumber(record.revenue30d) || 0), 0);
+  const ios = validRecords.find((record) => record.platform === 'ios') || null;
+  const android = validRecords.find((record) => record.platform === 'android') || null;
+
+  return {
+    ...summary,
+    ios_downloads_30d: finiteNumber(ios?.downloads30d),
+    ios_revenue_30d: finiteNumber(ios?.revenue30d),
+    android_downloads_30d: finiteNumber(android?.downloads30d),
+    android_revenue_30d: finiteNumber(android?.revenue30d),
+    total_downloads_30d: totalDownloads,
+    total_revenue_30d: totalRevenue,
+    total_coverage_status: validRecords.length > 1 ? 'validated_multi_platform' : `validated_${validRecords[0].platform}_only`,
+  };
+}
+
 function countryValueFactor(countries) {
   if (!Array.isArray(countries) || countries.length === 0) return 0.75;
   let measuredShare = 0;
@@ -231,9 +375,9 @@ function monthsBetween(startDate, endMonth) {
   return Math.max(1, (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + end.getUTCMonth() - start.getUTCMonth() + 1);
 }
 
-function estimateRevenue({ appark, paymentMonths, registrations, model, countryFactor, launchedAt, latestMonth }) {
+function estimateRevenue({ appark, paymentMonths, registrations, model, countryFactor, launchedAt, latestMonth, eligibilityStatus, paymentEvidenceAllowed, verifiedPricingEvidence }) {
   const appRevenue = finiteNumber(appark?.total_revenue_30d);
-  if (appRevenue !== null) {
+  if (appRevenue !== null && appRevenue > 0) {
     return {
       base: money(appRevenue),
       low: null,
@@ -243,14 +387,12 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, countryF
     };
   }
 
-  if (registrations === null || !latestMonth) {
-    return { base: null, low: null, high: null, source: null, method: null };
-  }
-
   const usablePaymentMonths = [...(paymentMonths || [])]
     .filter((item) => item.value !== null)
     .toSorted((left, right) => left.month.localeCompare(right.month));
-  const positivePaymentMonths = usablePaymentMonths.filter((item) => item.value > 0);
+  const positivePaymentMonths = usablePaymentMonths.filter((item) => (
+    item.value > 0 && item.productCount === 1 && paymentEvidenceAllowed
+  ));
   let base;
   let source;
   let method;
@@ -265,14 +407,42 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, countryF
     base = activePayers * model.monthlyRevenuePerPayer * countryFactor;
     source = 'Minaco estimate · Semrush payment traffic';
     method = 'payment-destination-cohort';
-  } else {
+  } else if (eligibilityStatus) {
+    return {
+      base: null,
+      low: null,
+      high: null,
+      source: eligibilityStatus.label,
+      method: eligibilityStatus.method,
+    };
+  } else if (registrations !== null && latestMonth) {
     const acquisitionMonths = Math.min(12, monthsBetween(launchedAt, latestMonth));
     const cohortMultiplier = Array.from({ length: acquisitionMonths }, (_, index) => Math.pow(model.monthlyRetention, index))
       .reduce((total, value) => total + value, 0);
     const newPayers = registrations * model.trialToPaidRate * clamp(countryFactor, 0.55, 1.02);
     base = newPayers * cohortMultiplier * model.monthlyRevenuePerPayer * countryFactor;
-    source = 'Minaco estimate · Similarweb fallback';
-    method = 'traffic-registration-cohort';
+    source = verifiedPricingEvidence
+      ? 'Minaco estimate · Similarweb + verified pricing'
+      : 'Minaco estimate · Similarweb fallback';
+    method = verifiedPricingEvidence ? 'verified-pricing-traffic-cohort' : 'traffic-registration-cohort';
+  } else {
+    return {
+      base: null,
+      low: null,
+      high: null,
+      source: REVENUE_STATUS.unavailable,
+      method: 'no-audience-data-for-revenue-estimate',
+    };
+  }
+
+  if (!Number.isFinite(base) || base <= 0) {
+    return {
+      base: null,
+      low: null,
+      high: null,
+      source: eligibilityStatus?.label || REVENUE_STATUS.unavailable,
+      method: eligibilityStatus?.method || 'no-positive-revenue-evidence',
+    };
   }
 
   return {
@@ -336,6 +506,21 @@ await readJsonLines(join(dataDirectory, 'appark-local-products.jsonl'), (record)
   apparkByProduct.set(normalizeProductKey(record.product_key), record);
 });
 
+const apparkPlatformsByProduct = new Map();
+await readJsonLines(join(dataDirectory, 'appark-local-platform.raw.jsonl'), (record) => {
+  const key = normalizeProductKey(record.productKey);
+  if (!key) return;
+  const existing = apparkPlatformsByProduct.get(key) || [];
+  existing.push(record);
+  apparkPlatformsByProduct.set(key, existing);
+});
+
+const pricingSignalsByProduct = new Map();
+await readJsonLines(join(dataDirectory, 'pricing-signals.jsonl'), (record) => {
+  const key = normalizeProductKey(record.productKey);
+  if (key) pricingSignalsByProduct.set(key, record);
+});
+
 const paymentMaps = new Map();
 for (const fileName of ['semrush.raw.jsonl', 'semrush-2026-07.raw.jsonl']) {
   await readJsonLines(join(dataDirectory, fileName), (record) => {
@@ -348,7 +533,14 @@ for (const fileName of ['semrush.raw.jsonl', 'semrush-2026-07.raw.jsonl']) {
         const value = metric.status === 'available' ? finiteNumber(metric.paymentOutboundVisits) : null;
         if (!month) continue;
         const previous = monthMap.get(month);
-        if (!previous || fetchedAt >= previous.fetchedAt) monthMap.set(month, { month, value, fetchedAt });
+        if (!previous || fetchedAt >= previous.fetchedAt) {
+          monthMap.set(month, {
+            month,
+            value,
+            fetchedAt,
+            productCount: new Set(record.productKeys || []).size,
+          });
+        }
       }
       paymentMaps.set(key, monthMap);
     }
@@ -368,11 +560,14 @@ for (const product of manifest.products || []) {
   const latestLaunch = productLaunches[0] || {};
   const description = String(latestLaunch.product_description || product.tagline || '').trim();
   const domain = identity.website_domain || latestLaunch.website_domain || null;
+  const websiteUrl = identity.website_url || latestLaunch.website_url || null;
   const similarwebCandidate = similarwebByProduct.get(key) || null;
   const similarweb = isSharedPlatformDomain(domain) || (similarwebCandidate?.productCount || 0) > 1
     ? null
     : similarwebCandidate;
-  const appark = apparkByProduct.get(key) || null;
+  const appark = validatedApparkMetrics(product, apparkByProduct.get(key) || null, apparkPlatformsByProduct.get(key) || []);
+  const pricingSignal = pricingSignalsByProduct.get(key) || null;
+  const verifiedPricingEvidence = (product.productTypes || []).includes('SaaS / Web Service') && hasVerifiedPricingSignal(pricingSignal);
   const paymentMonths = [...(paymentMaps.get(key)?.values() || [])].toSorted((left, right) => left.month.localeCompare(right.month));
   const modelName = classifyModel(product, description);
   const model = MODELS[modelName];
@@ -388,6 +583,9 @@ for (const product of manifest.products || []) {
   }));
   const latestTraffic = registrationSeries.at(-1) || null;
   const latestMonth = latestTraffic?.month || null;
+  const eligibilityStatus = revenueEligibilityStatus(product, description, websiteUrl, domain, pricingSignal);
+  const paymentEvidenceAllowed = !isSharedPlatformDomain(domain)
+    && (verifiedPricingEvidence || hasDedicatedProductDomain(product.name, websiteUrl, domain));
   const revenue = estimateRevenue({
     appark,
     paymentMonths,
@@ -396,6 +594,9 @@ for (const product of manifest.products || []) {
     countryFactor,
     launchedAt: product.lastLaunchDate,
     latestMonth,
+    eligibilityStatus,
+    paymentEvidenceAllowed,
+    verifiedPricingEvidence,
   });
   const trafficGrowth = registrationSeries.length >= 2
     ? registrationSeries[0].visits === 0
@@ -407,7 +608,6 @@ for (const product of manifest.products || []) {
   const topics = [...new Set((product.topics || []).filter(Boolean))];
   const productTypes = [...new Set((product.productTypes || []).filter(Boolean))];
   const platforms = [...new Set((product.platforms || []).filter(Boolean))];
-  const websiteUrl = identity.website_url || latestLaunch.website_url || null;
   const appObservedAt = latestIso(
     appark?.ios_checked_at,
     appark?.android_checked_at,
@@ -534,7 +734,7 @@ const payload = {
     sourceDirectory: basename(dataDirectory),
     sourceManifestGeneratedAt: manifest.generatedAt,
     estimateMethodVersion: MODEL_VERSION,
-    caveat: 'Website registrations and revenue are Minaco model estimates. App downloads and revenue are Appark estimates.',
+    caveat: 'Website registrations and revenue are Minaco model estimates. SaaS fallback revenue requires verified pricing evidence or product-level attribution. App downloads and revenue are Appark estimates.',
     counts: {
       products: products.length,
       launches: launchRows.length,
@@ -546,6 +746,12 @@ const payload = {
         return products.filter((product) => product.monthly_traffic !== null || appAudienceIds.has(product.id)).length;
       })(),
       productsWithRevenue: products.filter((product) => product.monthly_new_revenue_usd !== null).length,
+      productsWithVerifiedPricing: [...pricingSignalsByProduct.values()].filter(hasVerifiedPricingSignal).length,
+      revenueStatuses: {
+        openSource: products.filter((product) => product.monthly_new_revenue_usd === null && product.revenue_estimate_source === REVENUE_STATUS.openSource).length,
+        free: products.filter((product) => product.monthly_new_revenue_usd === null && product.revenue_estimate_source === REVENUE_STATUS.free).length,
+        unavailable: products.filter((product) => product.monthly_new_revenue_usd === null && product.revenue_estimate_source === REVENUE_STATUS.unavailable).length,
+      },
     },
   },
   products,

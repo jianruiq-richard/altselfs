@@ -165,7 +165,11 @@ function ProductLogo({ product }: { product: MarketProductApiRecord }) {
 }
 
 function metricTitle(metric: MetricValue) {
-  if (metric.value === null) return 'No estimate is available yet.';
+  if (metric.value === null) {
+    if (metric.source === 'Open Source') return 'Open-source product with no verified product-level paid revenue evidence.';
+    if (metric.source === 'Free') return 'Free product with no verified product-level paid revenue evidence.';
+    return 'No verified product-level revenue estimate is available yet.';
+  }
   const range = metric.low !== null && metric.high !== null
     ? ` Estimated range: ${fullNumber.format(metric.low)}–${fullNumber.format(metric.high)}.`
     : '';
@@ -180,6 +184,10 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
   const revenueMarkerLabel = usesApparkRevenue
     ? 'Revenue estimate provided by Appark'
     : 'Estimated using payment-platform traffic';
+  const revenueStatus = product.lastMonthRevenue.value === null
+    && (product.lastMonthRevenue.source === 'Open Source' || product.lastMonthRevenue.source === 'Free')
+    ? product.lastMonthRevenue.source
+    : null;
   return (
     <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/14 bg-[#080909]">
       <div className="flex min-h-[47px] items-center justify-between gap-3 border-b border-[#fffaf0]/12 bg-[#78c889]/[0.075] px-3.5" title={metricTitle(product.lastMonthAudience)}>
@@ -190,8 +198,8 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
       </div>
       <div className="flex min-h-[47px] items-center justify-between gap-3 bg-[#f2c36b]/[0.075] px-3.5" title={metricTitle(product.lastMonthRevenue)}>
         <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#f2c36b]">Last month revenue</span>
-        <strong className={`text-[17px] font-semibold tabular-nums ${product.lastMonthRevenue.value === null ? 'text-[#fffaf0]/48' : 'text-[#f2c36b]'}`}>
-          {formatMetric(product.lastMonthRevenue.value, true)}
+        <strong className={`${revenueStatus ? 'text-[13px] uppercase tracking-[0.04em]' : 'text-[17px] tabular-nums'} font-semibold ${product.lastMonthRevenue.value === null ? revenueStatus ? 'text-[#f2c36b]' : 'text-[#fffaf0]/48' : 'text-[#f2c36b]'}`}>
+          {revenueStatus || formatMetric(product.lastMonthRevenue.value, true)}
           {revenueMarker ? <sup className="ml-0.5 text-[8px] font-black tracking-[-0.08em] text-[#fff0c7]" aria-label={revenueMarkerLabel}>{revenueMarker}</sup> : null}
         </strong>
       </div>
@@ -499,7 +507,7 @@ export function ProductIntelligencePage() {
           ) : null}
 
           <div className="flex min-h-[60px] flex-wrap items-center justify-between gap-3 border-t border-[#fffaf0]/12 bg-[#0d0e0e] px-4">
-            <span className="text-[11px] leading-5 text-[#fffaf0]/62">Website registrations and revenue are Minaco estimates. * Uses observed payment-platform traffic. ** App revenue estimate provided by Appark. Hover a value for its source and range.</span>
+            <span className="text-[11px] leading-5 text-[#fffaf0]/62">Website registrations and revenue are Minaco estimates. Open Source and Free replace unsupported revenue figures when no product-level paid evidence exists. * Uses observed payment-platform traffic. ** App revenue estimate provided by Appark.</span>
             <div className="flex items-center gap-2">
               <button type="button" disabled={page === 0 || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.max(0, current - 1)); }} className="inline-flex h-9 items-center gap-1 rounded-[7px] border border-[#fffaf0]/16 px-3 text-[11px] font-semibold text-[#fffaf0]/72 hover:bg-[#fffaf0]/7 disabled:cursor-not-allowed disabled:opacity-40"><ArrowLeft className="h-3.5 w-3.5" /> Previous</button>
               <label className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#fffaf0]/16 bg-[#090a0a] pl-3 pr-2 text-[11px] font-medium text-[#fffaf0]/62">

@@ -127,7 +127,10 @@ const SORT_SQL: Record<MarketProductSort, string> = {
   rank: 'p.current_rank asc nulls last, p.id asc',
   audience: 'coalesce(app.total_downloads_30d, latest_metric.estimated_monthly_users) desc nulls last, p.current_rank asc nulls last, p.id asc',
   trend: 'p.traffic_growth_pct desc nulls last, p.current_rank asc nulls last, p.id asc',
-  revenue: 'coalesce(app.total_revenue_30d, p.monthly_new_revenue_usd) desc nulls last, p.current_rank asc nulls last, p.id asc',
+  revenue: `case
+    when p.revenue_estimate_source in ('Open Source', 'Free') then null
+    else coalesce(nullif(app.total_revenue_30d, 0), p.monthly_new_revenue_usd)
+  end desc nulls last, p.current_rank asc nulls last, p.id asc`,
   newest: 'p.launched_at desc, p.current_rank asc nulls last, p.id asc',
   traffic: 'coalesce(app.total_downloads_30d, latest_metric.estimated_monthly_users) desc nulls last, p.current_rank asc nulls last, p.id asc',
   'traffic-growth': 'p.traffic_growth_pct desc nulls last, p.current_rank asc nulls last, p.id asc',
@@ -318,7 +321,10 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         ? 'registered_users_estimate'
         : null;
     const audienceValue = appDownloads ?? registeredUsers;
-    const appRevenue = rowNullableNumber(row.total_revenue_30d);
+    const productRevenueSource = rowString(row.revenue_estimate_source) || null;
+    const revenueIsNonMonetized = productRevenueSource === 'Open Source' || productRevenueSource === 'Free';
+    const rawAppRevenue = rowNullableNumber(row.total_revenue_30d);
+    const appRevenue = !revenueIsNonMonetized && rawAppRevenue !== null && rawAppRevenue > 0 ? rawAppRevenue : null;
     const latestTrafficMonth = trafficTrend.length > 0
       ? rowString((trafficTrend.at(-1) as Record<string, unknown> | undefined)?.month)
       : '';
@@ -352,7 +358,7 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         low: appRevenue !== null ? null : rowNullableNumber(row.revenue_estimate_low_usd),
         high: appRevenue !== null ? null : rowNullableNumber(row.revenue_estimate_high_usd),
         period: appRevenue !== null ? 'rolling-30d' : rowString(row.latest_metric_month).slice(0, 7) || null,
-        source: appRevenue !== null ? 'Appark estimate' : rowString(row.revenue_estimate_source) || null,
+        source: appRevenue !== null ? 'Appark estimate' : productRevenueSource,
       },
       trafficGrowthPct: rowNullableNumber(row.traffic_growth_pct),
       trafficTrend: trafficTrend.map((metric) => {
