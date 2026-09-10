@@ -16,6 +16,7 @@ test('exposes the Semrush payment destinations dynamic tool', () => {
   assert.deepEqual(tool.inputSchema.properties.months.enum, [6]);
   assert.equal(tool.inputSchema.properties.month.pattern, '^\\d{4}-(?:0[1-9]|1[0-2])$');
   assert.match(tool.description, /specific calendar month/);
+  assert.match(tool.description, /API 今日配额/);
 });
 
 test('advertises the Semrush tool on both non-local Codex profiles', () => {

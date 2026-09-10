@@ -8,6 +8,15 @@ import {
   type Page,
 } from 'playwright';
 import { buildPaymentPlatformRegistry, matchPaymentPlatform } from './payment-platforms.js';
+import {
+  DailyQuotaExhaustedError,
+  DailyQuotaUnavailableError,
+  initialDailyQuotaSnapshot,
+  parseThreeUeSemrushDailyQuota,
+  unavailableDailyQuotaSnapshot,
+  type DailyQuotaSnapshot,
+  type ThreeUeSubscriptionCardProbe,
+} from './quota.js';
 import type {
   DestinationObservation,
   DestinationProvider,
@@ -27,6 +36,10 @@ export type BrowserProviderConfig = {
   timeoutMs: number;
   artifactDir: string;
   pacing: BrowserPacingConfig;
+  quotaGuard: {
+    enabled: boolean;
+    stopAtUsedPercent: number;
+  };
 };
 
 export type BrowserPacingConfig = {
@@ -44,22 +57,49 @@ export class SemrushBrowserProvider implements DestinationProvider {
   private queue: Promise<void> = Promise.resolve();
   private cdpConnection?: Promise<{ browser: Browser; context: BrowserContext }>;
   private lastQueryFinishedAt = 0;
+  private quotaSnapshot: DailyQuotaSnapshot;
 
-  constructor(private readonly config: BrowserProviderConfig) {}
+  constructor(private readonly config: BrowserProviderConfig) {
+    this.quotaSnapshot = initialDailyQuotaSnapshot(
+      config.quotaGuard.enabled,
+      config.quotaGuard.stopAtUsedPercent,
+    );
+  }
 
   async query(input: QueryInput, displayDates: string[]): Promise<DestinationProviderResult> {
     const execute = async () => {
+      if (this.config.quotaGuard.enabled) {
+        const quota = await this.refreshDailyQuotaSerial();
+        if (quota.status === 'exhausted') throw new DailyQuotaExhaustedError(quota);
+        if (quota.status !== 'available') throw new DailyQuotaUnavailableError(quota);
+      }
       await this.waitForRequestGap(input.domain);
       try {
         return await this.querySerial(input, displayDates);
       } finally {
         this.lastQueryFinishedAt = Date.now();
+        if (this.config.quotaGuard.enabled) {
+          await this.refreshDailyQuotaSerial().catch((error) => {
+            console.warn(
+              `[semrush-traffic] post-query quota refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
+        }
       }
     };
-    const run = this.queue.then(
-      execute,
-      execute,
-    );
+    return this.enqueueSerial(execute);
+  }
+
+  getDailyQuotaSnapshot() {
+    return this.quotaSnapshot;
+  }
+
+  async refreshDailyQuota() {
+    return this.enqueueSerial(() => this.refreshDailyQuotaSerial());
+  }
+
+  private enqueueSerial<T>(execute: () => Promise<T>) {
+    const run = this.queue.then(execute, execute);
     this.queue = run.then(() => undefined, () => undefined);
     return run;
   }
@@ -416,6 +456,49 @@ export class SemrushBrowserProvider implements DestinationProvider {
     return { context: connection.context, closeWhenDone: false };
   }
 
+  private async refreshDailyQuotaSerial() {
+    if (!this.config.quotaGuard.enabled) return this.quotaSnapshot;
+    const { context, closeWhenDone } = await this.openContext();
+    try {
+      const dashboard = await this.getDashboardPage(context);
+      dashboard.setDefaultTimeout(this.config.timeoutMs);
+      await dashboard.reload({ waitUntil: 'domcontentloaded', timeout: this.config.timeoutMs });
+      await assertAuthenticated(dashboard);
+      const cards = dashboard.locator('app-subscription-item');
+      await cards.first().waitFor({ state: 'visible', timeout: 30_000 });
+      const probes: ThreeUeSubscriptionCardProbe[] = [];
+      for (let index = 0; index < await cards.count(); index += 1) {
+        const card = cards.nth(index);
+        if (!await card.isVisible()) continue;
+        probes.push({
+          text: await card.innerText(),
+          buttonTexts: await card.locator('button').allInnerTexts(),
+          progressText: await card.locator('nb-progress-bar').first().innerText().catch(() => ''),
+        });
+      }
+      const parsed = parseThreeUeSemrushDailyQuota(
+        probes,
+        this.config.quotaGuard.stopAtUsedPercent,
+      );
+      if (!parsed) throw new Error('The active Semrush subscription card did not expose API 今日配额.');
+      this.quotaSnapshot = parsed;
+      console.log(
+        `[semrush-traffic] quota status=${parsed.status} usedPercent=${parsed.usedPercent} remainingPercent=${parsed.remainingPercent}`,
+      );
+      return parsed;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.quotaSnapshot = unavailableDailyQuotaSnapshot(
+        this.config.quotaGuard.stopAtUsedPercent,
+        message,
+      );
+      console.warn(`[semrush-traffic] quota status=unavailable error=${JSON.stringify(message)}`);
+      throw new DailyQuotaUnavailableError(this.quotaSnapshot);
+    } finally {
+      if (closeWhenDone) await context.close();
+    }
+  }
+
   private async connectCdp() {
     try {
       const browser = await chromium.connectOverCDP(this.config.cdpEndpoint, {
@@ -441,6 +524,21 @@ export class SemrushBrowserProvider implements DestinationProvider {
     ));
     if (this.config.connectionMode === 'launch') return existingReport || context.pages()[0] || context.newPage();
 
+    const dashboard = await this.getDashboardPage(context);
+    const node = await selectUsableSemrushNode(dashboard);
+    if (existingReport && !node.changed) return existingReport;
+    const popupPromise = context.waitForEvent('page', { timeout: this.config.timeoutMs });
+    const openButton = dashboard.getByRole('button', { name: '打开', exact: true }).first();
+    if (!await openButton.isVisible()) {
+      throw new Error('Could not find the Semrush Open button on the authenticated 3ue dashboard');
+    }
+    await openButton.click();
+    const popup = await popupPromise;
+    await popup.waitForLoadState('domcontentloaded', { timeout: this.config.timeoutMs }).catch(() => undefined);
+    return popup;
+  }
+
+  private async getDashboardPage(context: BrowserContext) {
     const pages = [...context.pages()].reverse();
     const dashboard = pages.find((page) => (
       /dash\.3ue\.com/i.test(page.url()) && !/[/#]login/i.test(page.url())
@@ -454,17 +552,7 @@ export class SemrushBrowserProvider implements DestinationProvider {
       });
     }
     await assertAuthenticated(dashboard);
-    const node = await selectUsableSemrushNode(dashboard);
-    if (existingReport && !node.changed) return existingReport;
-    const popupPromise = context.waitForEvent('page', { timeout: this.config.timeoutMs });
-    const openButton = dashboard.getByRole('button', { name: '打开', exact: true }).first();
-    if (!await openButton.isVisible()) {
-      throw new Error('Could not find the Semrush Open button on the authenticated 3ue dashboard');
-    }
-    await openButton.click();
-    const popup = await popupPromise;
-    await popup.waitForLoadState('domcontentloaded', { timeout: this.config.timeoutMs }).catch(() => undefined);
-    return popup;
+    return dashboard;
   }
 }
 

@@ -20,25 +20,36 @@ docker compose --env-file .env.production -f "${COMPOSE_FILE}" config >/dev/null
 docker pull "${ALTSELFS_SEMRUSH_TRAFFIC_IMAGE}"
 docker compose --env-file .env.production -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate semrush-traffic
 
-container_id="$(docker compose --env-file .env.production -f "${COMPOSE_FILE}" ps -q semrush-traffic)"
-elapsed=0
-while [ "${elapsed}" -lt "${HEALTH_TIMEOUT_SECONDS}" ]; do
-  status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${container_id}" 2>/dev/null || true)"
-  case "${status}" in
-    healthy|running)
-      docker compose --env-file .env.production -f "${COMPOSE_FILE}" ps semrush-traffic
-      printf '[semrush-deploy] deployed image=%s\n' "${ALTSELFS_SEMRUSH_TRAFFIC_IMAGE}"
-      exit 0
-      ;;
-    unhealthy|exited|dead)
-      docker logs --tail 100 "${container_id}" >&2 || true
-      exit 1
-      ;;
-  esac
-  sleep 3
-  elapsed=$((elapsed + 3))
-done
+wait_healthy() {
+  local service="$1"
+  local container_id
+  local elapsed=0
+  container_id="$(docker compose --env-file .env.production -f "${COMPOSE_FILE}" ps -q "${service}")"
+  while [ "${elapsed}" -lt "${HEALTH_TIMEOUT_SECONDS}" ]; do
+    status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${container_id}" 2>/dev/null || true)"
+    case "${status}" in
+      healthy|running)
+        return 0
+        ;;
+      unhealthy|exited|dead)
+        docker logs --tail 100 "${container_id}" >&2 || true
+        return 1
+        ;;
+    esac
+    sleep 3
+    elapsed=$((elapsed + 3))
+  done
+  echo "${service} did not become healthy within ${HEALTH_TIMEOUT_SECONDS}s" >&2
+  docker logs --tail 100 "${container_id}" >&2 || true
+  return 1
+}
 
-echo "Semrush traffic service did not become healthy within ${HEALTH_TIMEOUT_SECONDS}s" >&2
-docker logs --tail 100 "${container_id}" >&2 || true
-exit 1
+wait_healthy semrush-traffic
+docker compose --env-file .env.production -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate \
+  semrush-traffic-worker-1 semrush-traffic-worker-2 semrush-traffic-worker-3
+for service in semrush-traffic-worker-1 semrush-traffic-worker-2 semrush-traffic-worker-3; do
+  wait_healthy "${service}"
+done
+docker compose --env-file .env.production -f "${COMPOSE_FILE}" ps \
+  semrush-traffic semrush-traffic-worker-1 semrush-traffic-worker-2 semrush-traffic-worker-3
+printf '[semrush-deploy] deployed dispatcher and 3 workers image=%s\n' "${ALTSELFS_SEMRUSH_TRAFFIC_IMAGE}"

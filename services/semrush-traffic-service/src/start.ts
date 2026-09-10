@@ -5,8 +5,9 @@ import { chromium } from 'playwright';
 
 let chromeProcess: ChildProcess | undefined;
 let shuttingDown = false;
+const role = (process.env.SEMRUSH_ROLE || 'standalone').trim().toLowerCase();
 
-if (readBool('SEMRUSH_BROWSER_MANAGED', false)) {
+if (role !== 'dispatcher' && readBool('SEMRUSH_BROWSER_MANAGED', false)) {
   chromeProcess = await startManagedChrome();
 }
 

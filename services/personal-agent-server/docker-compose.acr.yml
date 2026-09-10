@@ -22,6 +22,27 @@ x-agent-healthcheck: &agent-healthcheck
   retries: 6
   start_period: 20s
 
+x-semrush-worker: &semrush-worker
+  image: ${ALTSELFS_SEMRUSH_TRAFFIC_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/semrush-traffic-service:latest}
+  restart: unless-stopped
+  env_file:
+    - .env.production
+  expose:
+    - "8791"
+  shm_size: 1gb
+  healthcheck:
+    test:
+      [
+        "CMD",
+        "node",
+        "-e",
+        "fetch('http://127.0.0.1:8791/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      ]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
+
 services:
   semrush-traffic:
     image: ${ALTSELFS_SEMRUSH_TRAFFIC_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/semrush-traffic-service:latest}
@@ -29,14 +50,10 @@ services:
     env_file:
       - .env.production
     environment:
+      SEMRUSH_ROLE: dispatcher
       PORT: "8791"
     expose:
       - "8791"
-    ports:
-      - "127.0.0.1:${SEMRUSH_NOVNC_HOST_PORT:-6080}:6080"
-    volumes:
-      - ${SEMRUSH_TRAFFIC_DATA_DIR:-/data/semrush-traffic}:/data
-    shm_size: 1gb
     healthcheck:
       test:
         [
@@ -49,6 +66,42 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  semrush-traffic-worker-1:
+    <<: *semrush-worker
+    environment:
+      SEMRUSH_ROLE: pool-worker
+      SEMRUSH_WORKER_ID: semrush-account-1
+      SEMRUSH_DISPATCHER_URL: http://semrush-traffic:8791
+      PORT: "8791"
+    ports:
+      - "127.0.0.1:${SEMRUSH_WORKER_1_NOVNC_HOST_PORT:-6080}:6080"
+    volumes:
+      - ${SEMRUSH_WORKER_1_DATA_DIR:-/data/semrush-traffic}:/data
+
+  semrush-traffic-worker-2:
+    <<: *semrush-worker
+    environment:
+      SEMRUSH_ROLE: pool-worker
+      SEMRUSH_WORKER_ID: semrush-account-2
+      SEMRUSH_DISPATCHER_URL: http://semrush-traffic:8791
+      PORT: "8791"
+    ports:
+      - "127.0.0.1:${SEMRUSH_WORKER_2_NOVNC_HOST_PORT:-6081}:6080"
+    volumes:
+      - ${SEMRUSH_WORKER_2_DATA_DIR:-/data/semrush-traffic-worker-2}:/data
+
+  semrush-traffic-worker-3:
+    <<: *semrush-worker
+    environment:
+      SEMRUSH_ROLE: pool-worker
+      SEMRUSH_WORKER_ID: semrush-account-3
+      SEMRUSH_DISPATCHER_URL: http://semrush-traffic:8791
+      PORT: "8791"
+    ports:
+      - "127.0.0.1:${SEMRUSH_WORKER_3_NOVNC_HOST_PORT:-6082}:6080"
+    volumes:
+      - ${SEMRUSH_WORKER_3_DATA_DIR:-/data/semrush-traffic-worker-3}:/data
 
   personal-agent-gateway:
     image: ${ALTSELFS_PERSONAL_AGENT_GATEWAY_IMAGE:-crpi-pvisgh9yojd87fkj.cn-hangzhou.personal.cr.aliyuncs.com/altselfs/personal-agent-server:latest}

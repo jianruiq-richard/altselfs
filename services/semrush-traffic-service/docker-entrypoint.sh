@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+if [ "${SEMRUSH_ROLE:-standalone}" = "dispatcher" ]; then
+  exec node dist/start.js
+fi
+
 export DISPLAY="${DISPLAY:-:99}"
 
 display_number="${DISPLAY#:}"

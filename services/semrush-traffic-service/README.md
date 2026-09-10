@@ -52,6 +52,33 @@ and before retries. Semrush load/frequency messages such as `Something went
 wrong` use the longer rate-limit cooldown. Pacing waits are logged with a
 `pacing stage=... delayMs=...` entry for production diagnosis.
 
+Before a query opens the Semrush report, browser mode reloads the authenticated
+3ue dashboard and reads `API 今日配额` from the active Semrush subscription card.
+The percentage is the amount used today: `100%` means no daily quota remains.
+At or above `SEMRUSH_QUOTA_STOP_AT_USED_PERCENT`, the request receives HTTP 429
+with code `DAILY_QUOTA_EXHAUSTED` without opening the Semrush report. If the
+quota cannot be verified, the worker fails closed with HTTP 503. `GET /healthz`
+exposes the most recent quota snapshot and `acceptingQueries`; authenticated
+`GET /v1/quota` refreshes the dashboard snapshot without running a report.
+
+## Worker pool
+
+Production uses a fixed dispatcher endpoint and any number of browser workers:
+
+- `SEMRUSH_ROLE=dispatcher` accepts the product request and queues it.
+- `SEMRUSH_ROLE=pool-worker` actively connects to `SEMRUSH_DISPATCHER_URL`,
+  registers by its unique `SEMRUSH_WORKER_ID`, sends quota/login heartbeats, and
+  pulls one job at a time. A worker can run on the dispatcher ECS or another ECS;
+  it does not need a public API, Chrome CDP, or VNC port.
+- The dispatcher sends work only to fresh workers with `acceptingQueries=true`.
+  A deterministic pre-query quota rejection can be reassigned to another account.
+  `GET /v1/workers` and `GET /v1/quota` return the combined pool snapshot.
+
+Every 3ue account must use a different persistent browser profile. Never mount
+the same data directory into two workers. The current three-account Compose setup
+uses `/data/semrush-traffic`, `/data/semrush-traffic-worker-2`, and
+`/data/semrush-traffic-worker-3`, with loopback-only noVNC ports 6080-6082.
+
 ## Required browser setup
 
 Use a dedicated browser profile for this worker. The 3ue node list is dynamic:
@@ -69,16 +96,21 @@ The container runs ordinary Chrome as a long-lived process, then attaches
 Playwright over a loopback-only CDP socket. This is different from launching the
 browser through Playwright and is required for the observed 3ue CacheClean flow.
 
-For a one-time login or renewed session on ECS:
+For the one-time login of all three same-ECS workers:
 
 ```bash
-ssh -L 6080:127.0.0.1:6080 root@YOUR_ECS_HOST
+ssh \
+  -L 6080:127.0.0.1:6080 \
+  -L 6081:127.0.0.1:6081 \
+  -L 6082:127.0.0.1:6082 \
+  root@YOUR_ECS_HOST
 ```
 
-Open `http://127.0.0.1:6080/vnc.html`, sign in at the 3ue dashboard, open
-Semrush, and navigate once to Sources & Destinations. The Compose files bind
-noVNC to ECS loopback only. Do not expose port 6080, Chrome CDP, or
-`/data/semrush-traffic` to the public internet.
+Open `http://127.0.0.1:6080/vnc.html`, `http://127.0.0.1:6081/vnc.html`, and
+`http://127.0.0.1:6082/vnc.html`. Sign a different 3ue account into each browser,
+open Semrush, and navigate once to Sources & Destinations. The Compose file binds
+all noVNC ports to ECS loopback only. Do not expose noVNC, Chrome CDP, service
+tokens, or the persistent profile directories to the public internet.
 
 The persistent profile is stored under `/data/semrush-traffic`. If the provider
 shows a CAPTCHA or requires new authentication, complete it manually; do not add
@@ -106,6 +138,17 @@ subscribed account.
 - `SEMRUSH_BROWSER_TIMEOUT_MS` (default `90000`)
 - `SEMRUSH_BROWSER_HEADLESS` (keep `false` for the managed ECS browser)
 - `SEMRUSH_BROWSER_CLEAR_STALE_LOCKS` (default `true`; run only one worker per profile)
+- `SEMRUSH_QUOTA_GUARD_ENABLED` (default `true`; verify 3ue quota before every query)
+- `SEMRUSH_QUOTA_STOP_AT_USED_PERCENT` (default `100`; 3ue reports used percentage)
+- `SEMRUSH_ROLE` (`standalone`, `dispatcher`, or `pool-worker`)
+- `SEMRUSH_WORKER_ID` (required and unique for every pool worker)
+- `SEMRUSH_DISPATCHER_URL` (required by pool workers)
+- `SEMRUSH_DISPATCH_HEARTBEAT_STALE_MS` (default `90000`)
+- `SEMRUSH_DISPATCH_JOB_TIMEOUT_MS` (default `900000`)
+- `SEMRUSH_DISPATCH_MAX_QUEUED` (default `30`)
+- `SEMRUSH_WORKER_HEARTBEAT_MS` (default `15000`)
+- `SEMRUSH_WORKER_POLL_MS` (default `2000`)
+- `SEMRUSH_WORKER_QUOTA_REFRESH_MS` (default `300000`)
 
 The optional API provider remains available for tests or a future licensed API
 deployment, but it is not used by the selected ECS configuration.

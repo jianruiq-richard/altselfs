@@ -15,9 +15,114 @@ import {
   singleMonthFromReportUrl,
 } from '../src/browser-provider.js';
 import { normalizeTargetDomain } from '../src/domains.js';
+import { NoAvailableWorkersError, SemrushDispatcher } from '../src/dispatcher.js';
 import { lastCompletedMonthStarts } from '../src/months.js';
 import { parseSemrushDestinationsCsv } from '../src/semrush-api-provider.js';
 import { normalizeQueryInput, queryPaymentDestinations } from '../src/service.js';
+import { parseThreeUeSemrushDailyQuota } from '../src/quota.js';
+
+test('dispatches only to online workers that still accept Semrush queries', async () => {
+  let now = Date.parse('2026-09-10T00:00:00.000Z');
+  const dispatcher = new SemrushDispatcher({
+    heartbeatStaleMs: 90_000,
+    jobTimeoutMs: 5_000,
+    maxQueued: 3,
+    now: () => now,
+  });
+  dispatcher.heartbeat({
+    workerId: 'account-1', busy: false, acceptingQueries: false,
+    quota: { status: 'exhausted', usedPercent: 100, remainingPercent: 0 },
+  });
+  dispatcher.heartbeat({
+    workerId: 'account-2', busy: false, acceptingQueries: true,
+    quota: { status: 'available', usedPercent: 10, remainingPercent: 90 },
+  });
+
+  const resultPromise = dispatcher.submit({ domain: 'tapnow.ai', month: '2026-08' });
+  assert.equal(dispatcher.claim({ workerId: 'account-1', busy: false, acceptingQueries: false }), null);
+  const claimed = dispatcher.claim({ workerId: 'account-2', busy: false, acceptingQueries: true });
+  assert.ok(claimed);
+  assert.deepEqual(claimed.request, { domain: 'tapnow.ai', month: '2026-08' });
+  dispatcher.complete({
+    worker: { workerId: 'account-2', busy: false, acceptingQueries: true },
+    jobId: claimed.jobId,
+    leaseToken: claimed.leaseToken,
+    result: { status: 200, body: { data: { paymentOutboundVisits: 123 } } },
+  });
+  assert.deepEqual(await resultPromise, { status: 200, body: { data: { paymentOutboundVisits: 123 } } });
+
+  now += 100_000;
+  assert.throws(() => dispatcher.submit({ domain: 'example.com' }), NoAvailableWorkersError);
+});
+
+test('reassigns a quota-rejected job to a different worker without retrying the exhausted account', async () => {
+  const dispatcher = new SemrushDispatcher({ heartbeatStaleMs: 90_000, jobTimeoutMs: 5_000, maxQueued: 3 });
+  for (const workerId of ['account-1', 'account-2']) {
+    dispatcher.heartbeat({ workerId, busy: false, acceptingQueries: true, quota: { status: 'available' } });
+  }
+  const resultPromise = dispatcher.submit({ domain: 'tapnow.ai', month: '2026-08' });
+  const first = dispatcher.claim({ workerId: 'account-1', busy: false, acceptingQueries: true });
+  assert.ok(first);
+  const requeue = dispatcher.complete({
+    worker: {
+      workerId: 'account-1', busy: false, acceptingQueries: false,
+      quota: { status: 'exhausted', usedPercent: 100, remainingPercent: 0 },
+    },
+    jobId: first.jobId,
+    leaseToken: first.leaseToken,
+    result: { status: 429, body: { code: 'DAILY_QUOTA_EXHAUSTED' } },
+  });
+  assert.deepEqual(requeue, { accepted: true, requeued: true });
+  assert.equal(dispatcher.claim({ workerId: 'account-1', busy: false, acceptingQueries: false }), null);
+  const second = dispatcher.claim({ workerId: 'account-2', busy: false, acceptingQueries: true });
+  assert.ok(second);
+  assert.equal(second.jobId, first.jobId);
+  dispatcher.complete({
+    worker: { workerId: 'account-2', busy: false, acceptingQueries: true },
+    jobId: second.jobId,
+    leaseToken: second.leaseToken,
+    result: { status: 200, body: { ok: true } },
+  });
+  assert.deepEqual(await resultPromise, { status: 200, body: { ok: true } });
+});
+
+test('reads the active Semrush used quota and ignores an expired Similarweb card', () => {
+  const quota = parseThreeUeSemrushDailyQuota([
+    {
+      text: 'API 今日配额 100% 节点1 BUSINESS 地区数据库 TW KR 打开',
+      buttonTexts: ['节点1 BUSINESS 地区数据库 TW KR ✅', '中文', '打开'],
+      progressText: '100%',
+    },
+    {
+      text: 'API 今日配额 0% 节点1 PRO 全球版 续订',
+      buttonTexts: ['节点1 PRO 全球版', '简体中文', '续订'],
+      progressText: '0%',
+    },
+  ], 100, '2026-09-10T00:00:00.000Z');
+
+  assert.deepEqual(quota, {
+    status: 'exhausted',
+    usedPercent: 100,
+    remainingPercent: 0,
+    acceptingQueries: false,
+    observedAt: '2026-09-10T00:00:00.000Z',
+    source: '3ue-dashboard',
+    stopAtUsedPercent: 100,
+  });
+});
+
+test('keeps a Semrush worker available below its configured used-quota threshold', () => {
+  const quota = parseThreeUeSemrushDailyQuota([{
+    text: 'API 今日配额 37.5%',
+    buttonTexts: ['节点12 GURU 地区数据库 MY TW ✅', '中文', '打开'],
+    progressText: '37.5%',
+  }], 100, '2026-09-10T00:00:00.000Z');
+
+  assert.equal(quota?.status, 'available');
+  assert.equal(quota?.usedPercent, 37.5);
+  assert.equal(quota?.remainingPercent, 62.5);
+  assert.equal(quota?.acceptingQueries, true);
+});
 
 test('lastCompletedMonthStarts excludes the current partial month', () => {
   assert.deepEqual(
