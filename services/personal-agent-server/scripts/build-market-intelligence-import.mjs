@@ -273,9 +273,15 @@ function revenueEligibilityStatus(product, description, websiteUrl, metricDomain
 
   if (verifiedPricingEvidence) return null;
 
-  if (systemRelease || namedDeveloperRelease || versionedRelease || bundledOffering || nonStandaloneType || nonProductSurface || domainAttributionRisk || governmentDomain) {
-    return { label: REVENUE_STATUS.unavailable, method: 'no-product-level-paid-evidence' };
-  }
+  if (isSharedPlatformDomain(metricDomain)) return { label: REVENUE_STATUS.unavailable, method: 'shared-platform-domain-without-product-level-paid-evidence' };
+  if (governmentDomain) return { label: REVENUE_STATUS.unavailable, method: 'government-domain-without-product-level-paid-evidence' };
+  if (systemRelease) return { label: REVENUE_STATUS.unavailable, method: 'system-release-without-product-level-paid-evidence' };
+  if (namedDeveloperRelease) return { label: REVENUE_STATUS.unavailable, method: 'developer-release-without-product-level-paid-evidence' };
+  if (versionedRelease) return { label: REVENUE_STATUS.unavailable, method: 'versioned-release-without-product-level-paid-evidence' };
+  if (bundledOffering) return { label: REVENUE_STATUS.unavailable, method: 'bundled-offering-without-product-level-paid-evidence' };
+  if (nonStandaloneType) return { label: REVENUE_STATUS.unavailable, method: 'non-standalone-product-without-product-level-paid-evidence' };
+  if (nonProductSurface) return { label: REVENUE_STATUS.unavailable, method: 'non-product-website-surface-without-product-level-paid-evidence' };
+  if (domainAttributionRisk) return { label: REVENUE_STATUS.unavailable, method: 'product-domain-mismatch-without-verified-pricing' };
 
   return null;
 }
@@ -375,7 +381,7 @@ function monthsBetween(startDate, endMonth) {
   return Math.max(1, (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + end.getUTCMonth() - start.getUTCMonth() + 1);
 }
 
-function estimateRevenue({ appark, paymentMonths, registrations, model, countryFactor, launchedAt, latestMonth, eligibilityStatus, paymentEvidenceAllowed, verifiedPricingEvidence }) {
+function estimateRevenue({ appark, paymentMonths, registrations, model, countryFactor, launchedAt, latestMonth, eligibilityStatus, paymentEvidenceAllowed, paymentEvidenceExclusion, verifiedPricingEvidence }) {
   const appRevenue = finiteNumber(appark?.total_revenue_30d);
   if (appRevenue !== null && appRevenue > 0) {
     return {
@@ -413,7 +419,7 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, countryF
       low: null,
       high: null,
       source: eligibilityStatus.label,
-      method: eligibilityStatus.method,
+      method: paymentEvidenceExclusion || eligibilityStatus.method,
     };
   } else if (registrations !== null && latestMonth) {
     const acquisitionMonths = Math.min(12, monthsBetween(launchedAt, latestMonth));
@@ -425,13 +431,14 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, countryF
       ? 'Minaco estimate · Similarweb + verified pricing'
       : 'Minaco estimate · Similarweb fallback';
     method = verifiedPricingEvidence ? 'verified-pricing-traffic-cohort' : 'traffic-registration-cohort';
+    if (paymentEvidenceExclusion) method = `${method}+${paymentEvidenceExclusion}`;
   } else {
     return {
       base: null,
       low: null,
       high: null,
       source: REVENUE_STATUS.unavailable,
-      method: 'no-audience-data-for-revenue-estimate',
+      method: paymentEvidenceExclusion || 'no-audience-data-for-revenue-estimate',
     };
   }
 
@@ -441,7 +448,7 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, countryF
       low: null,
       high: null,
       source: eligibilityStatus?.label || REVENUE_STATUS.unavailable,
-      method: eligibilityStatus?.method || 'no-positive-revenue-evidence',
+      method: paymentEvidenceExclusion || eligibilityStatus?.method || 'no-positive-revenue-evidence',
     };
   }
 
@@ -586,6 +593,14 @@ for (const product of manifest.products || []) {
   const eligibilityStatus = revenueEligibilityStatus(product, description, websiteUrl, domain, pricingSignal);
   const paymentEvidenceAllowed = !isSharedPlatformDomain(domain)
     && (verifiedPricingEvidence || hasDedicatedProductDomain(product.name, websiteUrl, domain));
+  const latestPositivePayment = paymentMonths.filter((item) => item.value > 0).at(-1) || null;
+  const paymentEvidenceExclusion = !latestPositivePayment || (latestPositivePayment.productCount === 1 && paymentEvidenceAllowed)
+    ? null
+    : latestPositivePayment.productCount !== 1
+      ? 'payment-domain-mapped-to-multiple-products'
+      : isSharedPlatformDomain(domain)
+        ? 'payment-shared-platform-domain'
+        : 'payment-product-domain-mismatch-without-verified-pricing';
   const revenue = estimateRevenue({
     appark,
     paymentMonths,
@@ -596,6 +611,7 @@ for (const product of manifest.products || []) {
     latestMonth,
     eligibilityStatus,
     paymentEvidenceAllowed,
+    paymentEvidenceExclusion,
     verifiedPricingEvidence,
   });
   const trafficGrowth = registrationSeries.length >= 2

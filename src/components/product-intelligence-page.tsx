@@ -177,6 +177,50 @@ function metricTitle(metric: MetricValue) {
   return `${metric.source || 'Estimated data'}.${range}`;
 }
 
+function revenueMetricTitle(product: MarketProductApiRecord) {
+  const method = product.estimateMethodVersion || '';
+  const source = product.lastMonthRevenue.source;
+
+  if (method.endsWith(':no-positive-revenue-evidence')) return 'Almost no revenue';
+
+  const paymentExclusion = method.includes('payment-domain-mapped-to-multiple-products')
+    ? 'Semrush payment traffic was excluded because the queried domain is linked to multiple Product Hunt products.'
+    : method.includes('payment-shared-platform-domain')
+      ? 'Semrush payment traffic was excluded because the website uses a shared platform domain rather than a product-specific domain.'
+      : method.includes('payment-product-domain-mismatch-without-verified-pricing')
+        ? 'Semrush payment traffic was excluded because the product name could not be reliably matched to the website domain and no verified pricing evidence was found.'
+        : null;
+
+  const sourceExplanation = source === 'Appark estimate'
+    ? 'Estimated from validated Appark 30-day app revenue data.'
+    : source?.includes('Semrush payment traffic')
+      ? 'Estimated from Semrush payment-platform traffic that could be attributed to this specific product.'
+      : source === 'Minaco estimate · Similarweb + verified pricing'
+        ? 'Estimated from Similarweb audience data and verified product pricing.'
+        : source === 'Minaco estimate · Similarweb fallback'
+          ? 'Estimated from Similarweb audience data using the product-category conversion model.'
+          : source === 'Open Source'
+            ? 'Open-source product with no verified product-level paid revenue evidence.'
+            : source === 'Free'
+              ? 'Free product with no verified product-level paid revenue evidence.'
+              : null;
+
+  if (paymentExclusion) return sourceExplanation ? `${sourceExplanation} ${paymentExclusion}` : paymentExclusion;
+  if (sourceExplanation) return sourceExplanation;
+  if (method.includes('shared-platform-domain-without-product-level-paid-evidence')) return 'No reliable product-level revenue estimate: the website uses a shared platform domain rather than a product-specific domain.';
+  if (method.includes('government-domain-without-product-level-paid-evidence')) return 'No reliable product-level revenue estimate: the product points to a government domain without verified product-level pricing evidence.';
+  if (method.includes('system-release-without-product-level-paid-evidence')) return 'No reliable product-level revenue estimate: this appears to be an operating-system release rather than a separately monetized product.';
+  if (method.includes('developer-release-without-product-level-paid-evidence')) return 'No reliable product-level revenue estimate: this appears to be an API, SDK, or CLI release without separate paid-product evidence.';
+  if (method.includes('versioned-release-without-product-level-paid-evidence')) return 'No reliable product-level revenue estimate: this is a versioned release and no separate paid-product evidence was verified.';
+  if (method.includes('bundled-offering-without-product-level-paid-evidence')) return 'No reliable product-level revenue estimate: the offering appears to be bundled into another membership, subscription, or plan.';
+  if (method.includes('non-standalone-product-without-product-level-paid-evidence')) return 'No reliable product-level revenue estimate: this is an AI model or hardware release without verified standalone software revenue.';
+  if (method.includes('non-product-website-surface-without-product-level-paid-evidence')) return 'No reliable product-level revenue estimate: the link points to documentation, a blog, release notes, or another non-product page.';
+  if (method.includes('product-domain-mismatch-without-verified-pricing')) return 'No reliable product-level revenue estimate: the product name could not be reliably matched to the website domain and no verified pricing evidence was found.';
+  if (method.includes('no-product-level-paid-evidence')) return 'No reliable product-level revenue estimate: the available domain or pricing evidence could not be attributed to this specific product.';
+  if (method.includes('no-audience-data-for-revenue-estimate')) return 'No reliable revenue estimate: no usable Similarweb audience, Appark revenue, or attributable payment traffic was available.';
+  return metricTitle(product.lastMonthRevenue);
+}
+
 function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
   const audienceLabel = product.lastMonthAudience.kind === 'app_downloads' ? 'APP downloads' : 'New registrations';
   const usesPaymentTraffic = product.lastMonthRevenue.source?.includes('Semrush payment traffic') ?? false;
@@ -185,13 +229,13 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
   const revenueMarkerLabel = usesApparkRevenue
     ? 'Revenue estimate provided by Appark'
     : 'Estimated using payment-platform traffic';
-  const revenueIsAlmostNone = product.lastMonthRevenue.value === null
+  const revenueIsNearZero = product.lastMonthRevenue.value === null
     && product.lastMonthRevenue.source === 'Not available'
     && product.estimateMethodVersion?.endsWith(':no-positive-revenue-evidence');
   const revenueStatus = product.lastMonthRevenue.value === null
     ? product.lastMonthRevenue.source === 'Open Source' || product.lastMonthRevenue.source === 'Free'
       ? product.lastMonthRevenue.source
-      : revenueIsAlmostNone ? 'Almost none' : 'Not available'
+      : revenueIsNearZero ? 'Near zero' : 'Not available'
     : null;
   return (
     <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/14 bg-[#080909]">
@@ -201,7 +245,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
           {formatMetric(product.lastMonthAudience.value)}
         </strong>
       </div>
-      <div className="flex min-h-[47px] items-center justify-between gap-3 bg-[#f2c36b]/[0.075] px-3.5" title={revenueIsAlmostNone ? 'No material positive revenue signal was detected.' : metricTitle(product.lastMonthRevenue)}>
+      <div className="flex min-h-[47px] items-center justify-between gap-3 bg-[#f2c36b]/[0.075] px-3.5" title={revenueMetricTitle(product)}>
         <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#f2c36b]">Last month revenue</span>
         <strong className={`${revenueStatus ? 'text-[13px] uppercase tracking-[0.04em]' : 'text-[17px] tabular-nums'} font-semibold ${product.lastMonthRevenue.value === null ? revenueStatus ? 'text-[#f2c36b]' : 'text-[#fffaf0]/48' : 'text-[#f2c36b]'}`}>
           {revenueStatus || formatMetric(product.lastMonthRevenue.value, true)}
