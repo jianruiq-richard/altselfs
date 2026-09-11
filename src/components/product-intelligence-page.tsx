@@ -347,7 +347,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
         </strong>
       </div>
       <div className="flex min-h-[47px] items-center justify-between gap-3 bg-[#f2c36b]/[0.075] px-3.5" title={revenueExplanation} aria-label={revenueExplanation}>
-        <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#f2c36b]">Last month revenue</span>
+        <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#f2c36b]">Est. monthly revenue</span>
         <strong className={`${revenueStatus ? 'text-[13px] uppercase tracking-[0.04em]' : 'text-[17px] tabular-nums'} font-semibold ${product.lastMonthRevenue.value === null ? revenueStatus ? 'text-[#f2c36b]' : 'text-[#fffaf0]/48' : 'text-[#f2c36b]'}`}>
           {revenueStatus || formatMetric(product.lastMonthRevenue.value, true)}
           {revenueMarker ? <sup className="ml-0.5 text-[8px] font-black tracking-[-0.08em] text-[#fff0c7]" aria-label={revenueMarkerLabel}>{revenueMarker}</sup> : null}
@@ -589,7 +589,7 @@ export function ProductIntelligencePage() {
                     ['Rank', true],
                     ['Product', false],
                     ['Launched', false],
-                    ['Last month · users & revenue', true],
+                    ['Latest month · users & revenue', true],
                     ['User scale · 3M', true],
                     ['Category · Product Hunt topics', false],
                     ['Product type', false],
