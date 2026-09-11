@@ -360,6 +360,16 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
 function TrafficTrend({ product }: { product: MarketProductApiRecord }) {
   const metrics = product.trafficTrend.filter((metric) => metric.value !== null);
   if (metrics.length < 2) {
+    if (product.lastMonthAudience.kind === 'app_downloads') {
+      return (
+        <span
+          className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#fffaf0]/62"
+          title="Appark currently provides a rolling 30-day snapshot. A three-month app trend is not available."
+        >
+          App data · 30d only
+        </span>
+      );
+    }
     return <span className="text-[12px] font-medium text-[#fffaf0]/52">Not available</span>;
   }
 
@@ -590,7 +600,7 @@ export function ProductIntelligencePage() {
                     ['Product', false],
                     ['Launched', false],
                     ['Latest month · users & revenue', true],
-                    ['Monthly website visits · 3M', true],
+                    ['Monthly visits · 3M', true],
                     ['Category · Product Hunt topics', false],
                     ['Product type', false],
                     ['Product introduction', false],
