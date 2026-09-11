@@ -69,7 +69,8 @@ const MARKET_INTELLIGENCE_SCHEMA_SQL = `
     add column if not exists revenue_estimate_low_usd numeric(18, 2),
     add column if not exists revenue_estimate_high_usd numeric(18, 2),
     add column if not exists revenue_estimate_source text,
-    add column if not exists estimate_method_version text;
+    add column if not exists estimate_method_version text,
+    add column if not exists revenue_estimate_details jsonb;
 
   create table if not exists market_intelligence.product_monthly_metrics (
     product_id text not null references market_intelligence.products(id) on delete cascade,
@@ -224,6 +225,7 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         p.revenue_estimate_high_usd,
         p.revenue_estimate_source,
         p.estimate_method_version,
+        p.revenue_estimate_details,
         p.revenue_growth_pct,
         p.data_confidence,
         p.is_mock,
@@ -375,6 +377,9 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
       metricsUpdatedAt: rowString(row.metrics_updated_at),
       appCoverageStatus: rowString(row.app_coverage_status) || null,
       estimateMethodVersion: rowString(row.estimate_method_version) || null,
+      revenueEstimateDetails: row.revenue_estimate_details && typeof row.revenue_estimate_details === 'object'
+        ? row.revenue_estimate_details as Record<string, unknown>
+        : null,
     };
   });
 

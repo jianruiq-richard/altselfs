@@ -58,6 +58,14 @@ type MarketProductApiRecord = {
   isMock: boolean;
   metricsUpdatedAt: string;
   estimateMethodVersion: string | null;
+  revenueEstimateDetails: {
+    evidencePriority?: number | null;
+    model?: string;
+    formula?: string | null;
+    inputs?: Record<string, unknown>;
+    risks?: string[];
+    confidence?: string;
+  } | null;
 };
 
 type FilterOption = { value: string; count: number };
@@ -180,8 +188,52 @@ function metricTitle(metric: MetricValue) {
 function revenueMetricTitle(product: MarketProductApiRecord) {
   const method = product.estimateMethodVersion || '';
   const source = product.lastMonthRevenue.source;
+  const details = product.revenueEstimateDetails;
+  const inputs = details?.inputs || {};
 
-  if (method.endsWith(':no-positive-revenue-evidence')) return 'Almost no revenue';
+  const evidenceHeading = details?.evidencePriority === 1
+    ? 'Priority 1 evidence: Appark 30-day app revenue is used before every website-based model.'
+    : details?.evidencePriority === 2
+      ? 'Priority 2 evidence: successful non-zero payment-platform traffic is combined with official website pricing.'
+      : details?.evidencePriority === 3
+        ? 'Priority 3 evidence: successful non-zero payment-platform traffic is combined with a category ARPPU assumption because usable website pricing was unavailable.'
+        : details?.evidencePriority === 4
+          ? 'Priority 4 evidence: a successful payment or app-intelligence query explicitly returned zero.'
+          : details?.evidencePriority === 5
+            ? 'Priority 5 evidence: this is a traffic-based fallback used only when stronger app and payment evidence is unavailable.'
+            : null;
+
+  if (details) {
+    const lines = [evidenceHeading];
+    if (inputs.estimateScope === 'company_portfolio') {
+      lines.push(`Scope: company portfolio total across ${String(inputs.portfolioProductCount || 'multiple')} Product Hunt products sharing this domain; it is not this product's standalone revenue.`);
+    }
+    if (typeof inputs.appRevenue30d === 'number') lines.push(`Appark estimated 30-day revenue: ${fullNumber.format(inputs.appRevenue30d)} USD.`);
+    if (Array.isArray(inputs.paymentMonths) && inputs.paymentMonths.length > 0) {
+      const latest = inputs.paymentMonths.at(-1) as Record<string, unknown>;
+      lines.push(`Latest observed payment-platform outbound visits: ${fullNumber.format(Number(latest.outboundVisits || 0))} (${String(latest.month || 'unknown month')}).`);
+    }
+    if (typeof inputs.estimatedActivePayers === 'number') lines.push(`Estimated active payers: ${fullNumber.format(inputs.estimatedActivePayers)}.`);
+    if (typeof inputs.arppuUsd === 'number') {
+      const arppuSource = inputs.arppuSource === 'official-pricing-plan-mix'
+        ? 'derived from official monthly list prices'
+        : inputs.arppuSource === 'official-one-time-price-amortized'
+          ? 'derived by amortizing an official one-time price'
+          : 'assumed from the product-category model';
+      lines.push(`Modelled ARPPU: $${fullNumber.format(inputs.arppuUsd)} per month, ${arppuSource}.`);
+    }
+    if (Array.isArray(inputs.observedMonthlyPricesUsd) && inputs.observedMonthlyPricesUsd.length > 0) {
+      lines.push(`Observed official monthly price samples: ${inputs.observedMonthlyPricesUsd.map((value) => `$${fullNumber.format(Number(value))}`).join(', ')}.`);
+    }
+    if (typeof inputs.estimatedMonthlyRegistrations === 'number') lines.push(`Modelled monthly registrations: ${fullNumber.format(inputs.estimatedMonthlyRegistrations)}.`);
+    if (typeof inputs.trialToPaidRate === 'number') lines.push(`Assumed registration-to-paid conversion: ${(inputs.trialToPaidRate * 100).toFixed(1)}%.`);
+    if (typeof inputs.countryValueFactor === 'number') lines.push(`Country-value factor: ${inputs.countryValueFactor.toFixed(2)}.`);
+    if (details.formula) lines.push(`Formula: ${details.formula}`);
+    for (const risk of details.risks || []) lines.push(`Risk: ${risk}`);
+    if (lines.filter(Boolean).length > 0) return lines.filter(Boolean).join('\n');
+  }
+
+  if (method.endsWith(':no-positive-revenue-evidence') || source === 'Near zero') return 'Almost no revenue';
 
   const paymentExclusion = method.includes('payment-domain-mapped-to-multiple-products')
     ? 'Semrush payment traffic was excluded because the queried domain is linked to multiple Product Hunt products.'
@@ -223,20 +275,24 @@ function revenueMetricTitle(product: MarketProductApiRecord) {
 
 function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
   const audienceLabel = product.lastMonthAudience.kind === 'app_downloads' ? 'APP downloads' : 'New registrations';
-  const usesPaymentTraffic = product.lastMonthRevenue.source?.includes('Semrush payment traffic') ?? false;
-  const usesApparkRevenue = product.lastMonthRevenue.source === 'Appark estimate';
+  const evidencePriority = product.revenueEstimateDetails?.evidencePriority;
+  const usesPaymentTraffic = evidencePriority === 2 || evidencePriority === 3 || (evidencePriority === 4 && product.estimateMethodVersion?.includes('semrush-payment'))
+    || product.lastMonthRevenue.source?.includes('Payment') === true;
+  const usesApparkRevenue = evidencePriority === 1 || product.lastMonthRevenue.source === 'Appark estimate';
   const revenueMarker = usesApparkRevenue ? '**' : usesPaymentTraffic ? '*' : '';
   const revenueMarkerLabel = usesApparkRevenue
     ? 'Revenue estimate provided by Appark'
     : 'Estimated using payment-platform traffic';
   const revenueIsNearZero = product.lastMonthRevenue.value === null
-    && product.lastMonthRevenue.source === 'Not available'
-    && product.estimateMethodVersion?.endsWith(':no-positive-revenue-evidence');
+    && (product.lastMonthRevenue.source === 'Near zero'
+      || product.estimateMethodVersion?.endsWith(':no-positive-revenue-evidence')
+      || product.estimateMethodVersion?.includes('success-zero'));
   const revenueStatus = product.lastMonthRevenue.value === null
     ? product.lastMonthRevenue.source === 'Open Source' || product.lastMonthRevenue.source === 'Free'
       ? product.lastMonthRevenue.source
       : revenueIsNearZero ? 'Near zero' : 'Not available'
     : null;
+  const revenueExplanation = revenueMetricTitle(product);
   return (
     <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/14 bg-[#080909]">
       <div className="flex min-h-[47px] items-center justify-between gap-3 border-b border-[#fffaf0]/12 bg-[#78c889]/[0.075] px-3.5" title={metricTitle(product.lastMonthAudience)}>
@@ -245,7 +301,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
           {formatMetric(product.lastMonthAudience.value)}
         </strong>
       </div>
-      <div className="flex min-h-[47px] items-center justify-between gap-3 bg-[#f2c36b]/[0.075] px-3.5" title={revenueMetricTitle(product)}>
+      <div className="flex min-h-[47px] items-center justify-between gap-3 bg-[#f2c36b]/[0.075] px-3.5" title={revenueExplanation} aria-label={revenueExplanation}>
         <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#f2c36b]">Last month revenue</span>
         <strong className={`${revenueStatus ? 'text-[13px] uppercase tracking-[0.04em]' : 'text-[17px] tabular-nums'} font-semibold ${product.lastMonthRevenue.value === null ? revenueStatus ? 'text-[#f2c36b]' : 'text-[#fffaf0]/48' : 'text-[#f2c36b]'}`}>
           {revenueStatus || formatMetric(product.lastMonthRevenue.value, true)}

@@ -12,6 +12,14 @@ if (!dataDirectoryArgument) {
 const connectionString = String(process.env.AGENT_CONTEXT_DATABASE_URL || process.env.DATABASE_URL || '').trim();
 if (!connectionString) throw new Error('AGENT_CONTEXT_DATABASE_URL or DATABASE_URL is required.');
 
+function compatibleConnectionString(value) {
+  const url = new URL(value);
+  if (url.searchParams.get('sslmode') === 'require' && !url.searchParams.has('uselibpqcompat')) {
+    url.searchParams.set('uselibpqcompat', 'true');
+  }
+  return url.toString();
+}
+
 const dataDirectory = resolve(dataDirectoryArgument);
 const sourceBatch = basename(dataDirectory);
 const BATCH_SIZE = 100;
@@ -28,6 +36,7 @@ const SOURCES = [
   { file: 'appark-local-products.jsonl', provider: 'appark', type: 'app_intelligence_summary', keys: (record) => [record.product_key, record.product_hunt_url] },
   { file: 'appark-local-platform.raw.jsonl', provider: 'appark', type: 'app_intelligence_platform', keys: (record) => [record.productKey, record.productHuntUrl] },
   { file: 'pricing-signals.jsonl', provider: 'pricing', type: 'pricing_signal', keys: (record) => [record.productKey] },
+  { file: 'pricing-snapshots.raw.jsonl', provider: 'pricing', type: 'pricing_snapshot', keys: (record) => [record.productKey] },
 ];
 
 const SCHEMA_SQL = `
@@ -210,7 +219,12 @@ function dataStatus(record, provider, observationType) {
     if (status.includes('success')) return 'success_no_data';
     return 'recorded';
   }
-  if (provider === 'pricing') return record.verified === true ? 'success_verified' : 'success_no_evidence';
+  if (provider === 'pricing') {
+    if (record.verified === true) return 'success_verified';
+    if (status === 'unreachable' || record.evidenceStatus === 'scan_failed') return 'failed_retryable';
+    if (status === 'no_website') return 'not_scannable';
+    return 'success_no_evidence';
+  }
   const values = metricValues(record, provider);
   if (values.some((value) => value > 0)) return 'success_positive';
   if (values.length > 0 && values.every((value) => value === 0)) return 'success_zero';
@@ -221,6 +235,8 @@ function dataStatus(record, provider, observationType) {
 
 function periods(record) {
   const values = new Set();
+  const snapshotMonth = String(record.snapshotMonth || '').slice(0, 7);
+  if (/^\d{4}-\d{2}$/.test(snapshotMonth)) values.add(snapshotMonth);
   for (const metric of record.monthly || record.raw?.data?.monthly || []) {
     const month = String(metric?.displayDate || metric?.month || '').slice(0, 7);
     if (/^\d{4}-\d{2}$/.test(month)) values.add(month);
@@ -284,7 +300,7 @@ function observationFor(source, record, sourceLine) {
 }
 
 const { Pool } = pg;
-const pool = new Pool({ connectionString, max: 3 });
+const pool = new Pool({ connectionString: compatibleConnectionString(connectionString), max: 3 });
 
 async function insertBatch(observations, links) {
   if (observations.length === 0) return { observations: 0, links: 0 };

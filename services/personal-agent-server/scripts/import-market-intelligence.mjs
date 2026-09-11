@@ -7,9 +7,17 @@ if (!payloadFile) throw new Error('Usage: node scripts/import-market-intelligenc
 const connectionString = String(process.env.AGENT_CONTEXT_DATABASE_URL || process.env.DATABASE_URL || '').trim();
 if (!connectionString) throw new Error('AGENT_CONTEXT_DATABASE_URL or DATABASE_URL is required.');
 
+function compatibleConnectionString(value) {
+  const url = new URL(value);
+  if (url.searchParams.get('sslmode') === 'require' && !url.searchParams.has('uselibpqcompat')) {
+    url.searchParams.set('uselibpqcompat', 'true');
+  }
+  return url.toString();
+}
+
 const payload = JSON.parse(readFileSync(payloadFile, 'utf8'));
 const { Pool } = pg;
-const pool = new Pool({ connectionString, max: 2 });
+const pool = new Pool({ connectionString: compatibleConnectionString(connectionString), max: 2 });
 const client = await pool.connect();
 
 const SCHEMA_SQL = `
@@ -50,7 +58,8 @@ const SCHEMA_SQL = `
     add column if not exists revenue_estimate_low_usd numeric(18, 2),
     add column if not exists revenue_estimate_high_usd numeric(18, 2),
     add column if not exists revenue_estimate_source text,
-    add column if not exists estimate_method_version text;
+    add column if not exists estimate_method_version text,
+    add column if not exists revenue_estimate_details jsonb;
 
   create table if not exists market_intelligence.product_launches (
     id text primary key,
@@ -184,6 +193,7 @@ async function importProducts(rows) {
           revenue_estimate_high_usd numeric,
           revenue_estimate_source text,
           estimate_method_version text,
+          revenue_estimate_details jsonb,
           data_confidence text,
           is_mock boolean,
           metrics_updated_at timestamptz
@@ -194,7 +204,7 @@ async function importProducts(rows) {
         product_hunt_url, logo_url, category, topics, product_types, platforms, is_native_app,
         launched_at, current_rank, monthly_traffic, traffic_growth_pct, monthly_new_revenue_usd,
         revenue_growth_pct, revenue_estimate_low_usd, revenue_estimate_high_usd, revenue_estimate_source,
-        estimate_method_version, data_confidence, is_mock, metrics_updated_at, updated_at
+        estimate_method_version, revenue_estimate_details, data_confidence, is_mock, metrics_updated_at, updated_at
       )
       select
         id, external_source, external_id, slug, name, tagline, description, domain, website_url,
@@ -204,7 +214,7 @@ async function importProducts(rows) {
         array(select jsonb_array_elements_text(platforms)),
         is_native_app, launched_at, current_rank, monthly_traffic, traffic_growth_pct, monthly_new_revenue_usd,
         revenue_growth_pct, revenue_estimate_low_usd, revenue_estimate_high_usd, revenue_estimate_source,
-        estimate_method_version, data_confidence, is_mock, metrics_updated_at, now()
+        estimate_method_version, revenue_estimate_details, data_confidence, is_mock, metrics_updated_at, now()
       from incoming
       on conflict (id) do update set
         external_source = excluded.external_source,
@@ -232,6 +242,7 @@ async function importProducts(rows) {
         revenue_estimate_high_usd = excluded.revenue_estimate_high_usd,
         revenue_estimate_source = excluded.revenue_estimate_source,
         estimate_method_version = excluded.estimate_method_version,
+        revenue_estimate_details = excluded.revenue_estimate_details,
         data_confidence = excluded.data_confidence,
         is_mock = excluded.is_mock,
         metrics_updated_at = excluded.metrics_updated_at,

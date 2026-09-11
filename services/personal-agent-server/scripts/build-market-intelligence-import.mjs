@@ -12,7 +12,7 @@ const dataDirectory = resolve(dataDirectoryArgument);
 const outputFile = resolve(outputFileArgument);
 const manifest = JSON.parse(readFileSync(join(dataDirectory, 'manifest.json'), 'utf8'));
 
-const MODEL_VERSION = 'minaco-static-competitor-estimate-v2';
+const MODEL_VERSION = 'minaco-evidence-priority-estimate-v3';
 
 const REVENUE_STATUS = {
   openSource: 'Open Source',
@@ -198,7 +198,10 @@ function classifyModel(product, description) {
 }
 
 function normalizedBrand(value) {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\s+(?:v(?:ersion)?\s*)?\d+(?:\.\d+)+(?:\s.*)?$/i, '')
+    .replace(/[^a-z0-9]/g, '');
 }
 
 function hasDedicatedProductDomain(name, websiteUrl, metricDomain = '') {
@@ -233,7 +236,7 @@ function revenueEligibilityStatus(product, description, websiteUrl, metricDomain
   const topics = new Set((product.topics || []).map((value) => String(value).trim().toLowerCase()));
   const productTypes = new Set((product.productTypes || []).map((value) => String(value).trim().toLowerCase()));
   const text = `${name} ${tagline} ${description}`.toLowerCase();
-  const verifiedPricingEvidence = productTypes.has('saas / web service') && hasVerifiedPricingSignal(pricingSignal);
+  const verifiedPricingEvidence = hasVerifiedPricingSignal(pricingSignal);
   const commercialTextEvidence = verifiedPricingEvidence || /\b(?:annual plan|available (?:now )?on (?:all )?plans|buy once|enterprise plan|lifetime license|monthly plan|one-time (?:payment|purchase)|paid (?:plan|subscription)|pay once|premium plan|upgrade to pro)\b/i.test(text)
     || /\b(?:costs?|from|only|priced at|starts? at|starting at|then)\s*[$€£]\s?\d/i.test(text)
     || /[$€£]\s?\d+(?:[.,]\d+)?\s*(?:one[- ]time|per month|\/mo\b)/i.test(text);
@@ -298,7 +301,7 @@ function appIdentityTokens(value) {
 }
 
 function apparkIdentityMatches(product, record) {
-  if (!record || !String(record.queryStatus || '').startsWith('success')) return false;
+  if (!record || !['success_value', 'success_zero'].includes(String(record.queryStatus || ''))) return false;
   if (record.storeIdentitySource === 'appark_verified_cluster') return false;
   const productTokens = appIdentityTokens(product.name);
   const resolvedTokens = new Set(appIdentityTokens(record.resolvedAppName));
@@ -381,75 +384,265 @@ function monthsBetween(startDate, endMonth) {
   return Math.max(1, (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + end.getUTCMonth() - start.getUTCMonth() + 1);
 }
 
-function estimateRevenue({ appark, paymentMonths, registrations, model, countryFactor, launchedAt, latestMonth, eligibilityStatus, paymentEvidenceAllowed, paymentEvidenceExclusion, verifiedPricingEvidence }) {
+function median(values) {
+  const sorted = values.filter(Number.isFinite).toSorted((left, right) => left - right);
+  if (sorted.length === 0) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+function pricingArppu(pricingSignal, model) {
+  if (!hasVerifiedPricingSignal(pricingSignal)) {
+    return {
+      value: model.monthlyRevenuePerPayer,
+      source: 'industry-category-arppu',
+      observedMonthlyPrices: [],
+      assumption: 'Uses the product-category ARPPU because website pricing was not verified.',
+    };
+  }
+  const points = Array.isArray(pricingSignal?.primaryPricePoints)
+    ? pricingSignal.primaryPricePoints
+    : Array.isArray(pricingSignal?.pricePoints)
+      ? pricingSignal.pricePoints.filter((point) => point?.role === 'list_price')
+      : [];
+  const monthlyPrices = points
+    .filter((point) => point?.currency === 'USD' && ['month', 'year', 'per_seat_month', 'per_seat_year'].includes(point?.billingInterval))
+    .map((point) => finiteNumber(point.normalizedMonthlyAmount))
+    .filter((value) => value !== null && value > 0);
+  const monthlyMedian = median(monthlyPrices);
+  if (monthlyMedian !== null) {
+    return {
+      value: clamp(monthlyMedian * 0.75, 3, 500),
+      source: 'official-pricing-plan-mix',
+      observedMonthlyPrices: monthlyPrices,
+      assumption: 'Uses 75% of the median observed USD monthly list price to approximate the paid-customer plan mix.',
+    };
+  }
+
+  const oneTimePrices = points
+    .filter((point) => point?.currency === 'USD' && point?.billingInterval === 'one_time')
+    .map((point) => finiteNumber(point.amount))
+    .filter((value) => value !== null && value > 0);
+  const oneTimeMedian = median(oneTimePrices);
+  if (oneTimeMedian !== null) {
+    return {
+      value: clamp(oneTimeMedian / 18, 2, 500),
+      source: 'official-one-time-price-amortized',
+      observedMonthlyPrices: [],
+      observedOneTimePrices: oneTimePrices,
+      assumption: 'Amortizes the median observed USD one-time price over 18 months.',
+    };
+  }
+
+  return {
+    value: model.monthlyRevenuePerPayer,
+    source: 'industry-category-arppu',
+    observedMonthlyPrices: [],
+    assumption: 'Uses the product-category ARPPU because no usable USD monthly list price was extracted.',
+  };
+}
+
+function nearZero(method, evidencePriority, inputs, risks = []) {
+  return {
+    base: null,
+    low: null,
+    high: null,
+    source: 'Near zero',
+    method,
+    details: {
+      evidencePriority,
+      model: method,
+      inputs,
+      formula: 'A successful first-party intelligence query returned zero observed revenue or zero payment-platform traffic.',
+      risks,
+      confidence: 'medium',
+    },
+  };
+}
+
+function estimateRevenue({ appark, paymentMonths, registrations, model, modelName, countryFactor, launchedAt, latestMonth, eligibilityStatus, pricingSignal, verifiedPricingEvidence, paymentContext }) {
   const appRevenue = finiteNumber(appark?.total_revenue_30d);
-  if (appRevenue !== null && appRevenue > 0) {
+  if (appRevenue !== null) {
+    if (appRevenue === 0) {
+      return nearZero('appark-success-zero', 1, {
+        appRevenue30d: 0,
+        coverageStatus: appark?.total_coverage_status || null,
+      }, appark?.total_coverage_status?.includes('only') ? ['Only one app platform had a validated result.'] : []);
+    }
     return {
       base: money(appRevenue),
       low: null,
       high: null,
       source: 'Appark estimate',
       method: 'appark-30d',
+      details: {
+        evidencePriority: 1,
+        model: 'appark-30d',
+        inputs: {
+          appRevenue30d: money(appRevenue),
+          iosRevenue30d: finiteNumber(appark?.ios_revenue_30d),
+          androidRevenue30d: finiteNumber(appark?.android_revenue_30d),
+          coverageStatus: appark?.total_coverage_status || null,
+        },
+        formula: 'Uses the validated Appark 30-day app revenue estimate directly.',
+        risks: ['Appark values are third-party estimates rather than audited company revenue.'],
+        confidence: 'estimated',
+      },
     };
   }
 
   const usablePaymentMonths = [...(paymentMonths || [])]
     .filter((item) => item.value !== null)
     .toSorted((left, right) => left.month.localeCompare(right.month));
-  const positivePaymentMonths = usablePaymentMonths.filter((item) => (
-    item.value > 0 && item.productCount === 1 && paymentEvidenceAllowed
-  ));
+  const latestPaymentMonth = usablePaymentMonths.at(-1) || null;
+  const positivePaymentMonths = usablePaymentMonths.filter((item) => item.value > 0);
   let base;
   let source;
   let method;
+  let details;
 
-  if (positivePaymentMonths.length > 0) {
-    const newestPaymentMonth = usablePaymentMonths.at(-1)?.month || latestMonth;
+  if (latestPaymentMonth?.value > 0 && paymentContext.canUse) {
+    const newestPaymentMonth = latestPaymentMonth.month || latestMonth;
+    const arppu = pricingArppu(pricingSignal, model);
     const activePayers = positivePaymentMonths.reduce((total, item) => {
       const age = Math.max(0, monthsBetween(`${item.month}-01`, newestPaymentMonth) - 1);
-      const newPayers = item.value * model.checkoutUniqueShare * model.checkoutCompletionRate * clamp(countryFactor, 0.58, 1.04);
+      const newPayers = item.value * model.checkoutUniqueShare * model.checkoutCompletionRate;
       return total + newPayers * Math.pow(model.monthlyRetention, age);
     }, 0);
-    base = activePayers * model.monthlyRevenuePerPayer * countryFactor;
-    source = 'Minaco estimate · Semrush payment traffic';
-    method = 'payment-destination-cohort';
-  } else if (eligibilityStatus) {
+    base = activePayers * arppu.value * countryFactor;
+    const usesOfficialPrice = arppu.source !== 'industry-category-arppu';
+    source = usesOfficialPrice
+      ? 'Minaco estimate · Payment + official pricing'
+      : 'Minaco estimate · Payment + industry ARPPU';
+    method = usesOfficialPrice ? 'payment-active-payers-official-arppu' : 'payment-active-payers-industry-arppu';
+    details = {
+      evidencePriority: usesOfficialPrice ? 2 : 3,
+      model: method,
+      inputs: {
+        paymentMonths: positivePaymentMonths.map((item) => ({ month: item.month, outboundVisits: item.value, mappedProductCount: item.productCount })),
+        checkoutUniqueShare: model.checkoutUniqueShare,
+        checkoutCompletionRate: model.checkoutCompletionRate,
+        monthlyRetention: model.monthlyRetention,
+        estimatedActivePayers: rounded(activePayers),
+        arppuUsd: money(arppu.value),
+        arppuSource: arppu.source,
+        observedMonthlyPricesUsd: arppu.observedMonthlyPrices,
+        observedOneTimePricesUsd: arppu.observedOneTimePrices || [],
+        countryValueFactor: countryFactor,
+        pricingStrategy: pricingSignal?.pricingStrategy || null,
+        pricingEvidenceUrl: pricingSignal?.evidenceUrl || null,
+        productCategoryModel: modelName,
+        estimateScope: latestPaymentMonth.productCount > 1 ? 'company_portfolio' : 'single_product',
+        portfolioProductCount: latestPaymentMonth.productCount,
+      },
+      formula: 'Payment outbound visits × checkout uniqueness × completion, retained by cohort; active payers × ARPPU × country-value factor.',
+      risks: [
+        'Payment-platform outbound visits are a proxy for checkout activity, not confirmed transactions.',
+        arppu.assumption,
+        ...paymentContext.risks,
+      ],
+      confidence: usesOfficialPrice && paymentContext.risks.length === 0 ? 'medium' : 'low-to-medium',
+    };
+  } else if (latestPaymentMonth?.value === 0 && paymentContext.canUse) {
+    return nearZero('semrush-payment-success-zero', 4, {
+      month: latestPaymentMonth.month,
+      paymentOutboundVisits: 0,
+      mappedProductCount: latestPaymentMonth.productCount,
+    }, paymentContext.risks);
+  } else if (registrations !== null && latestMonth) {
+    const nonMonetizedStatus = eligibilityStatus && [REVENUE_STATUS.openSource, REVENUE_STATUS.free].includes(eligibilityStatus.label)
+      ? eligibilityStatus
+      : null;
+    if (nonMonetizedStatus) {
+      return {
+        base: null,
+        low: null,
+        high: null,
+        source: nonMonetizedStatus.label,
+        method: nonMonetizedStatus.method,
+        details: {
+          evidencePriority: 5,
+          model: nonMonetizedStatus.method,
+          inputs: { trafficAvailable: true, paymentDataAvailable: latestPaymentMonth !== null },
+          formula: 'No revenue estimate is shown because the product is explicitly identified as free or open source without stronger paid evidence.',
+          risks: ['A paid hosted tier may exist even when the core product is free or open source.'],
+          confidence: 'medium',
+        },
+      };
+    }
+    const arppu = pricingArppu(pricingSignal, model);
+    const acquisitionMonths = Math.min(12, monthsBetween(launchedAt, latestMonth));
+    const cohortMultiplier = Array.from({ length: acquisitionMonths }, (_, index) => Math.pow(model.monthlyRetention, index))
+      .reduce((total, value) => total + value, 0);
+    const newPayers = registrations * model.trialToPaidRate * clamp(countryFactor, 0.55, 1.02);
+    base = newPayers * cohortMultiplier * arppu.value * countryFactor;
+    source = verifiedPricingEvidence
+      ? 'Minaco estimate · Similarweb + verified pricing'
+      : 'Minaco estimate · Similarweb industry model';
+    method = verifiedPricingEvidence ? 'traffic-cohort-official-arppu' : 'traffic-cohort-industry-arppu';
+    details = {
+      evidencePriority: 5,
+      model: method,
+      inputs: {
+        estimatedMonthlyRegistrations: registrations,
+        trialToPaidRate: model.trialToPaidRate,
+        estimatedNewPayers: rounded(newPayers),
+        acquisitionMonths,
+        cohortMultiplier: Number(cohortMultiplier.toFixed(4)),
+        monthlyRetention: model.monthlyRetention,
+        arppuUsd: money(arppu.value),
+        arppuSource: arppu.source,
+        observedMonthlyPricesUsd: arppu.observedMonthlyPrices,
+        countryValueFactor: countryFactor,
+        pricingStrategy: pricingSignal?.pricingStrategy || null,
+        pricingEvidenceUrl: pricingSignal?.evidenceUrl || null,
+        productCategoryModel: modelName,
+      },
+      formula: 'Estimated registrations × category paid-conversion rate × retained acquisition cohorts × ARPPU × country-value factor.',
+      risks: [
+        'Similarweb traffic and registrations are modelled audience estimates.',
+        arppu.assumption,
+        latestPaymentMonth === null ? 'Payment-platform traffic has not been successfully measured yet.' : 'Available payment-platform traffic could not be safely attributed to this product.',
+        ...paymentContext.risks,
+      ],
+      confidence: verifiedPricingEvidence ? 'low-to-medium' : 'low',
+    };
+  } else if (eligibilityStatus && [REVENUE_STATUS.openSource, REVENUE_STATUS.free].includes(eligibilityStatus.label)) {
     return {
       base: null,
       low: null,
       high: null,
       source: eligibilityStatus.label,
-      method: paymentEvidenceExclusion || eligibilityStatus.method,
+      method: eligibilityStatus.method,
+      details: {
+        evidencePriority: 5,
+        model: eligibilityStatus.method,
+        inputs: { trafficAvailable: false, paymentDataAvailable: latestPaymentMonth !== null },
+        formula: 'No revenue estimate is shown because the product is explicitly identified as free or open source without stronger paid evidence.',
+        risks: ['A paid hosted tier may exist even when the core product is free or open source.'],
+        confidence: 'medium',
+      },
     };
-  } else if (registrations !== null && latestMonth) {
-    const acquisitionMonths = Math.min(12, monthsBetween(launchedAt, latestMonth));
-    const cohortMultiplier = Array.from({ length: acquisitionMonths }, (_, index) => Math.pow(model.monthlyRetention, index))
-      .reduce((total, value) => total + value, 0);
-    const newPayers = registrations * model.trialToPaidRate * clamp(countryFactor, 0.55, 1.02);
-    base = newPayers * cohortMultiplier * model.monthlyRevenuePerPayer * countryFactor;
-    source = verifiedPricingEvidence
-      ? 'Minaco estimate · Similarweb + verified pricing'
-      : 'Minaco estimate · Similarweb fallback';
-    method = verifiedPricingEvidence ? 'verified-pricing-traffic-cohort' : 'traffic-registration-cohort';
-    if (paymentEvidenceExclusion) method = `${method}+${paymentEvidenceExclusion}`;
   } else {
     return {
       base: null,
       low: null,
       high: null,
       source: REVENUE_STATUS.unavailable,
-      method: paymentEvidenceExclusion || 'no-audience-data-for-revenue-estimate',
+      method: 'no-audience-data-for-revenue-estimate',
+      details: {
+        evidencePriority: null,
+        model: 'no-audience-data-for-revenue-estimate',
+        inputs: { paymentDataAvailable: latestPaymentMonth !== null, trafficAvailable: false, apparkDataAvailable: false },
+        formula: null,
+        risks: ['No usable Appark revenue, attributable payment-platform traffic, or Similarweb audience estimate is available.'],
+        confidence: 'unavailable',
+      },
     };
   }
 
   if (!Number.isFinite(base) || base <= 0) {
-    return {
-      base: null,
-      low: null,
-      high: null,
-      source: eligibilityStatus?.label || REVENUE_STATUS.unavailable,
-      method: paymentEvidenceExclusion || eligibilityStatus?.method || 'no-positive-revenue-evidence',
-    };
+    return nearZero('modelled-near-zero', details?.evidencePriority || 5, details?.inputs || {}, details?.risks || []);
   }
 
   return {
@@ -458,6 +651,7 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, countryF
     high: money(base * 1.68),
     source,
     method,
+    details,
   };
 }
 
@@ -527,6 +721,14 @@ await readJsonLines(join(dataDirectory, 'pricing-signals.jsonl'), (record) => {
   const key = normalizeProductKey(record.productKey);
   if (key) pricingSignalsByProduct.set(key, record);
 });
+await readJsonLines(join(dataDirectory, 'pricing-snapshots.raw.jsonl'), (record) => {
+  const key = normalizeProductKey(record.productKey);
+  if (!key) return;
+  const previous = pricingSignalsByProduct.get(key);
+  const recordTimestamp = String(record.checkedAt || record.fetchedAt || '');
+  const previousTimestamp = String(previous?.checkedAt || previous?.fetchedAt || '');
+  if (!previous || recordTimestamp >= previousTimestamp) pricingSignalsByProduct.set(key, record);
+});
 
 const paymentMaps = new Map();
 for (const fileName of ['semrush.raw.jsonl', 'semrush-2026-07.raw.jsonl']) {
@@ -574,7 +776,7 @@ for (const product of manifest.products || []) {
     : similarwebCandidate;
   const appark = validatedApparkMetrics(product, apparkByProduct.get(key) || null, apparkPlatformsByProduct.get(key) || []);
   const pricingSignal = pricingSignalsByProduct.get(key) || null;
-  const verifiedPricingEvidence = (product.productTypes || []).includes('SaaS / Web Service') && hasVerifiedPricingSignal(pricingSignal);
+  const verifiedPricingEvidence = hasVerifiedPricingSignal(pricingSignal);
   const paymentMonths = [...(paymentMaps.get(key)?.values() || [])].toSorted((left, right) => left.month.localeCompare(right.month));
   const modelName = classifyModel(product, description);
   const model = MODELS[modelName];
@@ -591,28 +793,37 @@ for (const product of manifest.products || []) {
   const latestTraffic = registrationSeries.at(-1) || null;
   const latestMonth = latestTraffic?.month || null;
   const eligibilityStatus = revenueEligibilityStatus(product, description, websiteUrl, domain, pricingSignal);
-  const paymentEvidenceAllowed = !isSharedPlatformDomain(domain)
-    && (verifiedPricingEvidence || hasDedicatedProductDomain(product.name, websiteUrl, domain));
-  const latestPositivePayment = paymentMonths.filter((item) => item.value > 0).at(-1) || null;
-  const paymentEvidenceExclusion = !latestPositivePayment || (latestPositivePayment.productCount === 1 && paymentEvidenceAllowed)
-    ? null
-    : latestPositivePayment.productCount !== 1
-      ? 'payment-domain-mapped-to-multiple-products'
-      : isSharedPlatformDomain(domain)
-        ? 'payment-shared-platform-domain'
-        : 'payment-product-domain-mismatch-without-verified-pricing';
+  const latestMeasuredPayment = paymentMonths.filter((item) => item.value !== null).at(-1) || null;
+  const sharedPaymentDomain = isSharedPlatformDomain(domain);
+  const dedicatedProductDomain = hasDedicatedProductDomain(product.name, websiteUrl, domain);
+  const paymentRisks = [
+    latestMeasuredPayment?.productCount > 1
+      ? `This is a company-domain portfolio estimate covering ${latestMeasuredPayment.productCount} Product Hunt products, not revenue attributable to this product alone.`
+      : null,
+    !dedicatedProductDomain && !verifiedPricingEvidence
+      ? 'The product name and website domain do not strictly match, so product-level attribution is less certain.'
+      : null,
+    sharedPaymentDomain
+      ? 'The website is a shared platform domain, so its payment traffic cannot be safely attributed to this product.'
+      : null,
+  ].filter(Boolean);
+  const paymentContext = {
+    canUse: !sharedPaymentDomain,
+    risks: paymentRisks,
+  };
   const revenue = estimateRevenue({
     appark,
     paymentMonths,
     registrations: latestTraffic?.registrations.base ?? null,
     model,
+    modelName,
     countryFactor,
     launchedAt: product.lastLaunchDate,
     latestMonth,
     eligibilityStatus,
-    paymentEvidenceAllowed,
-    paymentEvidenceExclusion,
+    pricingSignal,
     verifiedPricingEvidence,
+    paymentContext,
   });
   const trafficGrowth = registrationSeries.length >= 2
     ? registrationSeries[0].visits === 0
@@ -658,7 +869,8 @@ for (const product of manifest.products || []) {
     revenue_estimate_high_usd: revenue.high,
     revenue_estimate_source: revenue.source,
     estimate_method_version: `${MODEL_VERSION}:${revenue.method || 'no-revenue'}`,
-    data_confidence: appDownloads !== null || paymentMonths.some((item) => item.value > 0) ? 'medium' : latestTraffic ? 'modelled' : 'unavailable',
+    revenue_estimate_details: revenue.details || null,
+    data_confidence: appark || paymentMonths.some((item) => item.value !== null) ? 'medium' : latestTraffic ? 'modelled' : 'unavailable',
     is_mock: false,
     metrics_updated_at: metricUpdatedAt,
     ranking_value: appDownloads ?? latestTraffic?.registrations.base ?? null,
@@ -750,7 +962,7 @@ const payload = {
     sourceDirectory: basename(dataDirectory),
     sourceManifestGeneratedAt: manifest.generatedAt,
     estimateMethodVersion: MODEL_VERSION,
-    caveat: 'Website registrations and revenue are Minaco model estimates. SaaS fallback revenue requires verified pricing evidence or product-level attribution. App downloads and revenue are Appark estimates.',
+    caveat: 'Revenue evidence priority is Appark, attributable payment-platform traffic with official pricing, payment traffic with category ARPPU, explicit successful zero, then Similarweb traffic fallback. Company-domain estimates may cover multiple products and are labeled in estimate details.',
     counts: {
       products: products.length,
       launches: launchRows.length,
@@ -762,6 +974,7 @@ const payload = {
         return products.filter((product) => product.monthly_traffic !== null || appAudienceIds.has(product.id)).length;
       })(),
       productsWithRevenue: products.filter((product) => product.monthly_new_revenue_usd !== null).length,
+      productsNearZero: products.filter((product) => product.revenue_estimate_source === 'Near zero').length,
       productsWithVerifiedPricing: [...pricingSignalsByProduct.values()].filter(hasVerifiedPricingSignal).length,
       revenueStatuses: {
         openSource: products.filter((product) => product.monthly_new_revenue_usd === null && product.revenue_estimate_source === REVENUE_STATUS.openSource).length,

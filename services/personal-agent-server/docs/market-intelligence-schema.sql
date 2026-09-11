@@ -29,6 +29,7 @@ create table if not exists market_intelligence.products (
   revenue_estimate_high_usd numeric(18, 2),
   revenue_estimate_source text,
   estimate_method_version text,
+  revenue_estimate_details jsonb,
   data_confidence text not null default 'unknown',
   is_mock boolean not null default false,
   metrics_updated_at timestamptz,
@@ -105,6 +106,27 @@ create table if not exists market_intelligence.product_payment_metrics (
   primary key (product_id, month)
 );
 
+create table if not exists market_intelligence.product_pricing_snapshots (
+  product_id text not null references market_intelligence.products(id) on delete cascade,
+  snapshot_month date not null,
+  pricing_strategy text not null,
+  verified boolean not null default false,
+  evidence_status text not null,
+  scan_status text not null,
+  evidence_url text,
+  checkout_url text,
+  signals text[] not null default '{}',
+  price_points jsonb not null default '[]'::jsonb,
+  primary_price_points jsonb not null default '[]'::jsonb,
+  pricing_flags jsonb not null default '{}'::jsonb,
+  source text not null default 'official_website',
+  confidence text not null default 'unknown',
+  observed_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (product_id, snapshot_month)
+);
+
 create table if not exists market_intelligence.sync_runs (
   id text primary key,
   source text not null,
@@ -144,5 +166,11 @@ create index if not exists market_app_metrics_product_observed_idx
   on market_intelligence.product_app_metrics (product_id, observed_at desc);
 create index if not exists market_payment_metrics_product_month_idx
   on market_intelligence.product_payment_metrics (product_id, month desc);
+create index if not exists product_pricing_snapshots_month_strategy_idx
+  on market_intelligence.product_pricing_snapshots(snapshot_month desc, pricing_strategy);
+create index if not exists product_pricing_snapshots_verified_idx
+  on market_intelligence.product_pricing_snapshots(verified, snapshot_month desc);
+create index if not exists product_pricing_snapshots_price_points_idx
+  on market_intelligence.product_pricing_snapshots using gin(price_points jsonb_path_ops);
 
 commit;
