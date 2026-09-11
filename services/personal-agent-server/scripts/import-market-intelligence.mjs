@@ -59,7 +59,14 @@ const SCHEMA_SQL = `
     add column if not exists revenue_estimate_high_usd numeric(18, 2),
     add column if not exists revenue_estimate_source text,
     add column if not exists estimate_method_version text,
-    add column if not exists revenue_estimate_details jsonb;
+    add column if not exists revenue_estimate_details jsonb,
+    add column if not exists audience_estimate_details jsonb,
+    add column if not exists company_group_key text,
+    add column if not exists company_name text,
+    add column if not exists company_domain text,
+    add column if not exists company_website_url text,
+    add column if not exists is_company_primary boolean not null default true,
+    add column if not exists company_product_count integer not null default 1;
 
   create table if not exists market_intelligence.product_launches (
     id text primary key,
@@ -148,6 +155,8 @@ const SCHEMA_SQL = `
     on market_intelligence.products using gin (topics);
   create index if not exists market_products_types_idx
     on market_intelligence.products using gin (product_types);
+  create index if not exists market_products_company_group_idx
+    on market_intelligence.products (is_mock, is_company_primary, company_group_key);
   create index if not exists market_metrics_product_month_idx
     on market_intelligence.product_monthly_metrics (product_id, month desc);
   create index if not exists market_app_metrics_product_observed_idx
@@ -194,6 +203,13 @@ async function importProducts(rows) {
           revenue_estimate_source text,
           estimate_method_version text,
           revenue_estimate_details jsonb,
+          audience_estimate_details jsonb,
+          company_group_key text,
+          company_name text,
+          company_domain text,
+          company_website_url text,
+          is_company_primary boolean,
+          company_product_count integer,
           data_confidence text,
           is_mock boolean,
           metrics_updated_at timestamptz
@@ -204,7 +220,9 @@ async function importProducts(rows) {
         product_hunt_url, logo_url, category, topics, product_types, platforms, is_native_app,
         launched_at, current_rank, monthly_traffic, traffic_growth_pct, monthly_new_revenue_usd,
         revenue_growth_pct, revenue_estimate_low_usd, revenue_estimate_high_usd, revenue_estimate_source,
-        estimate_method_version, revenue_estimate_details, data_confidence, is_mock, metrics_updated_at, updated_at
+        estimate_method_version, revenue_estimate_details, audience_estimate_details,
+        company_group_key, company_name, company_domain, company_website_url, is_company_primary,
+        company_product_count, data_confidence, is_mock, metrics_updated_at, updated_at
       )
       select
         id, external_source, external_id, slug, name, tagline, description, domain, website_url,
@@ -214,7 +232,9 @@ async function importProducts(rows) {
         array(select jsonb_array_elements_text(platforms)),
         is_native_app, launched_at, current_rank, monthly_traffic, traffic_growth_pct, monthly_new_revenue_usd,
         revenue_growth_pct, revenue_estimate_low_usd, revenue_estimate_high_usd, revenue_estimate_source,
-        estimate_method_version, revenue_estimate_details, data_confidence, is_mock, metrics_updated_at, now()
+        estimate_method_version, revenue_estimate_details, audience_estimate_details,
+        company_group_key, company_name, company_domain, company_website_url, is_company_primary,
+        company_product_count, data_confidence, is_mock, metrics_updated_at, now()
       from incoming
       on conflict (id) do update set
         external_source = excluded.external_source,
@@ -243,6 +263,13 @@ async function importProducts(rows) {
         revenue_estimate_source = excluded.revenue_estimate_source,
         estimate_method_version = excluded.estimate_method_version,
         revenue_estimate_details = excluded.revenue_estimate_details,
+        audience_estimate_details = excluded.audience_estimate_details,
+        company_group_key = excluded.company_group_key,
+        company_name = excluded.company_name,
+        company_domain = excluded.company_domain,
+        company_website_url = excluded.company_website_url,
+        is_company_primary = excluded.is_company_primary,
+        company_product_count = excluded.company_product_count,
         data_confidence = excluded.data_confidence,
         is_mock = excluded.is_mock,
         metrics_updated_at = excluded.metrics_updated_at,

@@ -70,7 +70,14 @@ const MARKET_INTELLIGENCE_SCHEMA_SQL = `
     add column if not exists revenue_estimate_high_usd numeric(18, 2),
     add column if not exists revenue_estimate_source text,
     add column if not exists estimate_method_version text,
-    add column if not exists revenue_estimate_details jsonb;
+    add column if not exists revenue_estimate_details jsonb,
+    add column if not exists audience_estimate_details jsonb,
+    add column if not exists company_group_key text,
+    add column if not exists company_name text,
+    add column if not exists company_domain text,
+    add column if not exists company_website_url text,
+    add column if not exists is_company_primary boolean not null default true,
+    add column if not exists company_product_count integer not null default 1;
 
   create table if not exists market_intelligence.product_monthly_metrics (
     product_id text not null references market_intelligence.products(id) on delete cascade,
@@ -120,6 +127,8 @@ const MARKET_INTELLIGENCE_SCHEMA_SQL = `
     on market_intelligence.products using gin (topics);
   create index if not exists market_products_types_idx
     on market_intelligence.products using gin (product_types);
+  create index if not exists market_products_company_group_idx
+    on market_intelligence.products (is_mock, is_company_primary, company_group_key);
   create index if not exists market_app_metrics_product_observed_idx
     on market_intelligence.product_app_metrics (product_id, observed_at desc);
 `;
@@ -226,6 +235,12 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         p.revenue_estimate_source,
         p.estimate_method_version,
         p.revenue_estimate_details,
+        p.audience_estimate_details,
+        p.company_group_key,
+        p.company_name,
+        p.company_domain,
+        p.company_website_url,
+        p.company_product_count,
         p.revenue_growth_pct,
         p.data_confidence,
         p.is_mock,
@@ -240,6 +255,25 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         latest_metric.estimated_users_high,
         latest_metric.user_estimate_source,
         count(*) over() as total_count,
+        coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'id', child.id,
+            'name', child.name,
+            'tagline', child.tagline,
+            'logoUrl', child.logo_url,
+            'websiteUrl', child.website_url,
+            'productHuntUrl', child.product_hunt_url,
+            'launchedAt', child.launched_at,
+            'topics', child.topics,
+            'productTypes', child.product_types,
+            'platforms', child.platforms,
+            'isNativeApp', child.is_native_app
+          ) order by child.launched_at asc, child.name asc)
+          from market_intelligence.products child
+          where child.company_group_key = p.company_group_key
+            and child.id <> p.id
+            and child.is_mock = p.is_mock
+        ), '[]'::jsonb) as child_products,
         coalesce((
           select jsonb_agg(jsonb_build_object(
             'month', to_char(recent.month, 'YYYY-MM'),
@@ -271,6 +305,7 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         limit 1
       ) latest_metric on true
       where ${datasetSql}
+      and coalesce(p.is_company_primary, true) = true
       and (
         $1 = ''
         or to_tsvector(
@@ -280,6 +315,18 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         ) @@ websearch_to_tsquery('simple', $1)
         or p.name ilike '%' || $1 || '%'
         or p.domain ilike '%' || $1 || '%'
+        or exists (
+          select 1
+          from market_intelligence.products member
+          where member.company_group_key = p.company_group_key
+            and member.is_mock = p.is_mock
+            and (
+              member.name ilike '%' || $1 || '%'
+              or member.domain ilike '%' || $1 || '%'
+              or member.tagline ilike '%' || $1 || '%'
+              or member.description ilike '%' || $1 || '%'
+            )
+        )
       )
       and ($2 = '' or $2 = any(p.topics) or p.category = $2)
       and ($3 = '' or $3 = any(p.product_types))
@@ -290,10 +337,10 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
   );
 
   const optionsWhere = dataset === 'all'
-    ? 'true'
+    ? 'coalesce(is_company_primary, true) = true'
     : dataset === 'actual'
-      ? 'is_mock = false'
-      : 'is_mock = true';
+      ? 'is_mock = false and coalesce(is_company_primary, true) = true'
+      : 'is_mock = true and coalesce(is_company_primary, true) = true';
   const [topicResult, typeResult] = await Promise.all([
     pool.query(`
       select value, count(*)::integer as count
@@ -315,7 +362,9 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
 
   const products = result.rows.map((row) => {
     const trafficTrend = Array.isArray(row.traffic_trend) ? row.traffic_trend : [];
-    const appDownloads = rowNullableNumber(row.total_downloads_30d);
+    const companyProductCount = Math.max(1, rowNumber(row.company_product_count));
+    const groupedCompany = companyProductCount > 1;
+    const appDownloads = groupedCompany ? null : rowNullableNumber(row.total_downloads_30d);
     const registeredUsers = rowNullableNumber(row.estimated_monthly_users);
     const audienceKind = appDownloads !== null
       ? 'app_downloads'
@@ -325,7 +374,7 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
     const audienceValue = appDownloads ?? registeredUsers;
     const productRevenueSource = rowString(row.revenue_estimate_source) || null;
     const revenueIsNonMonetized = productRevenueSource === 'Open Source' || productRevenueSource === 'Free';
-    const rawAppRevenue = rowNullableNumber(row.total_revenue_30d);
+    const rawAppRevenue = groupedCompany ? null : rowNullableNumber(row.total_revenue_30d);
     const appRevenue = !revenueIsNonMonetized && rawAppRevenue !== null && rawAppRevenue > 0 ? rawAppRevenue : null;
     const latestTrafficMonth = trafficTrend.length > 0
       ? rowString((trafficTrend.at(-1) as Record<string, unknown> | undefined)?.month)
@@ -380,6 +429,18 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
       revenueEstimateDetails: row.revenue_estimate_details && typeof row.revenue_estimate_details === 'object'
         ? row.revenue_estimate_details as Record<string, unknown>
         : null,
+      audienceEstimateDetails: row.audience_estimate_details && typeof row.audience_estimate_details === 'object'
+        ? row.audience_estimate_details as Record<string, unknown>
+        : null,
+      companyGroup: {
+        key: rowString(row.company_group_key) || `product:${rowString(row.id)}`,
+        name: rowString(row.company_name) || rowString(row.name),
+        domain: rowString(row.company_domain) || rowString(row.domain) || null,
+        websiteUrl: rowString(row.company_website_url) || rowString(row.website_url) || null,
+        productCount: companyProductCount,
+        isGrouped: groupedCompany,
+        childProducts: Array.isArray(row.child_products) ? row.child_products : [],
+      },
     };
   });
 

@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ArrowUpDown,
   ChevronDown,
+  ChevronRight,
   ExternalLink,
   Search,
   SlidersHorizontal,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { fetchWorkspaceJson, WORKSPACE_CACHE_KEYS } from '@/lib/workspace-client-cache';
@@ -66,6 +67,35 @@ type MarketProductApiRecord = {
     risks?: string[];
     confidence?: string;
   } | null;
+  audienceEstimateDetails: {
+    scope?: string;
+    source?: string;
+    companyDomain?: string | null;
+    productCount?: number;
+    formula?: string;
+    risks?: string[];
+  } | null;
+  companyGroup: {
+    key: string;
+    name: string;
+    domain: string | null;
+    websiteUrl: string | null;
+    productCount: number;
+    isGrouped: boolean;
+    childProducts: Array<{
+      id: string;
+      name: string;
+      tagline: string | null;
+      logoUrl: string | null;
+      websiteUrl: string | null;
+      productHuntUrl: string | null;
+      launchedAt: string;
+      topics: string[];
+      productTypes: string[];
+      platforms: string[];
+      isNativeApp: boolean;
+    }>;
+  };
 };
 
 type FilterOption = { value: string; count: number };
@@ -151,7 +181,7 @@ function SelectField({
   );
 }
 
-function ProductLogo({ product }: { product: MarketProductApiRecord }) {
+function ProductLogo({ product }: { product: Pick<MarketProductApiRecord, 'name' | 'logoUrl'> }) {
   const [failed, setFailed] = useState(false);
   const fallback = product.name.slice(0, 1).toUpperCase() || '?';
 
@@ -170,6 +200,21 @@ function ProductLogo({ product }: { product: MarketProductApiRecord }) {
       ) : fallback}
     </span>
   );
+}
+
+function audienceMetricTitle(product: MarketProductApiRecord) {
+  const details = product.audienceEstimateDetails;
+  if (product.companyGroup.isGrouped) {
+    const lines = [
+      `Company-wide audience estimate for ${product.companyGroup.domain || 'this official website'}, covering ${product.companyGroup.productCount} tracked Product Hunt products.`,
+      `This figure is displayed once for the company and is not ${product.name}'s standalone user count.`,
+    ];
+    if (product.lastMonthAudience.source) lines.push(`Source: ${product.lastMonthAudience.source}.`);
+    if (details?.formula) lines.push(`Formula: ${details.formula}`);
+    for (const risk of details?.risks || []) lines.push(`Risk: ${risk}`);
+    return lines.join('\n');
+  }
+  return metricTitle(product.lastMonthAudience);
 }
 
 function metricTitle(metric: MetricValue) {
@@ -295,7 +340,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
   const revenueExplanation = revenueMetricTitle(product);
   return (
     <div className="grid min-w-[205px] overflow-hidden rounded-[8px] border border-[#fffaf0]/14 bg-[#080909]">
-      <div className="flex min-h-[47px] items-center justify-between gap-3 border-b border-[#fffaf0]/12 bg-[#78c889]/[0.075] px-3.5" title={metricTitle(product.lastMonthAudience)}>
+      <div className="flex min-h-[47px] items-center justify-between gap-3 border-b border-[#fffaf0]/12 bg-[#78c889]/[0.075] px-3.5" title={audienceMetricTitle(product)} aria-label={audienceMetricTitle(product)}>
         <span className="max-w-[118px] text-[11px] font-bold uppercase leading-4 tracking-[0.06em] text-[#8bd09a]">{audienceLabel}</span>
         <strong className={`text-[17px] font-semibold tabular-nums ${product.lastMonthAudience.value === null ? 'text-[#fffaf0]/48' : 'text-[#8bd09a]'}`}>
           {formatMetric(product.lastMonthAudience.value)}
@@ -379,6 +424,7 @@ export function ProductIntelligencePage() {
   const [page, setPage] = useState(0);
   const [productRows, setProductRows] = useState<MarketProductApiRecord[]>([]);
   const [totalProducts, setTotalProducts] = useState(0);
+  const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(() => new Set());
   const [filterOptions, setFilterOptions] = useState<MarketProductApiResponse['filterOptions']>({ topics: [], productTypes: [] });
   const [datasetStatus, setDatasetStatus] = useState<'loading' | 'rds' | 'error'>('loading');
 
@@ -440,6 +486,15 @@ export function ProductIntelligencePage() {
     setDraftFilters(initialFilters);
     setPage(0);
     setFilters({ ...initialFilters });
+  };
+
+  const toggleCompany = (companyKey: string) => {
+    setExpandedCompanies((current) => {
+      const next = new Set(current);
+      if (next.has(companyKey)) next.delete(companyKey);
+      else next.add(companyKey);
+      return next;
+    });
   };
 
   return (
@@ -509,7 +564,7 @@ export function ProductIntelligencePage() {
         <section className="mt-4 overflow-hidden rounded-[12px] border border-[#fffaf0]/10 bg-[#0b0c0c] shadow-[0_18px_60px_rgba(0,0,0,.22)]" aria-label="Product intelligence results">
           <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-3 border-b border-[#fffaf0]/10 px-4">
             <div className="flex items-center gap-3">
-              <strong className="text-[14px] font-semibold text-[#fffaf0]">All products</strong>
+              <strong className="text-[14px] font-semibold text-[#fffaf0]">All companies & independent products</strong>
               <span className="rounded-full border border-[#fffaf0]/16 bg-[#fffaf0]/[0.045] px-2.5 py-1 text-[12px] font-semibold tabular-nums text-[#fffaf0]/68" aria-live="polite">
                 {startRow.toLocaleString()}–{endRow.toLocaleString()} of {totalProducts.toLocaleString()}
               </span>
@@ -547,47 +602,102 @@ export function ProductIntelligencePage() {
                 </tr>
               </thead>
               <tbody>
-                {productRows.map((product) => (
-                  <tr key={product.id} className="group h-[124px] border-b border-[#fffaf0]/[0.1] transition-colors last:border-0 hover:bg-[#fffaf0]/[0.035]">
-                    <td className="px-4 align-middle"><span className="font-mono text-[13px] font-semibold tabular-nums text-[#fffaf0]/72">#{product.rank.toLocaleString()}</span></td>
-                    <td className="px-4 align-middle">
-                      <div className="flex items-center gap-3">
-                        <ProductLogo product={product} />
-                        <span className="grid min-w-0 gap-0.5">
-                          {product.productHuntUrl ? (
-                            <a
-                              href={product.productHuntUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={`View ${product.name} on Product Hunt`}
-                              className="truncate text-[14px] font-semibold text-[#fffaf0] transition hover:text-[#f2c36b]"
-                            >
-                              {product.name}
-                            </a>
-                          ) : <strong className="truncate text-[14px] font-semibold text-[#fffaf0]">{product.name}</strong>}
-                          {product.websiteUrl ? (
-                            <a href={product.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex w-fit max-w-[185px] items-center gap-1 truncate font-mono text-[12px] text-[#f2c36b]/90 hover:text-[#f8dfaa]">
-                              <span className="truncate">{product.domain || product.websiteUrl}</span><ExternalLink className="h-3 w-3 shrink-0" />
-                            </a>
-                          ) : <span className="text-[12px] text-[#fffaf0]/52">Website not available</span>}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 align-middle"><time dateTime={product.launchedAt} className="font-mono text-[12px] font-medium tabular-nums text-[#fffaf0]/68">{formatLaunchDate(product.launchedAt)}</time></td>
-                    <td className="px-4 align-middle"><LastMonthMetric product={product} /></td>
-                    <td className="px-4 align-middle"><TrafficTrend product={product} /></td>
-                    <td className="px-4 align-middle"><TagList values={product.topics} /></td>
-                    <td className="px-4 align-middle"><TagList values={product.productTypes} tone="gold" /></td>
-                    <td className="px-4 pr-6 align-middle">
-                      <p
-                        className="line-clamp-3 max-w-[390px] cursor-help text-[12px] leading-[1.6] text-[#fffaf0]/68 group-hover:text-[#fffaf0]/84"
-                        title={product.description || product.tagline || 'Not available'}
-                      >
-                        {product.description || product.tagline || 'Not available'}
-                      </p>
-                    </td>
-                  </tr>
-                ))}
+                {productRows.map((product) => {
+                  const company = product.companyGroup;
+                  const expanded = expandedCompanies.has(company.key);
+                  const companyWebsiteUrl = company.websiteUrl || product.websiteUrl;
+                  const companyDomain = company.domain || product.domain;
+                  return (
+                    <Fragment key={company.key}>
+                      <tr className="group h-[124px] border-b border-[#fffaf0]/[0.1] transition-colors hover:bg-[#fffaf0]/[0.035]">
+                        <td className="px-4 align-middle"><span className="font-mono text-[13px] font-semibold tabular-nums text-[#fffaf0]/72">#{product.rank.toLocaleString()}</span></td>
+                        <td className="px-4 align-middle">
+                          <div className="flex items-center gap-3">
+                            <ProductLogo product={product} />
+                            <span className="grid min-w-0 gap-0.5">
+                              {company.isGrouped ? (
+                                <strong className="truncate text-[14px] font-semibold text-[#fffaf0]">{company.name}</strong>
+                              ) : product.productHuntUrl ? (
+                                <a
+                                  href={product.productHuntUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={`View ${product.name} on Product Hunt`}
+                                  className="truncate text-[14px] font-semibold text-[#fffaf0] transition hover:text-[#f2c36b]"
+                                >
+                                  {product.name}
+                                </a>
+                              ) : <strong className="truncate text-[14px] font-semibold text-[#fffaf0]">{product.name}</strong>}
+                              {company.isGrouped ? (
+                                <span className="flex min-w-0 items-center gap-1 text-[11px] text-[#fffaf0]/62">
+                                  <span className="shrink-0 uppercase tracking-[0.05em]">Main product ·</span>
+                                  {product.productHuntUrl ? (
+                                    <a href={product.productHuntUrl} target="_blank" rel="noreferrer" className="truncate font-semibold text-[#fffaf0]/82 hover:text-[#f2c36b]">{product.name}</a>
+                                  ) : <span className="truncate font-semibold text-[#fffaf0]/82">{product.name}</span>}
+                                </span>
+                              ) : null}
+                              {companyWebsiteUrl ? (
+                                <a href={companyWebsiteUrl} target="_blank" rel="noreferrer" className="inline-flex w-fit max-w-[185px] items-center gap-1 truncate font-mono text-[12px] text-[#f2c36b]/90 hover:text-[#f8dfaa]">
+                                  <span className="truncate">{companyDomain || companyWebsiteUrl}</span><ExternalLink className="h-3 w-3 shrink-0" />
+                                </a>
+                              ) : <span className="text-[12px] text-[#fffaf0]/52">Website not available</span>}
+                              {company.isGrouped ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCompany(company.key)}
+                                  aria-expanded={expanded}
+                                  className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full border border-[#fffaf0]/14 bg-[#fffaf0]/[0.045] px-2 py-0.5 text-[10px] font-semibold text-[#fffaf0]/68 transition hover:border-[#f2c36b]/35 hover:text-[#f2c36b]"
+                                >
+                                  <ChevronRight className={`h-3 w-3 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                                  {company.childProducts.length} sub-product{company.childProducts.length === 1 ? '' : 's'}
+                                </button>
+                              ) : null}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 align-middle"><time dateTime={product.launchedAt} className="font-mono text-[12px] font-medium tabular-nums text-[#fffaf0]/68">{formatLaunchDate(product.launchedAt)}</time></td>
+                        <td className="px-4 align-middle"><LastMonthMetric product={product} /></td>
+                        <td className="px-4 align-middle"><TrafficTrend product={product} /></td>
+                        <td className="px-4 align-middle"><TagList values={product.topics} /></td>
+                        <td className="px-4 align-middle"><TagList values={product.productTypes} tone="gold" /></td>
+                        <td className="px-4 pr-6 align-middle">
+                          <p
+                            className="line-clamp-3 max-w-[390px] cursor-help text-[12px] leading-[1.6] text-[#fffaf0]/68 group-hover:text-[#fffaf0]/84"
+                            title={product.description || product.tagline || 'Not available'}
+                          >
+                            {product.description || product.tagline || 'Not available'}
+                          </p>
+                        </td>
+                      </tr>
+                      {company.isGrouped && expanded ? (
+                        <tr className="border-b border-[#fffaf0]/[0.1] bg-[#f2c36b]/[0.025]">
+                          <td />
+                          <td colSpan={7} className="px-4 py-3 pr-6">
+                            <div className="rounded-[9px] border border-[#fffaf0]/10 bg-[#090a0a] p-3">
+                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <strong className="text-[11px] uppercase tracking-[0.08em] text-[#fffaf0]/72">Products sharing {companyDomain}</strong>
+                                <span className="text-[10px] text-[#fffaf0]/48">Company metrics above are shown once and are not repeated per product.</span>
+                              </div>
+                              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                {company.childProducts.map((child) => (
+                                  <div key={child.id} className="flex min-w-0 items-center gap-2.5 rounded-[8px] border border-[#fffaf0]/10 bg-[#fffaf0]/[0.025] px-3 py-2.5">
+                                    <ProductLogo product={child} />
+                                    <span className="grid min-w-0 gap-0.5">
+                                      {child.productHuntUrl ? (
+                                        <a href={child.productHuntUrl} target="_blank" rel="noreferrer" className="truncate text-[12px] font-semibold text-[#fffaf0]/88 hover:text-[#f2c36b]">{child.name}</a>
+                                      ) : <strong className="truncate text-[12px] font-semibold text-[#fffaf0]/88">{child.name}</strong>}
+                                      <span className="truncate text-[10px] text-[#fffaf0]/48">{formatLaunchDate(child.launchedAt)}{child.tagline ? ` · ${child.tagline}` : ''}</span>
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -612,7 +722,7 @@ export function ProductIntelligencePage() {
           ) : null}
 
           <div className="flex min-h-[60px] flex-wrap items-center justify-between gap-3 border-t border-[#fffaf0]/12 bg-[#0d0e0e] px-4">
-            <span className="text-[11px] leading-5 text-[#fffaf0]/62">Website registrations and revenue are Minaco estimates. Open Source and Free replace unsupported revenue figures when no product-level paid evidence exists. * Uses observed payment-platform traffic. ** App revenue estimate provided by Appark.</span>
+            <span className="text-[11px] leading-5 text-[#fffaf0]/62">Products sharing an official domain are grouped and company-level figures are shown once without summing duplicate website data. Website registrations and revenue are Minaco estimates. * Uses observed payment-platform traffic. ** App revenue estimate provided by Appark.</span>
             <div className="flex items-center gap-2">
               <button type="button" disabled={page === 0 || datasetStatus === 'loading'} onClick={() => { setDatasetStatus('loading'); setPage((current) => Math.max(0, current - 1)); }} className="inline-flex h-9 items-center gap-1 rounded-[7px] border border-[#fffaf0]/16 px-3 text-[11px] font-semibold text-[#fffaf0]/72 hover:bg-[#fffaf0]/7 disabled:cursor-not-allowed disabled:opacity-40"><ArrowLeft className="h-3.5 w-3.5" /> Previous</button>
               <label className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#fffaf0]/16 bg-[#090a0a] pl-3 pr-2 text-[11px] font-medium text-[#fffaf0]/62">

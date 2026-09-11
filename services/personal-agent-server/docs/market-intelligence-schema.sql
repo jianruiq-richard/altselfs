@@ -30,6 +30,13 @@ create table if not exists market_intelligence.products (
   revenue_estimate_source text,
   estimate_method_version text,
   revenue_estimate_details jsonb,
+  audience_estimate_details jsonb,
+  company_group_key text,
+  company_name text,
+  company_domain text,
+  company_website_url text,
+  is_company_primary boolean not null default true,
+  company_product_count integer not null default 1,
   data_confidence text not null default 'unknown',
   is_mock boolean not null default false,
   metrics_updated_at timestamptz,
@@ -162,6 +169,8 @@ create index if not exists market_products_topics_idx
   on market_intelligence.products using gin (topics);
 create index if not exists market_products_types_idx
   on market_intelligence.products using gin (product_types);
+create index if not exists market_products_company_group_idx
+  on market_intelligence.products (is_mock, is_company_primary, company_group_key);
 create index if not exists market_app_metrics_product_observed_idx
   on market_intelligence.product_app_metrics (product_id, observed_at desc);
 create index if not exists market_payment_metrics_product_month_idx

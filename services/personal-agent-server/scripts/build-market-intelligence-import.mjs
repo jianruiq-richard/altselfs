@@ -12,7 +12,7 @@ const dataDirectory = resolve(dataDirectoryArgument);
 const outputFile = resolve(outputFileArgument);
 const manifest = JSON.parse(readFileSync(join(dataDirectory, 'manifest.json'), 'utf8'));
 
-const MODEL_VERSION = 'minaco-evidence-priority-estimate-v3';
+const MODEL_VERSION = 'minaco-company-website-estimate-v4';
 
 const REVENUE_STATUS = {
   openSource: 'Open Source',
@@ -150,6 +150,54 @@ function isSharedPlatformDomain(value) {
   return [...SHARED_PLATFORM_DOMAINS].some((rootDomain) => (
     domain === rootDomain || domain.endsWith(`.${rootDomain}`)
   ));
+}
+
+function normalizedCompanyDomain(value) {
+  return String(value || '').trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+}
+
+function companyGroupKey(product) {
+  const domain = normalizedCompanyDomain(product.domain);
+  return domain && !isSharedPlatformDomain(domain) ? `domain:${domain}` : `product:${product.id}`;
+}
+
+function companyNameFromDomain(domain, fallback) {
+  const commonSubdomains = new Set(['app', 'apps', 'blog', 'chat', 'code', 'docs', 'marketplace', 'platform', 'tools', 'www']);
+  const commonSuffixes = new Set(['ai', 'app', 'co', 'com', 'dev', 'io', 'me', 'net', 'new', 'org', 'so']);
+  const labels = normalizedCompanyDomain(domain).split('.').filter(Boolean);
+  const candidates = labels.filter((label, index) => (
+    !commonSubdomains.has(label) && !(index === labels.length - 1 && commonSuffixes.has(label))
+  ));
+  const token = candidates.at(-1) || labels.at(-1) || '';
+  if (!token) return fallback;
+  const knownNames = {
+    openai: 'OpenAI',
+    visualstudio: 'Visual Studio',
+    elevenlabs: 'ElevenLabs',
+  };
+  return knownNames[token] || token.split(/[-_]/).filter(Boolean).map((part) => `${part[0]?.toUpperCase() || ''}${part.slice(1)}`).join(' ');
+}
+
+function primaryProductScore(product, companyDomain) {
+  const companyName = companyNameFromDomain(companyDomain, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const productName = String(product.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  let score = 0;
+  if (companyName && productName === companyName) score += 160;
+  else if (companyName && productName.startsWith(companyName)) score += 100;
+  else if (companyName && productName.includes(companyName)) score += 60;
+  try {
+    const path = new URL(product.website_url || '').pathname.replace(/\/+$/, '');
+    if (!path) score += 35;
+  } catch {
+    // Invalid or absent URLs simply receive no homepage preference.
+  }
+  return score;
+}
+
+function appendUniqueRisk(details, risk) {
+  if (!details) return null;
+  const risks = [...new Set([...(Array.isArray(details.risks) ? details.risks : []), risk])];
+  return { ...details, risks };
 }
 
 function launchId(value) {
@@ -771,9 +819,7 @@ for (const product of manifest.products || []) {
   const domain = identity.website_domain || latestLaunch.website_domain || null;
   const websiteUrl = identity.website_url || latestLaunch.website_url || null;
   const similarwebCandidate = similarwebByProduct.get(key) || null;
-  const similarweb = isSharedPlatformDomain(domain) || (similarwebCandidate?.productCount || 0) > 1
-    ? null
-    : similarwebCandidate;
+  const similarweb = isSharedPlatformDomain(domain) ? null : similarwebCandidate;
   const appark = validatedApparkMetrics(product, apparkByProduct.get(key) || null, apparkPlatformsByProduct.get(key) || []);
   const pricingSignal = pricingSignalsByProduct.get(key) || null;
   const verifiedPricingEvidence = hasVerifiedPricingSignal(pricingSignal);
@@ -870,6 +916,22 @@ for (const product of manifest.products || []) {
     revenue_estimate_source: revenue.source,
     estimate_method_version: `${MODEL_VERSION}:${revenue.method || 'no-revenue'}`,
     revenue_estimate_details: revenue.details || null,
+    audience_estimate_details: latestTraffic ? {
+      scope: similarweb?.productCount > 1 ? 'company_website' : 'product_website',
+      source: 'Similarweb',
+      companyDomain: normalizedCompanyDomain(domain) || null,
+      mappedProductCount: similarweb?.productCount || 1,
+      formula: 'Similarweb website visits are converted into estimated new registrations using the product-category model.',
+      risks: similarweb?.productCount > 1
+        ? ['Website traffic covers multiple Product Hunt products sharing this company domain and is not attributable to this product alone.']
+        : ['Website visits are a proxy for product usage and do not equal authenticated active users.'],
+    } : null,
+    company_group_key: `product:${id}`,
+    company_name: product.name,
+    company_domain: normalizedCompanyDomain(domain) || null,
+    company_website_url: websiteUrl,
+    is_company_primary: true,
+    company_product_count: 1,
     data_confidence: appark || paymentMonths.some((item) => item.value !== null) ? 'medium' : latestTraffic ? 'modelled' : 'unavailable',
     is_mock: false,
     metrics_updated_at: metricUpdatedAt,
@@ -923,7 +985,151 @@ for (const product of manifest.products || []) {
   }
 }
 
-products.sort((left, right) => {
+const productsByCompany = new Map();
+for (const product of products) {
+  const groupKey = companyGroupKey(product);
+  const group = productsByCompany.get(groupKey) || [];
+  group.push(product);
+  productsByCompany.set(groupKey, group);
+}
+
+const monthlyMetricsByProduct = new Map();
+for (const metric of monthlyMetrics) {
+  const values = monthlyMetricsByProduct.get(metric.product_id) || [];
+  values.push(metric);
+  monthlyMetricsByProduct.set(metric.product_id, values);
+}
+const companyMonthlyOverrides = new Map();
+
+for (const [groupKey, companyProducts] of productsByCompany) {
+  const companyDomain = groupKey.startsWith('domain:') ? groupKey.slice('domain:'.length) : normalizedCompanyDomain(companyProducts[0]?.domain) || null;
+  const companyName = companyProducts.length > 1
+    ? companyNameFromDomain(companyDomain, companyProducts[0].name)
+    : companyProducts[0].name;
+  const primaryProduct = [...companyProducts].toSorted((left, right) => {
+    const scoreDifference = primaryProductScore(right, companyDomain) - primaryProductScore(left, companyDomain);
+    if (scoreDifference) return scoreDifference;
+    const nameLengthDifference = String(left.name || '').length - String(right.name || '').length;
+    return nameLengthDifference || left.launched_at.localeCompare(right.launched_at) || left.name.localeCompare(right.name);
+  })[0];
+  const companyWebsiteCandidate = [...companyProducts]
+    .map((product) => product.website_url)
+    .filter(Boolean)
+    .toSorted((left, right) => {
+      const score = (value) => {
+        try {
+          const url = new URL(value);
+          const path = url.pathname.replace(/\/+$/, '');
+          return (path ? 1000 : 0) + path.length + value.length / 1000;
+        } catch {
+          return 10_000 + String(value).length;
+        }
+      };
+      return score(left) - score(right);
+    })[0] || null;
+  let companyWebsiteUrl = companyWebsiteCandidate;
+  if (companyProducts.length > 1 && companyWebsiteCandidate) {
+    try {
+      companyWebsiteUrl = new URL(companyWebsiteCandidate).origin;
+    } catch {
+      // Keep the best recorded URL when it cannot be normalized to an origin.
+    }
+  }
+
+  for (const product of companyProducts) {
+    product.company_group_key = groupKey;
+    product.company_name = companyName;
+    product.company_domain = companyDomain;
+    product.company_website_url = companyWebsiteUrl;
+    product.is_company_primary = product.id === primaryProduct.id;
+    product.company_product_count = companyProducts.length;
+  }
+
+  if (companyProducts.length === 1) continue;
+
+  const audienceCarrier = [...companyProducts]
+    .filter((product) => product.monthly_traffic !== null)
+    .toSorted((left, right) => (
+      String(right.metrics_updated_at || '').localeCompare(String(left.metrics_updated_at || ''))
+      || Number(right.monthly_traffic || 0) - Number(left.monthly_traffic || 0)
+    ))[0] || null;
+  if (audienceCarrier) {
+    primaryProduct.monthly_traffic = audienceCarrier.monthly_traffic;
+    primaryProduct.traffic_growth_pct = audienceCarrier.traffic_growth_pct;
+    primaryProduct.metrics_updated_at = latestIso(primaryProduct.metrics_updated_at, audienceCarrier.metrics_updated_at);
+    primaryProduct.audience_estimate_details = {
+      ...(audienceCarrier.audience_estimate_details || {}),
+      scope: 'company_website',
+      source: 'Similarweb',
+      companyDomain,
+      productCount: companyProducts.length,
+      formula: 'The company website\'s Similarweb traffic is converted into estimated new registrations once for the entire website group.',
+      risks: [
+        `Company-wide audience estimate covering ${companyProducts.length} Product Hunt products that share ${companyDomain}. It is not the standalone user count of the main product or any child product.`,
+        'Website visits are a proxy for product usage and do not equal authenticated active users.',
+      ],
+    };
+    companyMonthlyOverrides.set(primaryProduct.id, (monthlyMetricsByProduct.get(audienceCarrier.id) || []).map((metric) => ({
+      ...metric,
+      product_id: primaryProduct.id,
+      user_estimate_source: 'Minaco estimate · Similarweb · Company website',
+    })));
+  }
+
+  const revenueCarrier = [...companyProducts].toSorted((left, right) => {
+    const leftPriority = finiteNumber(left.revenue_estimate_details?.evidencePriority) ?? 99;
+    const rightPriority = finiteNumber(right.revenue_estimate_details?.evidencePriority) ?? 99;
+    if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+    const leftPortfolio = left.revenue_estimate_details?.inputs?.estimateScope === 'company_portfolio' ? 1 : 0;
+    const rightPortfolio = right.revenue_estimate_details?.inputs?.estimateScope === 'company_portfolio' ? 1 : 0;
+    if (leftPortfolio !== rightPortfolio) return rightPortfolio - leftPortfolio;
+    return Number(right.monthly_new_revenue_usd || 0) - Number(left.monthly_new_revenue_usd || 0);
+  })[0];
+  if (revenueCarrier) {
+    primaryProduct.monthly_new_revenue_usd = revenueCarrier.monthly_new_revenue_usd;
+    primaryProduct.revenue_estimate_low_usd = revenueCarrier.revenue_estimate_low_usd;
+    primaryProduct.revenue_estimate_high_usd = revenueCarrier.revenue_estimate_high_usd;
+    primaryProduct.revenue_estimate_source = revenueCarrier.revenue_estimate_source;
+    primaryProduct.revenue_growth_pct = revenueCarrier.revenue_growth_pct;
+    primaryProduct.estimate_method_version = `${revenueCarrier.estimate_method_version}:company-group`;
+    primaryProduct.data_confidence = revenueCarrier.data_confidence;
+    const originalDetails = revenueCarrier.revenue_estimate_details;
+    if (originalDetails) {
+      const originalRisks = Array.isArray(originalDetails.risks)
+        ? originalDetails.risks.filter((risk) => !String(risk).startsWith('This is a company-domain portfolio estimate covering'))
+        : [];
+      primaryProduct.revenue_estimate_details = {
+        ...appendUniqueRisk({ ...originalDetails, risks: originalRisks }, 'Child-product revenue estimates are not added together, preventing the same website or payment traffic from being counted more than once.'),
+        inputs: {
+          ...(originalDetails.inputs || {}),
+          estimateScope: 'company_portfolio',
+          portfolioProductCount: companyProducts.length,
+          companyDomain,
+          groupMetricPolicy: 'strongest-evidence-without-summing-duplicates',
+        },
+      };
+      primaryProduct.revenue_estimate_details = appendUniqueRisk(
+        primaryProduct.revenue_estimate_details,
+        `This company-domain estimate covers ${companyProducts.length} Product Hunt products sharing ${companyDomain}; it is displayed once and is not attributable to any child product alone.`,
+      );
+    }
+  }
+
+  primaryProduct.topics = [...new Set(companyProducts.flatMap((product) => product.topics || []))];
+  primaryProduct.product_types = [...new Set(companyProducts.flatMap((product) => product.product_types || []))];
+  primaryProduct.platforms = [...new Set(companyProducts.flatMap((product) => product.platforms || []))];
+  primaryProduct.is_native_app = companyProducts.some((product) => product.is_native_app);
+  primaryProduct.ranking_value = Math.max(...companyProducts.map((product) => finiteNumber(product.ranking_value) ?? -1));
+}
+
+if (companyMonthlyOverrides.size > 0) {
+  const retainedMetrics = monthlyMetrics.filter((metric) => !companyMonthlyOverrides.has(metric.product_id));
+  const copiedMetrics = [...companyMonthlyOverrides.values()].flat();
+  monthlyMetrics.splice(0, monthlyMetrics.length, ...retainedMetrics, ...copiedMetrics);
+}
+
+const rankedCompanies = products.filter((product) => product.is_company_primary);
+rankedCompanies.sort((left, right) => {
   if (left.ranking_value !== null || right.ranking_value !== null) {
     if (left.ranking_value === null) return 1;
     if (right.ranking_value === null) return -1;
@@ -932,8 +1138,10 @@ products.sort((left, right) => {
   const dateComparison = right.launched_at.localeCompare(left.launched_at);
   return dateComparison || left.name.localeCompare(right.name);
 });
-products.forEach((product, index) => {
-  product.current_rank = index + 1;
+rankedCompanies.forEach((product, index) => {
+  for (const member of productsByCompany.get(product.company_group_key) || [product]) member.current_rank = index + 1;
+});
+products.forEach((product) => {
   delete product.ranking_value;
 });
 
@@ -962,9 +1170,12 @@ const payload = {
     sourceDirectory: basename(dataDirectory),
     sourceManifestGeneratedAt: manifest.generatedAt,
     estimateMethodVersion: MODEL_VERSION,
-    caveat: 'Revenue evidence priority is Appark, attributable payment-platform traffic with official pricing, payment traffic with category ARPPU, explicit successful zero, then Similarweb traffic fallback. Company-domain estimates may cover multiple products and are labeled in estimate details.',
+    caveat: 'Products sharing a non-platform official domain are grouped into one company row. Website audience and revenue estimates are displayed once per company without summing duplicate domain-level observations. Revenue evidence priority is Appark, attributable payment-platform traffic with official pricing, payment traffic with category ARPPU, explicit successful zero, then Similarweb traffic fallback.',
     counts: {
       products: products.length,
+      companies: rankedCompanies.length,
+      groupedCompanies: rankedCompanies.filter((product) => product.company_product_count > 1).length,
+      productsInGroupedCompanies: products.filter((product) => product.company_product_count > 1).length,
       launches: launchRows.length,
       monthlyMetrics: monthlyMetrics.length,
       appMetrics: appMetrics.length,
