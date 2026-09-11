@@ -52,6 +52,9 @@ export type BrowserPacingConfig = {
 };
 
 const PACING_JITTER_RATIO = 0.2;
+const QUOTA_LIVE_READ_TIMEOUT_MS = 8_000;
+const QUOTA_RELOAD_READ_TIMEOUT_MS = 30_000;
+const QUOTA_READ_POLL_MS = 500;
 
 export class SemrushBrowserProvider implements DestinationProvider {
   private queue: Promise<void> = Promise.resolve();
@@ -462,25 +465,31 @@ export class SemrushBrowserProvider implements DestinationProvider {
     try {
       const dashboard = await this.getDashboardPage(context);
       dashboard.setDefaultTimeout(this.config.timeoutMs);
-      await dashboard.reload({ waitUntil: 'domcontentloaded', timeout: this.config.timeoutMs });
-      await assertAuthenticated(dashboard);
-      const cards = dashboard.locator('app-subscription-item');
-      await cards.first().waitFor({ state: 'visible', timeout: 30_000 });
-      const probes: ThreeUeSubscriptionCardProbe[] = [];
-      for (let index = 0; index < await cards.count(); index += 1) {
-        const card = cards.nth(index);
-        if (!await card.isVisible()) continue;
-        probes.push({
-          text: await card.innerText(),
-          buttonTexts: await card.locator('button').allInnerTexts(),
-          progressText: await card.locator('nb-progress-bar').first().innerText().catch(() => ''),
-        });
+      let parsed: DailyQuotaSnapshot;
+      try {
+        parsed = await waitForThreeUeSemrushDailyQuota(
+          dashboard,
+          this.config.quotaGuard.stopAtUsedPercent,
+          QUOTA_LIVE_READ_TIMEOUT_MS,
+        );
+      } catch (liveReadError) {
+        console.warn(
+          `[semrush-traffic] quota live read incomplete; reloading dashboard once error=${JSON.stringify(errorMessage(liveReadError))}`,
+        );
+        await dashboard.reload({ waitUntil: 'domcontentloaded', timeout: this.config.timeoutMs });
+        await assertAuthenticated(dashboard);
+        try {
+          parsed = await waitForThreeUeSemrushDailyQuota(
+            dashboard,
+            this.config.quotaGuard.stopAtUsedPercent,
+            QUOTA_RELOAD_READ_TIMEOUT_MS,
+          );
+        } catch (reloadReadError) {
+          throw new Error(
+            `${errorMessage(reloadReadError)} Initial live read before the fallback reload also failed: ${errorMessage(liveReadError)}`,
+          );
+        }
       }
-      const parsed = parseThreeUeSemrushDailyQuota(
-        probes,
-        this.config.quotaGuard.stopAtUsedPercent,
-      );
-      if (!parsed) throw new Error('The active Semrush subscription card did not expose API 今日配额.');
       this.quotaSnapshot = parsed;
       console.log(
         `[semrush-traffic] quota status=${parsed.status} usedPercent=${parsed.usedPercent} remainingPercent=${parsed.remainingPercent}`,
@@ -554,6 +563,45 @@ export class SemrushBrowserProvider implements DestinationProvider {
     await assertAuthenticated(dashboard);
     return dashboard;
   }
+}
+
+async function waitForThreeUeSemrushDailyQuota(
+  dashboard: Page,
+  stopAtUsedPercent: number,
+  timeoutMs: number,
+) {
+  const deadline = Date.now() + timeoutMs;
+  let sawVisibleSubscriptionCard = false;
+  while (Date.now() < deadline) {
+    await assertAuthenticated(dashboard);
+    const cards = dashboard.locator('app-subscription-item');
+    const cardCount = await cards.count().catch(() => 0);
+    const probes: ThreeUeSubscriptionCardProbe[] = [];
+    for (let index = 0; index < cardCount; index += 1) {
+      const card = cards.nth(index);
+      if (!await card.isVisible().catch(() => false)) continue;
+      sawVisibleSubscriptionCard = true;
+      probes.push({
+        text: await card.innerText().catch(() => ''),
+        buttonTexts: await card.locator('button').allInnerTexts().catch(() => []),
+        progressText: await card.locator('nb-progress-bar').first().innerText().catch(() => ''),
+      });
+    }
+    const parsed = parseThreeUeSemrushDailyQuota(probes, stopAtUsedPercent);
+    if (parsed) return parsed;
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    await dashboard.waitForTimeout(Math.min(QUOTA_READ_POLL_MS, remainingMs));
+  }
+  if (!sawVisibleSubscriptionCard) {
+    throw new Error('The 3ue dashboard did not render a visible subscription card.');
+  }
+  throw new Error('The active Semrush subscription card did not expose API 今日配额.');
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function jitteredPacingDelayMs(baseDelayMs: number, randomValue = Math.random()) {

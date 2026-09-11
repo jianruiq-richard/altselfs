@@ -52,8 +52,10 @@ and before retries. Semrush load/frequency messages such as `Something went
 wrong` use the longer rate-limit cooldown. Pacing waits are logged with a
 `pacing stage=... delayMs=...` entry for production diagnosis.
 
-Before a query opens the Semrush report, browser mode reloads the authenticated
-3ue dashboard and reads `API 今日配额` from the active Semrush subscription card.
+Before a query opens the Semrush report, browser mode reads `API 今日配额` from
+the active Semrush subscription card in the long-lived authenticated 3ue
+dashboard tab. It polls the existing rendered dashboard first and reloads that
+tab once only as a fallback when the live card or quota value does not appear.
 The percentage is the amount used today: `100%` means no daily quota remains.
 At or above `SEMRUSH_QUOTA_STOP_AT_USED_PERCENT`, the request receives HTTP 429
 with code `DAILY_QUOTA_EXHAUSTED` without opening the Semrush report. If the
