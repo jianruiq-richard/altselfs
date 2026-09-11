@@ -381,7 +381,7 @@ function TrafficTrend({ product }: { product: MarketProductApiRecord }) {
   const color = rising ? '#78c889' : '#e86f61';
 
   return (
-    <div className="grid min-w-[168px] gap-1.5" title="Similarweb monthly website traffic trend">
+    <div className="grid min-w-[168px] gap-1.5" title="Similarweb estimated monthly website visits over the latest three complete months. Visits are not unique users or monthly active users.">
       <svg viewBox={`0 0 ${width} ${height}`} className="h-[48px] w-[150px] overflow-visible" role="img" aria-label="Three month Similarweb traffic trend">
         <line x1="0" x2={width} y1={height - 4} y2={height - 4} stroke="rgba(255,250,240,.16)" />
         <polyline points={pointString} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
@@ -590,7 +590,7 @@ export function ProductIntelligencePage() {
                     ['Product', false],
                     ['Launched', false],
                     ['Latest month · users & revenue', true],
-                    ['User scale · 3M', true],
+                    ['Monthly website visits · 3M', true],
                     ['Category · Product Hunt topics', false],
                     ['Product type', false],
                     ['Product introduction', false],
