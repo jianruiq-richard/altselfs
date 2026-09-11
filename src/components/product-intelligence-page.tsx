@@ -148,6 +148,16 @@ function formatLaunchDate(value: string) {
   }).format(parsed);
 }
 
+function formatMetricMonth(value: string) {
+  const parsed = new Date(`${value.slice(0, 7)}-01T00:00:00Z`);
+  if (!Number.isFinite(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(parsed);
+}
+
 function formatMetric(value: number | null, currency = false) {
   if (value === null || !Number.isFinite(value)) return 'Not available';
   return `${currency ? '$' : ''}${compactNumber.format(value)}`;
@@ -358,6 +368,7 @@ function LastMonthMetric({ product }: { product: MarketProductApiRecord }) {
 }
 
 function TrafficTrend({ product }: { product: MarketProductApiRecord }) {
+  const [activePointIndex, setActivePointIndex] = useState<number | null>(null);
   const metrics = product.trafficTrend.filter((metric) => metric.value !== null);
   if (metrics.length < 2) {
     if (product.lastMonthAudience.kind === 'app_downloads') {
@@ -389,16 +400,53 @@ function TrafficTrend({ product }: { product: MarketProductApiRecord }) {
   const pointString = points.map((point) => `${point.x},${point.y}`).join(' ');
   const rising = values.at(-1)! >= values[0];
   const color = rising ? '#78c889' : '#e86f61';
+  const activeMetric = activePointIndex === null ? null : metrics[activePointIndex];
+  const activePoint = activePointIndex === null ? null : points[activePointIndex];
 
   return (
-    <div className="grid min-w-[168px] gap-1.5" title="Similarweb estimated monthly website visits over the latest three complete months. Visits are not unique users or monthly active users.">
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-[48px] w-[150px] overflow-visible" role="img" aria-label="Three month Similarweb traffic trend">
-        <line x1="0" x2={width} y1={height - 4} y2={height - 4} stroke="rgba(255,250,240,.16)" />
-        <polyline points={pointString} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
-        {points.map((point, index) => (
-          <circle key={`${product.id}-trend-${index}`} cx={point.x} cy={point.y} r={index === points.length - 1 ? 2.8 : 1.7} fill="#0b0c0c" stroke={color} strokeWidth="1.5" />
-        ))}
-      </svg>
+    <div className="grid min-w-[168px] gap-1.5">
+      <div className="relative h-[48px] w-[150px]" onMouseLeave={() => setActivePointIndex(null)}>
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-[48px] w-[150px] overflow-visible" role="img" aria-label="Three month Similarweb traffic trend">
+          <line x1="0" x2={width} y1={height - 4} y2={height - 4} stroke="rgba(255,250,240,.16)" />
+          <polyline points={pointString} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
+          {points.map((point, index) => (
+            <g
+              key={`${product.id}-trend-${index}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`${formatMetricMonth(metrics[index].month)}: ${fullNumber.format(metrics[index].value as number)} estimated website visits`}
+              onMouseEnter={() => setActivePointIndex(index)}
+              onFocus={() => setActivePointIndex(index)}
+              onBlur={() => setActivePointIndex(null)}
+              className="cursor-crosshair outline-none"
+            >
+              <circle cx={point.x} cy={point.y} r="9" fill="transparent" />
+              <circle
+                cx={point.x}
+                cy={point.y}
+                r={activePointIndex === index ? 4 : index === points.length - 1 ? 2.8 : 1.7}
+                fill="#0b0c0c"
+                stroke={color}
+                strokeWidth={activePointIndex === index ? 2 : 1.5}
+              />
+            </g>
+          ))}
+        </svg>
+        {activeMetric && activePoint ? (
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute z-30 min-w-[138px] -translate-x-1/2 rounded-[7px] border border-[#f2c36b]/30 bg-[#151511] px-2.5 py-2 shadow-[0_10px_28px_rgba(0,0,0,.45)]"
+            style={{
+              left: `${(activePoint.x / width) * 100}%`,
+              top: `${Math.max(-48, activePoint.y - 54)}px`,
+            }}
+          >
+            <span className="block text-[9px] font-bold uppercase tracking-[0.08em] text-[#fffaf0]/52">{formatMetricMonth(activeMetric.month)}</span>
+            <strong className="mt-0.5 block whitespace-nowrap font-mono text-[12px] font-semibold tabular-nums text-[#f2c36b]">{fullNumber.format(activeMetric.value as number)} visits</strong>
+            <span className="mt-0.5 block text-[9px] text-[#fffaf0]/48">{activeMetric.source || 'Similarweb estimate'}</span>
+          </div>
+        ) : null}
+      </div>
       <span className="flex w-[150px] justify-between font-mono text-[10px] font-medium uppercase text-[#fffaf0]/58">
         {metrics.map((metric) => <span key={metric.month}>{metric.month.slice(5)}</span>)}
       </span>
