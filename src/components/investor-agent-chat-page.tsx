@@ -37,6 +37,7 @@ import { productBrand } from '@/lib/brand';
 import { getBillingPlan } from '@/lib/billing-plans';
 import { artifactDeliveryPath, isHtmlArtifact } from '@/lib/artifact-delivery';
 import { getVisibleConnectors } from '@/lib/investor-connector-visibility';
+import { DEFAULT_DISCUSSION_CONNECTOR_KEYS, resolveDiscussionConnectorKeys } from '@/lib/discussion-connectors';
 import {
   analyticsWasReported,
   markAnalyticsReported,
@@ -2748,7 +2749,7 @@ export function InvestorAgentChatPage() {
         enabledConnectionIds: [],
       };
     }
-    if (threadId) connectorSelectionsByThreadRef.current.set(threadId, nextKeys);
+    connectorSelectionsByThreadRef.current.set(threadId || DRAFT_SESSION_ID, nextKeys);
     setSelectedConnectorKeys((current) => sameStringSelection(current, nextKeys) ? current : nextKeys);
     return {
       enabledConnectorKeys: nextKeys,
@@ -2812,18 +2813,15 @@ export function InvestorAgentChatPage() {
   }, [connectors]);
 
   useEffect(() => {
-    if (!threadId || connectorsLoading || connectors.length === 0) return;
+    if (connectorsLoading || connectors.length === 0) return;
     const availableConnectors = connectors.filter(
       (connector) => connector.connected && connector.conversationAvailable !== false
     );
     const availableKeys = new Set(availableConnectors.map((connector) => connector.key));
-    const rememberedKeys = connectorSelectionsByThreadRef.current.get(threadId);
+    const rememberedKeys = connectorSelectionsByThreadRef.current.get(threadId || DRAFT_SESSION_ID);
     const messagesBelongToCurrentThread = messagesThreadIdRef.current === threadId;
     const messageKeys = messagesBelongToCurrentThread ? connectorKeysFromMessages(messages) : null;
-    const defaultKeys = availableConnectors
-      .filter((connector) => connector.enabledByDefault)
-      .map((connector) => connector.key);
-    const nextKeys = (rememberedKeys ?? messageKeys ?? defaultKeys).filter((key) => availableKeys.has(key));
+    const nextKeys = resolveDiscussionConnectorKeys(rememberedKeys, messageKeys).filter((key) => availableKeys.has(key));
     setSelectedConnectorKeys((current) => sameStringSelection(current, nextKeys) ? current : nextKeys);
   }, [connectors, connectorsLoading, messages, threadId]);
 
@@ -2832,7 +2830,7 @@ export function InvestorAgentChatPage() {
       const next = current.includes(key)
         ? current.filter((item) => item !== key)
         : [...current, key];
-      if (threadId) connectorSelectionsByThreadRef.current.set(threadId, next);
+      connectorSelectionsByThreadRef.current.set(threadId || DRAFT_SESSION_ID, next);
       return next;
     });
   }, [threadId]);
@@ -3582,9 +3580,10 @@ export function InvestorAgentChatPage() {
     setInput('');
     setAttachments([]);
     setOpenSessionMenuId(null);
+    connectorSelectionsByThreadRef.current.delete(DRAFT_SESSION_ID);
     setSelectedConnectorKeys(
       connectors
-        .filter((connector) => connector.connected && connector.conversationAvailable !== false && connector.enabledByDefault)
+        .filter((connector) => connector.connected && connector.conversationAvailable !== false && DEFAULT_DISCUSSION_CONNECTOR_KEYS.includes(connector.key))
         .map((connector) => connector.key)
     );
     window.requestAnimationFrame(() => {
@@ -4180,7 +4179,11 @@ export function InvestorAgentChatPage() {
     const shouldCreateThread = !requestThreadId;
     let requestConnectorScope: ConnectorScopePayload;
     try {
-      const ensured = await ensureTemplateConnectorKeys(options?.connectorKeys);
+      const requestedKeys = options?.connectorKeys ?? resolveDiscussionConnectorKeys(
+        connectorSelectionsByThreadRef.current.get(threadId || DRAFT_SESSION_ID),
+        messagesThreadIdRef.current === threadId ? connectorKeysFromMessages(messages) : null,
+      );
+      const ensured = await ensureTemplateConnectorKeys(requestedKeys);
       requestConnectorScope = connectorScopeForKeys(ensured.connectorKeys, ensured.connectors);
     } catch (connectorError) {
       submissionInFlightRef.current = false;

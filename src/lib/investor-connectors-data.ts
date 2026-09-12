@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import type { ServerTiming } from '@/lib/server-timing';
 import { COMPETITIVE_DATA_SOURCE_LIST } from '@/lib/competitive-data-sources';
 import { getVisibleConnectors } from '@/lib/investor-connector-visibility';
+import { DEFAULT_DISCUSSION_CONNECTOR_KEYS } from '@/lib/discussion-connectors';
 
 type ConnectorType = 'app' | 'data_source';
 
@@ -221,7 +222,7 @@ export async function loadInvestorConnectors(
       label: connector.label,
       description: connector.description,
       connected,
-      enabledByDefault: false,
+      enabledByDefault: DEFAULT_DISCUSSION_CONNECTOR_KEYS.includes(connector.key),
       conversationAvailable: true,
       connectionIds: [],
       accounts: [],
