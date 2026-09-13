@@ -181,7 +181,7 @@ request = {
     'messages': [{'role': role, 'content': [{'type': 'text', 'text': str(i), 'cache_control': marker}]} for i, role in enumerate(['user', 'assistant', 'user'])],
 }
 original = copy.deepcopy(request)
-context = dict(api_mode='anthropic_messages', provider='apiyi', model='claude-sonnet-4-6')
+context = dict(api_mode='anthropic_messages', provider='custom', model='claude-sonnet-4-6', base_url='https://api.apiyi.com/v1')
 result = normalize(request, **context)['request']
 assert request == original
 assert 'cache_control' not in result['tools'][0]
@@ -191,7 +191,10 @@ assert len(markers) == 4
 assert all(m == {'type': 'ephemeral', 'ttl': '1h'} for m in markers)
 assert 'cache_control' not in result['messages'][0]['content'][0]
 assert normalize(result, **context)['request'] == result
-assert normalize(request, **{**context, 'provider': 'openrouter'}) is None
+assert normalize(request, **{**context, 'provider': 'apiyi'})['request'] == result
+assert normalize(request, **{**context, 'base_url': 'https://vip.apiyi.com/v1'})['request'] == result
+for url in ['https://openrouter.ai/api/v1', 'https://apiyi.com.example.org/v1', 'https://notapiyi.com/v1', '']:
+    assert normalize(request, **{**context, 'base_url': url}) is None
 assert normalize(request, **{**context, 'api_mode': 'chat_completions'}) is None
 no_tools = {k: v for k, v in request.items() if k != 'tools'}
 assert 'tools' not in normalize(no_tools, **context)['request']
