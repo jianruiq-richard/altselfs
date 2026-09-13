@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
 import {
   ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV,
   buildHermesDynamicUserContext,
@@ -71,17 +72,6 @@ test('Hermes dynamic context contains time, mode, tools, profile, and artifacts'
 test('Hermes chat-completions prompt caching retains one hour', () => {
   assert.equal(HERMES_PROMPT_CACHE_TTL, '1h');
   assert.deepEqual(buildHermesPromptCachingYamlLines(), [
-    'prompt_caching:',
-    '  cache_ttl: "1h"',
-  ]);
-});
-
-test('Hermes native Anthropic caching uses 5m to avoid mixed-TTL request rejection', () => {
-  assert.deepEqual(buildHermesPromptCachingYamlLines('anthropic_messages'), [
-    'prompt_caching:',
-    '  cache_ttl: "5m"',
-  ]);
-  assert.deepEqual(buildHermesPromptCachingYamlLines('chat_completions'), [
     'prompt_caching:',
     '  cache_ttl: "1h"',
   ]);
@@ -169,4 +159,44 @@ test('generated Hermes plugin injects dynamic context through pre_llm_call', asy
   assert.match(source, /ctx\.register_hook\("pre_llm_call"/);
 
   await fs.rm(root, { recursive: true, force: true });
+});
+
+test('generated cache middleware preserves 1h with tools within four breakpoints', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'altselfs-hermes-cache-'));
+  try {
+    await prepareHermesRuntimeContextPlugin(root);
+    execFileSync('python3', ['-c', `
+import copy, runpy, sys
+plugin = runpy.run_path(sys.argv[1])
+registered = {}
+class Context:
+    def register_hook(self, *args): pass
+    def register_middleware(self, kind, callback): registered[kind] = callback
+plugin['register'](Context())
+normalize = registered['llm_request']
+marker = {'type': 'ephemeral'}
+request = {
+    'tools': [{'name': 'one'}, {'name': 'two'}],
+    'system': [{'type': 'text', 'text': 'system', 'cache_control': marker}],
+    'messages': [{'role': role, 'content': [{'type': 'text', 'text': str(i), 'cache_control': marker}]} for i, role in enumerate(['user', 'assistant', 'user'])],
+}
+original = copy.deepcopy(request)
+context = dict(api_mode='anthropic_messages', provider='apiyi', model='claude-sonnet-4-6')
+result = normalize(request, **context)['request']
+assert request == original
+assert 'cache_control' not in result['tools'][0]
+blocks = result['tools'] + result['system'] + [m['content'][0] for m in result['messages']]
+markers = [b['cache_control'] for b in blocks if 'cache_control' in b]
+assert len(markers) == 4
+assert all(m == {'type': 'ephemeral', 'ttl': '1h'} for m in markers)
+assert 'cache_control' not in result['messages'][0]['content'][0]
+assert normalize(result, **context)['request'] == result
+assert normalize(request, **{**context, 'provider': 'openrouter'}) is None
+assert normalize(request, **{**context, 'api_mode': 'chat_completions'}) is None
+no_tools = {k: v for k, v in request.items() if k != 'tools'}
+assert 'tools' not in normalize(no_tools, **context)['request']
+`, path.join(root, 'plugins', 'altselfs-runtime-context', '__init__.py')]);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });

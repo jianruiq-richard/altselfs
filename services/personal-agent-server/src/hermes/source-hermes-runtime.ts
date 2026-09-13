@@ -62,6 +62,7 @@ const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_SOURCE = [
   `"""${PRODUCT_BRAND.name} per-turn context injection for Hermes."""`,
   '',
   'import os',
+  'from copy import deepcopy',
   '',
   `ENV_KEY = "${ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV}"`,
   '',
@@ -72,9 +73,38 @@ const ALTSELFS_RUNTIME_CONTEXT_PLUGIN_SOURCE = [
   '        return None',
   '    return {"context": context}',
   '',
+  'def _normalize_apiyi_cache(request, api_mode="", provider="", model="", **_kwargs):',
+  '    if api_mode != "anthropic_messages" or provider != "apiyi" or "claude" not in model.lower():',
+  '        return None',
+  '    payload = deepcopy(request)',
+  '    tools = payload.get("tools") or []',
+  '    for tool in tools:',
+  '        tool.pop("cache_control", None)',
+  '    if tools:',
+  '        tools[-1]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}',
+  '    system = payload.get("system")',
+  '    system_blocks = system if isinstance(system, list) else []',
+  '    message_blocks = []',
+  '    for message in payload.get("messages", []):',
+  '        content = message.get("content")',
+  '        if isinstance(content, list):',
+  '            message_blocks.extend(block for block in content if isinstance(block, dict))',
+  '    marked_system = [block for block in system_blocks if isinstance(block, dict) and "cache_control" in block]',
+  '    marked_messages = [block for block in message_blocks if "cache_control" in block]',
+  '    markers = marked_system + marked_messages',
+  '    for block in markers:',
+  '        block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}',
+  '    # Tools consume one of Anthropic\'s four breakpoints. Drop oldest message',
+  '    # breakpoints first, retaining the stable system and latest conversation.',
+  '    excess = max(0, len(markers) + bool(tools) - 4)',
+  '    for block in (marked_messages + marked_system)[:excess]:',
+  '        block.pop("cache_control", None)',
+  '    return {"request": payload, "source": "altselfs-apiyi-cache", "reason": "Explicit one-hour tool and message caching"}',
+  '',
   '',
   'def register(ctx):',
   '    ctx.register_hook("pre_llm_call", _inject_runtime_context)',
+  '    ctx.register_middleware("llm_request", _normalize_apiyi_cache)',
   '',
 ].join('\n');
 
@@ -598,7 +628,7 @@ export class HermesSourceRuntime {
         ...hermesProviderConfigYamlLines(hermesModelSelection),
         ...buildHermesProviderRoutingYamlLines(hermesModelSelection, this.config),
         '',
-        ...buildHermesPromptCachingYamlLines(hermesModelSelection.apiMode),
+        ...buildHermesPromptCachingYamlLines(),
         '',
         'terminal:',
         `  cwd: ${yamlString(paths.workspace)}`,
@@ -1584,12 +1614,8 @@ export function buildHermesDynamicUserContext(input: {
   return sections.join('\n');
 }
 
-export function buildHermesPromptCachingYamlLines(
-  apiMode: HermesModelSelection['apiMode'] = 'chat_completions'
-) {
-  // This native route has rejected mixed 5m/1h cache markers in production.
-  // Use 5m so our message markers cannot follow a shorter-lived breakpoint.
-  const cacheTtl = apiMode === 'anthropic_messages' ? '5m' : HERMES_PROMPT_CACHE_TTL;
+export function buildHermesPromptCachingYamlLines() {
+  const cacheTtl = HERMES_PROMPT_CACHE_TTL;
   return [
     'prompt_caching:',
     `  cache_ttl: ${yamlString(cacheTtl)}`,
