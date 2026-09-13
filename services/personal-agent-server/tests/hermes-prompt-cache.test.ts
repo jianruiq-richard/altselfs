@@ -68,9 +68,20 @@ test('Hermes dynamic context contains time, mode, tools, profile, and artifacts'
   assert.match(dynamicContext, /quarterly-report\.pdf/);
 });
 
-test('Hermes prompt caching is configured for one hour', () => {
+test('Hermes chat-completions prompt caching retains one hour', () => {
   assert.equal(HERMES_PROMPT_CACHE_TTL, '1h');
   assert.deepEqual(buildHermesPromptCachingYamlLines(), [
+    'prompt_caching:',
+    '  cache_ttl: "1h"',
+  ]);
+});
+
+test('Hermes native Anthropic caching uses 5m to avoid mixed-TTL request rejection', () => {
+  assert.deepEqual(buildHermesPromptCachingYamlLines('anthropic_messages'), [
+    'prompt_caching:',
+    '  cache_ttl: "5m"',
+  ]);
+  assert.deepEqual(buildHermesPromptCachingYamlLines('chat_completions'), [
     'prompt_caching:',
     '  cache_ttl: "1h"',
   ]);

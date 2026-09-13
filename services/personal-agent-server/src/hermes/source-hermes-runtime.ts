@@ -598,7 +598,7 @@ export class HermesSourceRuntime {
         ...hermesProviderConfigYamlLines(hermesModelSelection),
         ...buildHermesProviderRoutingYamlLines(hermesModelSelection, this.config),
         '',
-        ...buildHermesPromptCachingYamlLines(),
+        ...buildHermesPromptCachingYamlLines(hermesModelSelection.apiMode),
         '',
         'terminal:',
         `  cwd: ${yamlString(paths.workspace)}`,
@@ -1584,10 +1584,15 @@ export function buildHermesDynamicUserContext(input: {
   return sections.join('\n');
 }
 
-export function buildHermesPromptCachingYamlLines() {
+export function buildHermesPromptCachingYamlLines(
+  apiMode: HermesModelSelection['apiMode'] = 'chat_completions'
+) {
+  // This native route has rejected mixed 5m/1h cache markers in production.
+  // Use 5m so our message markers cannot follow a shorter-lived breakpoint.
+  const cacheTtl = apiMode === 'anthropic_messages' ? '5m' : HERMES_PROMPT_CACHE_TTL;
   return [
     'prompt_caching:',
-    `  cache_ttl: ${yamlString(HERMES_PROMPT_CACHE_TTL)}`,
+    `  cache_ttl: ${yamlString(cacheTtl)}`,
   ];
 }
 
