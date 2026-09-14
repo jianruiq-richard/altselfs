@@ -28,6 +28,8 @@ create table if not exists market_intelligence.products (
   revenue_estimate_low_usd numeric(18, 2),
   revenue_estimate_high_usd numeric(18, 2),
   revenue_estimate_source text,
+  revenue_estimate_month date,
+  revenue_period_kind text,
   estimate_method_version text,
   revenue_estimate_details jsonb,
   audience_estimate_details jsonb,
@@ -44,6 +46,10 @@ create table if not exists market_intelligence.products (
   updated_at timestamptz not null default now(),
   unique (external_source, external_id)
 );
+
+alter table market_intelligence.products
+  add column if not exists revenue_estimate_month date,
+  add column if not exists revenue_period_kind text;
 
 create table if not exists market_intelligence.product_launches (
   id text primary key,
@@ -68,6 +74,7 @@ create table if not exists market_intelligence.product_monthly_metrics (
   estimated_users_low bigint,
   estimated_users_high bigint,
   user_estimate_source text,
+  audience_estimate_details jsonb,
   estimated_new_revenue_usd numeric(18, 2),
   revenue_low_usd numeric(18, 2),
   revenue_high_usd numeric(18, 2),
@@ -82,9 +89,15 @@ create table if not exists market_intelligence.product_monthly_metrics (
   primary key (product_id, month)
 );
 
+alter table market_intelligence.product_monthly_metrics
+  add column if not exists audience_estimate_details jsonb;
+
 create table if not exists market_intelligence.product_app_metrics (
   product_id text not null references market_intelligence.products(id) on delete cascade,
   observed_at timestamptz not null,
+  reference_month date,
+  period_start date,
+  period_end date,
   ios_downloads_30d bigint,
   ios_revenue_30d numeric(18, 2),
   android_downloads_30d bigint,
@@ -98,6 +111,35 @@ create table if not exists market_intelligence.product_app_metrics (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (product_id, observed_at)
+);
+
+alter table market_intelligence.product_app_metrics
+  add column if not exists reference_month date,
+  add column if not exists period_start date,
+  add column if not exists period_end date;
+
+create table if not exists market_intelligence.product_monthly_revenue_estimates (
+  product_id text not null references market_intelligence.products(id) on delete cascade,
+  month date not null,
+  model_version text not null,
+  estimated_new_revenue_usd numeric(18, 2),
+  revenue_low_usd numeric(18, 2),
+  revenue_high_usd numeric(18, 2),
+  evidence_priority integer,
+  estimate_source text,
+  period_kind text not null default 'calendar_month',
+  model text,
+  inputs jsonb not null default '{}'::jsonb,
+  formula text,
+  risks text[] not null default '{}',
+  confidence text not null default 'unknown',
+  observed_at timestamptz,
+  calculated_at timestamptz not null default now(),
+  is_current boolean not null default true,
+  is_mock boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (product_id, month, model_version)
 );
 
 create table if not exists market_intelligence.product_payment_metrics (
@@ -173,8 +215,15 @@ create index if not exists market_products_company_group_idx
   on market_intelligence.products (is_mock, is_company_primary, company_group_key);
 create index if not exists market_app_metrics_product_observed_idx
   on market_intelligence.product_app_metrics (product_id, observed_at desc);
+create index if not exists market_app_metrics_product_month_idx
+  on market_intelligence.product_app_metrics (product_id, reference_month desc, observed_at desc);
 create index if not exists market_payment_metrics_product_month_idx
   on market_intelligence.product_payment_metrics (product_id, month desc);
+create index if not exists market_revenue_estimates_product_month_idx
+  on market_intelligence.product_monthly_revenue_estimates (product_id, month desc, calculated_at desc);
+create unique index if not exists market_revenue_estimates_current_idx
+  on market_intelligence.product_monthly_revenue_estimates (product_id, month)
+  where is_current = true;
 create index if not exists product_pricing_snapshots_month_strategy_idx
   on market_intelligence.product_pricing_snapshots(snapshot_month desc, pricing_strategy);
 create index if not exists product_pricing_snapshots_verified_idx

@@ -11,6 +11,7 @@ if (!dataDirectoryArgument || !outputFileArgument) {
 const dataDirectory = resolve(dataDirectoryArgument);
 const outputFile = resolve(outputFileArgument);
 const manifest = JSON.parse(readFileSync(join(dataDirectory, 'manifest.json'), 'utf8'));
+const payloadGeneratedAt = new Date().toISOString();
 
 const MODEL_VERSION = 'minaco-company-website-estimate-v4';
 
@@ -224,6 +225,22 @@ function clamp(value, minimum, maximum) {
 
 function latestIso(...values) {
   return values.filter(Boolean).toSorted().at(-1) || null;
+}
+
+function monthStart(value) {
+  const month = String(value || '').slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(month) ? `${month}-01` : null;
+}
+
+function rollingThirtyDayPeriod(observedAt) {
+  const end = new Date(String(observedAt || ''));
+  if (!Number.isFinite(end.getTime())) return { periodStart: null, periodEnd: null };
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - 29);
+  return {
+    periodStart: start.toISOString().slice(0, 10),
+    periodEnd: end.toISOString().slice(0, 10),
+  };
 }
 
 function classifyModel(product, description) {
@@ -808,6 +825,7 @@ const products = [];
 const monthlyMetrics = [];
 const appMetrics = [];
 const paymentMetrics = [];
+const monthlyRevenueEstimates = [];
 
 for (const product of manifest.products || []) {
   const key = normalizeProductKey(product.productKey || product.productHuntUrl);
@@ -886,6 +904,12 @@ for (const product of manifest.products || []) {
     appark?.android_checked_at,
     manifest.generatedAt,
   );
+  const appPeriod = rollingThirtyDayPeriod(appObservedAt);
+  const evidencePriority = finiteNumber(revenue.details?.evidencePriority);
+  const revenueEstimateMonth = evidencePriority === 1
+    ? monthStart(appObservedAt)
+    : monthStart(latestMeasuredPayment?.month || latestMonth || pricingSignal?.snapshotMonth || manifest.generatedAt);
+  const revenuePeriodKind = evidencePriority === 1 ? 'rolling_30d' : 'calendar_month';
   const metricUpdatedAt = latestIso(similarweb?.fetchedAt, appObservedAt, paymentMonths.at(-1)?.fetchedAt, manifest.generatedAt);
 
   products.push({
@@ -914,6 +938,8 @@ for (const product of manifest.products || []) {
     revenue_estimate_low_usd: revenue.low,
     revenue_estimate_high_usd: revenue.high,
     revenue_estimate_source: revenue.source,
+    revenue_estimate_month: revenueEstimateMonth,
+    revenue_period_kind: revenuePeriodKind,
     estimate_method_version: `${MODEL_VERSION}:${revenue.method || 'no-revenue'}`,
     revenue_estimate_details: revenue.details || null,
     audience_estimate_details: latestTraffic ? {
@@ -947,6 +973,24 @@ for (const product of manifest.products || []) {
       estimated_users_low: metric.registrations.low,
       estimated_users_high: metric.registrations.high,
       user_estimate_source: 'Minaco estimate · Similarweb',
+      audience_estimate_details: {
+        scope: similarweb?.productCount > 1 ? 'company_website' : 'product_website',
+        source: 'Similarweb',
+        model: 'similarweb-registration-estimate',
+        inputs: {
+          trafficVisits: metric.visits,
+          uniqueVisitorShare: model.uniqueVisitorShare,
+          signupRate: model.signupRate,
+          engagementFactor: Number(engagementFactor(similarweb).toFixed(4)),
+          productCategoryModel: modelName,
+          mappedProductCount: similarweb?.productCount || 1,
+        },
+        formula: 'Website visits × estimated unique-visitor share × category signup rate × engagement factor.',
+        risks: similarweb?.productCount > 1
+          ? ['Website traffic covers multiple Product Hunt products sharing this company domain and is not attributable to this product alone.']
+          : ['Website visits are a proxy for product usage and do not equal authenticated active users.'],
+        confidence: similarweb?.confidence || 'medium',
+      },
       traffic_source: 'Similarweb',
       confidence: similarweb?.confidence || 'medium',
       method_version: MODEL_VERSION,
@@ -959,6 +1003,9 @@ for (const product of manifest.products || []) {
     appMetrics.push({
       product_id: id,
       observed_at: appObservedAt,
+      reference_month: monthStart(appObservedAt),
+      period_start: appPeriod.periodStart,
+      period_end: appPeriod.periodEnd,
       ios_downloads_30d: finiteNumber(appark.ios_downloads_30d),
       ios_revenue_30d: finiteNumber(appark.ios_revenue_30d),
       android_downloads_30d: finiteNumber(appark.android_downloads_30d),
@@ -1073,6 +1120,19 @@ for (const [groupKey, companyProducts] of productsByCompany) {
       ...metric,
       product_id: primaryProduct.id,
       user_estimate_source: 'Minaco estimate · Similarweb · Company website',
+      audience_estimate_details: {
+        ...(metric.audience_estimate_details || {}),
+        scope: 'company_website',
+        inputs: {
+          ...(metric.audience_estimate_details?.inputs || {}),
+          companyDomain,
+          mappedProductCount: companyProducts.length,
+        },
+        risks: [
+          `Company-wide audience estimate covering ${companyProducts.length} Product Hunt products that share ${companyDomain}. It is not the standalone user count of the main product or any child product.`,
+          'Website visits are a proxy for product usage and do not equal authenticated active users.',
+        ],
+      },
     })));
   }
 
@@ -1090,6 +1150,8 @@ for (const [groupKey, companyProducts] of productsByCompany) {
     primaryProduct.revenue_estimate_low_usd = revenueCarrier.revenue_estimate_low_usd;
     primaryProduct.revenue_estimate_high_usd = revenueCarrier.revenue_estimate_high_usd;
     primaryProduct.revenue_estimate_source = revenueCarrier.revenue_estimate_source;
+    primaryProduct.revenue_estimate_month = revenueCarrier.revenue_estimate_month;
+    primaryProduct.revenue_period_kind = revenueCarrier.revenue_period_kind;
     primaryProduct.revenue_growth_pct = revenueCarrier.revenue_growth_pct;
     primaryProduct.estimate_method_version = `${revenueCarrier.estimate_method_version}:company-group`;
     primaryProduct.data_confidence = revenueCarrier.data_confidence;
@@ -1145,6 +1207,30 @@ products.forEach((product) => {
   delete product.ranking_value;
 });
 
+for (const product of products) {
+  if (!product.revenue_estimate_month || !product.estimate_method_version) continue;
+  const details = product.revenue_estimate_details || {};
+  monthlyRevenueEstimates.push({
+    product_id: product.id,
+    month: product.revenue_estimate_month,
+    model_version: product.estimate_method_version,
+    estimated_new_revenue_usd: product.monthly_new_revenue_usd,
+    revenue_low_usd: product.revenue_estimate_low_usd,
+    revenue_high_usd: product.revenue_estimate_high_usd,
+    evidence_priority: finiteNumber(details.evidencePriority),
+    estimate_source: product.revenue_estimate_source,
+    period_kind: product.revenue_period_kind || 'calendar_month',
+    model: details.model || null,
+    inputs: details.inputs || {},
+    formula: details.formula || null,
+    risks: Array.isArray(details.risks) ? details.risks : [],
+    confidence: details.confidence || product.data_confidence || 'unknown',
+    observed_at: product.metrics_updated_at,
+    calculated_at: payloadGeneratedAt,
+    is_mock: false,
+  });
+}
+
 const productIdByKey = new Map(products.map((product) => [normalizeProductKey(product.external_id), product.id]));
 const launchRows = launches.flatMap((launch) => {
   const productKey = normalizeProductKey(launch.url);
@@ -1165,8 +1251,10 @@ const launchRows = launches.flatMap((launch) => {
 
 const payload = {
   metadata: {
-    schemaVersion: 2,
-    generatedAt: new Date().toISOString(),
+    schemaVersion: 3,
+    importMode: 'upsert-history',
+    replaceProductCatalog: false,
+    generatedAt: payloadGeneratedAt,
     sourceDirectory: basename(dataDirectory),
     sourceManifestGeneratedAt: manifest.generatedAt,
     estimateMethodVersion: MODEL_VERSION,
@@ -1180,6 +1268,7 @@ const payload = {
       monthlyMetrics: monthlyMetrics.length,
       appMetrics: appMetrics.length,
       paymentMetrics: paymentMetrics.length,
+      monthlyRevenueEstimates: monthlyRevenueEstimates.length,
       productsWithAudience: (() => {
         const appAudienceIds = new Set(appMetrics.filter((metric) => metric.total_downloads_30d !== null).map((metric) => metric.product_id));
         return products.filter((product) => product.monthly_traffic !== null || appAudienceIds.has(product.id)).length;
@@ -1199,6 +1288,7 @@ const payload = {
   monthlyMetrics,
   appMetrics,
   paymentMetrics,
+  monthlyRevenueEstimates,
 };
 
 writeFileSync(outputFile, `${JSON.stringify(payload)}\n`);

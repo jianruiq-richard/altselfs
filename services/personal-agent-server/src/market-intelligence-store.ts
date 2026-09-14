@@ -69,6 +69,8 @@ const MARKET_INTELLIGENCE_SCHEMA_SQL = `
     add column if not exists revenue_estimate_low_usd numeric(18, 2),
     add column if not exists revenue_estimate_high_usd numeric(18, 2),
     add column if not exists revenue_estimate_source text,
+    add column if not exists revenue_estimate_month date,
+    add column if not exists revenue_period_kind text,
     add column if not exists estimate_method_version text,
     add column if not exists revenue_estimate_details jsonb,
     add column if not exists audience_estimate_details jsonb,
@@ -101,11 +103,15 @@ const MARKET_INTELLIGENCE_SCHEMA_SQL = `
   alter table market_intelligence.product_monthly_metrics
     add column if not exists estimated_users_low bigint,
     add column if not exists estimated_users_high bigint,
-    add column if not exists user_estimate_source text;
+    add column if not exists user_estimate_source text,
+    add column if not exists audience_estimate_details jsonb;
 
   create table if not exists market_intelligence.product_app_metrics (
     product_id text not null references market_intelligence.products(id) on delete cascade,
     observed_at timestamptz not null,
+    reference_month date,
+    period_start date,
+    period_end date,
     ios_downloads_30d bigint,
     ios_revenue_30d numeric(18, 2),
     android_downloads_30d bigint,
@@ -121,6 +127,35 @@ const MARKET_INTELLIGENCE_SCHEMA_SQL = `
     primary key (product_id, observed_at)
   );
 
+  alter table market_intelligence.product_app_metrics
+    add column if not exists reference_month date,
+    add column if not exists period_start date,
+    add column if not exists period_end date;
+
+  create table if not exists market_intelligence.product_monthly_revenue_estimates (
+    product_id text not null references market_intelligence.products(id) on delete cascade,
+    month date not null,
+    model_version text not null,
+    estimated_new_revenue_usd numeric(18, 2),
+    revenue_low_usd numeric(18, 2),
+    revenue_high_usd numeric(18, 2),
+    evidence_priority integer,
+    estimate_source text,
+    period_kind text not null default 'calendar_month',
+    model text,
+    inputs jsonb not null default '{}'::jsonb,
+    formula text,
+    risks text[] not null default '{}',
+    confidence text not null default 'unknown',
+    observed_at timestamptz,
+    calculated_at timestamptz not null default now(),
+    is_current boolean not null default true,
+    is_mock boolean not null default false,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (product_id, month, model_version)
+  );
+
   create index if not exists market_products_actual_rank_idx
     on market_intelligence.products (is_mock, current_rank asc, id asc);
   create index if not exists market_products_topics_idx
@@ -131,6 +166,13 @@ const MARKET_INTELLIGENCE_SCHEMA_SQL = `
     on market_intelligence.products (is_mock, is_company_primary, company_group_key);
   create index if not exists market_app_metrics_product_observed_idx
     on market_intelligence.product_app_metrics (product_id, observed_at desc);
+  create index if not exists market_app_metrics_product_month_idx
+    on market_intelligence.product_app_metrics (product_id, reference_month desc, observed_at desc);
+  create index if not exists market_revenue_estimates_product_month_idx
+    on market_intelligence.product_monthly_revenue_estimates (product_id, month desc, calculated_at desc);
+  create unique index if not exists market_revenue_estimates_current_idx
+    on market_intelligence.product_monthly_revenue_estimates (product_id, month)
+    where is_current = true;
 `;
 
 const SORT_SQL: Record<MarketProductSort, string> = {
@@ -233,6 +275,8 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         p.revenue_estimate_low_usd,
         p.revenue_estimate_high_usd,
         p.revenue_estimate_source,
+        p.revenue_estimate_month,
+        p.revenue_period_kind,
         p.estimate_method_version,
         p.revenue_estimate_details,
         p.audience_estimate_details,
@@ -408,7 +452,9 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
         value: appRevenue ?? rowNullableNumber(row.monthly_new_revenue_usd),
         low: appRevenue !== null ? null : rowNullableNumber(row.revenue_estimate_low_usd),
         high: appRevenue !== null ? null : rowNullableNumber(row.revenue_estimate_high_usd),
-        period: appRevenue !== null ? 'rolling-30d' : rowString(row.latest_metric_month).slice(0, 7) || null,
+        period: appRevenue !== null
+          ? 'rolling-30d'
+          : rowString(row.revenue_estimate_month).slice(0, 7) || rowString(row.latest_metric_month).slice(0, 7) || null,
         source: appRevenue !== null ? 'Appark estimate' : productRevenueSource,
       },
       trafficGrowthPct: rowNullableNumber(row.traffic_growth_pct),
