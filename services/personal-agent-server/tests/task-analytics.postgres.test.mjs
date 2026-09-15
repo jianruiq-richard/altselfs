@@ -43,6 +43,10 @@ test('PostgreSQL milestones: eligibility, history, deduplication, consent and re
     await add('success', 'new', 'SUCCESS');
     await trackTaskMilestone(config, client, 'success', 'first_task_completed');
     assert.equal((await client.query('select * from agent_task_milestones')).rowCount, 2);
+    await add('fast', 'fast-user', 'SUCCESS');
+    await trackTaskMilestone(config, client, 'fast', 'first_task_submitted');
+    assert.equal((await client.query("select delivery_status from agent_task_milestones where investor_id = 'fast-user'")).rows[0].delivery_status, 'PENDING');
+    await client.query("delete from agent_task_milestones where investor_id = 'fast-user'");
     await add('historical', 'old', 'SUCCESS', 'granted', 24);
     await add('returning', 'old', 'SUCCESS');
     for (const event of ['first_task_submitted', 'first_task_completed']) await trackTaskMilestone(config, client, 'returning', event);

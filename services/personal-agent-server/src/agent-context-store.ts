@@ -306,7 +306,10 @@ export async function persistAgentTurnInput(
     });
   }
 
-  if (persistMessage && effectiveStatus === status && (status === 'QUEUED' || status === 'RUNNING')) {
+  // Record acceptance on the authorized transition, before a worker can advance
+  // QUEUED to RUNNING/SUCCESS during the subsequent message-persistence call.
+  // The milestone query independently requires queued_at or started_at.
+  if (status !== 'PENDING_AUTH') {
     await trackTaskMilestone(config, pool, runId, 'first_task_submitted');
   }
 
