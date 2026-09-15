@@ -306,7 +306,20 @@ type ConnectorScopePayload = {
   enabledConnectionIds: string[];
 };
 
-const GUEST_CONNECTORS = getVisibleConnectors(COMPETITIVE_DATA_SOURCE_LIST).map(({ key, label }) => ({ key, label }));
+const CONNECTOR_RAIL_ORDER = [
+  'similarweb_api1', 'appark', 'semrush13', 'ahrefs_url_research', 'domain_metrics_check',
+  'instagram_looter2', 'twitter241', 'tiktok_api23', 'youtube_v2',
+];
+
+function sortRailConnectors<T extends { key: string }>(items: readonly T[]): T[] {
+  const rank = (key: string) => {
+    const index = CONNECTOR_RAIL_ORDER.indexOf(key);
+    return index < 0 ? CONNECTOR_RAIL_ORDER.length : index;
+  };
+  return [...items].sort((a, b) => rank(a.key) - rank(b.key));
+}
+
+const GUEST_CONNECTORS = sortRailConnectors(getVisibleConnectors(COMPETITIVE_DATA_SOURCE_LIST)).map(({ key, label }) => ({ key, label }));
 
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 const HERMES_MODEL_STORAGE_KEY = 'altselfs:personal-agent-hermes-model';
@@ -4841,7 +4854,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
                 <span aria-hidden="true" className="relative h-[18px] w-[30px] rounded-full border border-white/15 bg-white/5"><span className="absolute left-[3px] top-[3px] h-[10px] w-[10px] rounded-full bg-zinc-500" /></span>
               </button>
             )) : null}
-            {connectedConnectors.map((connector) => {
+            {sortRailConnectors(connectedConnectors).map((connector) => {
               const selected = selectedConnectorKeys.includes(connector.key);
               const accountLabel = connector.accounts.map((account) => account.displayName || account.accountEmail).filter(Boolean).join(', ') || 'Connected';
               return (
