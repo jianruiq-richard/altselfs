@@ -7,6 +7,7 @@ export default function SsoCallbackPage() {
       signUpFallbackRedirectUrl="/dashboard/setup?role=investor"
       signInUrl="/sign-in?method=email"
       signUpUrl="/sign-up?method=email"
+      continueSignUpUrl="/auth/complete"
     />
   );
 }

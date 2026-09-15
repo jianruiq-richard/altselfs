@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useState, type ReactNode, type MouseEvent } from 'react';
-import { SignIn, useUser } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { usePathname } from 'next/navigation';
 import { X } from 'lucide-react';
@@ -9,7 +9,7 @@ import { EmailPasswordSignUpForm } from './email-password-sign-up-form';
 import { PhonePasswordAuthForm } from './phone-code-auth-form';
 import { EmbeddedBrowserAuthGuard } from './embedded-browser-auth-guard';
 import { MinacoBrandMark } from './minaco-brand-mark';
-import { clerkAuthAppearance } from '@/lib/clerk-auth-appearance';
+import { ModalEmailSignIn } from './modal-email-sign-in';
 import { productBrand } from '@/lib/brand';
 import styles from './astromar-auth.module.css';
 
@@ -78,7 +78,7 @@ export function AuthModalProvider({ children }: { children: ReactNode }) {
                 <div className={`${styles.authContent} mt-5`}>
                   {request.method === 'phone' ? <PhonePasswordAuthForm key={request.mode} mode={request.mode} redirectUrl={request.mode === 'sign-in' ? request.redirectUrl : undefined} /> :
                     <EmbeddedBrowserAuthGuard fallbackUrl={`${productBrand.canonicalUrl}/${request.mode}?method=email`} initiallyBlocked={false} mode={request.mode}>
-                      {request.mode === 'sign-in' ? <SignIn routing="hash" forceRedirectUrl={request.redirectUrl} fallbackRedirectUrl={request.redirectUrl} signUpUrl="/sign-up?method=email" appearance={clerkAuthAppearance} /> : <EmailPasswordSignUpForm />}
+                      {request.mode === 'sign-in' ? <ModalEmailSignIn redirectUrl={request.redirectUrl} /> : <EmailPasswordSignUpForm />}
                     </EmbeddedBrowserAuthGuard>}
                 </div>
                 <div className="mt-5 border-t border-white/10 pt-5 text-center text-xs text-zinc-400">

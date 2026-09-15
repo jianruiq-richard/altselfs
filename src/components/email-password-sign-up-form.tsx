@@ -56,7 +56,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function GoogleMark() {
+export function GoogleMark() {
   return (
     <svg className={styles.googleMark} viewBox="0 0 18 18" aria-hidden="true" focusable="false">
       <path
