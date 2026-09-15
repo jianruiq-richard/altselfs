@@ -282,6 +282,18 @@ function revenueMetricTitle(product: MarketProductApiRecord) {
     if (Array.isArray(inputs.observedMonthlyPricesUsd) && inputs.observedMonthlyPricesUsd.length > 0) {
       lines.push(`Observed official monthly price samples: ${inputs.observedMonthlyPricesUsd.map((value) => `$${fullNumber.format(Number(value))}`).join(', ')}.`);
     }
+    if (inputs.pricingSemanticReview && typeof inputs.pricingSemanticReview === 'object') {
+      const pricingReview = inputs.pricingSemanticReview as Record<string, unknown>;
+      const counts = pricingReview.counts && typeof pricingReview.counts === 'object'
+        ? pricingReview.counts as Record<string, unknown>
+        : null;
+      if (counts) {
+        lines.push(`Pricing evidence review: ${fullNumber.format(Number(counts.accepted || 0))} accepted, ${fullNumber.format(Number(counts.rejected || 0))} rejected, and ${fullNumber.format(Number(counts.needsReview || 0))} held out as ambiguous. Only accepted product-plan prices enter ARPPU.`);
+      }
+    }
+    if (inputs.paymentTrafficReviewFlagged === true) {
+      lines.push('Cross-check: payment traffic is unusually high relative to the website-traffic model. It remains included without a cap; the discrepancy is reflected in the risk notes and confidence level.');
+    }
     if (typeof inputs.estimatedMonthlyRegistrations === 'number') lines.push(`Modelled monthly registrations: ${fullNumber.format(inputs.estimatedMonthlyRegistrations)}.`);
     if (typeof inputs.trialToPaidRate === 'number') lines.push(`Assumed registration-to-paid conversion: ${(inputs.trialToPaidRate * 100).toFixed(1)}%.`);
     if (typeof inputs.countryValueFactor === 'number') lines.push(`Country-value factor: ${inputs.countryValueFactor.toFixed(2)}.`);

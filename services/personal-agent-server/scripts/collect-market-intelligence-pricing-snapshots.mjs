@@ -1,5 +1,6 @@
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { reviewPricePoints } from './lib/pricing-semantic-review.mjs';
 
 const [payloadFileArgument, outputFileArgument] = process.argv.slice(2);
 if (!payloadFileArgument || !outputFileArgument) {
@@ -329,10 +330,13 @@ async function inspectProduct(product) {
     [point.planName, point.amount, point.currency, point.billingInterval].join('|'),
     point,
   ])).values()].slice(0, 80);
-  const primaryPricePoints = pricePoints.filter((point) => ['list_price', 'usage_rate'].includes(point.role));
+  const semanticReview = reviewPricePoints(pricePoints);
+  const reviewedPricePoints = semanticReview.acceptedPricePoints;
+  const primaryPricePoints = reviewedPricePoints.filter((point) => ['list_price', 'usage_rate'].includes(point.role));
   const combinedEvidence = verifiedEvidence ? {
     ...verifiedEvidence,
     pricePoints,
+    reviewedPricePoints,
     primaryPricePoints,
     flags: pageEvidence.reduce((flags, evidence) => ({
       freeTier: flags.freeTier || evidence.flags.freeTier,
@@ -352,7 +356,14 @@ async function inspectProduct(product) {
     signals: [...new Set(pageEvidence.flatMap((evidence) => evidence.signals))],
     pricingStrategy: pricingStrategy(combinedEvidence, status),
     pricePoints,
+    reviewedPricePoints,
     primaryPricePoints,
+    pricingSemanticReview: {
+      version: semanticReview.version,
+      counts: semanticReview.counts,
+      reasonCounts: semanticReview.reasonCounts,
+      decisions: semanticReview.decisions,
+    },
     flags: combinedEvidence?.flags || { freeTier: false, contactSales: false, usageBased: false, oneTime: false, recurringPrice: false },
     status,
     pagesInspected: attempts.length,

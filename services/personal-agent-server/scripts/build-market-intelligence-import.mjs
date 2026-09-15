@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
+import { reviewPricePoints } from './lib/pricing-semantic-review.mjs';
 
 const [dataDirectoryArgument, outputFileArgument] = process.argv.slice(2);
 if (!dataDirectoryArgument || !outputFileArgument) {
@@ -13,7 +14,8 @@ const outputFile = resolve(outputFileArgument);
 const manifest = JSON.parse(readFileSync(join(dataDirectory, 'manifest.json'), 'utf8'));
 const payloadGeneratedAt = new Date().toISOString();
 
-const MODEL_VERSION = 'minaco-company-website-estimate-v4';
+const MODEL_VERSION = 'minaco-company-website-estimate-v5';
+const PAYMENT_TRAFFIC_REVIEW_MULTIPLIER = 4;
 
 const REVENUE_STATUS = {
   openSource: 'Open Source',
@@ -465,11 +467,10 @@ function pricingArppu(pricingSignal, model) {
       assumption: 'Uses the product-category ARPPU because website pricing was not verified.',
     };
   }
-  const points = Array.isArray(pricingSignal?.primaryPricePoints)
-    ? pricingSignal.primaryPricePoints
-    : Array.isArray(pricingSignal?.pricePoints)
-      ? pricingSignal.pricePoints.filter((point) => point?.role === 'list_price')
-      : [];
+  const semanticReview = reviewPricePoints(pricingSignal?.pricePoints || []);
+  const points = Array.isArray(pricingSignal?.reviewedPricePoints)
+    ? pricingSignal.reviewedPricePoints
+    : semanticReview.acceptedPricePoints;
   const monthlyPrices = points
     .filter((point) => point?.currency === 'USD' && ['month', 'year', 'per_seat_month', 'per_seat_year'].includes(point?.billingInterval))
     .map((point) => finiteNumber(point.normalizedMonthlyAmount))
@@ -481,6 +482,11 @@ function pricingArppu(pricingSignal, model) {
       source: 'official-pricing-plan-mix',
       observedMonthlyPrices: monthlyPrices,
       assumption: 'Uses 75% of the median observed USD monthly list price to approximate the paid-customer plan mix.',
+      pricingSemanticReview: {
+        version: pricingSignal?.pricingSemanticReview?.version || semanticReview.version,
+        counts: pricingSignal?.pricingSemanticReview?.counts || semanticReview.counts,
+        reasonCounts: pricingSignal?.pricingSemanticReview?.reasonCounts || semanticReview.reasonCounts,
+      },
     };
   }
 
@@ -496,6 +502,11 @@ function pricingArppu(pricingSignal, model) {
       observedMonthlyPrices: [],
       observedOneTimePrices: oneTimePrices,
       assumption: 'Amortizes the median observed USD one-time price over 18 months.',
+      pricingSemanticReview: {
+        version: pricingSignal?.pricingSemanticReview?.version || semanticReview.version,
+        counts: pricingSignal?.pricingSemanticReview?.counts || semanticReview.counts,
+        reasonCounts: pricingSignal?.pricingSemanticReview?.reasonCounts || semanticReview.reasonCounts,
+      },
     };
   }
 
@@ -504,6 +515,11 @@ function pricingArppu(pricingSignal, model) {
     source: 'industry-category-arppu',
     observedMonthlyPrices: [],
     assumption: 'Uses the product-category ARPPU because no usable USD monthly list price was extracted.',
+    pricingSemanticReview: {
+      version: pricingSignal?.pricingSemanticReview?.version || semanticReview.version,
+      counts: pricingSignal?.pricingSemanticReview?.counts || semanticReview.counts,
+      reasonCounts: pricingSignal?.pricingSemanticReview?.reasonCounts || semanticReview.reasonCounts,
+    },
   };
 }
 
@@ -525,7 +541,7 @@ function nearZero(method, evidencePriority, inputs, risks = []) {
   };
 }
 
-function estimateRevenue({ appark, paymentMonths, registrations, model, modelName, countryFactor, launchedAt, latestMonth, eligibilityStatus, pricingSignal, verifiedPricingEvidence, paymentContext }) {
+function estimateRevenue({ appark, paymentMonths, registrations, model, modelName, countryFactor, launchedAt, latestMonth, eligibilityStatus, pricingSignal, paymentContext }) {
   const appRevenue = finiteNumber(appark?.total_revenue_30d);
   if (appRevenue !== null) {
     if (appRevenue === 0) {
@@ -569,11 +585,22 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, modelNam
   if (latestPaymentMonth?.value > 0 && paymentContext.canUse) {
     const newestPaymentMonth = latestPaymentMonth.month || latestMonth;
     const arppu = pricingArppu(pricingSignal, model);
-    const activePayers = positivePaymentMonths.reduce((total, item) => {
+    const rawActivePayers = positivePaymentMonths.reduce((total, item) => {
       const age = Math.max(0, monthsBetween(`${item.month}-01`, newestPaymentMonth) - 1);
       const newPayers = item.value * model.checkoutUniqueShare * model.checkoutCompletionRate;
       return total + newPayers * Math.pow(model.monthlyRetention, age);
     }, 0);
+    const acquisitionMonths = latestMonth ? Math.min(12, monthsBetween(launchedAt, latestMonth)) : null;
+    const cohortMultiplier = acquisitionMonths === null
+      ? null
+      : Array.from({ length: acquisitionMonths }, (_, index) => Math.pow(model.monthlyRetention, index))
+        .reduce((total, value) => total + value, 0);
+    const trafficPayerBenchmark = registrations !== null && cohortMultiplier !== null
+      ? registrations * model.trialToPaidRate * clamp(countryFactor, 0.55, 1.02) * cohortMultiplier
+      : null;
+    const paymentTrafficReviewFlagged = trafficPayerBenchmark !== null
+      && rawActivePayers > trafficPayerBenchmark * PAYMENT_TRAFFIC_REVIEW_MULTIPLIER;
+    const activePayers = rawActivePayers;
     base = activePayers * arppu.value * countryFactor;
     const usesOfficialPrice = arppu.source !== 'industry-category-arppu';
     source = usesOfficialPrice
@@ -589,6 +616,9 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, modelNam
         checkoutCompletionRate: model.checkoutCompletionRate,
         monthlyRetention: model.monthlyRetention,
         estimatedActivePayers: rounded(activePayers),
+        trafficBasedActivePayerBenchmark: trafficPayerBenchmark === null ? null : rounded(trafficPayerBenchmark),
+        paymentTrafficReviewMultiplier: PAYMENT_TRAFFIC_REVIEW_MULTIPLIER,
+        paymentTrafficReviewFlagged,
         arppuUsd: money(arppu.value),
         arppuSource: arppu.source,
         observedMonthlyPricesUsd: arppu.observedMonthlyPrices,
@@ -596,6 +626,7 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, modelNam
         countryValueFactor: countryFactor,
         pricingStrategy: pricingSignal?.pricingStrategy || null,
         pricingEvidenceUrl: pricingSignal?.evidenceUrl || null,
+        pricingSemanticReview: arppu.pricingSemanticReview || null,
         productCategoryModel: modelName,
         estimateScope: latestPaymentMonth.productCount > 1 ? 'company_portfolio' : 'single_product',
         portfolioProductCount: latestPaymentMonth.productCount,
@@ -603,10 +634,13 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, modelNam
       formula: 'Payment outbound visits × checkout uniqueness × completion, retained by cohort; active payers × ARPPU × country-value factor.',
       risks: [
         'Payment-platform outbound visits are a proxy for checkout activity, not confirmed transactions.',
+        paymentTrafficReviewFlagged
+          ? `Payment-inferred active payers exceeded ${PAYMENT_TRAFFIC_REVIEW_MULTIPLIER}× the traffic-based paid-customer benchmark. The estimate still uses the original payment model without a cap, but payment traffic may mix checkout, billing, and integration flows.`
+          : null,
         arppu.assumption,
         ...paymentContext.risks,
-      ],
-      confidence: usesOfficialPrice && paymentContext.risks.length === 0 ? 'medium' : 'low-to-medium',
+      ].filter(Boolean),
+      confidence: paymentTrafficReviewFlagged ? 'low' : usesOfficialPrice && paymentContext.risks.length === 0 ? 'medium' : 'low-to-medium',
     };
   } else if (latestPaymentMonth?.value === 0 && paymentContext.canUse) {
     return nearZero('semrush-payment-success-zero', 4, {
@@ -641,10 +675,11 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, modelNam
       .reduce((total, value) => total + value, 0);
     const newPayers = registrations * model.trialToPaidRate * clamp(countryFactor, 0.55, 1.02);
     base = newPayers * cohortMultiplier * arppu.value * countryFactor;
-    source = verifiedPricingEvidence
+    const usesOfficialPrice = arppu.source !== 'industry-category-arppu';
+    source = usesOfficialPrice
       ? 'Minaco estimate · Similarweb + verified pricing'
       : 'Minaco estimate · Similarweb industry model';
-    method = verifiedPricingEvidence ? 'traffic-cohort-official-arppu' : 'traffic-cohort-industry-arppu';
+    method = usesOfficialPrice ? 'traffic-cohort-official-arppu' : 'traffic-cohort-industry-arppu';
     details = {
       evidencePriority: 5,
       model: method,
@@ -661,6 +696,7 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, modelNam
         countryValueFactor: countryFactor,
         pricingStrategy: pricingSignal?.pricingStrategy || null,
         pricingEvidenceUrl: pricingSignal?.evidenceUrl || null,
+        pricingSemanticReview: arppu.pricingSemanticReview || null,
         productCategoryModel: modelName,
       },
       formula: 'Estimated registrations × category paid-conversion rate × retained acquisition cohorts × ARPPU × country-value factor.',
@@ -670,7 +706,7 @@ function estimateRevenue({ appark, paymentMonths, registrations, model, modelNam
         latestPaymentMonth === null ? 'Payment-platform traffic has not been successfully measured yet.' : 'Available payment-platform traffic could not be safely attributed to this product.',
         ...paymentContext.risks,
       ],
-      confidence: verifiedPricingEvidence ? 'low-to-medium' : 'low',
+      confidence: usesOfficialPrice ? 'low-to-medium' : 'low',
     };
   } else if (eligibilityStatus && [REVENUE_STATUS.openSource, REVENUE_STATUS.free].includes(eligibilityStatus.label)) {
     return {
@@ -886,7 +922,6 @@ for (const product of manifest.products || []) {
     latestMonth,
     eligibilityStatus,
     pricingSignal,
-    verifiedPricingEvidence,
     paymentContext,
   });
   const trafficGrowth = registrationSeries.length >= 2

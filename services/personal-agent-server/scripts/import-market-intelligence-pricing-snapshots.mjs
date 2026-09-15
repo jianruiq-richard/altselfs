@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import pg from 'pg';
+import { reviewPricePoints } from './lib/pricing-semantic-review.mjs';
 
 const [inputFileArgument] = process.argv.slice(2);
 if (!inputFileArgument) {
@@ -37,7 +38,9 @@ const SCHEMA_SQL = `
     checkout_url text,
     signals text[] not null default '{}',
     price_points jsonb not null default '[]'::jsonb,
+    reviewed_price_points jsonb not null default '[]'::jsonb,
     primary_price_points jsonb not null default '[]'::jsonb,
+    semantic_review jsonb not null default '{}'::jsonb,
     pricing_flags jsonb not null default '{}'::jsonb,
     source text not null default 'official_website',
     confidence text not null default 'unknown',
@@ -48,7 +51,9 @@ const SCHEMA_SQL = `
   );
 
   alter table market_intelligence.product_pricing_snapshots
-    add column if not exists primary_price_points jsonb not null default '[]'::jsonb;
+    add column if not exists primary_price_points jsonb not null default '[]'::jsonb,
+    add column if not exists reviewed_price_points jsonb not null default '[]'::jsonb,
+    add column if not exists semantic_review jsonb not null default '{}'::jsonb;
 
   create index if not exists product_pricing_snapshots_month_strategy_idx
     on market_intelligence.product_pricing_snapshots(snapshot_month desc, pricing_strategy);
@@ -75,7 +80,9 @@ const SCHEMA_SQL = `
     snapshot.primary_price_points,
     snapshot.pricing_flags,
     snapshot.confidence,
-    snapshot.observed_at
+    snapshot.observed_at,
+    snapshot.reviewed_price_points,
+    snapshot.semantic_review
   from market_intelligence.product_pricing_snapshots snapshot
   join market_intelligence.products product on product.id = snapshot.product_id
   order by snapshot.product_id, snapshot.snapshot_month desc, snapshot.observed_at desc;
@@ -153,6 +160,16 @@ try {
     }
     const month = String(record.snapshotMonth || '').slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(month)) continue;
+    const semanticReview = reviewPricePoints(record.pricePoints || []);
+    const reviewedPricePoints = Array.isArray(record.reviewedPricePoints)
+      ? record.reviewedPricePoints
+      : semanticReview.acceptedPricePoints;
+    const storedSemanticReview = record.pricingSemanticReview || {
+      version: semanticReview.version,
+      counts: semanticReview.counts,
+      reasonCounts: semanticReview.reasonCounts,
+      decisions: semanticReview.decisions,
+    };
     const row = {
       product_id: productId,
       snapshot_month: `${month}-01`,
@@ -164,7 +181,11 @@ try {
       checkout_url: record.checkoutUrl || null,
       signals: record.signals || [],
       price_points: sanitizedValue(record.pricePoints || []),
-      primary_price_points: sanitizedValue(record.primaryPricePoints || []),
+      reviewed_price_points: sanitizedValue(reviewedPricePoints),
+      primary_price_points: sanitizedValue(record.pricingSemanticReview
+        ? record.primaryPricePoints || reviewedPricePoints
+        : reviewedPricePoints.filter((point) => point?.role === 'list_price' || point?.role === 'usage_rate')),
+      semantic_review: sanitizedValue(storedSemanticReview),
       pricing_flags: sanitizedValue(record.flags || {}),
       source: 'official_website',
       confidence: confidence(record),
@@ -180,17 +201,19 @@ try {
     const result = await pool.query(`
       insert into market_intelligence.product_pricing_snapshots (
         product_id, snapshot_month, pricing_strategy, verified, evidence_status, scan_status,
-        evidence_url, checkout_url, signals, price_points, primary_price_points, pricing_flags, source, confidence, observed_at, updated_at
+        evidence_url, checkout_url, signals, price_points, reviewed_price_points, primary_price_points,
+        semantic_review, pricing_flags, source, confidence, observed_at, updated_at
       )
       select
         product_id, snapshot_month, pricing_strategy, verified, evidence_status, scan_status,
         evidence_url, checkout_url,
         array(select jsonb_array_elements_text(signals)),
-        price_points, primary_price_points, pricing_flags, source, confidence, observed_at, now()
+        price_points, reviewed_price_points, primary_price_points, semantic_review, pricing_flags, source, confidence, observed_at, now()
       from jsonb_to_recordset($1::jsonb) as x(
         product_id text, snapshot_month date, pricing_strategy text, verified boolean,
         evidence_status text, scan_status text, evidence_url text, checkout_url text,
-        signals jsonb, price_points jsonb, primary_price_points jsonb, pricing_flags jsonb, source text, confidence text, observed_at timestamptz
+        signals jsonb, price_points jsonb, reviewed_price_points jsonb, primary_price_points jsonb,
+        semantic_review jsonb, pricing_flags jsonb, source text, confidence text, observed_at timestamptz
       )
       on conflict (product_id, snapshot_month) do update set
         pricing_strategy = excluded.pricing_strategy,
@@ -201,7 +224,9 @@ try {
         checkout_url = excluded.checkout_url,
         signals = excluded.signals,
         price_points = excluded.price_points,
+        reviewed_price_points = excluded.reviewed_price_points,
         primary_price_points = excluded.primary_price_points,
+        semantic_review = excluded.semantic_review,
         pricing_flags = excluded.pricing_flags,
         source = excluded.source,
         confidence = excluded.confidence,
