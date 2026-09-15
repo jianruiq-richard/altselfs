@@ -1,6 +1,6 @@
 import type { ServerConfig } from './config.js';
 
-type PgPool = {
+export type PgPool = {
   query: (text: string, values?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
 };
 
@@ -202,7 +202,8 @@ async function getMarketPool(config: ServerConfig) {
   return sharedPool;
 }
 
-async function ensureMarketSchema(pool: PgPool) {
+export async function initializeMarketSchema(config: ServerConfig) {
+  const pool = await getMarketPool(config);
   if (!schemaReady) {
     schemaReady = pool.query(MARKET_INTELLIGENCE_SCHEMA_SQL).then(() => undefined).catch((error) => {
       schemaReady = null;
@@ -234,9 +235,8 @@ function normalizeDataset(value: MarketProductDataset | undefined): MarketProduc
   return value === 'mock' || value === 'all' ? value : 'actual';
 }
 
-export async function listMarketProducts(config: ServerConfig, input: ListMarketProductsInput = {}) {
-  const pool = await getMarketPool(config);
-  await ensureMarketSchema(pool);
+export async function listMarketProducts(config: ServerConfig, input: ListMarketProductsInput = {}, queryPool?: PgPool) {
+  const pool = queryPool || await getMarketPool(config);
 
   const query = input.query?.trim().slice(0, 120) || '';
   const category = input.category?.trim().slice(0, 100) || '';
@@ -328,7 +328,7 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
           from (
             select m.*
             from market_intelligence.product_monthly_metrics m
-            where m.product_id = p.id
+            where m.product_id = p.id and m.is_mock = p.is_mock
             order by m.month desc
             limit 3
           ) recent
@@ -337,14 +337,14 @@ export async function listMarketProducts(config: ServerConfig, input: ListMarket
       left join lateral (
         select m.*
         from market_intelligence.product_app_metrics m
-        where m.product_id = p.id
+        where m.product_id = p.id and m.is_mock = p.is_mock
         order by m.observed_at desc
         limit 1
       ) app on true
       left join lateral (
         select m.*
         from market_intelligence.product_monthly_metrics m
-        where m.product_id = p.id
+        where m.product_id = p.id and m.is_mock = p.is_mock
         order by m.month desc
         limit 1
       ) latest_metric on true

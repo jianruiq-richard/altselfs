@@ -34,12 +34,16 @@ export class CodexJsonRpcClient extends EventEmitter {
     env?: Record<string, string>;
   }) {
     super();
-    const env = {
+    const env: NodeJS.ProcessEnv = {
       ...process.env,
       RUST_LOG: process.env.RUST_LOG || 'warn',
       ...(params.env || {}),
       ...(params.codexHome ? { CODEX_HOME: params.codexHome } : {}),
     };
+    // Database access stays in the host tool handler, never in the execution agent.
+    delete env.BUSINESS_DATABASE_READONLY_URL;
+    delete env.AGENT_CONTEXT_DATABASE_URL;
+    delete env.DATABASE_URL;
     this.process = spawn(params.codexBin, ['app-server', ...(params.extraArgs || [])], {
       env,
       stdio: ['pipe', 'pipe', 'pipe'],

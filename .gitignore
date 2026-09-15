@@ -61,6 +61,7 @@ Altselfsfigma/
 docs/
 !services/personal-agent-server/docs/
 services/personal-agent-server/docs/*
+!services/personal-agent-server/docs/business-database-tools.md
 !services/personal-agent-server/docs/market-intelligence-schema.sql
 !services/personal-agent-server/docs/market-intelligence-mock-seed.sql
 

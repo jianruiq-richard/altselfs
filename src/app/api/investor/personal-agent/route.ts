@@ -1,3 +1,4 @@
+import { parseBusinessSelection, businessSelectionContext, businessSelectionLabel, type BusinessSelection } from '@/lib/business-selection';
 import { Buffer } from 'node:buffer';
 import { NextRequest, NextResponse } from 'next/server';
 import { getInvestorOrNull } from '@/lib/investor-auth';
@@ -91,6 +92,7 @@ type ConnectorScope = {
 };
 
 type ParsedPostBody = {
+  businessSelection?: BusinessSelection | null;
   threadId?: string | null;
   createThread?: boolean;
   messages: ClientMessage[];
@@ -379,18 +381,22 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       createThread?: unknown;
       connectorScope?: unknown;
       uploadedArtifacts?: unknown;
+      businessSelection?: unknown;
     };
     const messages = normalizeMessages(body.messages);
     const explicitMessage = typeof body.message === 'string' ? body.message.trim() : '';
     const displayMessage = typeof body.displayMessage === 'string' ? body.displayMessage.trim() : '';
     const uploadedArtifacts = normalizeUploadedArtifacts(body.uploadedArtifacts);
-    const userMessage = explicitMessage || latestUserMessage(messages) || (uploadedArtifacts.length > 0 ? 'Please analyze the attached files.' : '');
+    const businessSelection = parseBusinessSelection(body.businessSelection);
+    const baseMessage = explicitMessage || latestUserMessage(messages) || (businessSelection ? 'Analyze the selected companies.' : '');
+    const userMessage = (businessSelection ? `${baseMessage}\n\n${businessSelectionContext(businessSelection)}` : baseMessage) || (uploadedArtifacts.length > 0 ? 'Please analyze the attached files.' : '');
     return {
+      businessSelection,
       threadId: body.threadId || null,
       createThread: body.createThread === true,
       messages: userMessage ? [{ role: 'user', content: userMessage }] : messages,
       userMessage,
-      displayUserMessage: displayMessage || userMessage,
+      displayUserMessage: businessSelection ? `${displayMessage || baseMessage}\n\n${businessSelectionLabel(businessSelection)}` : displayMessage || userMessage,
       clientRequestId: normalizeClientRequestId(body.clientRequestId),
       hermesModel: normalizeHermesModel(body.hermesModel),
       attachments: [],
@@ -1045,6 +1051,7 @@ export async function POST(req: NextRequest) {
 
   const persistedUserContent = displayUserMessage || userMessage;
   const userMessageMeta = {
+    ...(parsedBody.businessSelection ? { businessSelection: parsedBody.businessSelection } : {}),
     ...(parsedBody.clientRequestId ? { clientRequestId: parsedBody.clientRequestId } : {}),
     submission: {
       status: 'AUTHORIZING',

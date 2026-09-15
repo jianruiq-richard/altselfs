@@ -12,11 +12,13 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { fetchWorkspaceJson, WORKSPACE_CACHE_KEYS } from '@/lib/workspace-client-cache';
+
+import { BUSINESS_SELECTION_DRAFT_KEY, type BusinessSelection } from '@/lib/business-selection';
 
 const PAGE_SIZE = 50;
 
@@ -476,6 +478,10 @@ function TagList({ values, tone = 'neutral' }: { values: string[]; tone?: 'neutr
 
 export function ProductIntelligencePage() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [selectedBusinesses, setSelectedBusinesses] = useState<Map<string, { id: string; name: string }>>(() => new Map());
+  const [discussionBusy, setDiscussionBusy] = useState(false);
+  const [discussionError, setDiscussionError] = useState<string | null>(null);
   const isDevelopmentPreview = pathname === '/product-intelligence-preview';
   const [draftFilters, setDraftFilters] = useState<FilterState>(initialFilters);
   const [filters, setFilters] = useState<FilterState>(initialFilters);
@@ -533,13 +539,49 @@ export function ProductIntelligencePage() {
     setDraftFilters((current) => ({ ...current, [key]: value }));
   };
 
+  const openBusinessDiscussion = (items: BusinessSelection['items'], scope: BusinessSelection['scope'], totalMatched?: number) => {
+    try {
+      const selection: BusinessSelection = { items, scope, selectedAt: new Date().toISOString(), ...(scope === 'filtered' ? { filters, totalMatched } : {}) };
+      sessionStorage.setItem(BUSINESS_SELECTION_DRAFT_KEY, JSON.stringify(selection));
+      router.push('/app?newDiscussion=1&businessSelection=1');
+    } catch { setDiscussionError('Unable to open the discussion. Please try again.'); }
+  };
+  const analyzeFiltered = async () => {
+    setDiscussionBusy(true);
+    setDiscussionError(null);
+    try {
+      const query = new URLSearchParams({ dataset: 'actual', limit: '50', offset: '0', sort: filters.sort });
+      if (filters.query.trim()) query.set('q', filters.query.trim());
+      if (filters.category !== 'all') query.set('category', filters.category);
+      if (filters.productType !== 'all') query.set('productType', filters.productType);
+      const response = await fetch(`/api/product-intelligence/products?${query}`);
+      if (!response.ok) throw new Error('Failed to load matching companies.');
+      const data = await response.json() as MarketProductApiResponse;
+      if (!data.products?.length) throw new Error('No matching companies.');
+      openBusinessDiscussion(data.products.map((p) => ({ id: p.id, name: p.companyGroup.name || p.name })), 'filtered', data.total);
+    } catch (error) { setDiscussionError(error instanceof Error ? error.message : 'Unable to load companies.'); }
+    finally { setDiscussionBusy(false); }
+  };
+  const toggleBusiness = (product: MarketProductApiRecord) => {
+    setSelectedBusinesses((current) => {
+      const next = new Map(current);
+      if (next.has(product.id)) next.delete(product.id);
+      else if (next.size < 50) next.set(product.id, { id: product.id, name: product.companyGroup.name || product.name });
+      return next;
+    });
+  };
+
   const applyFilters = () => {
+    if (discussionBusy) return;
+    setSelectedBusinesses(new Map());
     setDatasetStatus('loading');
     setPage(0);
     setFilters({ ...draftFilters });
   };
 
   const resetFilters = () => {
+    if (discussionBusy) return;
+    setSelectedBusinesses(new Map());
     setDatasetStatus('loading');
     setDraftFilters(initialFilters);
     setPage(0);
@@ -619,6 +661,15 @@ export function ProductIntelligencePage() {
           </form>
         </section>
 
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+          <button type="button" disabled={discussionBusy || datasetStatus !== 'rds' || !totalProducts || isDevelopmentPreview} onClick={() => void analyzeFiltered()} className="rounded-lg border border-[#f2c36b]/40 px-3 py-2 text-[#f2c36b] disabled:opacity-40">{discussionBusy ? 'Loading…' : `Analyze first ${Math.min(50, totalProducts)} matches`}</button>
+          <span className="text-[#fffaf0]/60">{totalProducts} matches · {selectedBusinesses.size}/50 selected</span>
+          {selectedBusinesses.size > 0 && <>
+            <button type="button" disabled={discussionBusy || isDevelopmentPreview} onClick={() => openBusinessDiscussion([...selectedBusinesses.values()], 'selected')} className="rounded-lg bg-[#f2c36b] px-3 py-2 font-semibold text-black disabled:opacity-40">Compare selected</button>
+            <button type="button" onClick={() => setSelectedBusinesses(new Map())} className="text-[#fffaf0]/65">Clear selection</button>
+          </>}
+          {discussionError && <p role="alert" className="text-red-300">{discussionError}</p>}
+        </div>
         <section className="mt-4 overflow-hidden rounded-[12px] border border-[#fffaf0]/10 bg-[#0b0c0c] shadow-[0_18px_60px_rgba(0,0,0,.22)]" aria-label="Business database results">
           <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-3 border-b border-[#fffaf0]/10 px-4">
             <div className="flex items-center gap-3">
@@ -668,11 +719,12 @@ export function ProductIntelligencePage() {
                   return (
                     <Fragment key={company.key}>
                       <tr className="group h-[124px] border-b border-[#fffaf0]/[0.1] transition-colors hover:bg-[#fffaf0]/[0.035]">
-                        <td className="px-4 align-middle"><span className="font-mono text-[13px] font-semibold tabular-nums text-[#fffaf0]/72">#{product.rank.toLocaleString()}</span></td>
+                        <td className="px-4 align-middle"><input type="checkbox" aria-label={`Select ${product.companyGroup.name || product.name}`} checked={selectedBusinesses.has(product.id)} disabled={discussionBusy || datasetStatus !== 'rds' || (!selectedBusinesses.has(product.id) && selectedBusinesses.size >= 50)} onChange={() => toggleBusiness(product)} className="mb-2 block accent-[#f2c36b]" /><span className="font-mono text-[13px] font-semibold tabular-nums text-[#fffaf0]/72">#{product.rank.toLocaleString()}</span></td>
                         <td className="px-4 align-middle">
                           <div className="flex items-center gap-3">
                             <ProductLogo product={product} />
                             <span className="grid min-w-0 gap-0.5">
+                              <button type="button" disabled={discussionBusy || datasetStatus !== 'rds' || isDevelopmentPreview} onClick={() => openBusinessDiscussion([{ id: product.id, name: company.name || product.name }], 'single')} className="w-fit text-[11px] text-[#f2c36b] hover:underline disabled:opacity-40">Analyze in discussion</button>
                               {company.isGrouped ? (
                                 <strong className="truncate text-[14px] font-semibold text-[#fffaf0]">{company.name}</strong>
                               ) : product.productHuntUrl ? (

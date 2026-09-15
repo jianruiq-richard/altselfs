@@ -1,4 +1,5 @@
 'use client';
+import { BUSINESS_SELECTION_DRAFT_KEY, parseBusinessSelection, businessSelectionLabel, type BusinessSelection } from '@/lib/business-selection';
 
 import { WorkspaceDiscordLink } from '@/components/workspace-discord-link';
 
@@ -2458,6 +2459,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [persistedBriefing, setPersistedBriefing] = useState<PersistedBriefing | null>(null);
   const [input, setInput] = useState('');
+  const [businessSelection, setBusinessSelection] = useState<BusinessSelection | null>(null);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentDragActive, setAttachmentDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -3559,6 +3561,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
 
   useEffect(() => {
     if (guest || initialLoadStartedRef.current) return;
+    if (startNewDiscussion) { initialLoadStartedRef.current = true; void loadSessions({ suppressErrors: true }); return; }
     initialLoadStartedRef.current = true;
     let pendingDraft = '';
     try { pendingDraft = sessionStorage.getItem(GUEST_DRAFT_KEY) || ''; } catch {}
@@ -3577,7 +3580,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
       showBlockingLoading: !hasBootstrappedSessions,
       suppressErrors: hasBootstrappedSessions,
     });
-  }, [guest, loadData, loadSessions, selectThreadId, setThreadMessages]);
+  }, [guest, loadData, loadSessions, selectThreadId, setThreadMessages, startNewDiscussion]);
 
   useEffect(() => {
     if (guest) return;
@@ -3594,7 +3597,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
     return () => window.clearInterval(timer);
   }, [billingCapacity, loadBillingCapacity]);
 
-  const createNewSession = useCallback(() => {
+  const createNewSession = useCallback((options?: { preserveBusinessEntry?: boolean }) => {
     if (startingRun || recoveringRunState) return;
     threadLoadSeqRef.current += 1;
     setLoading(false);
@@ -3607,6 +3610,8 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
     setThreadMessages([], null);
     setHasMoreMessages(false);
     setInput('');
+    setBusinessSelection(null);
+    if (!options?.preserveBusinessEntry) window.history.replaceState(null, '', '/app');
     try { sessionStorage.removeItem(GUEST_DRAFT_KEY); } catch {}
     setAttachments([]);
     setOpenSessionMenuId(null);
@@ -3622,16 +3627,25 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
   }, [connectors, recoveringRunState, resetPersonalAgentRunState, selectThreadId, setThreadMessages, startingRun]);
 
   useEffect(() => {
-    if (!startNewDiscussion || handledNewDiscussionRef.current || startingRun || recoveringRunState) return;
+    if (!startNewDiscussion) { handledNewDiscussionRef.current = false; return; }
+    if (handledNewDiscussionRef.current || startingRun || recoveringRunState) return;
     handledNewDiscussionRef.current = true;
-    createNewSession();
-    window.history.replaceState(null, '', '/app');
-  }, [createNewSession, recoveringRunState, startNewDiscussion, startingRun]);
+    createNewSession({ preserveBusinessEntry: true });
+    if (searchParams.get('businessSelection') === '1') {
+      try {
+        const selection = parseBusinessSelection(JSON.parse(sessionStorage.getItem(BUSINESS_SELECTION_DRAFT_KEY) || 'null'));
+        setBusinessSelection(selection);
+        if (selection) setInput(selection.scope === 'single' ? 'Analyze this company: product positioning, traffic trends, revenue estimates, and key limitations.' : 'Compare these companies: product positioning, traffic trends, revenue estimates, and key differences.');
+        else setError('This company selection is no longer available. Please select companies again.');
+      } catch { setError('Unable to restore the company selection. Please select companies again.'); }
+    } else window.history.replaceState(null, '', '/app');
+  }, [createNewSession, recoveringRunState, startNewDiscussion, startingRun, searchParams]);
 
   const switchSession = useCallback(async (targetThreadId: string) => {
     if (!targetThreadId || targetThreadId === threadId || startingRun || recoveringRunState) return;
     setDraftSessionCreatedAt(null);
     selectedThreadIdRef.current = targetThreadId;
+    if (businessSelection) window.history.replaceState(null, '', '/app');
     const availableKeys = new Set(
       connectors
         .filter((connector) => connector.connected && connector.conversationAvailable !== false)
@@ -3640,11 +3654,12 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
     const rememberedKeys = connectorSelectionsByThreadRef.current.get(targetThreadId) || [];
     setSelectedConnectorKeys(rememberedKeys.filter((key) => availableKeys.has(key)));
     setInput('');
+    setBusinessSelection(null);
     try { sessionStorage.removeItem(GUEST_DRAFT_KEY); } catch {}
     setAttachments([]);
     setOpenSessionMenuId(null);
     await loadData(targetThreadId, { showBlockingLoading: true });
-  }, [connectors, loadData, recoveringRunState, startingRun, threadId]);
+  }, [connectors, loadData, recoveringRunState, startingRun, threadId, businessSelection]);
 
   const handleSessionAction = useCallback(async (
     session: AgentSessionSummary,
@@ -4267,11 +4282,13 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
     ]
       .filter(Boolean)
       .join('\n\n');
+    const selectedBusinessContext = businessSelection;
+    const businessDisplayContent = selectedBusinessContext ? `${displayContent}\n\n${businessSelectionLabel(selectedBusinessContext)}` : displayContent;
     const nextMessages: ChatMessage[] = [
       ...messages,
       {
         role: 'user',
-        content: displayContent,
+        content: businessDisplayContent,
         connectorScope: requestConnectorScope,
         submission: {
           status: 'AUTHORIZING',
@@ -4315,6 +4332,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
           createThread: shouldCreateThread,
           message: content,
           displayMessage: displayContent,
+          businessSelection: selectedBusinessContext,
           hermesModel: effectiveHermesModel,
           clientRequestId,
           connectorScope: requestConnectorScope,
@@ -4409,6 +4427,11 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
         return;
       }
 
+      const clearBusinessDraft = () => {
+        setBusinessSelection(null);
+        try { sessionStorage.removeItem(BUSINESS_SELECTION_DRAFT_KEY); } catch {}
+        if (selectedBusinessContext) window.history.replaceState(null, '', '/app');
+      };
       const asyncThreadId = typeof data.threadId === 'string' ? data.threadId : threadId;
       const runId = typeof data.runId === 'string' ? data.runId : '';
       if (!runId) {
@@ -4433,6 +4456,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
         selectThreadId(asyncThreadId);
         setDraftSessionCreatedAt(null);
       }
+      clearBusinessDraft();
       const nextSessionsAfterStart = Array.isArray(data.sessions) ? (data.sessions as AgentSessionSummary[]) : sessions;
       const nextHasMoreAfterStart = typeof data.hasMore === 'boolean' ? data.hasMore : hasMoreMessages;
       if (Array.isArray(data.sessions)) setSessions(nextSessionsAfterStart);
@@ -4485,7 +4509,12 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
       void loadBillingCapacity();
       void refreshPersonalAgentStatus(asyncThreadId);
     } catch (err) {
-      const recoveryResult = await recoverPersonalAgentStreamState(threadId, displayContent);
+      const recoveryResult = await recoverPersonalAgentStreamState(requestThreadId, businessDisplayContent);
+      if (recoveryResult === 'active' || recoveryResult === 'recovered' || recoveryResult === 'saved') {
+        setBusinessSelection(null);
+        try { sessionStorage.removeItem(BUSINESS_SELECTION_DRAFT_KEY); } catch {}
+        if (selectedBusinessContext) window.history.replaceState(null, '', '/app');
+      }
       if (recoveryResult === 'active') {
         preserveRunStateAfterSend = true;
         return;
@@ -4699,6 +4728,11 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
         </div>
       ) : null}
 
+      {businessSelection && <div className="mx-3 mt-2 rounded-lg border border-[#f2c36b]/25 bg-[#f2c36b]/5 p-3 text-xs text-zinc-200">
+        <div className="flex items-center justify-between gap-2"><strong>Business Database · {businessSelection.items.length} companies</strong><button type="button" disabled={sending || startingRun} onClick={() => { setBusinessSelection(null); try { sessionStorage.removeItem(BUSINESS_SELECTION_DRAFT_KEY); } catch {} window.history.replaceState(null, '', '/app'); }} className="text-zinc-400 hover:text-white">Remove</button></div>
+        {businessSelection.scope === 'filtered' && <p className="mt-1 text-zinc-400">First {businessSelection.items.length} of {businessSelection.totalMatched} matches · metrics fetched when analyzed</p>}
+        <details className="mt-2"><summary className="cursor-pointer">View selected companies</summary><ul className="mt-2 max-h-32 overflow-auto">{businessSelection.items.map((item) => <li key={item.id}>{item.name}</li>)}</ul></details>
+      </div>}
       <textarea
         value={input}
         onChange={(event) => {
