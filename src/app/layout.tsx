@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from '@clerk/nextjs';
 import { Analytics } from '@vercel/analytics/next';
-import { AnalyticsConsent } from '@/components/analytics-consent';
 import { GoogleAnalytics } from '@/components/google-analytics';
 import { GoogleAnalyticsScripts } from '@/components/google-analytics-scripts';
 import { MicrosoftClarityScripts } from '@/components/microsoft-clarity-scripts';
@@ -41,7 +40,6 @@ export default async function RootLayout({
           <MicrosoftClarityScripts />
           <AuthModalProvider>{children}</AuthModalProvider>
           <GoogleAnalytics />
-          <AnalyticsConsent />
           <Analytics />
         </body>
       </html>
