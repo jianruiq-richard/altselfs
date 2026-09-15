@@ -30,7 +30,7 @@ export function ModalEmailSignIn({ redirectUrl }: { redirectUrl: string }) {
     }
   }
 
-  return <>
+  return <div className={styles.emailForm}>
     <button type="button" className={styles.googleButton} disabled={!isLoaded || pending} onClick={continueWithGoogle}>
       <GoogleMark />{pending ? 'Connecting…' : 'Continue with Google'}
     </button>
@@ -43,5 +43,5 @@ export function ModalEmailSignIn({ redirectUrl }: { redirectUrl: string }) {
         socialButtons: { display: 'none' },
         dividerRow: { display: 'none' },
       } }} />
-  </>;
+  </div>;
 }

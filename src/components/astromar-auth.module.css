@@ -1037,6 +1037,8 @@
 
 .googleButton {
   display: inline-flex;
+  width: 100%;
+  padding: 10px 16px;
   align-items: center;
   justify-content: center;
   cursor: pointer;
