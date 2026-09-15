@@ -41,7 +41,7 @@ export default function ProductIntelligencePreviewRoute() {
         <nav className="grid shrink-0 gap-0.5 border-b border-[#fffaf0]/10 px-2.5 pb-3" aria-label="Workspace preview navigation">
           <Link href="/product-intelligence-preview" aria-current="page" className="flex min-h-[38px] items-center gap-2.5 rounded-[7px] bg-[#fffaf0]/[0.085] px-3 text-[13px] text-[#fffaf0]">
             <Database className="h-4 w-4 shrink-0 text-[#f2c36b]" />
-            <span>Product Intelligence</span>
+            <span>Business Database</span>
           </Link>
           <span className="flex min-h-[38px] items-center gap-2.5 rounded-[7px] px-3 text-[13px] text-[#fffaf0]/45">
             <MessagesSquare className="h-4 w-4 shrink-0" />
@@ -84,7 +84,7 @@ export default function ProductIntelligencePreviewRoute() {
       <section className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#090a0a]">
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[#fffaf0]/10 px-4 md:hidden">
           <MinacoBrandMark className="block h-8 w-8 shrink-0 overflow-hidden rounded-[8px]" imageClassName="h-full w-full object-contain" />
-          <strong className="min-w-0 flex-1 truncate text-sm text-[#fffaf0]">Product Intelligence</strong>
+          <strong className="min-w-0 flex-1 truncate text-sm text-[#fffaf0]">Business Database</strong>
           <span className="rounded-full border border-[#f2c36b]/20 bg-[#f2c36b]/[0.07] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#f2c36b]">Preview</span>
         </header>
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">

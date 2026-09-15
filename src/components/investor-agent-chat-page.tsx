@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, SetStateAction } from 'react';
 import Link from 'next/link';
 import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, LockKeyhole, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, Share2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
+import { COMPETITIVE_DATA_SOURCE_LIST } from '@/lib/competitive-data-sources';
 import { AuthButtons, GUEST_DRAFT_KEY, useAuthModal } from '@/components/auth-modal-provider';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
@@ -304,6 +305,8 @@ type ConnectorScopePayload = {
   enabledConnectorKeys: string[];
   enabledConnectionIds: string[];
 };
+
+const GUEST_CONNECTORS = getVisibleConnectors(COMPETITIVE_DATA_SOURCE_LIST).map(({ key, label }) => ({ key, label }));
 
 const EXECUTIVE_ACTIVE_RUN_STORAGE_KEY = 'altselfs:executive-active-run-id';
 const HERMES_MODEL_STORAGE_KEY = 'altselfs:personal-agent-hermes-model';
@@ -4819,10 +4822,25 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
 
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <div><h2 className="text-[13px] font-semibold text-zinc-200">Connector context</h2><p className="mt-1 text-[9px] text-zinc-600">{activeConnectors.length}/{connectedConnectors.length} enabled</p></div>
+            <div><h2 className="text-[13px] font-semibold text-zinc-200">Connector context</h2><p className="mt-1 text-[9px] text-zinc-600">{guest ? 0 : activeConnectors.length}/{guest ? GUEST_CONNECTORS.length : connectedConnectors.length} enabled</p></div>
             <Link href="/app/connectors" className="grid h-7 w-7 place-items-center rounded-md text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors"><Settings2 className="h-3.5 w-3.5" /></Link>
           </div>
           <div className="grid gap-1">
+            {guest ? GUEST_CONNECTORS.map((connector) => (
+              <button
+                key={connector.key}
+                type="button"
+                role="switch"
+                aria-checked={false}
+                aria-label={`Enable ${connector.label}`}
+                onClick={() => openAuth('sign-in', '/app')}
+                className="grid min-h-14 w-full grid-cols-[34px_minmax(0,1fr)_30px] items-center gap-2.5 rounded-[7px] px-2 text-left hover:bg-white/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f2c36b]"
+              >
+                <span className="grid h-8 w-8 place-items-center rounded-md border border-white/[0.09] text-zinc-500"><Plug className="h-3.5 w-3.5" /></span>
+                <span className="grid min-w-0"><strong className="truncate text-xs text-zinc-300">{connector.label}</strong><span className="text-[10px] text-zinc-600">Not enabled</span></span>
+                <span aria-hidden="true" className="relative h-[18px] w-[30px] rounded-full border border-white/15 bg-white/5"><span className="absolute left-[3px] top-[3px] h-[10px] w-[10px] rounded-full bg-zinc-500" /></span>
+              </button>
+            )) : null}
             {connectedConnectors.map((connector) => {
               const selected = selectedConnectorKeys.includes(connector.key);
               const accountLabel = connector.accounts.map((account) => account.displayName || account.accountEmail).filter(Boolean).join(', ') || 'Connected';
@@ -4843,7 +4861,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
                 </div>
               );
             })}
-            {!connectorsLoading && connectedConnectors.length === 0 ? <Link href="/app/connectors" className="rounded-[7px] border border-dashed border-white/[0.09] px-3 py-4 text-center text-[11px] text-zinc-500 hover:text-zinc-300">Connect a source</Link> : null}
+            {!guest && !connectorsLoading && connectedConnectors.length === 0 ? <Link href="/app/connectors" className="rounded-[7px] border border-dashed border-white/[0.09] px-3 py-4 text-center text-[11px] text-zinc-500 hover:text-zinc-300">Connect a source</Link> : null}
           </div>
           <div className="mt-4 flex items-start gap-2 border-t border-white/[0.09] px-2 pt-3 text-[10px] leading-4 text-zinc-600"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Enabled sources are available only to this discussion. Workspace memory remains shared.</span></div>
         </section>

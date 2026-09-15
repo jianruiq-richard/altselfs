@@ -44,7 +44,7 @@ type AstromarWorkspaceShellProps = {
 const DEFAULT_WORKSPACE_ENTRY_HREF = '/app';
 
 const navItems = [
-  { key: 'product-intelligence' as const, name: 'Product Intelligence', href: '/app/product-intelligence', icon: Database },
+  { key: 'product-intelligence' as const, name: 'Business Database', href: '/app/product-intelligence', icon: Database },
   { key: 'discussion' as const, name: 'Discussion', href: DEFAULT_WORKSPACE_ENTRY_HREF, icon: MessagesSquare },
   { key: 'connectors' as const, name: 'Connectors', href: '/app/connectors', icon: Plug },
   { key: 'settings' as const, name: 'Settings', href: '/app/settings', icon: Settings },

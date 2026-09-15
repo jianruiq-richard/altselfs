@@ -619,7 +619,7 @@ export function ProductIntelligencePage() {
           </form>
         </section>
 
-        <section className="mt-4 overflow-hidden rounded-[12px] border border-[#fffaf0]/10 bg-[#0b0c0c] shadow-[0_18px_60px_rgba(0,0,0,.22)]" aria-label="Product intelligence results">
+        <section className="mt-4 overflow-hidden rounded-[12px] border border-[#fffaf0]/10 bg-[#0b0c0c] shadow-[0_18px_60px_rgba(0,0,0,.22)]" aria-label="Business database results">
           <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-3 border-b border-[#fffaf0]/10 px-4">
             <div className="flex items-center gap-3">
               <strong className="text-[14px] font-semibold text-[#fffaf0]">All companies & independent products</strong>
