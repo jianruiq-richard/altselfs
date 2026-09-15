@@ -11,10 +11,12 @@ test('normalizes opted-in GA4 client context and rejects unsafe identifiers', ()
     clientId: '123456.789012',
     sessionId: '1712345678',
     analyticsConsent: 'granted',
+    adUserDataConsent: 'denied',
   }), {
     clientId: '123456.789012',
     sessionId: '1712345678',
     analyticsConsent: 'granted',
+    adUserDataConsent: 'denied',
   });
 
   assert.deepEqual(normalizeGa4ClientContext({
@@ -25,6 +27,7 @@ test('normalizes opted-in GA4 client context and rejects unsafe identifiers', ()
     clientId: null,
     sessionId: null,
     analyticsConsent: 'denied',
+    adUserDataConsent: 'denied',
   });
 });
 
@@ -33,6 +36,7 @@ test('round-trips GA4 context through Stripe metadata', () => {
     clientId: '123456.789012',
     sessionId: '1712345678',
     analyticsConsent: 'granted',
+    adUserDataConsent: 'denied',
   });
 
   assert.deepEqual(ga4ContextFromMetadata(ga4ContextMetadata(context)), context);

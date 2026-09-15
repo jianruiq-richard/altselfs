@@ -6,6 +6,7 @@ export type Ga4ClientContext = {
   clientId: string | null;
   sessionId: string | null;
   analyticsConsent: 'granted' | 'denied';
+  adUserDataConsent?: 'granted' | 'denied';
 };
 
 type Ga4EventParams = Record<string, unknown>;
@@ -16,6 +17,7 @@ export function normalizeGa4ClientContext(value: unknown): Ga4ClientContext {
     clientId: safeAnalyticsId(record.clientId),
     sessionId: safeAnalyticsId(record.sessionId),
     analyticsConsent: record.analyticsConsent === 'granted' ? 'granted' : 'denied',
+    adUserDataConsent: record.adUserDataConsent === 'granted' ? 'granted' : 'denied',
   };
 }
 
@@ -24,6 +26,7 @@ export function ga4ContextMetadata(context: Ga4ClientContext) {
     ...(context.clientId ? { gaClientId: context.clientId } : {}),
     ...(context.sessionId ? { gaSessionId: context.sessionId } : {}),
     gaAnalyticsConsent: context.analyticsConsent,
+    gaAdUserDataConsent: context.adUserDataConsent || 'denied',
   };
 }
 
@@ -33,6 +36,7 @@ export function ga4ContextFromMetadata(value: unknown): Ga4ClientContext {
     clientId: record.gaClientId,
     sessionId: record.gaSessionId,
     analyticsConsent: record.gaAnalyticsConsent,
+    adUserDataConsent: record.gaAdUserDataConsent,
   });
 }
 
@@ -44,6 +48,7 @@ export async function sendGa4Event(
     context: Ga4ClientContext;
     params: Ga4EventParams;
     includeSession?: boolean;
+    timestampMicros?: number;
   },
 ) {
   if (
@@ -66,8 +71,11 @@ export async function sendGa4Event(
       body: JSON.stringify({
         client_id: input.context.clientId,
         user_id: input.userId,
-        timestamp_micros: Date.now() * 1_000,
-        non_personalized_ads: true,
+        timestamp_micros: input.timestampMicros ?? Date.now() * 1_000,
+        consent: {
+          ad_user_data: input.context.adUserDataConsent === 'granted' ? 'GRANTED' : 'DENIED',
+          ad_personalization: 'DENIED',
+        },
         events: [{
           name: input.name,
           params: {

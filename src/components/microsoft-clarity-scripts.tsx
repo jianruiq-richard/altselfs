@@ -1,22 +1,20 @@
 import Script from 'next/script';
+import { CONSENT_BOOTSTRAP } from '@/lib/analytics/consent';
 
 const configuredProjectId = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID?.trim() || '';
 const projectId = /^[a-z0-9]{6,32}$/i.test(configuredProjectId)
   ? configuredProjectId
   : '';
-const analyticsStorage = process.env.NEXT_PUBLIC_CLARITY_ANALYTICS_STORAGE === 'granted'
-  ? 'granted'
-  : 'denied';
-
 export function MicrosoftClarityScripts() {
   if (!projectId) return null;
 
   const initialization = `
+    ${CONSENT_BOOTSTRAP}
     (function(c,l,a,r,i,t,y){
       c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
       c[a]('consentv2', {
-        ad_Storage: 'denied',
-        analytics_Storage: '${analyticsStorage}'
+        ad_Storage: minacoAdConsent,
+        analytics_Storage: minacoAnalyticsConsent
       });
       t=l.createElement(r);t.async=1;t.src='https://www.clarity.ms/tag/'+i;
       y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);

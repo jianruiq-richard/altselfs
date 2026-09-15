@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { TASK_ANALYTICS_SCHEMA, trackTaskMilestone, deliverTaskMilestones } from './task-analytics.js';
 import type { ServerConfig } from './config.js';
 import type { RuntimePaths } from './sandbox-runtime.js';
 import type { AgentEvent, AgentRoute, TurnStartRequest } from './types.js';
@@ -303,6 +304,10 @@ export async function persistAgentTurnInput(
     ).catch((error) => {
       warnings.push(`parsed attachment persistence failed: ${error instanceof Error ? error.message : String(error)}`);
     });
+  }
+
+  if (persistMessage && effectiveStatus === status && (status === 'QUEUED' || status === 'RUNNING')) {
+    await trackTaskMilestone(config, pool, runId, 'first_task_submitted');
   }
 
   return {
@@ -1556,6 +1561,7 @@ export async function persistAgentTurnSuccess(
   }).catch((error) => {
     console.warn(`[billing] failed to settle successful run ${input.runId}: ${error instanceof Error ? error.message : String(error)}`);
   });
+  await trackTaskMilestone(config, pool, input.runId, 'first_task_completed');
 }
 
 export async function persistAgentTurnError(
@@ -1594,6 +1600,11 @@ export async function persistAgentTurnError(
   }).catch((error) => {
     console.warn(`[billing] failed to release failed run ${input.runId}: ${error instanceof Error ? error.message : String(error)}`);
   });
+}
+
+export async function processTaskAnalyticsOutbox(config: ServerConfig) {
+  const pool = await getRequiredContextPool(config);
+  await deliverTaskMilestones(config, pool);
 }
 
 export async function processAgentBillingOutbox(
@@ -1876,6 +1887,7 @@ async function ensureAgentContextSchema(pool: PgPool) {
 }
 
 async function createAgentContextSchema(pool: PgPool) {
+  await pool.query(TASK_ANALYTICS_SCHEMA);
   await pool.query(`
     create table if not exists agent_context_threads (
       thread_id text primary key,

@@ -5,6 +5,7 @@ import {
   expireStaleAgentTurns,
   listRequestedAgentRunCancellations,
   processAgentBillingOutbox,
+  processTaskAnalyticsOutbox,
   persistAgentRunEvent,
   persistAgentTurnTimeout,
 } from './agent-context-store.js';
@@ -22,6 +23,8 @@ type RunningTurn = {
 export class AgentTurnQueueWorker {
   private readonly workerId = `${process.env.HOSTNAME || 'worker'}-${process.pid}-${id('tw')}`;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private analyticsTimer: ReturnType<typeof setInterval> | null = null;
+  private deliveringAnalytics = false;
   private cancelTimer: ReturnType<typeof setInterval> | null = null;
   private running = new Map<string, RunningTurn>();
   private acceptingClaims = true;
@@ -46,6 +49,7 @@ export class AgentTurnQueueWorker {
     this.cancelTimer = setInterval(() => {
       void this.pollCancellationRequests();
     }, this.config.turnQueueCancelPollMs);
+    this.analyticsTimer = setInterval(() => { void this.deliverAnalytics(); }, 15_000);
     if (this.acceptingClaims) void this.tick();
     console.log(
       [
@@ -66,6 +70,8 @@ export class AgentTurnQueueWorker {
   stop() {
     if (this.timer) clearInterval(this.timer);
     if (this.cancelTimer) clearInterval(this.cancelTimer);
+    if (this.analyticsTimer) clearInterval(this.analyticsTimer);
+    this.analyticsTimer = null;
     this.timer = null;
     this.cancelTimer = null;
     this.acceptingClaims = false;
@@ -89,6 +95,18 @@ export class AgentTurnQueueWorker {
       runningCount: this.running.size,
       runningRunIds: Array.from(this.running.keys()),
     };
+  }
+
+  private async deliverAnalytics() {
+    if (!this.acceptingClaims || this.deliveringAnalytics) return;
+    this.deliveringAnalytics = true;
+    try {
+      await processTaskAnalyticsOutbox(this.config);
+    } catch (error) {
+      console.warn(`[ga4] task outbox failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.deliveringAnalytics = false;
+    }
   }
 
   private async tick() {

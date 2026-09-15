@@ -2,7 +2,7 @@
 
 import { useUser } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   completePendingAuthFlow,
   GA4_MEASUREMENT_ID,
@@ -10,6 +10,8 @@ import {
   trackEvent,
   trackPageView,
 } from '@/lib/analytics/client';
+
+import { getConsentChoice, subscribeConsent } from '@/lib/analytics/consent';
 
 type AnalyticsIdentity = {
   userId: string;
@@ -19,6 +21,7 @@ type AnalyticsIdentity = {
 
 export function GoogleAnalytics() {
   const pathname = usePathname();
+  const consent = useSyncExternalStore(subscribeConsent, getConsentChoice, () => 'loading');
   const { isLoaded, isSignedIn } = useUser();
   const lastPagePath = useRef('');
 
@@ -53,7 +56,7 @@ export function GoogleAnalytics() {
     }).catch(() => null);
 
     return () => controller.abort();
-  }, [isLoaded, isSignedIn, pathname]);
+  }, [isLoaded, isSignedIn, pathname, consent]);
 
   useEffect(() => {
     if (!GA4_MEASUREMENT_ID) return;

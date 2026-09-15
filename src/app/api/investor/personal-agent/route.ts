@@ -92,6 +92,7 @@ type ConnectorScope = {
 };
 
 type ParsedPostBody = {
+  analytics?: { clientId: string | null; sessionId: string | null; analyticsConsent: 'granted' | 'denied'; adUserDataConsent: 'granted' | 'denied' };
   businessSelection?: BusinessSelection | null;
   threadId?: string | null;
   createThread?: boolean;
@@ -382,6 +383,7 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
       connectorScope?: unknown;
       uploadedArtifacts?: unknown;
       businessSelection?: unknown;
+      analytics?: unknown;
     };
     const messages = normalizeMessages(body.messages);
     const explicitMessage = typeof body.message === 'string' ? body.message.trim() : '';
@@ -392,6 +394,12 @@ async function parsePostBody(req: NextRequest): Promise<ParsedPostBody> {
     const userMessage = (businessSelection ? `${baseMessage}\n\n${businessSelectionContext(businessSelection)}` : baseMessage) || (uploadedArtifacts.length > 0 ? 'Please analyze the attached files.' : '');
     return {
       businessSelection,
+      analytics: isRecord(body.analytics) ? {
+        clientId: typeof body.analytics.clientId === 'string' ? body.analytics.clientId : null,
+        sessionId: typeof body.analytics.sessionId === 'string' ? body.analytics.sessionId : null,
+        analyticsConsent: body.analytics.analyticsConsent === 'granted' ? 'granted' : 'denied',
+        adUserDataConsent: body.analytics.adUserDataConsent === 'granted' ? 'granted' : 'denied',
+      } : undefined,
       threadId: body.threadId || null,
       createThread: body.createThread === true,
       messages: userMessage ? [{ role: 'user', content: userMessage }] : messages,
@@ -1104,6 +1112,7 @@ export async function POST(req: NextRequest) {
     message: buildCurrentTurnMessage(messages),
     allowedAgents: ['codex-general', 'codex-competitive-intelligence'],
     metadata: {
+      analytics: parsedBody.analytics,
       currentMessageId: userThreadMessage.id,
       investorId: investor.id,
       contextMode: 'ecs_database_context',

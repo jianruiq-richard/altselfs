@@ -43,6 +43,7 @@ import { getVisibleConnectors } from '@/lib/investor-connector-visibility';
 import { DEFAULT_DISCUSSION_CONNECTOR_KEYS, resolveDiscussionConnectorKeys } from '@/lib/discussion-connectors';
 import {
   analyticsWasReported,
+  getAnalyticsSessionContext,
   markAnalyticsReported,
   trackEvent,
 } from '@/lib/analytics/client';
@@ -4326,6 +4327,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
     const clientRequestId = createClientRequestId();
 
     try {
+      const analytics = await getAnalyticsSessionContext();
       const buildRequestBody = () => (
         JSON.stringify({
           threadId: requestThreadId,
@@ -4335,6 +4337,7 @@ export function InvestorAgentChatPage({ executive = false, guest = false }: { ex
           businessSelection: selectedBusinessContext,
           hermesModel: effectiveHermesModel,
           clientRequestId,
+          analytics,
           connectorScope: requestConnectorScope,
           uploadedArtifacts,
         })

@@ -1,5 +1,7 @@
 'use client';
 
+import { consentParameters, getConsentChoice } from './consent';
+
 const configuredMeasurementId = process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID?.trim() || '';
 export const GA4_MEASUREMENT_ID = /^G-[A-Z0-9]+$/i.test(configuredMeasurementId)
   ? configuredMeasurementId
@@ -7,7 +9,6 @@ export const GA4_MEASUREMENT_ID = /^G-[A-Z0-9]+$/i.test(configuredMeasurementId)
 export const ANALYTICS_SCHEMA_VERSION = 1;
 
 const AUTH_FLOW_STORAGE_KEY = 'minaco.analytics.auth-flow.v1';
-const ANALYTICS_STORAGE_GRANTED = process.env.NEXT_PUBLIC_GA4_ANALYTICS_STORAGE === 'granted';
 
 export type AuthFlow = 'login' | 'sign_up';
 export type AuthMethod = 'email_password' | 'google_oauth' | 'phone_password' | 'clerk_ui';
@@ -36,6 +37,7 @@ type AnalyticsSessionContext = {
   clientId: string | null;
   sessionId: string | null;
   analyticsConsent: 'granted' | 'denied';
+  adUserDataConsent: 'granted' | 'denied';
 };
 
 declare global {
@@ -75,6 +77,7 @@ export function setAnalyticsUser(
 ) {
   const gtag = ensureGtag();
   if (!gtag) return;
+  if (consentParameters(getConsentChoice()).analytics_storage !== 'granted') return;
   gtag('config', GA4_MEASUREMENT_ID, { user_id: userId });
   gtag('set', 'user_properties', compactParams(properties));
 }
@@ -225,6 +228,10 @@ function getGtagValue(field: 'client_id' | 'session_id') {
 }
 
 export async function getAnalyticsSessionContext(): Promise<AnalyticsSessionContext> {
+  const consent = consentParameters(getConsentChoice());
+  if (consent.analytics_storage !== 'granted') {
+    return { clientId: null, sessionId: null, analyticsConsent: 'denied', adUserDataConsent: 'denied' };
+  }
   const [clientId, sessionId] = await Promise.all([
     getGtagValue('client_id'),
     getGtagValue('session_id'),
@@ -232,7 +239,8 @@ export async function getAnalyticsSessionContext(): Promise<AnalyticsSessionCont
   return {
     clientId,
     sessionId,
-    analyticsConsent: ANALYTICS_STORAGE_GRANTED ? 'granted' : 'denied',
+    analyticsConsent: consent.analytics_storage,
+    adUserDataConsent: consent.ad_user_data,
   };
 }
 

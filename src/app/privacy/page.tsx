@@ -139,6 +139,9 @@ export default function PrivacyPolicyPage() {
       <section id="cookies">
         <h2>7. Cookies and Analytics</h2>
         <p>
+          Use Cookie preferences to allow or decline optional analytics and advertising measurement, or change your choice later. Analytics can include Google Analytics and privacy-masked session replay. With advertising measurement enabled, we use Google Analytics to relate ad visits to registration, task completion, and purchases. We may associate these events with an internal account identifier; we do not send your email address or private task content in these events.
+        </p>
+        <p>
           We use cookies and similar technologies to authenticate users, remember preferences, secure sessions, understand how the Services are used, and improve performance. You can control cookies through your browser settings, though blocking some cookies may prevent parts of the Services from functioning.
         </p>
         <p>
