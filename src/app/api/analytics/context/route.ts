@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const { userId: clerkId } = await auth();
+  const { userId: clerkId, sessionId } = await auth();
   if (!clerkId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const user = await prisma.user.findUnique({
@@ -12,6 +12,8 @@ export async function GET() {
     select: {
       id: true,
       role: true,
+      registrationSessionId: true,
+      registrationReportedAt: true,
       creditSubscription: { select: { planKey: true } },
     },
   });
@@ -20,6 +22,7 @@ export async function GET() {
   return Response.json({
     userId: user.id,
     role: user.role,
+    registrationPending: Boolean(sessionId && user.registrationSessionId === sessionId && !user.registrationReportedAt),
     planKey: user.creditSubscription?.planKey || 'FREE',
   });
 }

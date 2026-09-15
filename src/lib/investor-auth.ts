@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import type { ServerTiming } from '@/lib/server-timing';
 import { provisionProductUser } from '@/lib/user-provisioning';
 
-async function provisionCurrentInvestorUser(clerkUserId: string) {
+async function provisionCurrentInvestorUser(clerkUserId: string, sessionId: string | null) {
   const clerkUser = await currentUser();
   if (!clerkUser || clerkUser.id !== clerkUserId) {
     return null;
@@ -17,6 +17,7 @@ async function provisionCurrentInvestorUser(clerkUserId: string) {
 
   return provisionProductUser({
     clerkId: clerkUser.id,
+    registrationSessionId: sessionId,
     email,
     name: clerkUser.fullName || clerkUser.username,
     role: 'INVESTOR',
@@ -24,7 +25,7 @@ async function provisionCurrentInvestorUser(clerkUserId: string) {
 }
 
 export async function getInvestorOrNull(timing?: ServerTiming) {
-  const { userId } = timing
+  const { userId, sessionId } = timing
     ? await timing.time('auth', () => auth(), 'Clerk authentication')
     : await auth();
   if (!userId) {
@@ -42,7 +43,7 @@ export async function getInvestorOrNull(timing?: ServerTiming) {
     return user;
   }
 
-  const provisionUser = () => provisionCurrentInvestorUser(userId);
+  const provisionUser = () => provisionCurrentInvestorUser(userId, sessionId);
   return timing
     ? await timing.time('db_user_provision', provisionUser, 'Provision application user')
     : await provisionUser();

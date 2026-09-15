@@ -36,7 +36,7 @@ function readRunTitle(request: unknown) {
 }
 
 export default async function InvestorDashboardPage() {
-  const { userId } = await auth();
+  const { userId, sessionId } = await auth();
   if (!userId) redirect('/sign-in');
 
   const dbUser = await prisma.user.findUnique({
@@ -113,6 +113,7 @@ export default async function InvestorDashboardPage() {
 
     await provisionProductUser({
       clerkId: clerkUser.id,
+      registrationSessionId: sessionId,
       email:
         clerkUser.primaryEmailAddress?.emailAddress ||
         clerkUser.emailAddresses.find((item) => item.id === clerkUser.primaryEmailAddressId)?.emailAddress ||

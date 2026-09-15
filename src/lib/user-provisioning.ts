@@ -124,6 +124,7 @@ async function ensureDefaultInvestorWorkspace(user: {
 
 export async function provisionProductUser(input: {
   clerkId: string;
+  registrationSessionId?: string | null;
   email?: string | null;
   name?: string | null;
   role: ProductUserRole;
@@ -153,6 +154,7 @@ export async function provisionProductUser(input: {
     where: { clerkId: input.clerkId },
     create: {
       clerkId: input.clerkId,
+      registrationSessionId: input.registrationSessionId || null,
       email: normalizedEmail,
       name: normalizedName,
       nickname: input.role === 'CANDIDATE' ? nickname : null,

@@ -179,18 +179,37 @@ function readPendingAuthFlow(): PendingAuthFlow | null {
   }
 }
 
-export function completePendingAuthFlow() {
+let authCompletionInFlight: Promise<void> | null = null;
+
+export function completePendingAuthFlow(registrationPending = false): Promise<void> {
+  if (authCompletionInFlight) return authCompletionInFlight;
+  if (!ensureGtag() || consentParameters(getConsentChoice()).analytics_storage !== 'granted') return Promise.resolve();
   const pending = readPendingAuthFlow();
-  if (!pending) return;
-  try {
-    window.sessionStorage.removeItem(AUTH_FLOW_STORAGE_KEY);
-  } catch {
-    // The event is still sent if storage cleanup is unavailable.
-  }
-  trackEvent(pending.flow, {
-    method: pending.method,
-    auth_duration_ms: Math.max(0, Date.now() - pending.startedAt),
+  if (!pending && !registrationPending) return Promise.resolve();
+  authCompletionInFlight = (async () => {
+    const response = await fetch('/api/analytics/auth-completion', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analyticsConsent: 'granted', hasPendingAuth: Boolean(pending) }),
+    });
+    if (!response.ok) return;
+    const result = await response.json() as { eventName: 'sign_up' | 'login' | null };
+    if (result.eventName !== null && result.eventName !== 'sign_up' && result.eventName !== 'login') return;
+    if (result.eventName && consentParameters(getConsentChoice()).analytics_storage === 'granted') trackEvent(result.eventName, {
+      method: pending?.method || 'clerk_ui',
+      auth_duration_ms: pending ? Math.max(0, Date.now() - pending.startedAt) : undefined,
+    });
+    try {
+      // Don't erase a newer authentication flow that started during the request.
+      if (pending && readPendingAuthFlow()?.startedAt === pending.startedAt) window.sessionStorage.removeItem(AUTH_FLOW_STORAGE_KEY);
+    } catch { /* Storage can be unavailable. */ }
+  })().catch(() => {
+    // Keep the pending flow so a later identity refresh can retry.
+  }).finally(() => {
+    authCompletionInFlight = null;
   });
+  return authCompletionInFlight;
 }
 
 export function trackAuthError(input: {

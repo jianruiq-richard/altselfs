@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
     }
     const user = await provisionProductUser({
       clerkId: userId,
+      registrationSessionId: authResult.sessionId,
       email,
       name,
       role: normalizedRole,

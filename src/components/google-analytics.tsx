@@ -17,6 +17,7 @@ type AnalyticsIdentity = {
   userId: string;
   role: string;
   planKey: string;
+  registrationPending: boolean;
 };
 
 export function GoogleAnalytics() {
@@ -52,7 +53,7 @@ export function GoogleAnalytics() {
         account_role: identity.role.toLowerCase(),
         plan_key: identity.planKey.toLowerCase(),
       });
-      completePendingAuthFlow();
+      void completePendingAuthFlow(identity.registrationPending);
     }).catch(() => null);
 
     return () => controller.abort();
