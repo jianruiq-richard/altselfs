@@ -1,5 +1,6 @@
 export const CONSENT_STORAGE_KEY = 'minaco.consent.v1';
 export const CONSENT_CHANGED_EVENT = 'minaco:consent-changed';
+export const DEFAULT_CONSENT_CHOICE = 'all' as const;
 export type ConsentChoice = 'all' | 'analytics' | 'denied';
 export type ConsentSnapshot = ConsentChoice | 'unknown' | 'loading';
 
@@ -20,7 +21,7 @@ export function getConsentChoice(): ConsentSnapshot {
     const stored = parseConsentChoice(window.localStorage.getItem(CONSENT_STORAGE_KEY));
     if (stored) return stored;
   } catch { /* Use the current-page choice when browser storage is unavailable. */ }
-  return window.__minacoConsent || 'unknown';
+  return window.__minacoConsent || DEFAULT_CONSENT_CHOICE;
 }
 
 export function consentParameters(choice: ConsentSnapshot) {
@@ -64,13 +65,12 @@ export function subscribeConsent(listener: () => void) {
   };
 }
 
-// Runs synchronously before either vendor initializes. Do not interpret the old
-// deployment-wide "granted" environment variable as an individual user's choice.
+// Runs synchronously before either vendor initializes. Apply the site default
+// only when no valid preference exists; do not persist it as a visitor's choice.
 export const CONSENT_BOOTSTRAP = `
   var minacoChoice = window.__minacoConsent;
   try { minacoChoice = localStorage.getItem('${CONSENT_STORAGE_KEY}') || minacoChoice; } catch (_) {}
-  if (minacoChoice !== 'all' && minacoChoice !== 'analytics' && minacoChoice !== 'denied') minacoChoice = 'unknown';
-  if (minacoChoice !== 'unknown') window.__minacoConsent = minacoChoice;
+  if (minacoChoice !== 'all' && minacoChoice !== 'analytics' && minacoChoice !== 'denied') minacoChoice = '${DEFAULT_CONSENT_CHOICE}';
   var minacoAnalyticsConsent = minacoChoice === 'all' || minacoChoice === 'analytics' ? 'granted' : 'denied';
   var minacoAdConsent = minacoChoice === 'all' ? 'granted' : 'denied';
 `;
