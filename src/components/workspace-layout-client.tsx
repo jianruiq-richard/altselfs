@@ -40,15 +40,15 @@ const RIGHT_RAIL_SLOT_ID = 'astromar-workspace-right-rail-slot';
 const NAVIGATION_START_EVENT = 'astromar:workspace-navigation-start';
 
 function defaultMobileTitle(pathname: string) {
-  if (pathname.startsWith('/product-intelligence')) return 'Product Intelligence';
-  if (pathname.startsWith('/investor/chat')) return 'Discussion';
-  if (pathname.startsWith('/connectors')) return 'Connectors';
-  if (pathname.startsWith('/profile')) return 'Settings';
+  if (pathname.startsWith('/app/product-intelligence')) return 'Product Intelligence';
+  if ((pathname === '/' || pathname === '/app' || pathname.startsWith('/investor/chat'))) return 'Discussion';
+  if (pathname.startsWith('/app/connectors')) return 'Connectors';
+  if (pathname.startsWith('/app/settings')) return 'Settings';
   return 'Workspace';
 }
 
 function routeHasRightRail(pathname: string) {
-  return pathname.startsWith('/investor/chat');
+  return (pathname === '/' || pathname === '/app' || pathname.startsWith('/investor/chat'));
 }
 
 function WorkspaceNavigationObserver() {

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, SetStateAction } from 'react';
 import Link from 'next/link';
 import { AlertCircle, Archive, ArrowUp, Check, CheckCircle2, ChevronDown, CircleGauge, Clock3, Download, ExternalLink, FileText, Film, ImageIcon, Info, LoaderCircle, LockKeyhole, MoreHorizontal, Paperclip, Pencil, Plug, Plus, Settings2, Share2, ShieldCheck, Square, Trash2, X } from 'lucide-react';
+import { AuthButtons, GUEST_DRAFT_KEY, useAuthModal } from '@/components/auth-modal-provider';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FigmaShell } from '@/components/figma-shell';
 import {
@@ -313,8 +314,8 @@ function buildSignInRedirectUrl() {
   const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   const redirectTarget =
     currentPath.startsWith('/sign-in') || currentPath.startsWith('/sign-up')
-      ? '/investor/chat/100'
-      : currentPath || '/investor/chat/100';
+      ? '/app'
+      : currentPath || '/app';
   const params = new URLSearchParams({ redirect_url: redirectTarget });
   return `/sign-in?${params.toString()}`;
 }
@@ -2408,21 +2409,22 @@ function StreamingAssistantMessage({ content }: { content: string }) {
   );
 }
 
-export function InvestorAgentChatPage() {
+export function InvestorAgentChatPage({ executive = false, guest = false }: { executive?: boolean; guest?: boolean } = {}) {
+  const openAuth = useAuthModal();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const startNewDiscussion = searchParams.get('newDiscussion') === '1';
   const agentId = params.agentId as string;
-  const isExecutive = agentId === '100';
-  const initialPersonalAgentCache = isExecutive
+  const isExecutive = executive || agentId === '100';
+  const initialPersonalAgentCache = isExecutive && !guest
     ? getWorkspaceCachedStale<PersonalAgentCachedPage>(WORKSPACE_CACHE_KEYS.personalAgentDefault)
     : null;
-  const initialPersonalAgentSessionsCache = isExecutive
+  const initialPersonalAgentSessionsCache = isExecutive && !guest
     ? getWorkspaceCachedStale<{ sessions?: AgentSessionSummary[] }>(WORKSPACE_CACHE_KEYS.personalAgentSessions)
     : null;
-  const initialBillingCapacity = getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
-  const initialConnectorsCache = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
+  const initialBillingCapacity = guest ? null : getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity);
+  const initialConnectorsCache = guest ? null : getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
   const initialSessions = filterPersistedSessions(pickInitialSessions(initialPersonalAgentCache, initialPersonalAgentSessionsCache));
 
   const [threadId, setThreadId] = useState<string | null>(initialPersonalAgentCache?.threadId || null);
@@ -2447,7 +2449,7 @@ export function InvestorAgentChatPage() {
   const [startingRun, setStartingRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [billingCapacity, setBillingCapacity] = useState<BillingCapacityData | null>(initialBillingCapacity);
-  const [billingCapacityLoading, setBillingCapacityLoading] = useState(!initialBillingCapacity);
+  const [billingCapacityLoading, setBillingCapacityLoading] = useState(!guest && !initialBillingCapacity);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');
   const [promptSaved, setPromptSaved] = useState('');
@@ -2474,7 +2476,7 @@ export function InvestorAgentChatPage() {
     () => initialConnectorsCache?.connectors || [],
   );
   const connectors = useMemo(() => getVisibleConnectors(connectorItems), [connectorItems]);
-  const [connectorsLoading, setConnectorsLoading] = useState(!initialConnectorsCache?.connectors?.length);
+  const [connectorsLoading, setConnectorsLoading] = useState(!guest && !initialConnectorsCache?.connectors?.length);
   const [connectorsError, setConnectorsError] = useState<string | null>(null);
   const [selectedConnectorKeys, setSelectedConnectorKeys] = useState<string[]>([]);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
@@ -2689,7 +2691,7 @@ export function InvestorAgentChatPage() {
   }, [billingCapacity, canUseProModel, hermesModel]);
 
   useEffect(() => {
-    if (!isExecutive) return;
+    if (!isExecutive || guest) return;
     let cancelled = false;
     const cached = getWorkspaceCachedStale<{ connectors?: ConnectorItem[] }>(WORKSPACE_CACHE_KEYS.connectors);
     if (Array.isArray(cached?.connectors)) {
@@ -2719,7 +2721,7 @@ export function InvestorAgentChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [isExecutive]);
+  }, [isExecutive, guest]);
 
   const activeConnectors = useMemo(
     () => connectors.filter((connector) => connector.connected && selectedConnectorKeys.includes(connector.key)),
@@ -3540,8 +3542,18 @@ export function InvestorAgentChatPage() {
   }, [activeRunId, refreshPersonalAgentStatus, threadId]);
 
   useEffect(() => {
-    if (initialLoadStartedRef.current) return;
+    if (guest || initialLoadStartedRef.current) return;
     initialLoadStartedRef.current = true;
+    let pendingDraft = '';
+    try { pendingDraft = sessionStorage.getItem(GUEST_DRAFT_KEY) || ''; } catch {}
+    if (pendingDraft) {
+      selectThreadId(null);
+      setThreadMessages([], null);
+      setHasMoreMessages(false);
+      setInput(pendingDraft);
+      void loadSessions({ suppressErrors: true });
+      return;
+    }
     const hasBootstrappedSessions = Array.isArray(
       getWorkspaceCachedStale<PersonalAgentSessionsPayload>(WORKSPACE_CACHE_KEYS.personalAgentSessions)?.sessions,
     );
@@ -3549,13 +3561,14 @@ export function InvestorAgentChatPage() {
       showBlockingLoading: !hasBootstrappedSessions,
       suppressErrors: hasBootstrappedSessions,
     });
-  }, [loadData]);
+  }, [guest, loadData, loadSessions, selectThreadId, setThreadMessages]);
 
   useEffect(() => {
+    if (guest) return;
     void loadBillingCapacity({
       showLoading: !getWorkspaceCachedStale<BillingCapacityData>(WORKSPACE_CACHE_KEYS.billingCapacity),
     });
-  }, [loadBillingCapacity]);
+  }, [guest, loadBillingCapacity]);
 
   useEffect(() => {
     if (!billingCapacity || billingCapacity.capacity.activeTaskCount <= 0) return;
@@ -3578,6 +3591,7 @@ export function InvestorAgentChatPage() {
     setThreadMessages([], null);
     setHasMoreMessages(false);
     setInput('');
+    try { sessionStorage.removeItem(GUEST_DRAFT_KEY); } catch {}
     setAttachments([]);
     setOpenSessionMenuId(null);
     connectorSelectionsByThreadRef.current.delete(DRAFT_SESSION_ID);
@@ -3595,7 +3609,7 @@ export function InvestorAgentChatPage() {
     if (!startNewDiscussion || handledNewDiscussionRef.current || startingRun || recoveringRunState) return;
     handledNewDiscussionRef.current = true;
     createNewSession();
-    window.history.replaceState(null, '', '/investor/chat/100');
+    window.history.replaceState(null, '', '/app');
   }, [createNewSession, recoveringRunState, startNewDiscussion, startingRun]);
 
   const switchSession = useCallback(async (targetThreadId: string) => {
@@ -3610,6 +3624,7 @@ export function InvestorAgentChatPage() {
     const rememberedKeys = connectorSelectionsByThreadRef.current.get(targetThreadId) || [];
     setSelectedConnectorKeys(rememberedKeys.filter((key) => availableKeys.has(key)));
     setInput('');
+    try { sessionStorage.removeItem(GUEST_DRAFT_KEY); } catch {}
     setAttachments([]);
     setOpenSessionMenuId(null);
     await loadData(targetThreadId, { showBlockingLoading: true });
@@ -3813,7 +3828,8 @@ export function InvestorAgentChatPage() {
   useEffect(() => {
     const prompt = searchParams.get('prompt')?.trim();
     if (prompt) setInput(prompt);
-  }, [searchParams]);
+    else if (guest) { try { const draft = sessionStorage.getItem(GUEST_DRAFT_KEY); if (draft) setInput(draft); } catch {} }
+  }, [guest, searchParams]);
 
   const uploadPendingAttachments = useCallback(async (items: PendingAttachment[]) => {
     if (items.length === 0) return;
@@ -3939,6 +3955,7 @@ export function InvestorAgentChatPage() {
 
   const handleFilesSelected = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
+    if (guest) { openAuth(); return; }
     const selectedFiles = Array.from(files);
     const oversized = selectedFiles.find((file) => file.size > MAX_ATTACHMENT_FILE_BYTES);
     if (oversized) {
@@ -3955,7 +3972,7 @@ export function InvestorAgentChatPage() {
     setAttachments((prev) => [...prev, ...pending].slice(0, MAX_ATTACHMENT_FILES));
     void uploadPendingAttachments(pending);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  }, [attachments.length, uploadPendingAttachments]);
+  }, [attachments.length, guest, openAuth, uploadPendingAttachments]);
 
   const resetAttachmentDrag = useCallback(() => {
     attachmentDragDepthRef.current = 0;
@@ -4143,6 +4160,14 @@ export function InvestorAgentChatPage() {
 
   const handleSend = async (textFromSuggestion?: string, options?: { connectorKeys?: string[] }) => {
     const content = (textFromSuggestion || input).trim();
+    if (guest) {
+      if (content) {
+        setInput(content);
+        try { sessionStorage.setItem(GUEST_DRAFT_KEY, content); } catch {}
+      }
+      openAuth('sign-in', '/app');
+      return;
+    }
     const requestAttachments = attachments;
     const hasAttachments = requestAttachments.length > 0;
     if (
@@ -4165,6 +4190,7 @@ export function InvestorAgentChatPage() {
       return;
     }
     submissionInFlightRef.current = true;
+    try { sessionStorage.removeItem(GUEST_DRAFT_KEY); } catch {}
     setStartingRun(true);
     const uploadedArtifacts = requestAttachments.map((attachment) => ({
       id: attachment.artifactId || '',
@@ -4641,7 +4667,7 @@ export function InvestorAgentChatPage() {
           const selected = selectedConnectorKeys.includes(connector.key);
           return <button key={connector.key} type="button" onClick={() => toggleConnector(connector.key)} disabled={sending || recoveringRunState} className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[10px] ${selected ? 'border-[#8eb3ff]/25 bg-[#8eb3ff]/[0.07] text-[#dfe8ff]' : 'border-white/[0.09] text-zinc-600 hover:text-zinc-300'} disabled:opacity-50`}><i className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-[#8eb3ff]' : 'bg-zinc-600'}`} />{connector.label}</button>;
         })}
-        <Link href="/connectors" className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/[0.09] text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors"><Plus className="h-3.5 w-3.5" /></Link>
+        <Link href="/app/connectors" className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/[0.09] text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors"><Plus className="h-3.5 w-3.5" /></Link>
         {connectorsLoading ? <span className="px-2 text-[10px] text-zinc-600">Loading context...</span> : null}
       </div>
 
@@ -4659,7 +4685,10 @@ export function InvestorAgentChatPage() {
 
       <textarea
         value={input}
-        onChange={(event) => setInput(event.target.value)}
+        onChange={(event) => {
+          setInput(event.target.value);
+          if (guest) { try { sessionStorage.setItem(GUEST_DRAFT_KEY, event.target.value); } catch {} }
+        }}
         placeholder={variant === 'starter' ? `Ask ${productBrand.name} to research, decide, or build a plan...` : 'Ask your AI cofounder anything...'}
         rows={3}
         className={`block w-full resize-none bg-transparent px-4 py-3 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 ${variant === 'starter' ? 'h-[112px]' : 'h-[76px]'}`}
@@ -4667,7 +4696,7 @@ export function InvestorAgentChatPage() {
       <div className="flex items-center justify-between gap-3 px-2.5 pb-2.5">
         <div className="flex items-center gap-1">
           <input ref={fileInputRef} type="file" multiple accept={attachmentAccept} className="hidden" onChange={(event) => handleFilesSelected(event.target.files)} />
-          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!canAttachFiles} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-50" title="Attach files"><Paperclip className="h-3.5 w-3.5" />Attach</button>
+          <button type="button" onClick={() => guest ? openAuth() : fileInputRef.current?.click()} disabled={!canAttachFiles} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-50" title="Attach files"><Paperclip className="h-3.5 w-3.5" />Attach</button>
           <span className="hidden items-center gap-1.5 rounded-md border border-white/[0.09] px-2 py-1.5 text-[10px] text-zinc-500 sm:inline-flex"><Check className="h-3.5 w-3.5" />Think</span>
         </div>
         {sending || recoveringRunState ? (
@@ -4751,11 +4780,11 @@ export function InvestorAgentChatPage() {
   const rightRail = (
     <div className="grid h-full min-h-0 grid-rows-[64px_minmax(0,1fr)]">
       <div className="border-b border-white/[0.09]">
-        <BillingCapacityPopover
+        {guest ? <AuthButtons className="h-full px-4" /> : <BillingCapacityPopover
           data={billingCapacity}
           loading={billingCapacityLoading}
           variant="rail"
-        />
+        />}
       </div>
       <div className="astromar-scrollbar min-h-0 overflow-y-auto px-4 py-5">
         <section className="mb-8">
@@ -4791,7 +4820,7 @@ export function InvestorAgentChatPage() {
         <section>
           <div className="mb-3 flex items-center justify-between">
             <div><h2 className="text-[13px] font-semibold text-zinc-200">Connector context</h2><p className="mt-1 text-[9px] text-zinc-600">{activeConnectors.length}/{connectedConnectors.length} enabled</p></div>
-            <Link href="/connectors" className="grid h-7 w-7 place-items-center rounded-md text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors"><Settings2 className="h-3.5 w-3.5" /></Link>
+            <Link href="/app/connectors" className="grid h-7 w-7 place-items-center rounded-md text-zinc-600 hover:bg-white/5 hover:text-white" title="Manage connectors"><Settings2 className="h-3.5 w-3.5" /></Link>
           </div>
           <div className="grid gap-1">
             {connectedConnectors.map((connector) => {
@@ -4814,7 +4843,7 @@ export function InvestorAgentChatPage() {
                 </div>
               );
             })}
-            {!connectorsLoading && connectedConnectors.length === 0 ? <Link href="/connectors" className="rounded-[7px] border border-dashed border-white/[0.09] px-3 py-4 text-center text-[11px] text-zinc-500 hover:text-zinc-300">Connect a source</Link> : null}
+            {!connectorsLoading && connectedConnectors.length === 0 ? <Link href="/app/connectors" className="rounded-[7px] border border-dashed border-white/[0.09] px-3 py-4 text-center text-[11px] text-zinc-500 hover:text-zinc-300">Connect a source</Link> : null}
           </div>
           <div className="mt-4 flex items-start gap-2 border-t border-white/[0.09] px-2 pt-3 text-[10px] leading-4 text-zinc-600"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Enabled sources are available only to this discussion. Workspace memory remains shared.</span></div>
         </section>
@@ -4833,7 +4862,7 @@ export function InvestorAgentChatPage() {
             <span className="mt-0.5 block truncate text-[10px] text-zinc-600">Think with you. Act for you.</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <WorkspaceDiscordLink />
+            {guest ? <AuthButtons className="xl:hidden" /> : <WorkspaceDiscordLink />}
             <div data-hermes-model-menu="true" className="relative">
               <button
                 type="button"
@@ -4903,11 +4932,12 @@ export function InvestorAgentChatPage() {
                 </span>
               </div>
             ) : showStarterSurface ? (
-              <div className="flex min-h-[calc(100dvh-170px)] items-start justify-center pb-12 pt-[clamp(28px,7vh,78px)] text-center">
+              <div className="flex min-h-[calc(100dvh-220px)] items-start justify-center pb-12 pt-[clamp(28px,7vh,78px)] text-center">
                 <div className="w-full">
                   <h1 className="text-3xl font-semibold tracking-[-0.04em] text-zinc-50 sm:text-4xl">
                     What should we move forward?
                   </h1>
+                  <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-zinc-500">Your AI cofounder for competitor intelligence, research, and the next step.</p>
                   <div className="mt-8">
                     {renderComposer('starter')}
                   </div>

@@ -164,7 +164,7 @@ export default async function AccountsPage() {
       details: [
         `Date: ${dailyBriefing.date}`,
         `Priority tasks: ${dailyBriefing.priorityTasks.length}`,
-        'Workspace: /investor/chat/100',
+        'Workspace: /app',
       ],
     },
     {

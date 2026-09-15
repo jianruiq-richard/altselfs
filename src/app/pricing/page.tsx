@@ -169,7 +169,7 @@ export default function PricingPage() {
             <span className="mt-0.5 block text-[10px] text-zinc-600">Plans and credits</span>
           </div>
           <Link
-            href="/profile"
+            href="/app/settings"
             className="inline-flex min-h-9 items-center gap-2 rounded-[7px] px-3 text-[11px] font-semibold text-zinc-400 hover:bg-white/[0.045] hover:text-white"
           >
             Manage usage

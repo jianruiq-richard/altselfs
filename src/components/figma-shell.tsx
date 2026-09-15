@@ -5,7 +5,7 @@ import { useHasSharedWorkspaceLayout } from '@/components/workspace-layout-clien
 import { productBrand } from '@/lib/brand';
 
 export function FigmaShell({
-  homeHref = '/investor/chat/100',
+  homeHref = '/app',
   title,
   subtitle,
   actions,

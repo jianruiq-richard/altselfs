@@ -1466,3 +1466,16 @@
     grid-template-columns: 100px 1fr;
   }
 }
+
+.authModal {
+  --auth-bg: #090909;
+  --auth-panel: #111213;
+  --auth-line: rgba(255, 250, 240, 0.11);
+  --auth-line-strong: rgba(255, 250, 240, 0.2);
+  --auth-text: #fffaf0;
+  --auth-muted: rgba(255, 250, 240, 0.64);
+  --auth-subtle: rgba(255, 250, 240, 0.42);
+  --auth-green: #78c889;
+  --auth-blue: #f2c36b;
+  --auth-amber: #f2c36b;
+}

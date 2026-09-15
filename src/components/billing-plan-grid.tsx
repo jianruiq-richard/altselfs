@@ -62,7 +62,7 @@ export function BillingPlanGrid({
   currentBillingCycle,
   cancelAtPeriodEnd = false,
   billingAction,
-  getStartedHref = '/sign-in?method=email&redirect_url=/investor/chat/100',
+  getStartedHref = '/sign-in?method=email&redirect_url=/app',
   showIntro = true,
   onChoosePlan,
   onOpenPortal,

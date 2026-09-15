@@ -292,7 +292,7 @@ export function prefetchWorkspaceRouteData(href: string) {
   if (url.origin !== window.location.origin) return;
 
   const pathname = url.pathname;
-  if (pathname.startsWith('/product-intelligence')) {
+  if (pathname.startsWith('/app/product-intelligence')) {
     prefetchWorkspaceJson<{ products?: unknown[] }>(
       WORKSPACE_CACHE_KEYS.productIntelligence,
       '/api/product-intelligence/products?dataset=actual&limit=50&offset=0',
@@ -302,7 +302,7 @@ export function prefetchWorkspaceRouteData(href: string) {
     return;
   }
 
-  if (pathname.startsWith('/connectors')) {
+  if (pathname.startsWith('/app/connectors')) {
     prefetchWorkspaceJson<{ connectors?: unknown[] }>(
       WORKSPACE_CACHE_KEYS.connectors,
       '/api/investor/connectors',
@@ -312,7 +312,7 @@ export function prefetchWorkspaceRouteData(href: string) {
     return;
   }
 
-  if (pathname.startsWith('/profile')) {
+  if (pathname.startsWith('/app/settings')) {
     prefetchWorkspaceJson<{ user?: unknown }>(
       WORKSPACE_CACHE_KEYS.userProfile,
       '/api/user/profile',
@@ -336,7 +336,7 @@ export function prefetchWorkspaceRouteData(href: string) {
     return;
   }
 
-  if (pathname.startsWith('/investor/chat')) {
+  if ((pathname === '/' || pathname === '/app' || pathname.startsWith('/investor/chat'))) {
     void fetchWorkspaceJson<Record<string, unknown>>(
       WORKSPACE_CACHE_KEYS.personalAgentSessions,
       '/api/investor/personal-agent?sessionsOnly=1',

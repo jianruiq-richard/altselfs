@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
       return res;
     }
 
-    const url = new URL('/connectors', req.url);
+    const url = new URL('/app/connectors', req.url);
     url.searchParams.set('integrationProvider', 'feishu');
     url.searchParams.set('integrationStatus', 'pending');
     url.searchParams.set('integrationDetail', 'Lark CLI setup started. Complete app setup, then authorize your account.');
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
         { status: 500 },
       );
     }
-    const url = new URL('/connectors', req.url);
+    const url = new URL('/app/connectors', req.url);
     url.searchParams.set('integrationProvider', 'feishu');
     url.searchParams.set('integrationStatus', 'error');
     url.searchParams.set('integrationDetail', err instanceof Error ? err.message : 'Lark CLI setup failed');

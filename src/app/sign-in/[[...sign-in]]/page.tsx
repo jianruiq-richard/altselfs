@@ -8,7 +8,7 @@ import { productBrand } from "@/lib/brand";
 import { clerkAuthAppearance } from "@/lib/clerk-auth-appearance";
 import { isOauthBlockedEmbeddedBrowser } from "@/lib/oauth-browser";
 
-const DEFAULT_AUTH_REDIRECT = "/investor/chat/100";
+const DEFAULT_AUTH_REDIRECT = "/app";
 
 export const metadata: Metadata = {
   title: `Sign in | ${productBrand.name}`,

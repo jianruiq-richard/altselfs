@@ -502,7 +502,7 @@ export function ExecutiveDailyBriefingBrowser({
       onPromptRequest(prompt);
       return;
     }
-    window.location.href = `/investor/chat/100?prompt=${encodeURIComponent(prompt)}`;
+    window.location.href = `/app?prompt=${encodeURIComponent(prompt)}`;
   };
 
   const applyRunResult = useCallback((run: ExecutiveRunPollResult) => {

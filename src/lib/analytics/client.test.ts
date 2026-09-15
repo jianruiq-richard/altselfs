@@ -14,6 +14,6 @@ test('page view keeps the complete campaign URL and a normalized route path', ()
     'https://minaco.ai/?utm_source=xiaohongshu&utm_medium=organic_social&utm_campaign=launch',
   );
   assert.equal(params.page_path, '/');
-  assert.equal(params.route_name, 'landing');
-  assert.equal(params.app_area, 'marketing');
+  assert.equal(params.route_name, 'workspace_preview');
+  assert.equal(params.app_area, 'product');
 });

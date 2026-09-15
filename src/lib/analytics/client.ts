@@ -80,7 +80,9 @@ export function setAnalyticsUser(
 }
 
 export function analyticsRoute(pathname: string) {
-  if (pathname === '/') return { routeName: 'landing', pagePath: '/' };
+  if (pathname === '/') return { routeName: 'workspace_preview', pagePath: '/' };
+  if (pathname === '/app') return { routeName: 'discussion', pagePath: '/app' };
+  if (pathname === '/introduction') return { routeName: 'landing', pagePath: '/introduction' };
   if (pathname === '/pricing') return { routeName: 'pricing', pagePath: '/pricing' };
   if (pathname === '/blog') return { routeName: 'blog_index', pagePath: '/blog' };
   if (/^\/blog\/[^/]+\/?$/.test(pathname)) return { routeName: 'blog_article', pagePath: pathname };
@@ -103,8 +105,8 @@ export function analyticsRoute(pathname: string) {
   if (/^\/chat\/[^/]+/.test(pathname)) {
     return { routeName: 'public_chat', pagePath: '/chat/:avatar_id' };
   }
-  if (pathname === '/connectors') return { routeName: 'connectors', pagePath: '/connectors' };
-  if (pathname === '/profile') return { routeName: 'profile', pagePath: '/profile' };
+  if (pathname === '/app/connectors') return { routeName: 'connectors', pagePath: '/app/connectors' };
+  if (pathname === '/app/settings') return { routeName: 'profile', pagePath: '/app/settings' };
   if (/^\/avatar\/[^/]+\/chat\/[^/]+/.test(pathname)) {
     return { routeName: 'avatar_chat', pagePath: '/avatar/:avatar_id/chat/:chat_id' };
   }

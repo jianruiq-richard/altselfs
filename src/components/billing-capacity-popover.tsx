@@ -245,7 +245,7 @@ export function BillingCapacityPopover({
           </div>
 
           <Link
-            href="/profile?view=plan"
+            href="/app/settings?view=plan"
             className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 border-t border-white/[0.09] text-[10px] font-semibold text-zinc-400 hover:bg-white/[0.04] hover:text-white"
           >
             View usage

@@ -16,6 +16,8 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { AuthButtons, useAuthModal } from '@/components/auth-modal-provider';
+import { WorkspacePublicFooter } from '@/components/workspace-public-footer';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { WorkspaceDiscordLink } from '@/components/workspace-discord-link';
 import { productBrand } from '@/lib/brand';
@@ -39,13 +41,13 @@ type AstromarWorkspaceShellProps = {
   homeHref?: string;
 };
 
-const DEFAULT_WORKSPACE_ENTRY_HREF = '/investor/chat/100';
+const DEFAULT_WORKSPACE_ENTRY_HREF = '/app';
 
 const navItems = [
-  { key: 'product-intelligence' as const, name: 'Product Intelligence', href: '/product-intelligence', icon: Database },
+  { key: 'product-intelligence' as const, name: 'Product Intelligence', href: '/app/product-intelligence', icon: Database },
   { key: 'discussion' as const, name: 'Discussion', href: DEFAULT_WORKSPACE_ENTRY_HREF, icon: MessagesSquare },
-  { key: 'connectors' as const, name: 'Connectors', href: '/connectors', icon: Plug },
-  { key: 'settings' as const, name: 'Settings', href: '/profile', icon: Settings },
+  { key: 'connectors' as const, name: 'Connectors', href: '/app/connectors', icon: Plug },
+  { key: 'settings' as const, name: 'Settings', href: '/app/settings', icon: Settings },
 ];
 
 function buildSignInRedirectUrl() {
@@ -59,11 +61,11 @@ function buildSignInRedirectUrl() {
 }
 
 function activeNavKey(pathname: string): WorkspaceNavKey | null {
-  if (pathname.startsWith('/product-intelligence')) return 'product-intelligence';
-  if (pathname.startsWith('/investor/chat')) return 'discussion';
-  if (pathname.startsWith('/connectors')) return 'connectors';
+  if (pathname.startsWith('/app/product-intelligence')) return 'product-intelligence';
+  if ((pathname === '/' || pathname === '/app' || pathname.startsWith('/investor/chat'))) return 'discussion';
+  if (pathname.startsWith('/app/connectors')) return 'connectors';
   if (pathname.startsWith('/pricing')) return null;
-  if (pathname.startsWith('/profile')) return 'settings';
+  if (pathname.startsWith('/app/settings')) return 'settings';
   return null;
 }
 
@@ -81,22 +83,24 @@ export function AstromarWorkspaceShell({
   const router = useRouter();
   const { isLoaded, isSignedIn, user } = useUser();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const openAuth = useAuthModal();
+  const publicWorkspace = pathname === '/';
   const activeKey = useMemo(() => activeNavKey(pathname), [pathname]);
 
   useEffect(() => {
-    if (!isLoaded || isSignedIn) return;
+    if (publicWorkspace || !isLoaded || isSignedIn) return;
     router.replace(buildSignInRedirectUrl());
-  }, [isLoaded, isSignedIn, router]);
+  }, [isLoaded, isSignedIn, publicWorkspace, router]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     const prefetchCommonRoutes = () => {
       prefetchWorkspaceBootstrap();
       [
-        '/product-intelligence',
-        '/investor/chat/100',
-        '/connectors',
-        '/profile',
+        '/app/product-intelligence',
+        '/app',
+        '/app/connectors',
+        '/app/settings',
       ].forEach((href) => {
         router.prefetch(href);
         prefetchWorkspaceRouteData(href);
@@ -110,7 +114,7 @@ export function AstromarWorkspaceShell({
     return () => globalThis.clearTimeout(timeout);
   }, [isLoaded, isSignedIn, router]);
 
-  if (!isLoaded || !isSignedIn) {
+  if (!publicWorkspace && (!isLoaded || !isSignedIn)) {
     return (
       <div className="grid min-h-dvh place-items-center bg-[#090a0a] px-6 text-center text-zinc-400">
         <div>
@@ -121,8 +125,8 @@ export function AstromarWorkspaceShell({
     );
   }
 
-  const displayName = user.fullName || user.firstName || 'User';
-  const email = user.primaryEmailAddress?.emailAddress || 'Account';
+  const displayName = user?.fullName || user?.firstName || 'User';
+  const email = user?.primaryEmailAddress?.emailAddress || 'Account';
   const initials = displayName
     .split(/\s+/)
     .filter(Boolean)
@@ -134,6 +138,7 @@ export function AstromarWorkspaceShell({
     typeof sidebarContent === 'function' ? sidebarContent(location) : sidebarContent
   );
   const handleNavigationIntent = (href: string) => {
+    if (!isSignedIn) return;
     router.prefetch(href);
     prefetchWorkspaceRouteData(href);
   };
@@ -141,7 +146,7 @@ export function AstromarWorkspaceShell({
   const sidebar = (location: SidebarLocation) => (
     <div className="flex h-full min-h-0 flex-col bg-[#0c0d0e] text-zinc-100">
       <div className="flex h-16 shrink-0 items-center justify-between px-4">
-        <Link href={homeHref} className="inline-flex items-center gap-2 font-semibold leading-none text-zinc-50">
+        <Link href={publicWorkspace && !isSignedIn ? '/' : homeHref} className="inline-flex items-center gap-2 font-semibold leading-none text-zinc-50">
           <MinacoBrandMark className="block h-9 w-9 shrink-0 overflow-hidden rounded-[9px]" imageClassName="h-full w-full object-contain" />
           <span className="text-[15px]">{productBrand.name}</span>
         </Link>
@@ -171,7 +176,7 @@ export function AstromarWorkspaceShell({
         </button>
       ) : (
         <Link
-          href="/investor/chat/100"
+          href="/app"
           onClick={() => setMobileSidebarOpen(false)}
           className="mx-3 mb-3 inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[7px] border border-white/80 bg-[#f2f2f0] px-4 text-[13px] font-bold text-[#0b0b0b] hover:bg-white"
         >
@@ -187,7 +192,7 @@ export function AstromarWorkspaceShell({
           return (
             <Link
               key={item.key}
-              href={item.href}
+              href={publicWorkspace && !isSignedIn && item.key === 'discussion' ? '/' : item.href}
               aria-current={active ? 'page' : undefined}
               onPointerEnter={() => handleNavigationIntent(item.href)}
               onFocus={() => handleNavigationIntent(item.href)}
@@ -208,8 +213,9 @@ export function AstromarWorkspaceShell({
       </div>
 
       <div className="shrink-0 border-t border-white/[0.09] bg-[#0c0d0e] p-3">
+        {!isSignedIn ? <button type="button" onClick={() => { setMobileSidebarOpen(false); openAuth(); }} className="flex min-h-11 w-full items-center justify-center rounded-lg border border-white/15 bg-white/5 text-sm font-semibold text-zinc-100 hover:bg-white/10">Sign in</button> : <>
         <Link
-          href="/profile"
+          href="/app/settings"
           className="grid min-h-[58px] grid-cols-[38px_minmax(0,1fr)_18px] items-center gap-2.5 rounded-[7px] border border-white/[0.09] bg-white/[0.025] p-2 text-left hover:border-white/15 hover:bg-white/[0.05]"
         >
           <span className="grid h-[38px] w-[38px] place-items-center rounded-[7px] bg-[#d9dce1] text-[11px] font-extrabold text-[#161616]">{initials}</span>
@@ -229,12 +235,24 @@ export function AstromarWorkspaceShell({
             Sign out
           </button>
         </SignOutButton>
+        </>}
       </div>
     </div>
   );
 
   return (
     <div
+      onClickCapture={(event) => {
+        if (isSignedIn || !(event.target instanceof Element)) return;
+        const anchor = event.target.closest('a[href]');
+        if (!(anchor instanceof HTMLAnchorElement)) return;
+        const destination = new URL(anchor.href, window.location.href);
+        if (destination.origin !== window.location.origin || !['/app', '/app/connectors', '/app/product-intelligence', '/app/settings'].includes(destination.pathname)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setMobileSidebarOpen(false);
+        openAuth('sign-in', destination.pathname + destination.search);
+      }}
       className={`agent-activity-text grid h-dvh min-h-0 min-w-0 grid-cols-1 overflow-hidden bg-[#090a0a] text-zinc-100 md:grid-cols-[244px_minmax(0,1fr)] ${
         rightRail ? 'xl:grid-cols-[244px_minmax(0,1fr)_304px]' : ''
       }`}
@@ -273,9 +291,10 @@ export function AstromarWorkspaceShell({
             <Menu className="h-4 w-4" />
           </button>
           <strong data-clarity-mask="true" className="min-w-0 flex-1 truncate text-sm text-zinc-100">{mobileTitle}</strong>
-          <WorkspaceDiscordLink />
+          {publicWorkspace && !isSignedIn ? <AuthButtons /> : <WorkspaceDiscordLink />}
         </header>
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
+        {publicWorkspace || pathname === '/app' ? <WorkspacePublicFooter /> : null}
       </section>
 
       {rightRail ? (

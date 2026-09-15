@@ -286,7 +286,7 @@ export function AstromarLandingPage() {
             </Link>
             <Link
               className={classes("button", "buttonPrimary")}
-              href="/sign-in?method=email&redirect_url=/investor/chat/100"
+              href="/sign-in?method=email&redirect_url=/app"
               data-analytics-cta="nav_get_started"
               data-analytics-location="landing_nav"
             >

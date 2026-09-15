@@ -154,7 +154,7 @@ export function AstromarDashboardClient({
   const openDiscussion = (nextPrompt?: string) => {
     const value = (nextPrompt ?? prompt).trim();
     const query = value ? `?prompt=${encodeURIComponent(value)}` : '';
-    const destination = `/investor/chat/100${query}`;
+    const destination = `/app${query}`;
     startWorkspaceNavigation(destination);
     router.push(destination);
   };
@@ -192,7 +192,7 @@ export function AstromarDashboardClient({
                 return (
                   <Link
                     key={work.id}
-                    href="/investor/chat/100"
+                    href="/app"
                     className="rounded-[7px] border border-white/[0.09] bg-white/[0.027] p-3.5 hover:border-white/15 hover:bg-white/[0.045]"
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -327,10 +327,10 @@ export function AstromarDashboardClient({
                 </div>
               </section>
               <section>
-                <div className="mb-2.5 flex items-center justify-between"><h2 className="text-[15px] font-semibold">Recent discussions</h2><Link href="/investor/chat/100" className="text-[10px] text-zinc-600 hover:text-zinc-300">Open</Link></div>
+                <div className="mb-2.5 flex items-center justify-between"><h2 className="text-[15px] font-semibold">Recent discussions</h2><Link href="/app" className="text-[10px] text-zinc-600 hover:text-zinc-300">Open</Link></div>
                 <div className="overflow-hidden rounded-[8px] border border-white/[0.09] bg-white/[0.02]">
                   {activeWork.length > 0 ? activeWork.slice(0, 4).map((work) => (
-                    <Link key={work.id} href="/investor/chat/100" className="grid min-h-14 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-white/[0.06] px-3.5 py-2.5 last:border-b-0 hover:bg-white/[0.02]">
+                    <Link key={work.id} href="/app" className="grid min-h-14 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-white/[0.06] px-3.5 py-2.5 last:border-b-0 hover:bg-white/[0.02]">
                       <MessageSquare className="h-4 w-4 text-zinc-600" />
                       <span className="truncate text-[11px] font-medium text-zinc-200">{work.title}</span>
                       <span className="text-[9px] text-zinc-600">{relativeTime(work.updatedAt)}</span>

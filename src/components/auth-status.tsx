@@ -13,7 +13,7 @@ type AuthStatusProps = {
 export default function AuthStatus({ imageUrl, displayName, roleLabel }: AuthStatusProps) {
   return (
     <div className="flex items-center gap-3">
-      <Link href="/profile" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+      <Link href="/app/settings" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
         <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-200">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

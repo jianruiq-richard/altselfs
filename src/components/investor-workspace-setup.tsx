@@ -13,7 +13,7 @@ import {
 import { trackEvent } from '@/lib/analytics/client';
 import { productBrand } from '@/lib/brand';
 
-const DISCUSSION_URL = '/investor/chat/100';
+const DISCUSSION_URL = '/app';
 const SIGN_IN_URL = `/sign-in?redirect_url=${encodeURIComponent('/dashboard/setup?role=investor')}`;
 
 function getErrorMessage(error: unknown) {

@@ -527,7 +527,7 @@ export function ProductIntelligencePage() {
   const endRow = Math.min(totalProducts, page * PAGE_SIZE + productRows.length);
   const totalPages = Math.max(1, Math.ceil(totalProducts / PAGE_SIZE));
   const categoryOptions = useMemo(() => filterOptions.topics.slice(0, 80), [filterOptions.topics]);
-  const askMinacoHref = '/investor/chat/100?newDiscussion=1';
+  const askMinacoHref = '/app?newDiscussion=1';
 
   const updateDraft = <Key extends keyof FilterState>(key: Key, value: FilterState[Key]) => {
     setDraftFilters((current) => ({ ...current, [key]: value }));

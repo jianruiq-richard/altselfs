@@ -6,6 +6,7 @@ import { GoogleAnalyticsScripts } from '@/components/google-analytics-scripts';
 import { MicrosoftClarityScripts } from '@/components/microsoft-clarity-scripts';
 import { productBrand } from '@/lib/brand';
 import "./globals.css";
+import { AuthModalProvider } from "@/components/auth-modal-provider";
 
 export const metadata: Metadata = {
   metadataBase: new URL(productBrand.canonicalUrl),
@@ -37,7 +38,7 @@ export default async function RootLayout({
         <body className="min-h-full bg-[#090a0a]">
           <GoogleAnalyticsScripts />
           <MicrosoftClarityScripts />
-          {children}
+          <AuthModalProvider>{children}</AuthModalProvider>
           <GoogleAnalytics />
           <Analytics />
         </body>

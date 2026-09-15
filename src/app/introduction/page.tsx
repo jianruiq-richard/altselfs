@@ -6,9 +6,9 @@ const homepageDescription =
   `${productBrand.name} is an AI cofounder workspace for competitor intelligence—estimate revenue and user counts, and uncover customer acquisition and marketing tactics.`;
 
 export const metadata: Metadata = {
-  title: `${productBrand.name} | Your AI cofounder`,
+  title: `Introduction | ${productBrand.name}`,
   description: homepageDescription,
-  alternates: { canonical: '/' },
+  alternates: { canonical: '/introduction' },
 };
 
 export const viewport: Viewport = {

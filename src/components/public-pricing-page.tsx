@@ -5,7 +5,7 @@ import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { productBrand } from '@/lib/brand';
 import styles from './astromar-landing-page.module.css';
 
-const signInHref = '/sign-in?method=email&redirect_url=/investor/chat/100';
+const signInHref = '/sign-in?method=email&redirect_url=/app';
 
 function classes(...names: string[]) {
   return names.map((name) => styles[name]).filter(Boolean).join(' ');
