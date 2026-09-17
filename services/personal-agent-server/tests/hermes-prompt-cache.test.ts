@@ -6,6 +6,7 @@ import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import {
   ALTSELFS_HERMES_DYNAMIC_USER_CONTEXT_ENV,
+  buildHermesAvailableCompetitortoolNames,
   buildHermesDynamicUserContext,
   buildHermesPromptCachingYamlLines,
   buildHermesProviderRoutingYamlLines,
@@ -67,6 +68,28 @@ test('Hermes dynamic context contains time, mode, tools, profile, and artifacts'
   assert.match(dynamicContext, /Prefers concise answers/);
   assert.match(dynamicContext, /<altselfs_artifact_context>/);
   assert.match(dynamicContext, /quarterly-report\.pdf/);
+});
+
+test('Hermes always sees the enabled Semrush payment destinations backend tool', () => {
+  const enabledTools = buildHermesAvailableCompetitortoolNames(
+    ['altselfs_similarweb_api1'],
+    true
+  );
+  const dynamicContext = buildHermesDynamicUserContext({
+    artifactContext: '',
+    renderedProfile: '',
+    enabledCompetitortools: enabledTools,
+  });
+
+  assert.deepEqual(enabledTools, [
+    'altselfs_similarweb_api1',
+    'altselfs_semrush_payment_destinations',
+  ]);
+  assert.match(dynamicContext, /altselfs_semrush_payment_destinations/);
+  assert.deepEqual(
+    buildHermesAvailableCompetitortoolNames(['altselfs_similarweb_api1'], false),
+    ['altselfs_similarweb_api1']
+  );
 });
 
 test('Hermes chat-completions prompt caching retains one hour', () => {

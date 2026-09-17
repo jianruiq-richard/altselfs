@@ -21,6 +21,7 @@ import {
 import type { MemoryReviewJobStore } from '../memory-review-queue.js';
 import { listPersonalConnections } from '../personal-data-store.js';
 import { createPersonalDataDynamictools } from '../tools/personal-data.js';
+import { SEMRUSH_PAYMENT_DESTINATIONS_TOOL_NAME } from '../tools/semrush-traffic.js';
 import { LocalProfileStore, type UserProfileStore } from '../profile-store.js';
 import {
   cancelActiveRun,
@@ -254,6 +255,10 @@ export class HermesSourceRuntime {
     const connectorScope = getConnectorScope(request.metadata);
     const enabledInfoSources = getEnabledInfoSourceNames(request.metadata, connectorScope.enabledConnectorKeys);
     const enabledCompetitortools = getEnabledCompetitortoolNames(request.metadata, connectorScope.enabledConnectorKeys);
+    const availableCompetitortools = buildHermesAvailableCompetitortoolNames(
+      enabledCompetitortools,
+      this.config.semrushTrafficToolEnabled
+    );
     const availablePersonalConnectorKeys = await getAvailablePersonalConnectorKeys(this.config, investorId, request.userId);
     const personalDatatoolNames = await getPersonalDatatoolNames(this.config, investorId, request.userId, connectorScope);
     const profileLoadStartedAtMs = Date.now();
@@ -269,7 +274,7 @@ export class HermesSourceRuntime {
       enabledConnectorKeys: connectorScope.enabledConnectorKeys,
       availablePersonalConnectorKeys,
       enabledInfoSources,
-      enabledCompetitortools,
+      enabledCompetitortools: availableCompetitortools,
       personalDatatoolNames,
       codexModelProvider: codexModelSelection.provider,
       sandboxExecEnabled: this.config.sandboxExecEnabled,
@@ -1390,6 +1395,16 @@ function getEnabledCompetitortoolNames(metadata: Record<string, unknown> | undef
     .map((provider) => COMPETITOR_INFO_SOURCE_TO_TOOL[provider])
     .filter((item): item is string => Boolean(item));
   return Array.from(new Set(names));
+}
+
+export function buildHermesAvailableCompetitortoolNames(
+  connectorToolNames: Iterable<string>,
+  semrushTrafficToolEnabled: boolean
+) {
+  return Array.from(new Set([
+    ...connectorToolNames,
+    ...(semrushTrafficToolEnabled ? [SEMRUSH_PAYMENT_DESTINATIONS_TOOL_NAME] : []),
+  ]));
 }
 
 function getEnabledInfoSourceNames(metadata: Record<string, unknown> | undefined, enabledConnectorKeys?: string[]) {
