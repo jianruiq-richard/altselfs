@@ -8,6 +8,8 @@ import {
   Menu,
   MessagesSquare,
   PanelLeftClose,
+  PanelRightClose,
+  PanelRightOpen,
   Plug,
   Settings,
   SquarePen,
@@ -35,6 +37,7 @@ type AstromarWorkspaceShellProps = {
   mobileTitle: string;
   sidebarContent?: React.ReactNode | ((location: SidebarLocation) => React.ReactNode);
   rightRail?: React.ReactNode;
+  rightRailCollapsible?: boolean;
   onNewDiscussion?: () => void;
   newDiscussionBusy?: boolean;
   newDiscussionDisabled?: boolean;
@@ -74,6 +77,7 @@ export function AstromarWorkspaceShell({
   mobileTitle,
   sidebarContent,
   rightRail,
+  rightRailCollapsible = false,
   onNewDiscussion,
   newDiscussionBusy = false,
   newDiscussionDisabled = false,
@@ -83,6 +87,7 @@ export function AstromarWorkspaceShell({
   const router = useRouter();
   const { isLoaded, isSignedIn, user } = useUser();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [rightRailCollapsed, setRightRailCollapsed] = useState(false);
   const openAuth = useAuthModal();
   const publicWorkspace = pathname === '/';
   const activeKey = useMemo(() => activeNavKey(pathname), [pathname]);
@@ -253,8 +258,12 @@ export function AstromarWorkspaceShell({
         setMobileSidebarOpen(false);
         openAuth('sign-in', destination.pathname + destination.search);
       }}
-      className={`agent-activity-text grid h-dvh min-h-0 min-w-0 grid-cols-1 overflow-hidden bg-[#090a0a] text-zinc-100 md:grid-cols-[244px_minmax(0,1fr)] ${
-        rightRail ? 'xl:grid-cols-[244px_minmax(0,1fr)_304px]' : ''
+      className={`agent-activity-text grid h-dvh min-h-0 min-w-0 grid-cols-1 overflow-hidden bg-[#090a0a] text-zinc-100 transition-[grid-template-columns] duration-200 ease-out md:grid-cols-[244px_minmax(0,1fr)] ${
+        rightRail
+          ? rightRailCollapsible && rightRailCollapsed
+            ? 'xl:grid-cols-[244px_minmax(0,1fr)_40px]'
+            : 'xl:grid-cols-[244px_minmax(0,1fr)_304px]'
+          : ''
       }`}
     >
       <aside className="hidden min-h-0 border-r border-white/[0.09] md:block">{sidebar('desktop')}</aside>
@@ -298,8 +307,31 @@ export function AstromarWorkspaceShell({
       </section>
 
       {rightRail ? (
-        <aside className="hidden min-h-0 min-w-0 overflow-hidden border-l border-white/[0.09] bg-[#0c0d0e] xl:block">
-          {rightRail}
+        <aside className="relative hidden min-h-0 min-w-0 overflow-visible border-l border-white/[0.09] bg-[#0c0d0e] xl:block">
+          {rightRailCollapsible ? (
+            <button
+              type="button"
+              onClick={() => setRightRailCollapsed((collapsed) => !collapsed)}
+              aria-controls="workspace-right-rail"
+              aria-expanded={!rightRailCollapsed}
+              aria-label={rightRailCollapsed ? 'Expand right sidebar' : 'Collapse right sidebar'}
+              title={rightRailCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="absolute -left-3.5 top-[18px] z-30 grid h-7 w-7 place-items-center rounded-[7px] border border-white/[0.14] bg-[#151719] text-zinc-500 shadow-[0_8px_24px_rgba(0,0,0,.4)] transition hover:border-white/25 hover:bg-[#1d1f22] hover:text-zinc-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#8eb3ff]/70"
+            >
+              {rightRailCollapsed
+                ? <PanelRightOpen className="h-3.5 w-3.5" />
+                : <PanelRightClose className="h-3.5 w-3.5" />}
+            </button>
+          ) : null}
+          <div
+            id="workspace-right-rail"
+            aria-hidden={rightRailCollapsible && rightRailCollapsed}
+            className={`h-full min-h-0 overflow-hidden transition-opacity duration-150 ${
+              rightRailCollapsible && rightRailCollapsed ? 'pointer-events-none w-0 opacity-0' : 'w-full opacity-100'
+            }`}
+          >
+            {rightRail}
+          </div>
         </aside>
       ) : null}
     </div>

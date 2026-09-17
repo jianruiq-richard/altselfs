@@ -188,6 +188,7 @@ export function WorkspaceLayoutClient({ children }: { children: React.ReactNode 
           />
         )}
         rightRail={showRightRail ? <div ref={setRightRailTarget} id={RIGHT_RAIL_SLOT_ID} className="h-full min-h-0" /> : undefined}
+        rightRailCollapsible={showRightRail}
         onNewDiscussion={chrome?.onNewDiscussion}
         newDiscussionBusy={chrome?.newDiscussionBusy}
         newDiscussionDisabled={chrome?.newDiscussionDisabled}
