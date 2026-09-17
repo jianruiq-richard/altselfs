@@ -2,6 +2,7 @@ import { aggregatePaymentDestinations } from './aggregate.js';
 import { SemrushBrowserProvider, type BrowserProviderConfig } from './browser-provider.js';
 import { normalizeTargetDomain } from './domains.js';
 import { lastCompletedMonthStarts } from './months.js';
+import { readQueryWorkload } from './quota.js';
 import { SemrushApiProvider } from './semrush-api-provider.js';
 import type { DestinationProvider, QueryInput } from './types.js';
 
@@ -34,6 +35,7 @@ export async function queryPaymentDestinations(
 
 export function normalizeQueryInput(value: unknown): QueryInput {
   const record = isRecord(value) ? value : {};
+  const workload = readQueryWorkload(record.workload);
   const month = normalizeRequestedMonth(record.month);
   const rangeMode = record.rangeMode === true;
   if (month && record.months !== undefined) {
@@ -61,6 +63,7 @@ export function normalizeQueryInput(value: unknown): QueryInput {
   if (paymentDomains && paymentDomains.length > 50) throw new Error('paymentDomains supports at most 50 entries');
   return {
     domain: normalizeTargetDomain(record.domain),
+    ...(workload === 'batch' ? { workload } : {}),
     months,
     ...(month ? { month } : {}),
     rangeMode,

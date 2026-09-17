@@ -1,5 +1,14 @@
 export type DailyQuotaStatus = 'unknown' | 'available' | 'exhausted' | 'unavailable' | 'disabled';
 
+export const BATCH_QUOTA_STOP_AT_USED_PERCENT = 80;
+export type QueryWorkload = 'interactive' | 'batch';
+
+export function readQueryWorkload(value: unknown): QueryWorkload {
+  if (value === undefined || value === 'interactive') return 'interactive';
+  if (value === 'batch') return 'batch';
+  throw new Error('workload must be interactive or batch');
+}
+
 export type DailyQuotaSnapshot = {
   status: DailyQuotaStatus;
   usedPercent: number | null;
@@ -94,6 +103,24 @@ export class DailyQuotaUnavailableError extends Error {
   constructor(readonly quota: DailyQuotaSnapshot) {
     super(`3ue Semrush daily quota could not be verified: ${quota.error || quota.status}`);
     this.name = 'DailyQuotaUnavailableError';
+  }
+}
+
+export class BatchQuotaReservedError extends Error {
+  readonly code = 'BATCH_QUOTA_RESERVED';
+
+  constructor(readonly quota?: DailyQuotaSnapshot) {
+    super(`Batch queries require a worker with verified quota below ${BATCH_QUOTA_STOP_AT_USED_PERCENT}% used; remaining quota is reserved for interactive users`);
+    this.name = 'BatchQuotaReservedError';
+  }
+}
+
+export function assertQueryQuota(quota: DailyQuotaSnapshot, workload: QueryWorkload = 'interactive') {
+  if (quota.status === 'exhausted') throw new DailyQuotaExhaustedError(quota);
+  if (workload === 'interactive' && quota.status === 'disabled') return;
+  if (quota.status !== 'available' || quota.usedPercent === null) throw new DailyQuotaUnavailableError(quota);
+  if (workload === 'batch' && quota.usedPercent >= BATCH_QUOTA_STOP_AT_USED_PERCENT) {
+    throw new BatchQuotaReservedError(quota);
   }
 }
 

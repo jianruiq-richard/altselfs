@@ -13,13 +13,94 @@ import {
   parseRenderedDestinationRow,
   parseTargetTrafficFromTooltip,
   singleMonthFromReportUrl,
+  SemrushBrowserProvider,
+  type BrowserProviderConfig,
 } from '../src/browser-provider.js';
 import { normalizeTargetDomain } from '../src/domains.js';
 import { NoAvailableWorkersError, SemrushDispatcher } from '../src/dispatcher.js';
 import { lastCompletedMonthStarts } from '../src/months.js';
 import { parseSemrushDestinationsCsv } from '../src/semrush-api-provider.js';
 import { normalizeQueryInput, queryPaymentDestinations } from '../src/service.js';
-import { parseThreeUeSemrushDailyQuota } from '../src/quota.js';
+import { BatchQuotaReservedError, DailyQuotaExhaustedError, DailyQuotaUnavailableError, assertQueryQuota, parseThreeUeSemrushDailyQuota } from '../src/quota.js';
+
+function workerWithUsedQuota(workerId: string, usedPercent: number) {
+  return {
+    workerId, busy: false, acceptingQueries: usedPercent < 100,
+    quota: { status: usedPercent < 100 ? 'available' : 'exhausted', usedPercent, remainingPercent: 100 - usedPercent },
+  };
+}
+
+test('reserves quota above 80 percent for interactive users and excludes it from batch routing', async () => {
+  const dispatcher = new SemrushDispatcher({ heartbeatStaleMs: 90_000, jobTimeoutMs: 5_000, maxQueued: 3 });
+  const reserved = workerWithUsedQuota('reserved', 85);
+  const eligible = workerWithUsedQuota('batch-eligible', 79);
+  dispatcher.heartbeat(reserved);
+  dispatcher.heartbeat(eligible);
+
+  const batch = dispatcher.submit({ domain: 'tapnow.ai', month: '2026-07', workload: 'batch' });
+  assert.equal(dispatcher.claim(reserved), null);
+  const claimed = dispatcher.claim(eligible)!;
+  assert.ok(claimed);
+  dispatcher.complete({ worker: workerWithUsedQuota('batch-eligible', 80), jobId: claimed.jobId,
+    leaseToken: claimed.leaseToken, result: { status: 200, body: { ok: true } } });
+  assert.equal((await batch).status, 200);
+  assert.throws(() => dispatcher.submit({ domain: 'tapnow.ai', workload: 'batch' }), BatchQuotaReservedError);
+
+  const interactive = dispatcher.submit({ domain: 'tapnow.ai', month: '2026-07' });
+  const userJob = dispatcher.claim(reserved)!;
+  assert.ok(userJob);
+  dispatcher.complete({ worker: reserved, jobId: userJob.jobId, leaseToken: userJob.leaseToken,
+    result: { status: 200, body: { ok: true } } });
+  assert.equal((await interactive).status, 200);
+  assert.equal(dispatcher.snapshot().capacity.acceptingBatchWorkers, 0);
+  assert.equal(dispatcher.snapshot().capacity.acceptingWorkers, 2);
+});
+
+test('rechecks queued batch eligibility without blocking interactive work when quota reaches 80 percent', async () => {
+  const dispatcher = new SemrushDispatcher({ heartbeatStaleMs: 90_000, jobTimeoutMs: 5_000, maxQueued: 3 });
+  dispatcher.heartbeat(workerWithUsedQuota('account', 79));
+  const batch = dispatcher.submit({ domain: 'tapnow.ai', workload: 'batch' });
+  assert.equal(dispatcher.claim(workerWithUsedQuota('account', 80)), null);
+  const rejected = await batch;
+  assert.equal(rejected.status, 429);
+  assert.equal((rejected.body as { code: string }).code, 'BATCH_QUOTA_RESERVED');
+  assert.equal(dispatcher.snapshot().capacity.acceptingWorkers, 1);
+});
+
+test('batch quota rejection can reassign to another eligible account without disabling user queries', async () => {
+  const dispatcher = new SemrushDispatcher({ heartbeatStaleMs: 90_000, jobTimeoutMs: 5_000, maxQueued: 3 });
+  dispatcher.heartbeat(workerWithUsedQuota('account-1', 79));
+  dispatcher.heartbeat(workerWithUsedQuota('account-2', 60));
+  const batch = dispatcher.submit({ domain: 'tapnow.ai', workload: 'batch' });
+  const first = dispatcher.claim(workerWithUsedQuota('account-1', 79))!;
+  assert.deepEqual(dispatcher.complete({ worker: workerWithUsedQuota('account-1', 80), jobId: first.jobId,
+    leaseToken: first.leaseToken, result: { status: 429, body: { code: 'BATCH_QUOTA_RESERVED' } } }),
+  { accepted: true, requeued: true });
+  assert.equal(dispatcher.claim(workerWithUsedQuota('account-1', 80)), null);
+  const second = dispatcher.claim(workerWithUsedQuota('account-2', 60))!;
+  dispatcher.complete({ worker: workerWithUsedQuota('account-2', 61), jobId: second.jobId,
+    leaseToken: second.leaseToken, result: { status: 200, body: { ok: true } } });
+  assert.equal((await batch).status, 200);
+});
+
+test('worker checks fresh batch quota before opening a report and keeps interactive quota available', async () => {
+  const quota = parseThreeUeSemrushDailyQuota([{
+    text: 'API 今日配额 80% 节点1 地区数据库 打开',
+    buttonTexts: ['节点1 地区数据库', '打开'], progressText: '80%',
+  }], 100)!;
+  const provider = new SemrushBrowserProvider({ quotaGuard: { enabled: true, stopAtUsedPercent: 100 } } as BrowserProviderConfig);
+  let opened = false;
+  Object.assign(provider, {
+    refreshDailyQuotaSerial: async () => quota,
+    querySerial: async () => { opened = true; throw new Error('must not open report'); },
+  });
+  await assert.rejects(provider.query(normalizeQueryInput({ domain: 'tapnow.ai', workload: 'batch' }), []), BatchQuotaReservedError);
+  assert.equal(opened, false);
+  assert.doesNotThrow(() => assertQueryQuota(quota));
+  assert.throws(() => assertQueryQuota({ ...quota, status: 'unavailable', usedPercent: null }, 'batch'), DailyQuotaUnavailableError);
+  assert.throws(() => assertQueryQuota({ ...quota, status: 'exhausted', usedPercent: 100 }), DailyQuotaExhaustedError);
+  assert.throws(() => normalizeQueryInput({ domain: 'tapnow.ai', workload: 'invalid' }), /workload must be/);
+});
 
 test('dispatches only to online workers that still accept Semrush queries', async () => {
   let now = Date.parse('2026-09-10T00:00:00.000Z');

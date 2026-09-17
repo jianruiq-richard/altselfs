@@ -6,6 +6,7 @@ import { startDispatcherServer } from './dispatcher.js';
 import { bearerToken, json, readJsonBody } from './http-utils.js';
 import { startPoolWorker } from './pool-worker.js';
 import {
+  BatchQuotaReservedError,
   DailyQuotaExhaustedError,
   DailyQuotaUnavailableError,
 } from './quota.js';
@@ -91,6 +92,9 @@ function startStandaloneServer(input: {
       }
       return json(res, 404, { error: 'Not found' });
     } catch (error) {
+      if (error instanceof BatchQuotaReservedError) {
+        return json(res, 429, { error: error.message, code: error.code, quota: error.quota });
+      }
       if (error instanceof DailyQuotaExhaustedError) {
         return json(res, 429, { error: error.message, code: error.code, quota: error.quota });
       }

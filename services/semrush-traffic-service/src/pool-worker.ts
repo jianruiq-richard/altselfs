@@ -4,7 +4,7 @@ import { BoundedSerialTaskQueue, QueueFullError } from './bounded-task-queue.js'
 import { SemrushBrowserProvider } from './browser-provider.js';
 import type { WorkerHeartbeat, WorkerQuota, WorkerResult } from './dispatcher.js';
 import { bearerToken, json, readJsonBody } from './http-utils.js';
-import { DailyQuotaExhaustedError, DailyQuotaUnavailableError } from './quota.js';
+import { BatchQuotaReservedError, DailyQuotaExhaustedError, DailyQuotaUnavailableError } from './quota.js';
 import { queryPaymentDestinations, type ServiceConfig } from './service.js';
 
 export function startPoolWorker(input: {
@@ -153,6 +153,9 @@ async function runQuery(provider: SemrushBrowserProvider, config: ServiceConfig,
 }
 
 function workerErrorResult(error: unknown, queue?: BoundedSerialTaskQueue): WorkerResult {
+  if (error instanceof BatchQuotaReservedError) {
+    return { status: 429, body: { error: error.message, code: error.code, quota: error.quota } };
+  }
   if (error instanceof DailyQuotaExhaustedError) {
     return { status: 429, body: { error: error.message, code: error.code, quota: error.quota } };
   }

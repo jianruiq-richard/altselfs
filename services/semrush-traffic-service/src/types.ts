@@ -17,6 +17,7 @@ export type DestinationProviderResult = {
 
 export type QueryInput = {
   domain: string;
+  workload?: 'interactive' | 'batch';
   months: number;
   month?: string;
   rangeMode?: boolean;

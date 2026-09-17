@@ -63,6 +63,24 @@ quota cannot be verified, the worker fails closed with HTTP 503. `GET /healthz`
 exposes the most recent quota snapshot and `acceptingQueries`; authenticated
 `GET /v1/quota` refreshes the dashboard snapshot without running a report.
 
+Keep the global quota stop at `100` for Discussion requests. Batch collectors
+must send `"workload": "batch"` in the JSON request to the same
+`/v1/payment-destinations` endpoint. This internal flag is not exposed in the
+agent tool schema or frontend. Batch work can only use workers with a verified
+used percentage below `80`; the remainder is reserved for interactive users.
+The dispatcher checks eligibility on submission, claim and reassignment, and
+the browser worker checks fresh quota before opening a report and before batch
+month/retry operations. A batch rejection uses HTTP 429 `BATCH_QUOTA_RESERVED`
+and does not disable that worker for interactive queries. The pool snapshot
+includes `acceptingBatchQueries` per worker and `capacity.acceptingBatchWorkers`.
+
+The Product Hunt collector in `scripts/producthunt-enrichment/collect-tool.mjs`
+marks direct and ECS SSH requests as batch. It pauses with resumable progress
+when the batch reserve is reached, without recording the domain as a failed
+query. Run it through ECS SSH or the dispatcher URL, not the interactive agent
+tool bridge. When the quotas reset, restart the collector with the same output
+directory to continue from its saved records.
+
 ## Worker pool
 
 Production uses a fixed dispatcher endpoint and any number of browser workers:
@@ -141,7 +159,7 @@ subscribed account.
 - `SEMRUSH_BROWSER_HEADLESS` (keep `false` for the managed ECS browser)
 - `SEMRUSH_BROWSER_CLEAR_STALE_LOCKS` (default `true`; run only one worker per profile)
 - `SEMRUSH_QUOTA_GUARD_ENABLED` (default `true`; verify 3ue quota before every query)
-- `SEMRUSH_QUOTA_STOP_AT_USED_PERCENT` (default `100`; 3ue reports used percentage)
+- `SEMRUSH_QUOTA_STOP_AT_USED_PERCENT` (default `100`; global interactive limit, not the batch reserve threshold)
 - `SEMRUSH_ROLE` (`standalone`, `dispatcher`, or `pool-worker`)
 - `SEMRUSH_WORKER_ID` (required and unique for every pool worker)
 - `SEMRUSH_DISPATCHER_URL` (required by pool workers)

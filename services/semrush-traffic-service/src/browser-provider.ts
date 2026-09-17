@@ -9,6 +9,8 @@ import {
 } from 'playwright';
 import { buildPaymentPlatformRegistry, matchPaymentPlatform } from './payment-platforms.js';
 import {
+  assertQueryQuota,
+  BatchQuotaReservedError,
   DailyQuotaExhaustedError,
   DailyQuotaUnavailableError,
   initialDailyQuotaSnapshot,
@@ -71,10 +73,9 @@ export class SemrushBrowserProvider implements DestinationProvider {
 
   async query(input: QueryInput, displayDates: string[]): Promise<DestinationProviderResult> {
     const execute = async () => {
-      if (this.config.quotaGuard.enabled) {
+      if (this.config.quotaGuard.enabled || input.workload === 'batch') {
         const quota = await this.refreshDailyQuotaSerial();
-        if (quota.status === 'exhausted') throw new DailyQuotaExhaustedError(quota);
-        if (quota.status !== 'available') throw new DailyQuotaUnavailableError(quota);
+        assertQueryQuota(quota, input.workload);
       }
       await this.waitForRequestGap(input.domain);
       try {
@@ -258,6 +259,8 @@ export class SemrushBrowserProvider implements DestinationProvider {
         },
       };
     } catch (error) {
+      if (error instanceof BatchQuotaReservedError || error instanceof DailyQuotaUnavailableError
+        || error instanceof DailyQuotaExhaustedError) throw error;
       const artifactPath = path.join(this.config.artifactDir, `failure-${Date.now()}.png`);
       await page.screenshot({ path: artifactPath, fullPage: true }).catch(() => undefined);
       throw new Error(`${error instanceof Error ? error.message : String(error)}; screenshot=${artifactPath}`);
@@ -307,6 +310,10 @@ export class SemrushBrowserProvider implements DestinationProvider {
         let lastError: unknown;
         let lastArtifactPath = '';
         for (let attempt = 1; attempt <= 2; attempt += 1) {
+          // Batch work must not continue through more months/retries into the user reserve.
+          if (input.workload === 'batch') {
+            assertQueryQuota(await this.refreshDailyQuotaSerial(), 'batch');
+          }
           try {
             logStage('start', `attempt=${attempt}`);
             if (attempt > 1) {

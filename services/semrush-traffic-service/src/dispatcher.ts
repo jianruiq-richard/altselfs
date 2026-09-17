@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { bearerToken, json, readJsonBody } from './http-utils.js';
+import { BATCH_QUOTA_STOP_AT_USED_PERCENT, BatchQuotaReservedError, readQueryWorkload, type QueryWorkload } from './quota.js';
 
 export type WorkerQuota = {
   status?: string;
@@ -39,6 +40,7 @@ type WorkerRecord = WorkerHeartbeat & {
 type PendingJob = {
   id: string;
   request: unknown;
+  workload: QueryWorkload;
   createdAt: string;
   state: 'queued' | 'running';
   workerId?: string;
@@ -98,6 +100,7 @@ export class SemrushDispatcher {
 
   snapshot() {
     this.requeueOfflineWorkerJobs();
+    this.rejectBlockedBatchJobs();
     const workers = [...this.workers.values()]
       .map((worker) => this.publicWorker(worker))
       .sort((a, b) => a.workerId.localeCompare(b.workerId));
@@ -111,6 +114,7 @@ export class SemrushDispatcher {
         registeredWorkers: workers.length,
         onlineWorkers: online.length,
         acceptingWorkers: accepting.length,
+        acceptingBatchWorkers: online.filter((worker) => worker.acceptingBatchQueries).length,
         busyWorkers: online.filter((worker) => worker.busy).length,
         queuedJobs: this.queue.filter((id) => this.jobs.get(id)?.state === 'queued').length,
         runningJobs: [...this.jobs.values()].filter((job) => job.state === 'running').length,
@@ -121,7 +125,11 @@ export class SemrushDispatcher {
   }
 
   submit(request: unknown) {
-    if (!this.hasAcceptingWorker()) throw new NoAvailableWorkersError('No online Semrush worker currently accepts queries');
+    const workload = readQueryWorkload(asRecord(request).workload);
+    if (!this.hasAcceptingWorker(workload)) {
+      if (workload === 'batch') throw new BatchQuotaReservedError();
+      throw new NoAvailableWorkersError('No online Semrush worker currently accepts queries');
+    }
     const queuedCount = this.queue.filter((id) => this.jobs.get(id)?.state === 'queued').length;
     if (queuedCount >= this.options.maxQueued) throw new DispatcherQueueFullError('Semrush dispatcher queue is full');
 
@@ -140,6 +148,7 @@ export class SemrushDispatcher {
       this.jobs.set(id, {
         id,
         request,
+        workload,
         createdAt: this.nowIso(),
         state: 'queued',
         attemptedWorkerIds: new Set(),
@@ -154,6 +163,7 @@ export class SemrushDispatcher {
     const worker = this.heartbeat({ ...heartbeat, busy: false });
     if (!worker.online || !worker.acceptingQueries) return null;
     this.requeueOfflineWorkerJobs();
+    this.rejectBlockedBatchJobs();
 
     for (let index = 0; index < this.queue.length; index += 1) {
       const id = this.queue[index];
@@ -164,6 +174,7 @@ export class SemrushDispatcher {
         continue;
       }
       if (job.attemptedWorkerIds.has(worker.workerId)) continue;
+      if (!this.acceptsWorkload(worker, job.workload)) continue;
       this.queue.splice(index, 1);
       const leaseToken = crypto.randomUUID();
       job.state = 'running';
@@ -195,8 +206,7 @@ export class SemrushDispatcher {
     const hasAlternative = [...this.workers.values()].some((candidate) => (
       candidate.workerId !== worker.workerId
       && !job.attemptedWorkerIds.has(candidate.workerId)
-      && candidate.acceptingQueries
-      && this.isOnline(candidate)
+      && this.acceptsWorkload(candidate, job.workload)
     ));
     if (retryable && hasAlternative) {
       if (workerRecord) workerRecord.failedJobs += 1;
@@ -217,8 +227,27 @@ export class SemrushDispatcher {
     return { accepted: true, requeued: false };
   }
 
-  private hasAcceptingWorker() {
-    return [...this.workers.values()].some((worker) => worker.acceptingQueries && this.isOnline(worker));
+  private hasAcceptingWorker(workload: QueryWorkload = 'interactive') {
+    return [...this.workers.values()].some((worker) => this.acceptsWorkload(worker, workload));
+  }
+
+  private acceptsWorkload(worker: WorkerRecord, workload: QueryWorkload) {
+    if (!worker.acceptingQueries || !this.isOnline(worker)) return false;
+    if (workload === 'interactive') return true;
+    const used = worker.quota?.usedPercent;
+    return worker.quota?.status === 'available' && typeof used === 'number'
+      && Number.isFinite(used) && used >= 0 && used < BATCH_QUOTA_STOP_AT_USED_PERCENT;
+  }
+
+  private rejectBlockedBatchJobs() {
+    if (this.hasAcceptingWorker('batch')) return;
+    for (const job of this.jobs.values()) {
+      if (job.state !== 'queued' || job.workload !== 'batch') continue;
+      clearTimeout(job.timer);
+      this.jobs.delete(job.id);
+      const error = new BatchQuotaReservedError();
+      job.resolve({ status: 429, body: { error: error.message, code: error.code } });
+    }
   }
 
   private requeueOfflineWorkerJobs() {
@@ -238,6 +267,7 @@ export class SemrushDispatcher {
       workerId: worker.workerId,
       online: this.isOnline(worker),
       acceptingQueries: worker.acceptingQueries,
+      acceptingBatchQueries: this.acceptsWorkload(worker, 'batch'),
       busy: worker.busy,
       quota: worker.quota,
       version: worker.version,
@@ -307,6 +337,9 @@ export function startDispatcherServer(input: {
       }
       return json(res, 404, { error: 'Not found' });
     } catch (error) {
+      if (error instanceof BatchQuotaReservedError) {
+        return json(res, 429, { error: error.message, code: error.code, pool: dispatcher.snapshot() });
+      }
       if (error instanceof NoAvailableWorkersError) {
         return json(res, 503, { error: error.message, code: error.code, pool: dispatcher.snapshot() });
       }
@@ -339,7 +372,7 @@ function parseHeartbeat(value: unknown): WorkerHeartbeat {
 function isSafeWorkerRejection(result: WorkerResult) {
   if (result.status !== 429 && result.status !== 503) return false;
   const body = asRecordOrUndefined(result.body);
-  return ['DAILY_QUOTA_EXHAUSTED', 'DAILY_QUOTA_UNAVAILABLE', 'SEMRUSH_QUEUE_FULL'].includes(String(body?.code || ''));
+  return ['DAILY_QUOTA_EXHAUSTED', 'DAILY_QUOTA_UNAVAILABLE', 'BATCH_QUOTA_RESERVED', 'SEMRUSH_QUEUE_FULL'].includes(String(body?.code || ''));
 }
 
 function normalizeWorkerId(value: string) {
