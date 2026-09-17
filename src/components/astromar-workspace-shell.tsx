@@ -316,7 +316,7 @@ export function AstromarWorkspaceShell({
               aria-expanded={!rightRailCollapsed}
               aria-label={rightRailCollapsed ? 'Expand right sidebar' : 'Collapse right sidebar'}
               title={rightRailCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className="absolute -left-3.5 top-[18px] z-30 grid h-7 w-7 place-items-center rounded-[7px] border border-white/[0.14] bg-[#151719] text-zinc-500 shadow-[0_8px_24px_rgba(0,0,0,.4)] transition hover:border-white/25 hover:bg-[#1d1f22] hover:text-zinc-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#8eb3ff]/70"
+              className="absolute -left-3.5 top-1/2 z-30 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-[7px] border border-white/[0.14] bg-[#151719] text-zinc-500 shadow-[0_8px_24px_rgba(0,0,0,.4)] transition hover:border-white/25 hover:bg-[#1d1f22] hover:text-zinc-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#8eb3ff]/70"
             >
               {rightRailCollapsed
                 ? <PanelRightOpen className="h-3.5 w-3.5" />
