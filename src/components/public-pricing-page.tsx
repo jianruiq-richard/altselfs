@@ -24,7 +24,7 @@ export function PublicPricingPage() {
 
           <div className={styles.navLinks} aria-label="Primary navigation">
             <Link href="/pricing">Pricing</Link>
-            <Link href="/#cases">Use cases</Link>
+            <Link href="/introduction#demo">Use cases</Link>
             <Link href="/#conversation">How it thinks</Link>
           </div>
 
