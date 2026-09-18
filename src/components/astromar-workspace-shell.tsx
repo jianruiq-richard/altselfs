@@ -28,6 +28,7 @@ import {
   prefetchWorkspaceRouteData,
   resetWorkspaceClientCache,
 } from '@/lib/workspace-client-cache';
+import { isPublicWorkspacePathname, PUBLIC_BUSINESS_DATABASE_PATH } from '@/lib/workspace-route-access';
 
 type WorkspaceNavKey = 'product-intelligence' | 'discussion' | 'connectors' | 'settings';
 type SidebarLocation = 'desktop' | 'mobile';
@@ -48,7 +49,7 @@ const DEFAULT_WORKSPACE_ENTRY_HREF = '/app';
 
 const navItems = [
   { key: 'discussion' as const, name: 'Discussion', href: DEFAULT_WORKSPACE_ENTRY_HREF, icon: MessagesSquare },
-  { key: 'product-intelligence' as const, name: 'Business Database', href: '/app/product-intelligence', icon: Database },
+  { key: 'product-intelligence' as const, name: 'Business Database', href: PUBLIC_BUSINESS_DATABASE_PATH, icon: Database },
   { key: 'connectors' as const, name: 'Connectors', href: '/app/connectors', icon: Plug },
   { key: 'settings' as const, name: 'Settings', href: '/app/settings', icon: Settings },
 ];
@@ -64,7 +65,7 @@ function buildSignInRedirectUrl() {
 }
 
 function activeNavKey(pathname: string): WorkspaceNavKey | null {
-  if (pathname.startsWith('/app/product-intelligence')) return 'product-intelligence';
+  if (pathname === PUBLIC_BUSINESS_DATABASE_PATH || pathname.startsWith(`${PUBLIC_BUSINESS_DATABASE_PATH}/`)) return 'product-intelligence';
   if ((pathname === '/' || pathname === '/app' || pathname.startsWith('/investor/chat'))) return 'discussion';
   if (pathname.startsWith('/app/connectors')) return 'connectors';
   if (pathname.startsWith('/pricing')) return null;
@@ -89,7 +90,8 @@ export function AstromarWorkspaceShell({
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [rightRailCollapsed, setRightRailCollapsed] = useState(false);
   const openAuth = useAuthModal();
-  const publicWorkspace = pathname === '/';
+  const publicHomepage = pathname === '/';
+  const publicWorkspace = isPublicWorkspacePathname(pathname);
   const activeKey = useMemo(() => activeNavKey(pathname), [pathname]);
 
   useEffect(() => {
@@ -102,7 +104,7 @@ export function AstromarWorkspaceShell({
     const prefetchCommonRoutes = () => {
       prefetchWorkspaceBootstrap();
       [
-        '/app/product-intelligence',
+        PUBLIC_BUSINESS_DATABASE_PATH,
         '/app',
         '/app/connectors',
         '/app/settings',
@@ -143,7 +145,7 @@ export function AstromarWorkspaceShell({
     typeof sidebarContent === 'function' ? sidebarContent(location) : sidebarContent
   );
   const handleNavigationIntent = (href: string) => {
-    if (!isSignedIn) return;
+    if (!isSignedIn && href !== PUBLIC_BUSINESS_DATABASE_PATH) return;
     router.prefetch(href);
     prefetchWorkspaceRouteData(href);
   };
@@ -252,7 +254,7 @@ export function AstromarWorkspaceShell({
         const anchor = event.target.closest('a[href]');
         if (!(anchor instanceof HTMLAnchorElement)) return;
         const destination = new URL(anchor.href, window.location.href);
-        if (destination.origin !== window.location.origin || !['/app', '/app/connectors', '/app/product-intelligence', '/app/settings'].includes(destination.pathname)) return;
+        if (destination.origin !== window.location.origin || !['/app', '/app/connectors', '/app/settings'].includes(destination.pathname)) return;
         event.preventDefault();
         event.stopPropagation();
         setMobileSidebarOpen(false);
@@ -303,7 +305,7 @@ export function AstromarWorkspaceShell({
           {publicWorkspace && !isSignedIn ? <AuthButtons /> : <WorkspaceDiscordLink />}
         </header>
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
-        {publicWorkspace || pathname === '/app' ? <WorkspacePublicFooter /> : null}
+        {publicHomepage || pathname === '/app' ? <WorkspacePublicFooter /> : null}
       </section>
 
       {rightRail ? (

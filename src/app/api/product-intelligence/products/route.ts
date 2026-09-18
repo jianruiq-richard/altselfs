@@ -1,4 +1,3 @@
-import { getInvestorOrNull } from '@/lib/investor-auth';
 import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
 
 export const dynamic = 'force-dynamic';
@@ -7,12 +6,6 @@ const FORWARDED_QUERY_KEYS = ['q', 'category', 'productType', 'dataset', 'sort',
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
-  const developmentPreview = process.env.NODE_ENV !== 'production' && requestUrl.searchParams.get('preview') === '1';
-  if (!developmentPreview) {
-    const investor = await getInvestorOrNull();
-    if (!investor) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const upstreamQuery = new URLSearchParams();
   for (const key of FORWARDED_QUERY_KEYS) {
     const value = requestUrl.searchParams.get(key)?.trim();
@@ -25,7 +18,7 @@ export async function GET(request: Request) {
     const result = await personalAgentInternalFetch(path);
     return Response.json(result, {
       headers: {
-        'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
+        'Cache-Control': 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
       },
     });
   } catch (error) {
