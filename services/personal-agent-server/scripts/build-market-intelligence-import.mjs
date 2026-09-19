@@ -4,17 +4,26 @@ import { basename, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { reviewPricePoints } from './lib/pricing-semantic-review.mjs';
 
-const [dataDirectoryArgument, outputFileArgument] = process.argv.slice(2);
+const [dataDirectoryArgument, outputFileArgument, ...buildFlags] = process.argv.slice(2);
 if (!dataDirectoryArgument || !outputFileArgument) {
-  throw new Error('Usage: node scripts/build-market-intelligence-import.mjs <enrichment-directory> <output.json>');
+  throw new Error('Usage: node scripts/build-market-intelligence-import.mjs <enrichment-directory> <output.json> [--month=YYYY-MM]');
 }
+
+const targetMonth = (() => {
+  const inlineFlag = buildFlags.find((flag) => flag.startsWith('--month='));
+  const flagIndex = buildFlags.indexOf('--month');
+  const value = inlineFlag?.slice('--month='.length) || (flagIndex >= 0 ? buildFlags[flagIndex + 1] : '') || '';
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}$/.test(value)) throw new Error(`Invalid --month value: ${value}`);
+  return value;
+})();
 
 const dataDirectory = resolve(dataDirectoryArgument);
 const outputFile = resolve(outputFileArgument);
 const manifest = JSON.parse(readFileSync(join(dataDirectory, 'manifest.json'), 'utf8'));
 const payloadGeneratedAt = new Date().toISOString();
 
-const MODEL_VERSION = 'minaco-company-website-estimate-v5';
+const MODEL_VERSION = 'minaco-company-website-estimate-v6';
 const PAYMENT_TRAFFIC_REVIEW_MULTIPLIER = 4;
 
 const REVENUE_STATUS = {
@@ -783,7 +792,10 @@ await readJsonLines(join(dataDirectory, 'product-launches-with-identities.jsonl'
 });
 
 const similarwebByProduct = new Map();
-await readJsonLines(join(dataDirectory, 'similarweb.raw.jsonl'), (record) => {
+const similarwebSourceFile = targetMonth
+  ? join(dataDirectory, 'similarweb-snapshots', targetMonth, 'similarweb.raw.jsonl')
+  : join(dataDirectory, 'similarweb.raw.jsonl');
+await readJsonLines(similarwebSourceFile, (record) => {
   if (!String(record.scanStatus || '').startsWith('success')) return;
   const body = record.raw?.data?.body || {};
   const normalized = {
@@ -804,12 +816,18 @@ await readJsonLines(join(dataDirectory, 'similarweb.raw.jsonl'), (record) => {
 });
 
 const apparkByProduct = new Map();
-await readJsonLines(join(dataDirectory, 'appark-local-products.jsonl'), (record) => {
+const apparkProductsSourceFile = targetMonth
+  ? join(dataDirectory, 'appark-snapshots', targetMonth, 'appark-local-products.jsonl')
+  : join(dataDirectory, 'appark-local-products.jsonl');
+await readJsonLines(apparkProductsSourceFile, (record) => {
   apparkByProduct.set(normalizeProductKey(record.product_key), record);
 });
 
 const apparkPlatformsByProduct = new Map();
-await readJsonLines(join(dataDirectory, 'appark-local-platform.raw.jsonl'), (record) => {
+const apparkPlatformsSourceFile = targetMonth
+  ? join(dataDirectory, 'appark-snapshots', targetMonth, 'appark-local-platform.raw.jsonl')
+  : join(dataDirectory, 'appark-local-platform.raw.jsonl');
+await readJsonLines(apparkPlatformsSourceFile, (record) => {
   const key = normalizeProductKey(record.productKey);
   if (!key) return;
   const existing = apparkPlatformsByProduct.get(key) || [];
@@ -832,7 +850,10 @@ await readJsonLines(join(dataDirectory, 'pricing-snapshots.raw.jsonl'), (record)
 });
 
 const paymentMaps = new Map();
-for (const fileName of ['semrush.raw.jsonl', 'semrush-2026-07.raw.jsonl']) {
+const paymentSourceFiles = targetMonth
+  ? [`semrush-${targetMonth}.raw.jsonl`]
+  : ['semrush.raw.jsonl', 'semrush-2026-07.raw.jsonl'];
+for (const fileName of paymentSourceFiles) {
   await readJsonLines(join(dataDirectory, fileName), (record) => {
     const fetchedAt = String(record.fetchedAt || record.raw?.fetchedAt || '');
     for (const rawKey of record.productKeys || []) {
@@ -924,6 +945,19 @@ for (const product of manifest.products || []) {
     pricingSignal,
     paymentContext,
   });
+  if (targetMonth && verifiedPricingEvidence && revenue.details) {
+    const pricingSnapshotMonth = String(pricingSignal?.snapshotMonth || '').slice(0, 7) || null;
+    revenue.details.inputs = {
+      ...(revenue.details.inputs || {}),
+      pricingSnapshotMonth,
+    };
+    if (pricingSnapshotMonth && pricingSnapshotMonth !== targetMonth) {
+      revenue.details = appendUniqueRisk(
+        revenue.details,
+        `Official pricing was observed in ${pricingSnapshotMonth} and is used as the closest available proxy for ${targetMonth}.`,
+      );
+    }
+  }
   const trafficGrowth = registrationSeries.length >= 2
     ? registrationSeries[0].visits === 0
       ? registrationSeries.at(-1).visits === 0 ? 0 : null
@@ -941,9 +975,11 @@ for (const product of manifest.products || []) {
   );
   const appPeriod = rollingThirtyDayPeriod(appObservedAt);
   const evidencePriority = finiteNumber(revenue.details?.evidencePriority);
-  const revenueEstimateMonth = evidencePriority === 1
-    ? monthStart(appObservedAt)
-    : monthStart(latestMeasuredPayment?.month || latestMonth || pricingSignal?.snapshotMonth || manifest.generatedAt);
+  const revenueEstimateMonth = targetMonth
+    ? `${targetMonth}-01`
+    : evidencePriority === 1
+      ? monthStart(appObservedAt)
+      : monthStart(latestMeasuredPayment?.month || latestMonth || pricingSignal?.snapshotMonth || manifest.generatedAt);
   const revenuePeriodKind = evidencePriority === 1 ? 'rolling_30d' : 'calendar_month';
   const metricUpdatedAt = latestIso(similarweb?.fetchedAt, appObservedAt, paymentMonths.at(-1)?.fetchedAt, manifest.generatedAt);
 
@@ -1000,6 +1036,7 @@ for (const product of manifest.products || []) {
   });
 
   for (const metric of registrationSeries) {
+    if (targetMonth && metric.month !== targetMonth) continue;
     monthlyMetrics.push({
       product_id: id,
       month: `${metric.month}-01`,
@@ -1038,7 +1075,7 @@ for (const product of manifest.products || []) {
     appMetrics.push({
       product_id: id,
       observed_at: appObservedAt,
-      reference_month: monthStart(appObservedAt),
+      reference_month: targetMonth ? `${targetMonth}-01` : monthStart(appObservedAt),
       period_start: appPeriod.periodStart,
       period_end: appPeriod.periodEnd,
       ios_downloads_30d: finiteNumber(appark.ios_downloads_30d),
@@ -1292,6 +1329,14 @@ const payload = {
     generatedAt: payloadGeneratedAt,
     sourceDirectory: basename(dataDirectory),
     sourceManifestGeneratedAt: manifest.generatedAt,
+    targetMonth,
+    sourceFiles: {
+      similarweb: similarwebSourceFile,
+      apparkProducts: apparkProductsSourceFile,
+      apparkPlatforms: apparkPlatformsSourceFile,
+      semrush: paymentSourceFiles.map((fileName) => join(dataDirectory, fileName)),
+      pricing: join(dataDirectory, 'pricing-snapshots.raw.jsonl'),
+    },
     estimateMethodVersion: MODEL_VERSION,
     caveat: 'Products sharing a non-platform official domain are grouped into one company row. Website audience and revenue estimates are displayed once per company without summing duplicate domain-level observations. Revenue evidence priority is Appark, attributable payment-platform traffic with official pricing, payment traffic with category ARPPU, explicit successful zero, then Similarweb traffic fallback.',
     counts: {

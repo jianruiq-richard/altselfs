@@ -31,3 +31,22 @@ For a new month:
 5. update `products` only with the latest summary.
 
 Re-running a month updates that month's canonical facts while retaining raw evidence. Changing the estimator must also change `model_version`, which preserves the older estimate and makes the strongest current version explicit.
+
+Build and import an isolated month with:
+
+```sh
+node services/personal-agent-server/scripts/build-market-intelligence-import.mjs \
+  <enrichment-directory> <payload.json> --month=YYYY-MM
+
+node services/personal-agent-server/scripts/import-market-intelligence-raw-observations.mjs \
+  <enrichment-directory> --month=YYYY-MM
+
+node services/personal-agent-server/scripts/import-market-intelligence.mjs <payload.json>
+```
+
+The month-scoped builder reads `semrush-YYYY-MM.raw.jsonl`,
+`similarweb-snapshots/YYYY-MM/similarweb.raw.jsonl`, and the matching Appark
+snapshot directory. Its canonical audience, payment, app reference, and revenue
+rows are restricted to that month. Older monthly rows are not included in the
+payload and therefore are not overwritten. The denormalized `products` summary
+is refreshed from the requested target month for the production list API.

@@ -4,10 +4,19 @@ import { basename, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import pg from 'pg';
 
-const [dataDirectoryArgument] = process.argv.slice(2);
+const [dataDirectoryArgument, ...importFlags] = process.argv.slice(2);
 if (!dataDirectoryArgument) {
-  throw new Error('Usage: node import-market-intelligence-raw-observations.mjs <enrichment-directory>');
+  throw new Error('Usage: node import-market-intelligence-raw-observations.mjs <enrichment-directory> [--month=YYYY-MM]');
 }
+
+const targetMonth = (() => {
+  const inlineFlag = importFlags.find((flag) => flag.startsWith('--month='));
+  const flagIndex = importFlags.indexOf('--month');
+  const value = inlineFlag?.slice('--month='.length) || (flagIndex >= 0 ? importFlags[flagIndex + 1] : '') || '';
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}$/.test(value)) throw new Error(`Invalid --month value: ${value}`);
+  return value;
+})();
 
 const connectionString = String(process.env.AGENT_CONTEXT_DATABASE_URL || process.env.DATABASE_URL || '').trim();
 if (!connectionString) throw new Error('AGENT_CONTEXT_DATABASE_URL or DATABASE_URL is required.');
@@ -24,7 +33,7 @@ const dataDirectory = resolve(dataDirectoryArgument);
 const sourceBatch = basename(dataDirectory);
 const BATCH_SIZE = 100;
 
-const SOURCES = [
+const BASE_SOURCES = [
   { file: 'product-identities.jsonl', provider: 'product_hunt', type: 'product_identity', keys: (record) => [record.product_hunt_url] },
   { file: 'product-launches-with-identities.jsonl', provider: 'product_hunt', type: 'product_launch', keys: (record) => [record.url] },
   { file: 'producthunt-official-links.raw.jsonl', provider: 'product_hunt', type: 'official_link_resolution', keys: (record) => [record.productKey, record.productHuntUrl] },
@@ -38,6 +47,39 @@ const SOURCES = [
   { file: 'pricing-signals.jsonl', provider: 'pricing', type: 'pricing_signal', keys: (record) => [record.productKey] },
   { file: 'pricing-snapshots.raw.jsonl', provider: 'pricing', type: 'pricing_snapshot', keys: (record) => [record.productKey] },
 ];
+
+const MONTHLY_SOURCES = targetMonth ? [
+  {
+    file: `semrush-${targetMonth}.raw.jsonl`,
+    provider: 'semrush',
+    type: 'payment_destinations_monthly',
+    referenceMonth: targetMonth,
+    keys: (record) => record.productKeys || [],
+  },
+  {
+    file: join('similarweb-snapshots', targetMonth, 'similarweb.raw.jsonl'),
+    provider: 'similarweb',
+    type: 'website_intelligence_monthly',
+    referenceMonth: targetMonth,
+    keys: (record) => record.productKeys || [],
+  },
+  {
+    file: join('appark-snapshots', targetMonth, 'appark-local-products.jsonl'),
+    provider: 'appark',
+    type: 'app_intelligence_summary_monthly',
+    referenceMonth: targetMonth,
+    keys: (record) => [record.product_key, record.product_hunt_url],
+  },
+  {
+    file: join('appark-snapshots', targetMonth, 'appark-local-platform.raw.jsonl'),
+    provider: 'appark',
+    type: 'app_intelligence_platform_monthly',
+    referenceMonth: targetMonth,
+    keys: (record) => [record.productKey, record.productHuntUrl],
+  },
+] : [];
+
+const SOURCES = targetMonth ? MONTHLY_SOURCES : BASE_SOURCES;
 
 const SCHEMA_SQL = `
   create schema if not exists market_intelligence;
@@ -233,8 +275,9 @@ function dataStatus(record, provider, observationType) {
   return 'recorded';
 }
 
-function periods(record) {
+function periods(record, source) {
   const values = new Set();
+  if (/^\d{4}-\d{2}$/.test(String(source?.referenceMonth || ''))) values.add(source.referenceMonth);
   const snapshotMonth = String(record.snapshotMonth || '').slice(0, 7);
   if (/^\d{4}-\d{2}$/.test(snapshotMonth)) values.add(snapshotMonth);
   for (const metric of record.monthly || record.raw?.data?.monthly || []) {
@@ -287,7 +330,7 @@ function observationFor(source, record, sourceLine) {
     query_key: queryKey(rawRecord),
     domain: String(rawRecord.domain || rawRecord.websiteDomain || rawRecord.website_domain || '').trim() || null,
     platform: String(rawRecord.platform || '').trim() || null,
-    periods: periods(rawRecord),
+    periods: periods(rawRecord, source),
     scan_status: scanStatus(rawRecord),
     data_status: dataStatus(rawRecord, source.provider, source.type),
     http_status: finiteInteger(rawRecord.httpStatus || rawRecord.pageHttpStatus),

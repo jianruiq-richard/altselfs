@@ -526,7 +526,7 @@ async function importPaymentMetrics(rows) {
   }
 }
 
-async function refreshLatestProductSummaries(productIds) {
+async function refreshLatestProductSummaries(productIds, targetMonth = null) {
   if (productIds.length === 0) return;
   await client.query(`
     with latest_audience as (
@@ -565,7 +565,9 @@ async function refreshLatestProductSummaries(productIds) {
         estimate.observed_at,
         estimate.calculated_at
       from market_intelligence.product_monthly_revenue_estimates estimate
-      where estimate.product_id = any($1::text[]) and estimate.is_current = true
+      where estimate.product_id = any($1::text[])
+        and estimate.is_current = true
+        and ($2::date is null or estimate.month = $2::date)
       order by estimate.product_id, estimate.month desc, estimate.calculated_at desc
     )
     update market_intelligence.products product
@@ -591,7 +593,7 @@ async function refreshLatestProductSummaries(productIds) {
         updated_at = now()
     from latest_revenue
     where product.id = latest_revenue.product_id
-  `, [productIds]);
+  `, [productIds, targetMonth ? `${targetMonth}-01` : null]);
 }
 
 try {
@@ -611,7 +613,7 @@ try {
   await importAppMetrics(payload.appMetrics);
   await importPaymentMetrics(payload.paymentMetrics);
   await importMonthlyRevenueEstimates(payload.monthlyRevenueEstimates || []);
-  await refreshLatestProductSummaries(actualProductIds);
+  await refreshLatestProductSummaries(actualProductIds, payload.metadata?.targetMonth || null);
   await client.query('delete from market_intelligence.products where is_mock = true');
 
   const syncRunId = `product_hunt_import_${Date.now()}`;
