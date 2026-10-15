@@ -9,6 +9,7 @@ import {
   isDestinationLoadErrorText,
   isLikelySemrushRateLimitError,
   jitteredPacingDelayMs,
+  PAYMENT_DESTINATION_ROW_SELECTOR,
   parseHumanNumber,
   parseRenderedDestinationRow,
   parseTargetTrafficFromTooltip,
@@ -29,6 +30,12 @@ function workerWithUsedQuota(workerId: string, usedPercent: number) {
     quota: { status: usedPercent < 100 ? 'available' : 'exhausted', usedPercent, remainingPercent: 100 - usedPercent },
   };
 }
+
+test('recognizes both current and legacy Semrush destination table row markup', () => {
+  assert.match(PAYMENT_DESTINATION_ROW_SELECTOR, /DataTable\.Body/);
+  assert.match(PAYMENT_DESTINATION_ROW_SELECTOR, /\[data-ui-name="Row"\]/);
+  assert.match(PAYMENT_DESTINATION_ROW_SELECTOR, /Body\.Row/);
+});
 
 test('reserves quota above 80 percent for interactive users and excludes it from batch routing', async () => {
   const dispatcher = new SemrushDispatcher({ heartbeatStaleMs: 90_000, jobTimeoutMs: 5_000, maxQueued: 3 });

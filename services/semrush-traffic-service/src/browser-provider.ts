@@ -58,6 +58,19 @@ const QUOTA_LIVE_READ_TIMEOUT_MS = 8_000;
 const QUOTA_RELOAD_READ_TIMEOUT_MS = 30_000;
 const QUOTA_READ_POLL_MS = 500;
 
+// The 3ue Semrush dashboard migrated its destination table from Body.Row to
+// DataTable.Body > Row. Keep the legacy and semantic-table fallbacks because
+// the dashboard rolls UI changes out independently across accounts.
+export const PAYMENT_DESTINATION_ROW_SELECTOR = [
+  '[data-ui-name="DataTable.Body"] [data-ui-name="Row"]',
+  '[data-ui-name="Body.Row"]',
+  'table tbody tr',
+].join(', ');
+
+function paymentDestinationRows(page: Page): Locator {
+  return page.locator(PAYMENT_DESTINATION_ROW_SELECTOR);
+}
+
 export class SemrushBrowserProvider implements DestinationProvider {
   private queue: Promise<void> = Promise.resolve();
   private cdpConnection?: Promise<{ browser: Browser; context: BrowserContext }>;
@@ -961,7 +974,7 @@ async function hasEmptyDestinationState(page: Page) {
 }
 
 async function waitForRows(page: Page, timeoutMs = 90_000): Promise<DestinationTableState> {
-  const rows = page.locator('[data-ui-name="Body.Row"], table tbody tr');
+  const rows = paymentDestinationRows(page);
   const deadline = Date.now() + timeoutMs;
   let emptySince = 0;
   while (Date.now() < deadline) {
@@ -981,7 +994,7 @@ async function waitForRows(page: Page, timeoutMs = 90_000): Promise<DestinationT
 }
 
 async function destinationRowsFingerprint(page: Page) {
-  const rows = page.locator('[data-ui-name="Body.Row"], table tbody tr');
+  const rows = paymentDestinationRows(page);
   return rows.evaluateAll((elements) => elements
     .map((element) => (element.textContent || '').replace(/\s+/g, ' ').trim())
     .filter(Boolean)
@@ -1120,7 +1133,7 @@ async function readPaymentDestinationRowsAcrossPages(
       pagesScanned += 1;
       break;
     }
-    const rows = page.locator('[data-ui-name="Body.Row"], table tbody tr');
+    const rows = paymentDestinationRows(page);
     const renderedRows = await rows.evaluateAll((elements) => elements.map((row, index) => ({
       index,
       text: (row.textContent || '').trim(),
