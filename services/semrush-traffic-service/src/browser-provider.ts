@@ -843,11 +843,11 @@ async function enterDomain(page: Page, domain: string) {
   if (existingDomains.some((value) => value.trim().toLowerCase() === domain)) return false;
   let input = await findDomainInput(page);
   if (!input) {
-    const addButton = page.locator('button[data-ui-name="Button"]').first();
+    const addButton = page.getByTestId('add-competitor');
     if (!await addButton.isVisible()) throw new Error('Could not find the Add website button.');
     await dismissTransientOverlays(page);
     await addButton.click({ force: true });
-    await page.locator('input:not([type="hidden"]):not([type="password"])').first()
+    await page.locator('input:not([type="hidden"]):not([type="password"])').filter({ visible: true }).first()
       .waitFor({ state: 'visible', timeout: 10_000 });
     input = await findDomainInput(page);
   }
@@ -879,7 +879,7 @@ async function removeExtraDomains(page: Page, domain: string) {
   let removed = false;
   for (let index = selectedDomains.length - 1; index >= 0; index -= 1) {
     if (selectedDomains[index] === domain) continue;
-    const remove = tags.nth(index).locator('svg[data-ui-name="Tag.Addon"][role="button"]');
+    const remove = tags.nth(index).getByTestId('remove-competitor');
     if (!await remove.isVisible()) {
       throw new Error(`Could not find the remove control for ${selectedDomains[index]}`);
     }
