@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { HomepageWorkspace } from "@/components/homepage-workspace";
-import { connection } from "next/server";
+import { AstromarLandingPage } from "@/components/astromar-landing-page";
 import { productBrand } from "@/lib/brand";
 
 const homepageDescription =
@@ -35,8 +34,7 @@ const structuredData = [
   },
 ];
 
-export default async function Home() {
-  await connection();
+export default function Home() {
   return (
     <>
       <script
@@ -45,7 +43,7 @@ export default async function Home() {
           __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
         }}
       />
-      <HomepageWorkspace />
+      <AstromarLandingPage />
     </>
   );
 }
