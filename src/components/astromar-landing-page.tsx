@@ -16,9 +16,9 @@ const scenarios = [
     detail: "Don’t waste months proving demand from scratch. Start where money is already moving.",
   },
   {
-    lead: `${productBrand.name} tracks competitor moves.`,
-    decision: "Decide your action.",
-    detail: "KOC drops, paid campaigns, channel shifts - what they did yesterday and what it means for today.",
+    lead: "Spy on any product.",
+    decision: "See how much revenue it generates and how it gets customers.",
+    detail: "Get solid revenue estimates backed by payment signals, uncover acquisition channels, and track marketing moves in one place.",
   },
   {
     lead: `${productBrand.name} finds who needs your product.`,
