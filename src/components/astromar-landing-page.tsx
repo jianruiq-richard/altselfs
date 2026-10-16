@@ -13,7 +13,7 @@ const scenarios = [
   {
     lead: "Find products that are already making money",
     decision: "before you build.",
-    detail: "See what’s selling, what’s growing, and which products keep winning, so you can build where the money is already moving.",
+    detail: "Don’t waste months proving demand from scratch. Start where money is already moving.",
   },
   {
     lead: `${productBrand.name} tracks competitor moves.`,
@@ -317,12 +317,9 @@ export function AstromarLandingPage() {
 
         <div className={styles.copyCarousel} aria-label="Scenario details">
           <div className={styles.copyTrack}>
-            {scenarios.map((scenario, index) => (
+            {scenarios.map((scenario) => (
               <p className={styles.heroCopy} key={scenario.detail}>
                 {scenario.detail}
-                {index === 0 && <strong className={styles.heroPromise}>
-                  Don’t waste months proving demand from scratch. Start where money is already moving.
-                </strong>}
               </p>
             ))}
           </div>
