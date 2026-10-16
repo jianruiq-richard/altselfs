@@ -276,6 +276,14 @@
   text-wrap: balance;
 }
 
+.heroPromise {
+  display: block;
+  margin-top: 16px;
+  color: var(--text);
+  font-size: 0.9em;
+  font-weight: 650;
+}
+
 .heroActions {
   flex-wrap: wrap;
   justify-content: center;

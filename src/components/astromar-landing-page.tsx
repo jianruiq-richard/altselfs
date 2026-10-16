@@ -11,9 +11,9 @@ import styles from "./astromar-landing-page.module.css";
 
 const scenarios = [
   {
-    lead: `${productBrand.name} sizes up your competitor.`,
-    decision: "Decide your strategy.",
-    detail: "Users, revenue, growth trajectory - the numbers on any competitor, pulled in seconds.",
+    lead: "Find products that are already making money",
+    decision: "before you build.",
+    detail: "See what’s selling, what’s growing, and which products keep winning, so you can build where the money is already moving.",
   },
   {
     lead: `${productBrand.name} tracks competitor moves.`,
@@ -303,26 +303,12 @@ export function AstromarLandingPage() {
 
         <div className={styles.heroCarousel} aria-label="Founder decision scenarios">
           <div className={styles.scenarioTrack}>
-            {scenarios.map((scenario, index) => (
+            {scenarios.map((scenario) => (
               <div className={styles.scenario} key={scenario.lead}>
                 <h1 className={styles.headline}>
-                  <span>
-                    {scenario.lead === `${productBrand.name} sizes up your competitor.` ? (
-                      <>
-                        {productBrand.name} sizes up <br className={styles.mobileOnly} />your competitor.
-                      </>
-                    ) : (
-                      scenario.lead
-                    )}
-                  </span>
+                  <span>{scenario.lead}</span>
                   <br />
-                  {index === 0 ? (
-                    <>
-                      Decide your <br className={styles.mobileOnly} />strategy.
-                    </>
-                  ) : (
-                    scenario.decision
-                  )}
+                  {scenario.decision}
                 </h1>
               </div>
             ))}
@@ -331,9 +317,12 @@ export function AstromarLandingPage() {
 
         <div className={styles.copyCarousel} aria-label="Scenario details">
           <div className={styles.copyTrack}>
-            {scenarios.map((scenario) => (
+            {scenarios.map((scenario, index) => (
               <p className={styles.heroCopy} key={scenario.detail}>
                 {scenario.detail}
+                {index === 0 && <strong className={styles.heroPromise}>
+                  Don’t waste months proving demand from scratch. Start where money is already moving.
+                </strong>}
               </p>
             ))}
           </div>
