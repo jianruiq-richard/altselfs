@@ -17,7 +17,7 @@ const scenarios = [
   },
   {
     lead: "Spy on any product.",
-    decision: "See how much revenue it generates and how it gets customers.",
+    decision: "See its revenue and how it gets customers.",
     detail: "Get solid revenue estimates backed by payment signals, uncover acquisition channels, and track marketing moves in one place.",
   },
   {
