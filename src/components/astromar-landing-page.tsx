@@ -266,7 +266,10 @@ export function AstromarLandingPage() {
           <Link className={styles.brand} href="/" aria-label={`${productBrand.name} home`}>
             <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandMarkImage} />
             <span className={styles.brandName}>{productBrand.name}</span>
-            <span className={styles.brandTagline}>{productBrand.tagline}</span>
+            <span className={styles.brandTagline}>
+              <span>Your AI cofounder.</span>
+              <span>{productBrand.tagline}</span>
+            </span>
           </Link>
 
           <div className={styles.navLinks} aria-label="Primary navigation">
@@ -297,10 +300,6 @@ export function AstromarLandingPage() {
       </nav>
 
       <section className={classes("container", "hero")}>
-        <p className={styles.heroPositioning}>
-          {productBrand.name} is your AI cofounder, built to think with you, not just work for you.
-        </p>
-
         <div className={styles.heroCarousel} aria-label="Founder decision scenarios">
           <div className={styles.scenarioTrack}>
             {scenarios.map((scenario) => (

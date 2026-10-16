@@ -104,6 +104,10 @@
 
 .brandTagline {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.25;
   margin-left: 10px;
   padding-left: 20px;
   background: linear-gradient(105deg, #fffaf0 0%, #f2c36b 52%, #fff4d8 100%);
@@ -201,21 +205,6 @@
   text-align: center;
 }
 
-.heroPositioning {
-  width: max-content;
-  max-width: 100%;
-  margin: 0 auto 26px;
-  background: linear-gradient(105deg, #fffaf0 0%, #f2c36b 52%, #fff4d8 100%);
-  background-clip: text;
-  color: transparent;
-  font-family: "Avenir Next", "Helvetica Neue", sans-serif;
-  font-size: 21px;
-  font-weight: 500;
-  font-style: italic;
-  line-height: 1.35;
-  white-space: nowrap;
-  -webkit-background-clip: text;
-}
 
 .heroCarousel,
 .copyCarousel {
@@ -2205,13 +2194,6 @@
     padding: 44px 0 42px;
   }
 
-  .heroPositioning {
-    width: auto;
-    max-width: 300px;
-    margin-bottom: 22px;
-    font-size: 15px;
-    white-space: normal;
-  }
 
   .heroCarousel,
   .copyCarousel {
@@ -2420,10 +2402,6 @@
     font-size: 34px;
   }
 
-  .heroPositioning {
-    max-width: 280px;
-    font-size: 13.5px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
