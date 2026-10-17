@@ -462,11 +462,12 @@ export function AstromarLandingPage() {
           <article className={classes("reasonBlock", "reasonBlockSolo")}>
             <div className={styles.reasonText}>
               <p className={styles.eyebrow}>PRODUCT OPPORTUNITY RESEARCH</p>
-              <h2>What is Minaco?</h2>
+              <h2>Who is Minaco for?</h2>
               <p>
-                Minaco helps indie developers and startup teams find products worth building. Explore revenue
-                estimates, growth trends, and acquisition channels to understand which products show commercial
-                traction and which opportunities deserve a closer look before you build.
+                Minaco helps indie developers, founders, and growth teams discover product opportunities and
+                spy on competitors. Explore revenue estimates and growth trends to identify which opportunities
+                deserve a closer look before you build. Track competitors to see how their customer acquisition
+                strategies and estimated revenue change over time.
               </p>
             </div>
             <div className={styles.reasonSupport}>
