@@ -75,10 +75,19 @@ const marketTools = [
   { name: "Reddit", src: "/connector-logos/reddit.svg", width: 24, height: 24 },
 ] as const;
 
-const agentBrainPoints = [
-  "Most AI tools wait to be told what to do. Minaco decides what needs doing \u2014 then tells them.",
-  "It orchestrates research, coding, outreach, and growth agents \u2014 calling the right specialist at the right moment, through one conversation.",
-  "The more decisions you make together, the more Minaco thinks like you. Your judgment compounds over time.",
+const opportunityResearchPoints = [
+  {
+    title: "Find opportunities worth exploring",
+    description: "Discover products with payment activity in the Business Database. Compare estimated revenue, growth trends, and product categories to find opportunities in your market.",
+  },
+  {
+    title: "Understand the evidence",
+    description: "Minaco combines payment platform traffic, website and app data, search rankings, backlinks, and real business cases. Its revenue estimation method has been validated against real business revenue, showing close agreement with actual results. Individual figures remain estimates, not verified sales.",
+  },
+  {
+    title: "Know how fresh the data is",
+    description: "Business Database revenue estimates are updated monthly. For other research sources, check the reporting period and collection date shown in the analysis.",
+  },
 ] as const;
 
 const demoScenarios = [
@@ -452,21 +461,21 @@ export function AstromarLandingPage() {
 
           <article className={classes("reasonBlock", "reasonBlockSolo")}>
             <div className={styles.reasonText}>
-              <p className={styles.eyebrow}>Solo founder leverage</p>
-              <h2>
-                Other AI agents are hands. <br className={styles.mobileOnly} />{productBrand.name} is the brain.
-              </h2>
+              <p className={styles.eyebrow}>PRODUCT OPPORTUNITY RESEARCH</p>
+              <h2>What is Minaco?</h2>
               <p>
-                {productBrand.name} sits above the stack. It reads your full context {"\u2014"} email, docs, meetings,
-                platforms {"\u2014"} then decides which agents to call, what to ask them, and what to do with what they
-                return. You make decisions with {productBrand.name}.{" "}
-                <strong>{productBrand.name} is built to think with you, not just work for you.</strong>
+                Minaco helps indie developers and startup teams find products worth building. Explore revenue
+                estimates, growth trends, and acquisition channels to understand which products show commercial
+                traction and which opportunities deserve a closer look before you build.
               </p>
             </div>
             <div className={styles.reasonSupport}>
-              <div className={styles.agentBrainList} aria-label={`${productBrand.name} agent orchestration`}>
-                {agentBrainPoints.map((item) => (
-                  <span key={item}>{item}</span>
+              <div className={styles.opportunityList} aria-label="Product opportunity research">
+                {opportunityResearchPoints.map((item) => (
+                  <section key={item.title}>
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                  </section>
                 ))}
               </div>
             </div>

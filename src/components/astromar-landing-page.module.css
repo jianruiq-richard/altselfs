@@ -686,7 +686,14 @@
 
 .reasonBlockSolo {
   min-height: 280px;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1fr);
 }
+
+.opportunityList { display: grid; }
+.opportunityList section { padding: 22px 0; border-bottom: 1px solid var(--line); }
+.opportunityList section:first-child { border-top: 1px solid var(--line); }
+.opportunityList h3 { margin: 0; color: var(--text); font-size: 20px; line-height: 1.35; font-weight: 700; }
+.opportunityList p { margin: 10px 0 0; color: var(--muted); font-size: 15px; line-height: 1.7; }
 
 .reasonText {
   min-width: 0;
