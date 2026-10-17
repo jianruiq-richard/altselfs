@@ -272,21 +272,39 @@
   margin-top: 30px;
 }
 
-.contextRow {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 18px;
-  color: var(--subtle);
-  font-size: 13px;
+.heroMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin: 44px 0 0;
+  padding: 30px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
-.contextRow span {
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 250, 240, 0.045);
+.heroMetric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.heroMetric dt {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.45;
+  text-wrap: balance;
+}
+
+.heroMetric dd {
+  order: -1;
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(36px, 4.5vw, 56px);
+  font-weight: 780;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
 }
 
 .section {
@@ -2249,8 +2267,18 @@
     width: 100%;
   }
 
-  .contextRow {
-    display: none;
+  .heroMetrics {
+    gap: 12px;
+    margin-top: 30px;
+    padding: 24px 0;
+  }
+
+  .heroMetric dt {
+    font-size: 12px;
+  }
+
+  .heroMetric dd {
+    font-size: clamp(26px, 7vw, 36px);
   }
 
   .section {

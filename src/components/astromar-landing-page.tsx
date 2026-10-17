@@ -28,7 +28,11 @@ const scenarios = [
   },
 ] as const;
 
-const contextSources = ["Google Workspace", "Gmail", "Slack", "Notion", "YouTube", "TikTok", "X", "Search"];
+const heroMetrics = [
+  { value: "50K+", label: "Products ranked by revenue" },
+  { value: "1,000+", label: "Real-world business case models" },
+  { value: "600+", label: "Backlink rankings" },
+] as const;
 
 const cofounderProofs = [
   "65% of high-potential startups fail because of cofounder conflict.",
@@ -347,11 +351,14 @@ export function AstromarLandingPage() {
           </a>
         </div>
 
-        <div className={styles.contextRow} aria-label="Example connected context sources">
-          {contextSources.map((source) => (
-            <span key={source}>{source}</span>
+        <dl className={styles.heroMetrics} aria-label="Minaco research coverage">
+          {heroMetrics.map((metric) => (
+            <div className={styles.heroMetric} key={metric.label}>
+              <dt>{metric.label}</dt>
+              <dd>{metric.value}</dd>
+            </div>
           ))}
-        </div>
+        </dl>
       </section>
 
       <section className={classes("container", "section", "founderReasons")} id="why">
