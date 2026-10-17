@@ -3,7 +3,10 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Clock3, Database, MessagesSquare, Plug, Settings, Settings2, ShieldCheck, SquarePen } from "lucide-react";
+import { MinacoCreditsIcon } from "@/components/minaco-credits-icon";
+import { COMPETITIVE_DATA_SOURCES } from "@/lib/competitive-data-sources";
+import { DEFAULT_DISCUSSION_CONNECTOR_KEYS } from "@/lib/discussion-connectors";
 import { DiscordLogo } from "@/components/discord-logo";
 import { MinacoBrandMark } from "@/components/minaco-brand-mark";
 import { productBrand } from "@/lib/brand";
@@ -77,8 +80,8 @@ const marketTools = [
 
 const opportunityResearchPoints = [
   {
-    title: "Find opportunities worth exploring",
-    description: "Discover products with payment activity in the Business Database. Compare estimated revenue, growth trends, and product categories to find opportunities in your market.",
+    title: "Find opportunities. Spy on competitors.",
+    description: "Discover products with payment activity in the Business Database. Compare estimated revenue, growth trends, and product categories to decide which opportunities deserve a closer look before you build. Spy on competitors to see how their customer acquisition channels and estimated revenue change over time.",
   },
   {
     title: "Understand the evidence",
@@ -89,6 +92,20 @@ const opportunityResearchPoints = [
     description: "Business Database revenue estimates are updated monthly. For other research sources, check the reporting period and collection date shown in the analysis.",
   },
 ] as const;
+
+const demoNavigation = [
+  { label: "Discussion", icon: MessagesSquare },
+  { label: "Business Database", icon: Database },
+  { label: "Connectors", icon: Plug },
+  { label: "Settings", icon: Settings },
+] as const;
+
+// Match the Discussion rail's source order and initial selection.
+const demoConnectors = [
+  "similarweb_api1", "appark", "semrush13", "ahrefs_url_research", "domain_metrics_check",
+  "instagram_looter2", "twitter241", "tiktok_api23", "youtube_v2",
+] as const;
+const demoEnabledCount = demoConnectors.filter((key) => DEFAULT_DISCUSSION_CONNECTOR_KEYS.includes(key)).length;
 
 const demoScenarios = [
   {
@@ -530,12 +547,12 @@ export function AstromarLandingPage() {
                 <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandMarkImage} />
                 <span>{productBrand.name}</span>
               </div>
-              <button className={styles.newDiscussion} type="button">+ New discussion</button>
+              <button className={styles.newDiscussion} type="button"><SquarePen size={14} aria-hidden="true" />New discussion</button>
               <nav className={styles.workspaceNav} aria-label="Workspace">
-                {["Discussion", "Home", "Connectors", "Settings"].map((item, index) => (
-                  <span className={index === 0 ? styles.isActive : undefined} key={item}>
-                    <i className={styles.navIcon} aria-hidden="true" />
-                    {item}
+                {demoNavigation.map(({ label, icon: Icon }, index) => (
+                  <span className={index === 0 ? styles.isActive : undefined} key={label}>
+                    <Icon className={styles.navIcon} aria-hidden="true" />
+                    {label}
                   </span>
                 ))}
               </nav>
@@ -661,12 +678,12 @@ export function AstromarLandingPage() {
 
             <aside className={styles.workspaceRail} aria-label="Discussion context">
               <div className={styles.capacityStrip}>
-                <div>
-                  <strong>8,460</strong>
-                  <span>credits available</span>
+                <div className={styles.creditBalance}>
+                  <div className={styles.creditIcon}><MinacoCreditsIcon /></div>
+                  <div><strong>8,460</strong><span>credits available</span></div>
                 </div>
-                <div>
-                  <strong>1 / 10</strong>
+                <div className={styles.taskCapacity}>
+                  <strong>0/10</strong>
                   <span>tasks active</span>
                 </div>
               </div>
@@ -674,59 +691,38 @@ export function AstromarLandingPage() {
                 <section className={styles.railSection}>
                   <div className={styles.railHeader}>
                     <h3>Active work</h3>
-                    <span>Done</span>
+                    <Clock3 size={14} aria-hidden="true" />
                   </div>
-                  <div className={styles.activeWorkCard}>
-                    <div className={styles.activeWorkTop}>
-                      <strong>{demo.activeTitle}</strong>
-                      <span className={styles.statusPill}>
-                        <i aria-hidden="true" />
-                        Done
-                      </span>
+                  <div className={styles.emptyWork}>No active work in this discussion.</div>
+                </section>
+                <section>
+                  <div className={styles.railHeader}>
+                    <div>
+                      <h3>Connector context</h3>
+                      <p className={styles.connectorCount}>{demoEnabledCount}/{demoConnectors.length} enabled</p>
                     </div>
-                    <p>{demo.activeCopy}</p>
-                    <div className={styles.workTimer}>Static completed preview</div>
-                  </div>
-                </section>
-
-                <section className={styles.railSection}>
-                  <div className={styles.railHeader}>
-                    <h3>Key outputs</h3>
-                    <span>{demo.railMetrics.length}</span>
-                  </div>
-                  <div className={styles.railMetricList}>
-                    {demo.railMetrics.map(([label, value]) => (
-                      <div className={styles.railMetricRow} key={label}>
-                        <span>{label}</span>
-                        <strong>{value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section className={styles.railSection}>
-                  <div className={styles.railHeader}>
-                    <h3>Connector context</h3>
-                    <span>{demo.connectors.length}/4 enabled</span>
+                    <Settings2 size={14} aria-hidden="true" />
                   </div>
                   <div className={styles.connectorList}>
-                    {demo.connectors.map((item) => (
-                      <div className={styles.connectorRow} key={item}>
-                        <span className={styles.connectorIcon} aria-hidden="true" />
+                    {demoConnectors.map((key) => (
+                      <div className={styles.connectorRow} key={key}>
+                        <span className={styles.connectorIcon} aria-hidden="true"><Plug size={14} /></span>
                         <span>
-                          <strong>{item}</strong>
-                          <span>Enabled for this discussion</span>
+                          <strong>{COMPETITIVE_DATA_SOURCES[key].label}</strong>
+                          <span>Connected</span>
                         </span>
-                        <span className={styles.toggle} aria-hidden="true" />
+                        <span
+                          className={`${styles.toggle} ${DEFAULT_DISCUSSION_CONNECTOR_KEYS.includes(key) ? styles.toggleEnabled : ""}`}
+                          aria-label={DEFAULT_DISCUSSION_CONNECTOR_KEYS.includes(key) ? "Enabled" : "Disabled"}
+                        />
                       </div>
                     ))}
                   </div>
+                  <div className={styles.railFootnote}>
+                    <ShieldCheck size={14} aria-hidden="true" />
+                    <span>Enabled sources are available only to this discussion. Workspace memory remains shared.</span>
+                  </div>
                 </section>
-
-                <div className={styles.railFootnote}>
-                  <span aria-hidden="true">i</span>
-                  <span>Enabled sources are available to this discussion. Workspace memory keeps the thread across decisions.</span>
-                </div>
               </div>
             </aside>
           </div>
