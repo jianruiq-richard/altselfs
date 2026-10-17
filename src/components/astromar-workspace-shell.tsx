@@ -199,7 +199,7 @@ export function AstromarWorkspaceShell({
           return (
             <Link
               key={item.key}
-              href={publicWorkspace && !isSignedIn && item.key === 'discussion' ? '/' : item.href}
+              href={item.href}
               aria-current={active ? 'page' : undefined}
               onPointerEnter={() => handleNavigationIntent(item.href)}
               onFocus={() => handleNavigationIntent(item.href)}
@@ -254,7 +254,7 @@ export function AstromarWorkspaceShell({
         const anchor = event.target.closest('a[href]');
         if (!(anchor instanceof HTMLAnchorElement)) return;
         const destination = new URL(anchor.href, window.location.href);
-        if (destination.origin !== window.location.origin || !['/app', '/app/connectors', '/app/settings'].includes(destination.pathname)) return;
+        if (destination.origin !== window.location.origin || !['/app/connectors', '/app/settings'].includes(destination.pathname)) return;
         event.preventDefault();
         event.stopPropagation();
         setMobileSidebarOpen(false);
