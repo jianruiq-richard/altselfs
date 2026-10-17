@@ -728,6 +728,26 @@
   border-top: 1px solid var(--line-strong);
 }
 
+.researchEvidence {
+  display: grid;
+  gap: 14px;
+  margin: 26px 0 0;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.researchEvidence > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 14px;
+  align-items: baseline;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.researchEvidence dt { color: var(--amber); font-weight: 700; }
+.researchEvidence dd { margin: 0; color: var(--muted); }
+
 .principleList span,
 .agentBrainList span {
   display: flex;
@@ -787,7 +807,7 @@
 
 .marketTools {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   min-width: 0;
 }

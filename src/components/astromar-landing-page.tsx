@@ -394,21 +394,26 @@ export function AstromarLandingPage() {
 
           <article className={classes("reasonBlock", "reasonBlockMarket")}>
             <div className={styles.reasonText}>
-              <p className={styles.eyebrow}>Market intelligence</p>
-              <h2>
-                Enterprise market <br className={styles.mobileOnly} />intelligence. <br className={styles.mobileOnly} />Founder pricing.
-              </h2>
+              <p className={styles.eyebrow}>MINACO RESEARCH AGENT</p>
+              <h2>How Minaco works.</h2>
               <p>
-                The market intelligence stack used to mean five separate subscriptions, thousands a month, and someone
-                full-time to make sense of it. {productBrand.name} integrates them all {"\u2014"} a fraction of the cost,
-                none of the overhead. {productBrand.name}&apos;s commercial database covers thousands of real startup cases{" "}
-                {"\u2014"} with actual revenue figures and growth trajectories that never surface in a dashboard. You
-                don&apos;t just see their traffic. You see their revenue.
+                Give Minaco a product name or URL. Its agent gathers payment platform data, website traffic,
+                search, social, and app data through integrated research tools.
               </p>
+              <p>
+                Minaco cross-checks these signals against real business cases and models to estimate revenue
+                and explain how the product acquires customers. Each analysis separates{' '}
+                <strong>observations from sources</strong> from{' '}
+                <strong>inferences based on those observations and business models</strong>, with clear
+                assumptions behind the estimates.
+              </p>
+              <Link className={classes("button", "buttonPrimary", "databaseCta")} href="/app?newDiscussion=1">
+                Analyze a product <ArrowRight size={18} aria-hidden="true" />
+              </Link>
             </div>
             <div className={styles.reasonSupport}>
-              <div className={styles.marketNote}>42% of products that could have won, died on the growth side.</div>
-              <div className={styles.marketTools} aria-label="Integrated market intelligence tools">
+              <div className={styles.marketNote}>Multiple sources. Cross-checked by Minaco.</div>
+              <div className={styles.marketTools} aria-label="Integrated research tools and business database">
                 {marketTools.map((tool) => (
                   <div className={styles.toolLogo} key={tool.name}>
                     <span className={classes("toolLogoIcon", "wide" in tool && tool.wide && "toolLogoIconWide")}>
@@ -417,7 +422,21 @@ export function AstromarLandingPage() {
                     <span>{tool.name}</span>
                   </div>
                 ))}
+                <div className={styles.toolLogo}>
+                  <MinacoBrandMark className={styles.toolLogoIcon} />
+                  <span>Minaco Business Database</span>
+                </div>
               </div>
+              <dl className={styles.researchEvidence}>
+                <div>
+                  <dt>Observed</dt>
+                  <dd>What the sources show.</dd>
+                </div>
+                <div>
+                  <dt>Inferred</dt>
+                  <dd>What the evidence and business models suggest.</dd>
+                </div>
+              </dl>
             </div>
           </article>
 
