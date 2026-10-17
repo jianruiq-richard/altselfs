@@ -66,6 +66,13 @@ const marketTools = [
     width: 48,
     height: 48,
   },
+  { name: "Instagram", src: "/connector-logos/instagram.svg", width: 48, height: 48 },
+  { name: "X", src: "/connector-logos/x.svg", width: 48, height: 48 },
+  { name: "TikTok", src: "/connector-logos/tiktok.svg", width: 48, height: 48 },
+  { name: "YouTube", src: "/connector-logos/youtube.svg", width: 48, height: 48 },
+  { name: "LinkedIn", src: "/connector-logos/linkedin.svg", width: 24, height: 24 },
+  { name: "Facebook", src: "/connector-logos/facebook.svg", width: 24, height: 24 },
+  { name: "Reddit", src: "/connector-logos/reddit.svg", width: 24, height: 24 },
 ] as const;
 
 const agentBrainPoints = [
@@ -397,7 +404,7 @@ export function AstromarLandingPage() {
               <p className={styles.eyebrow}>MINACO RESEARCH AGENT</p>
               <h2>How Minaco works.</h2>
               <p>
-                Give Minaco a product name or URL. Its agent gathers payment platform data, website traffic,
+                Enter a product name or URL in the chat with Minaco AI Agent. It gathers payment platform data, website traffic,
                 search, social, and app data through integrated research tools.
               </p>
               <p>
