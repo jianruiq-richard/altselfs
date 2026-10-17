@@ -381,7 +381,7 @@ export function AstromarLandingPage() {
                 <div className={styles.databaseScreenshotWindow}>
                   <Image
                     src="/images/business-database-preview.png"
-                    alt="Business Database first-page results showing ElevenLabs, X, Higgsfield and Cursor, with estimated monthly revenue and traffic trends."
+                    alt="Business Database first-page results showing ElevenLabs, Higgsfield, Genspark and OpenArt, with estimated monthly revenue and traffic trends."
                     width={842}
                     height={545}
                     className={styles.databaseScreenshot}
