@@ -302,7 +302,7 @@ export function AstromarLandingPage() {
             </Link>
             <Link
               className={classes("button", "buttonPrimary")}
-              href="/sign-in?method=email&redirect_url=/app"
+              href="/app/product-intelligence"
               data-analytics-cta="nav_get_started"
               data-analytics-location="landing_nav"
             >
@@ -340,7 +340,7 @@ export function AstromarLandingPage() {
         <div className={styles.heroActions}>
           <Link
             className={classes("button", "buttonPrimary", "buttonLarge")}
-            href="/sign-up?method=email"
+            href="/app/product-intelligence"
             data-analytics-cta="hero_talk_to_cofounder"
             data-analytics-location="landing_hero"
           >
