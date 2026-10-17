@@ -34,14 +34,6 @@ const heroMetrics = [
   { value: "600+", label: "Backlink rankings" },
 ] as const;
 
-// Static preview from the public Business Database, August 2026 estimates.
-const databasePreviewProducts = [
-  { name: "ElevenLabs Agent Templates", domain: "elevenlabs.io", revenue: "$45.6M", initial: "E" },
-  { name: "Grok’s Text to Speech API", domain: "x.ai", revenue: "$37.1M", initial: "G" },
-  { name: "Higgsfield Genjutsu", domain: "higgsfield.ai", revenue: "$36.6M", initial: "H" },
-  { name: "Cursor 3", domain: "cursor.com", revenue: "$27.8M", initial: "C" },
-] as const;
-
 const marketTools = [
   {
     name: "Similarweb",
@@ -380,29 +372,23 @@ export function AstromarLandingPage() {
               </Link>
             </div>
             <div className={styles.reasonSupport}>
-              <div className={styles.databasePreview} aria-label="Business Database product list preview">
+              <Link className={styles.databasePreview} href="/app/product-intelligence" aria-label="Explore Minaco Business Database">
                 <div className={styles.databasePreviewHeading}>
                   <MinacoBrandMark className={styles.databasePreviewMark} />
-                  <strong>Business Database</strong>
+                  <strong>Minaco Business Database</strong>
+                  <ArrowRight size={18} aria-hidden="true" />
                 </div>
-                <div className={styles.databasePreviewFilters} aria-hidden="true">
-                  <span>All categories</span><span>Revenue ↓</span>
+                <div className={styles.databaseScreenshotWindow}>
+                  <Image
+                    src="/images/business-database-preview.png"
+                    alt="Business Database first-page results showing ElevenLabs, X, Higgsfield and Cursor, with estimated monthly revenue and traffic trends."
+                    width={842}
+                    height={545}
+                    className={styles.databaseScreenshot}
+                    unoptimized
+                  />
                 </div>
-                <div className={styles.databasePreviewColumns}>
-                  <span>Product</span><span>Est. monthly revenue</span>
-                </div>
-                {databasePreviewProducts.map((product) => (
-                  <div className={styles.databasePreviewRow} key={product.domain}>
-                    <span className={styles.databaseProductIcon} aria-hidden="true">{product.initial}</span>
-                    <div className={styles.databaseProductIdentity}>
-                      <strong>{product.name}</strong>
-                      <span>{product.domain}</span>
-                    </div>
-                    <strong className={styles.databaseRevenue}>{product.revenue}</strong>
-                  </div>
-                ))}
-                <p className={styles.databasePreviewNote}>Preview · Aug 2026 estimates · Updated monthly</p>
-              </div>
+              </Link>
             </div>
           </article>
 
