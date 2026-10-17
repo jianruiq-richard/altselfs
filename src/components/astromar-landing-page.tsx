@@ -404,14 +404,17 @@ export function AstromarLandingPage() {
               <p className={styles.eyebrow}>MINACO RESEARCH AGENT</p>
               <h2>How Minaco works.</h2>
               <p>
-                Enter a product name or URL in the chat with Minaco AI Agent. It gathers payment platform data, website traffic,
-                search, social, and app data through integrated research tools.
+                Enter a product name or URL in the chat with Minaco AI Agent. It brings together website
+                traffic, search, social, and app data from integrated research tools.
               </p>
               <p>
-                Minaco cross-checks these signals against real business cases and models to estimate revenue
-                and explain how the product acquires customers. Each analysis separates{' '}
-                <strong>observations from sources</strong> from{' '}
-                <strong>inferences based on those observations and business models</strong>, with clear
+                Minaco also examines traffic from the product to payment platforms, showing how many visits
+                lead to checkout. It combines this signal with real business cases and models to estimate
+                revenue and uncover how the product gets customers.
+              </p>
+              <p>
+                Each analysis clearly separates <strong>what the sources show</strong> from{' '}
+                <strong>what Minaco infers using the evidence and business models</strong>, with transparent
                 assumptions behind the estimates.
               </p>
               <Link className={classes("button", "buttonPrimary", "databaseCta")} href="/app?newDiscussion=1">
