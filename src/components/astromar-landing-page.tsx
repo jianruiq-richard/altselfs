@@ -34,10 +34,12 @@ const heroMetrics = [
   { value: "600+", label: "Backlink rankings" },
 ] as const;
 
-const cofounderProofs = [
-  "65% of high-potential startups fail because of cofounder conflict.",
-  "Most cofounders rush their equity split in under a day - before roles or trust are established.",
-  "Every human cofounder has a life, a limit, and an agenda that isn't yours.",
+// Static preview from the public Business Database, August 2026 estimates.
+const databasePreviewProducts = [
+  { name: "ElevenLabs Agent Templates", domain: "elevenlabs.io", revenue: "$45.6M", initial: "E" },
+  { name: "Grok’s Text to Speech API", domain: "x.ai", revenue: "$37.1M", initial: "G" },
+  { name: "Higgsfield Genjutsu", domain: "higgsfield.ai", revenue: "$36.6M", initial: "H" },
+  { name: "Cursor 3", domain: "cursor.com", revenue: "$27.8M", initial: "C" },
 ] as const;
 
 const marketTools = [
@@ -365,23 +367,41 @@ export function AstromarLandingPage() {
         <div className={styles.reasonStack}>
           <article className={classes("reasonBlock", "reasonBlockLead")}>
             <div className={styles.reasonText}>
-              <p className={styles.eyebrow}>Why you need an AI cofounder</p>
+              <p className={styles.eyebrow}>MINACO BUSINESS DATABASE</p>
               <h2>
-                No ego. <br className={styles.mobileOnly} />No hidden agenda. <br className={styles.mobileOnly} />No politics.
+                Find your next product idea.<br />Start with what’s already selling.
               </h2>
               <p>
-                Every human cofounder brings interests that don&apos;t fully align with yours. {productBrand.name}{" "}doesn&apos;t.
-                It has no equity to protect, no reputation to manage, no side to take. Just your outcome.
+                Explore 50,000+ products ranked by the latest estimated revenue, updated monthly.
+                Filter by category, compare growth, and find businesses worth a closer look before you build.
               </p>
+              <Link className={classes("button", "buttonPrimary", "databaseCta")} href="/app/product-intelligence">
+                Explore the database <ArrowRight size={18} aria-hidden="true" />
+              </Link>
             </div>
             <div className={styles.reasonSupport}>
-              <div className={styles.principleList} aria-label="AI cofounder alignment principles">
-                {cofounderProofs.map((proof) => (
-                  <span key={proof}>
-                    <i aria-hidden="true" />
-                    <strong className={styles.principleCopy}>{proof}</strong>
-                  </span>
+              <div className={styles.databasePreview} aria-label="Business Database product list preview">
+                <div className={styles.databasePreviewHeading}>
+                  <MinacoBrandMark className={styles.databasePreviewMark} />
+                  <strong>Business Database</strong>
+                </div>
+                <div className={styles.databasePreviewFilters} aria-hidden="true">
+                  <span>All categories</span><span>Revenue ↓</span>
+                </div>
+                <div className={styles.databasePreviewColumns}>
+                  <span>Product</span><span>Est. monthly revenue</span>
+                </div>
+                {databasePreviewProducts.map((product) => (
+                  <div className={styles.databasePreviewRow} key={product.domain}>
+                    <span className={styles.databaseProductIcon} aria-hidden="true">{product.initial}</span>
+                    <div className={styles.databaseProductIdentity}>
+                      <strong>{product.name}</strong>
+                      <span>{product.domain}</span>
+                    </div>
+                    <strong className={styles.databaseRevenue}>{product.revenue}</strong>
+                  </div>
                 ))}
+                <p className={styles.databasePreviewNote}>Preview · Aug 2026 estimates · Updated monthly</p>
               </div>
             </div>
           </article>

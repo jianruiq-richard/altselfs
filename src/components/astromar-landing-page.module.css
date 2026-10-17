@@ -650,6 +650,31 @@
   z-index: 1;
 }
 
+.databaseCta { margin-top: 26px; }
+
+.databasePreview {
+  min-width: 0;
+  padding: clamp(16px, 2vw, 24px);
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: linear-gradient(145deg, #1b1914, #111110 65%);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .25);
+}
+
+.databasePreviewHeading { display: flex; align-items: center; gap: 10px; font-size: 18px; }
+.databasePreviewMark img { display: block; width: 28px; height: 28px; }
+.databasePreviewFilters { display: flex; gap: 8px; margin: 22px 0; }
+.databasePreviewFilters span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; }
+.databasePreviewFilters span:last-child { color: var(--amber); border-color: rgba(242, 195, 107, .25); }
+.databasePreviewColumns { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 12px; color: var(--subtle); font-size: 10px; }
+.databasePreviewRow { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 17px 0; border-top: 1px solid var(--line); }
+.databaseProductIcon { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line-strong); border-radius: 8px; background: rgba(242, 195, 107, .08); color: var(--amber); font-size: 14px; }
+.databaseProductIdentity { display: grid; min-width: 0; gap: 5px; }
+.databaseProductIdentity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.databaseProductIdentity span { color: var(--subtle); font-size: 11px; }
+.databaseRevenue { color: var(--amber); font-size: 14px; font-variant-numeric: tabular-nums; }
+.databasePreviewNote { margin: 8px 0 0; padding-top: 14px; border-top: 1px solid var(--line); color: var(--subtle); font-size: 10px; line-height: 1.6; }
+
 .reasonBlockMarket {
   grid-template-columns: minmax(0, 0.86fr) minmax(360px, 0.86fr);
 }
