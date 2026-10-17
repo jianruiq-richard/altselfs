@@ -487,7 +487,7 @@ export function AstromarLandingPage() {
       <section className={classes("container", "section")} id="demo">
         <div className={styles.sectionHeading}>
           <div>
-            <p className={styles.eyebrow}>AI cofounder in the decision room</p>
+            <p className={styles.eyebrow}>Use cases</p>
             <h2>Ask once. Watch the work. Decide with evidence.</h2>
           </div>
           <p className={styles.sectionCopy}>
