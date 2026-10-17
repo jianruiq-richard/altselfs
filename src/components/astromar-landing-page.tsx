@@ -431,7 +431,7 @@ export function AstromarLandingPage() {
               </Link>
             </div>
             <div className={styles.reasonSupport}>
-              <div className={styles.marketNote}>Multiple sources. Cross-checked by Minaco.</div>
+              <div className={styles.marketNote}>Research tools built in. One affordable subscription.</div>
               <div className={styles.marketTools} aria-label="Integrated research tools and business database">
                 {marketTools.map((tool) => (
                   <div className={styles.toolLogo} key={tool.name}>
@@ -448,12 +448,12 @@ export function AstromarLandingPage() {
               </div>
               <dl className={styles.researchEvidence}>
                 <div>
-                  <dt>Observed</dt>
-                  <dd>What the sources show.</dd>
+                  <dt>No separate tool subscriptions</dt>
+                  <dd>Access these research sources through Minaco AI Agent without paying for each tool separately.</dd>
                 </div>
                 <div>
-                  <dt>Inferred</dt>
-                  <dd>What the evidence and business models suggest.</dd>
+                  <dt>No accounts to connect</dt>
+                  <dd>Start researching with your Minaco subscription. No third-party accounts or API keys required.</dd>
                 </div>
               </dl>
             </div>

@@ -745,8 +745,8 @@
 
 .researchEvidence > div {
   display: grid;
-  grid-template-columns: 80px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
   align-items: baseline;
   font-size: 14px;
   line-height: 1.6;
