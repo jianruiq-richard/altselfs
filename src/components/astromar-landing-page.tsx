@@ -419,7 +419,7 @@ export function AstromarLandingPage() {
               <p>
                 Minaco also examines traffic from the product to payment platforms, showing how many visits
                 lead to checkout. It combines this signal with real business cases and models to estimate
-                revenue and uncover how the product gets customers.
+                revenue and <strong>uncover how the product gets customers.</strong>
               </p>
               <p>
                 Each analysis clearly separates <strong>what the sources show</strong> from{' '}
