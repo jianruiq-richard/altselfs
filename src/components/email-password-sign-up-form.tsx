@@ -79,7 +79,7 @@ export function GoogleMark() {
   );
 }
 
-export function EmailPasswordSignUpForm() {
+export function EmailPasswordSignUpForm({ redirectUrl = DEFAULT_AUTH_REDIRECT, oauthCallbackUrl = "/sso-callback", signInUrl = "/sign-in?method=email" }: { redirectUrl?: string; oauthCallbackUrl?: string; signInUrl?: string } = {}) {
   const router = useRouter();
   const clerk = useClerk();
   const { isLoaded, signUp, setActive } = useSignUp();
@@ -103,7 +103,7 @@ export function EmailPasswordSignUpForm() {
       session: sessionId,
       navigate: async ({ decorateUrl }) => {
         completePendingAuthFlow();
-        const destination = decorateUrl(DEFAULT_AUTH_REDIRECT);
+        const destination = decorateUrl(redirectUrl);
         if (destination.startsWith("http")) {
           window.location.assign(destination);
           return;
@@ -245,8 +245,8 @@ export function EmailPasswordSignUpForm() {
     try {
       await signUp.authenticateWithRedirect({
         strategy: "oauth_google",
-        redirectUrl: "/sso-callback",
-        redirectUrlComplete: DEFAULT_AUTH_REDIRECT,
+        redirectUrl: oauthCallbackUrl,
+        redirectUrlComplete: redirectUrl,
       });
     } catch (oauthError) {
       setError(getErrorMessage(oauthError, "Google sign-up could not be started. Please try again."));
@@ -375,7 +375,7 @@ export function EmailPasswordSignUpForm() {
         {error ? <p className={styles.phoneError} role="alert">{error}</p> : null}
 
         {existingAccount ? (
-          <Link className={styles.authTextButton} href="/sign-in?method=email">
+          <Link className={styles.authTextButton} href={signInUrl}>
             Sign in instead
           </Link>
         ) : null}
