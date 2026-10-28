@@ -1233,17 +1233,15 @@ function hermesProviderConfigYamlLines(selection: HermesModelSelection) {
 
 export function buildHermesProviderRoutingYamlLines(
   selection: Pick<HermesModelSelection, 'provider'>,
-  config: Pick<ServerConfig, 'hermesOpenRouterProvidersOnly'>
+  config: Pick<ServerConfig, 'hermesOpenRouterProvidersOrder'>
 ) {
-  if (selection.provider !== 'openrouter' || config.hermesOpenRouterProvidersOnly.length === 0) {
+  if (selection.provider !== 'openrouter' || config.hermesOpenRouterProvidersOrder.length === 0) {
     return [];
   }
   return [
     'provider_routing:',
-    '  only:',
-    ...config.hermesOpenRouterProvidersOnly.map((provider) => `    - ${yamlString(provider)}`),
     '  order:',
-    ...config.hermesOpenRouterProvidersOnly.map((provider) => `    - ${yamlString(provider)}`),
+    ...config.hermesOpenRouterProvidersOrder.map((provider) => `    - ${yamlString(provider)}`),
     '  require_parameters: true',
   ];
 }

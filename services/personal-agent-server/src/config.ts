@@ -17,7 +17,7 @@ export type ServerConfig = {
   hermesBaseUrl: string;
   hermesApiKeyEnv: string;
   hermesOpenRouterApiKeyEnv: string;
-  hermesOpenRouterProvidersOnly: string[];
+  hermesOpenRouterProvidersOrder: string[];
   codexBin: string;
   codexHomeRoot: string;
   workspaceRoot: string;
@@ -484,6 +484,7 @@ export function loadConfig(): ServerConfig {
   const hermesBaseUrl = readEnv('HERMES_BASE_URL', 'https://vip.apiyi.com/v1');
   const hermesApiKeyEnv = readEnv('HERMES_API_KEY_ENV', 'APIYI_API_KEY');
   const openRouterApiKeyEnv = readEnv('OPENROUTER_API_KEY_ENV', 'OPENROUTER_API_KEY');
+  const hermesOpenRouterProvidersOrder = readCsvEnv('HERMES_OPENROUTER_PROVIDERS_ORDER');
   const codexModel = process.env.CODEX_MODEL?.trim() || 'gpt-5.5';
   const codexModelProvider = process.env.CODEX_MODEL_PROVIDER?.trim() || 'openai';
   const env = readEnv('ALTSELFS_AGENT_ENV', process.env.NODE_ENV || 'development');
@@ -502,7 +503,9 @@ export function loadConfig(): ServerConfig {
     hermesBaseUrl,
     hermesApiKeyEnv,
     hermesOpenRouterApiKeyEnv: readEnv('HERMES_OPENROUTER_API_KEY_ENV', hermesApiKeyEnv),
-    hermesOpenRouterProvidersOnly: readCsvEnv('HERMES_OPENROUTER_PROVIDERS_ONLY'),
+    hermesOpenRouterProvidersOrder: hermesOpenRouterProvidersOrder.length > 0
+      ? hermesOpenRouterProvidersOrder
+      : readCsvEnv('HERMES_OPENROUTER_PROVIDERS_ONLY'),
     codexBin: readEnv('CODEX_BIN', 'codex'),
     codexHomeRoot: path.resolve(readEnv('CODEX_HOME_ROOT', '/tmp/altselfs-codex-homes')),
     workspaceRoot: path.resolve(readEnv('WORKSPACE_ROOT', '/tmp/altselfs-workspaces')),

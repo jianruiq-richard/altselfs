@@ -100,14 +100,11 @@ test('Hermes chat-completions prompt caching retains one hour', () => {
   ]);
 });
 
-test('Hermes prioritizes Friendli and falls back to Alibaba without affecting other providers', () => {
-  const config = { hermesOpenRouterProvidersOnly: ['friendli', 'alibaba'] };
+test('Hermes prioritizes Friendli then Alibaba and permits other provider fallbacks', () => {
+  const config = { hermesOpenRouterProvidersOrder: ['friendli', 'alibaba'] };
 
   assert.deepEqual(buildHermesProviderRoutingYamlLines({ provider: 'openrouter' }, config), [
     'provider_routing:',
-    '  only:',
-    '    - "friendli"',
-    '    - "alibaba"',
     '  order:',
     '    - "friendli"',
     '    - "alibaba"',
@@ -116,7 +113,7 @@ test('Hermes prioritizes Friendli and falls back to Alibaba without affecting ot
   assert.deepEqual(buildHermesProviderRoutingYamlLines({ provider: 'apiyi' }, config), []);
   assert.deepEqual(buildHermesProviderRoutingYamlLines(
     { provider: 'openrouter' },
-    { hermesOpenRouterProvidersOnly: [] }
+    { hermesOpenRouterProvidersOrder: [] }
   ), []);
 });
 
