@@ -1,8 +1,8 @@
 import { clerkMiddleware } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { buildLegacyWorkspaceRedirect, buildSignedInHomepageRedirect } from '@/lib/homepage-redirect';
 
-export default clerkMiddleware(
+const authenticatedMiddleware = clerkMiddleware(
   async (auth, req) => {
     const redirectUrl = buildLegacyWorkspaceRedirect(req.nextUrl);
     if (redirectUrl) return NextResponse.redirect(redirectUrl, 308);
@@ -31,6 +31,17 @@ export default clerkMiddleware(
     },
   },
 );
+
+function localPreviewMiddleware(req: NextRequest) {
+  const redirectUrl = buildLegacyWorkspaceRedirect(req.nextUrl);
+  return redirectUrl ? NextResponse.redirect(redirectUrl, 308) : NextResponse.next();
+}
+
+// Local release previews must not enter Clerk's frontend proxy, which can
+// rewrite the preview back to itself. Production builds keep Clerk unchanged.
+export default process.env.MINACO_WEBSITE_PREVIEW === '1'
+  ? localPreviewMiddleware
+  : authenticatedMiddleware;
 
 export const config = {
   matcher: [

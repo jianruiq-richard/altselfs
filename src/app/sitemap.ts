@@ -4,7 +4,7 @@ import { productBrand } from '@/lib/brand';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
-    ...['/', '/introduction', '/blog', '/pricing', '/contact', '/terms', '/privacy'].map((path) => ({
+    ...['/', '/agent', '/introduction', '/blog', '/pricing', '/contact', '/terms', '/privacy'].map((path) => ({
       url: `${productBrand.canonicalUrl}${path === '/' ? '' : path}`,
     })),
     ...blogPosts.map((post) => ({
