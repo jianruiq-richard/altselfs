@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Download, ExternalLink } from 'lucide-react';
+import { ArrowRight, Check, Download, ExternalLink } from 'lucide-react';
 import { DiscordLogo } from '@/components/discord-logo';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { productBrand } from '@/lib/brand';
@@ -28,14 +28,14 @@ const faqs = [
 
 export function MinacoDesktopLandingPage({ catalog }: Props) {
   const agents = catalog.agents;
-  const [agentId, setAgentId] = useState(agents[0]?.id || '');
+  const [agentId, setAgentId] = useState(agents.find((agent) => agent.id !== 'codex')?.id || agents[0]?.id || '');
   const [stage, setStage] = useState(0);
   const [faq, setFaq] = useState(0);
   const [workspace, setWorkspace] = useState('Launch research');
   const activeAgent = agents.find((agent) => agent.id === agentId) || agents[0];
   const paidPlans = catalog.plans.filter((plan) => plan.key !== 'FREE');
-  const featuredModels = useMemo(() => distinctModels(catalog.models).slice(0, 12), [catalog.models]);
-  const downloadUrl = catalog.release?.url || 'https://desktop.minaco.ai/#download';
+  const featuredModels = useMemo(() => distinctModels(catalog.models).slice(0, 6), [catalog.models]);
+  const downloadUrl = '/download';
   const releaseText = catalog.release
     ? `Minaco ${catalog.release.version} · Apple silicon · ${formatBytes(catalog.release.bytes)}`
     : 'Latest signed macOS release';
@@ -61,33 +61,21 @@ export function MinacoDesktopLandingPage({ catalog }: Props) {
 
       <main id="top">
         <section className={styles.hero} aria-labelledby="hero-title">
-          <div className={styles.heroMotif} aria-hidden="true">
-            <MinacoBrandMark className={styles.heroMark} imageClassName={styles.heroMarkImage} variant="mark" />
-          </div>
           <div className={styles.heroCopy}>
-            <h1 id="hero-title">Your Agents.<br />One workspace.</h1>
+            <h1 id="hero-title"><span>Your Agents.</span><span>One workspace.</span></h1>
             <p>Use supported native AI Agents and their ecosystems with one Minaco subscription. Switch specialists without restarting the work.</p>
             <div className={styles.heroActions}>
-              <a className={styles.primaryAction} href={downloadUrl} data-analytics-cta="hero_download_macos">
+              <Link className={styles.primaryAction} href={downloadUrl} data-analytics-cta="hero_download_macos" data-analytics-location="landing_hero">
                 <Download aria-hidden="true" size={19} /> Download for macOS
-              </a>
+              </Link>
               <a className={styles.secondaryAction} href={productBrand.discordUrl} target="_blank" rel="noreferrer" data-analytics-cta="hero_join_discord">
                 <DiscordLogo /> Join Discord
               </a>
             </div>
             <p className={styles.releaseLine}>{releaseText}. Download first; sign in when you open it.</p>
           </div>
-          <div className={styles.folderStack} aria-label="One continuous Minaco workflow">
-            <a className={`${styles.folder} ${styles.folderBack}`} href="#agents"><span>Native Agents</span></a>
-            <a className={`${styles.folder} ${styles.folderMiddle}`} href="#how"><span>Continuous context</span></a>
-            <a className={`${styles.folder} ${styles.folderNear}`} href="#pricing"><span>One account</span></a>
-            <div className={`${styles.folder} ${styles.folderFront}`}>
-              <strong>One Minaco conversation</strong>
-              <p>Choose the best Agent for the next turn. Keep the project, files, visible context, and billing in one place.</p>
-              <div className={styles.folderAgentLine}>
-                {(agents.length ? agents.slice(0, 5) : [{ id: 'live', name: 'Live Agent catalog' } as PublicAgent]).map((agent) => <span key={agent.id}>{agent.name}</span>)}
-              </div>
-            </div>
+          <div className={styles.heroProduct} data-ui aria-label="Interactive cross-Agent handoff">
+            <HeroHandoff agents={agents} activeAgent={activeAgent} onSelect={setAgentId} />
           </div>
         </section>
 
@@ -178,7 +166,7 @@ export function MinacoDesktopLandingPage({ catalog }: Props) {
             <h2 id="rates-title">Know what<br />each turn costs.</h2>
             <p>Current Minaco-credit model rates come directly from the Desktop API. Figures are credits per one million tokens.</p>
           </div>
-          {featuredModels.length ? <ModelRateTable models={featuredModels} /> : (
+          {featuredModels.length ? <div><ModelRateTable models={featuredModels} /><Link className={styles.ratesLink} href="/pricing#model-rates">Search all model rates<ArrowRight size={17} /></Link></div> : (
             <div className={styles.ratesUnavailable}>Live model rates are unavailable right now. Minaco will never substitute made-up prices.</div>
           )}
         </section>
@@ -215,7 +203,7 @@ export function MinacoDesktopLandingPage({ catalog }: Props) {
             <label htmlFor="workspace-name">Workspace name</label>
             <input id="workspace-name" value={workspace} onChange={(event) => setWorkspace(event.target.value)} />
             <div className={styles.modeChoice}><button className={styles.modeSelected}>Work</button><button>Code</button></div>
-            <a href={downloadUrl}><Download size={18} /> Download and create “{workspace || 'New workspace'}”</a>
+            <Link href={`${downloadUrl}?workspace=${encodeURIComponent(workspace || 'New workspace')}`}><Download size={18} /> Download and create “{workspace || 'New workspace'}”</Link>
           </div>
         </section>
       </main>
@@ -229,10 +217,51 @@ export function MinacoDesktopLandingPage({ catalog }: Props) {
           <div><strong>Legal</strong><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
           <p>{productBrand.supportEmail}<br />{releaseText}</p>
         </div>
-        <div className={styles.footerBottom}><span>© {new Date().getFullYear()} Minaco</span><a href={downloadUrl}>Download macOS<ExternalLink size={14} /></a></div>
+        <div className={styles.footerBottom}><span>© {new Date().getFullYear()} Minaco</span><Link href={downloadUrl}>Download macOS<ExternalLink size={14} /></Link></div>
       </footer>
     </div>
   );
+}
+
+function HeroHandoff({
+  agents,
+  activeAgent,
+  onSelect,
+}: {
+  agents: PublicAgent[];
+  activeAgent?: PublicAgent;
+  onSelect(agentId: string): void;
+}) {
+  const choices = agents.slice(0, 5);
+  const current = activeAgent || choices[0];
+  return <div className={styles.handoffDemo}>
+    <div className={styles.handoffDemoTop}>
+      <span><i /> Launch plan</span>
+      <strong>Context handoff</strong>
+    </div>
+    <div className={styles.handoffDemoBody}>
+      <div className={styles.handoffSource}>
+        <small>Current Agent</small>
+        <strong>Codex</strong>
+        <p>Research is complete. The next Agent should turn the decision into a release-ready implementation.</p>
+        <div><Check size={14} /> Visible messages</div>
+        <div><Check size={14} /> Tool activity</div>
+        <div><Check size={14} /> Project files</div>
+      </div>
+      <div className={styles.handoffRoute} aria-hidden="true"><span>handoff</span><ArrowRight size={22} /></div>
+      <div className={styles.handoffTarget}>
+        <small>Continue with</small>
+        <strong>{current?.name || 'Choose an Agent'}</strong>
+        <p>{current?.description || 'The live Agent catalog is temporarily unavailable.'}</p>
+        <span>Credentials stay with {current?.vendor || 'the provider'}</span>
+      </div>
+    </div>
+    {choices.length ? <div className={styles.handoffAgentPicker} aria-label="Choose the next Agent">
+      {choices.map((agent) => <button key={agent.id} className={agent.id === current?.id ? styles.handoffAgentActive : ''} onClick={() => onSelect(agent.id)}>
+        {agent.name}
+      </button>)}
+    </div> : null}
+  </div>;
 }
 
 function AgentWorkspace({ agent }: { agent?: PublicAgent }) {

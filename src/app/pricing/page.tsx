@@ -145,18 +145,7 @@ export default function PricingPage() {
     }
   };
 
-  if (!isLoaded) {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-[#090909] px-6 text-center text-zinc-400">
-        <div>
-          <p className="text-base font-semibold text-zinc-100">Loading pricing</p>
-          <p className="mt-2 text-sm text-zinc-500">Please wait...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isSignedIn) {
+  if (!isLoaded || !isSignedIn) {
     return <PublicPricingPage />;
   }
 

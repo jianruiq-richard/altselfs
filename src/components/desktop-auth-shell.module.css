@@ -1,0 +1,173 @@
+.page {
+  min-height: 100svh;
+  background: #0d0c09;
+  color: #f6f0e4;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.header {
+  width: min(1320px, calc(100% - 64px));
+  height: 88px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #2b271f;
+  color: #8f877a;
+  font-size: 14px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: #f6f0e4;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  text-transform: none;
+}
+
+.brandMark { width: 30px; height: 30px; }
+.brandImage { width: 100%; height: 100%; }
+
+.layout {
+  width: min(1180px, calc(100% - 64px));
+  min-height: calc(100svh - 88px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(400px, .92fr);
+  align-items: center;
+  gap: clamp(64px, 9vw, 144px);
+  padding: 72px 0 96px;
+}
+
+.context { min-width: 0; }
+
+.contextLabel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 30px;
+  color: #d3a955;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.context h1 {
+  margin: 0;
+  max-width: 680px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(54px, 6vw, 86px);
+  font-weight: 400;
+  letter-spacing: -.065em;
+  line-height: .94;
+}
+
+.context > p:not(.contextLabel, .security) {
+  max-width: 600px;
+  margin: 32px 0 0;
+  color: #aea597;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.steps {
+  margin: 48px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid #302b22;
+}
+
+.steps li {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+  border-bottom: 1px solid #302b22;
+  color: #716b61;
+}
+
+.steps li > span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #3c372e;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.steps strong { font-size: 14px; font-weight: 600; }
+.steps .stepActive { color: #f6f0e4; }
+.steps .stepActive > span { border-color: #d3a955; color: #d3a955; }
+.steps .stepComplete { color: #a8a092; }
+.steps .stepComplete > span { border-color: #4b654a; background: #172116; color: #84b580; }
+
+.security {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 24px 0 0;
+  color: #777064;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.security svg { flex: 0 0 auto; margin-top: 1px; }
+
+.authPanel {
+  min-width: 0;
+  padding: clamp(28px, 4vw, 48px);
+  border: 1px solid #393226;
+  border-radius: 24px;
+  background: #17140f;
+}
+
+.authHeading { margin-bottom: 28px; }
+.authHeading p { margin: 0 0 14px; color: #d3a955; font-size: 14px; font-weight: 700; }
+.authHeading h2 { margin: 0; font-size: clamp(28px, 3vw, 38px); letter-spacing: -.04em; line-height: 1.05; }
+.authHeading span { display: block; margin-top: 14px; color: #a69d8e; font-size: 14px; line-height: 1.55; }
+
+.recovery p { margin: 0; color: #a69d8e; font-size: 15px; line-height: 1.6; }
+.recovery a {
+  display: inline-flex;
+  justify-content: center;
+  margin-top: 24px;
+  padding: 13px 20px;
+  border-radius: 999px;
+  background: #f1c46b;
+  color: #1a1308;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.authPanel :global(button) {
+  box-shadow: none !important; /* taste-skill-ignore: explicitly remove the inherited provider shadow */
+  background-image: none !important;
+}
+
+.steps li { color: #8d867a; }
+.security { color: #90887b; }
+
+@media (max-width: 880px) {
+  .header { width: min(100% - 40px, 680px); height: 72px; }
+  .layout { width: min(100% - 40px, 680px); min-height: auto; grid-template-columns: 1fr; gap: 44px; padding: 56px 0 72px; }
+  .context h1 { font-size: clamp(50px, 12vw, 70px); }
+  .context > p:not(.contextLabel, .security) { font-size: 16px; }
+  .steps { margin-top: 36px; }
+}
+
+@media (max-width: 520px) {
+  .header { width: calc(100% - 32px); }
+  .header > span { display: none; }
+  .layout { width: calc(100% - 32px); padding-top: 40px; }
+  .contextLabel { margin-bottom: 22px; }
+  .context h1 { font-size: 46px; }
+  .context > p:not(.contextLabel, .security) { margin-top: 24px; }
+  .authPanel { padding: 24px 20px; border-radius: 20px; }
+}

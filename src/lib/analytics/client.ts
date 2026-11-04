@@ -84,6 +84,10 @@ export function setAnalyticsUser(
 
 export function analyticsRoute(pathname: string) {
   if (pathname === '/') return { routeName: 'workspace_preview', pagePath: '/' };
+  if (pathname === '/download') return { routeName: 'desktop_download', pagePath: '/download' };
+  if (pathname.startsWith('/desktop/register')) return { routeName: 'desktop_auth', pagePath: '/desktop/register' };
+  if (pathname.startsWith('/desktop/sso')) return { routeName: 'desktop_auth_callback', pagePath: '/desktop/sso' };
+  if (pathname.startsWith('/desktop/complete')) return { routeName: 'desktop_auth_complete', pagePath: '/desktop/complete' };
   if (pathname === '/app') return { routeName: 'discussion', pagePath: '/app' };
   if (pathname === '/introduction') return { routeName: 'landing', pagePath: '/introduction' };
   if (pathname === '/pricing') return { routeName: 'pricing', pagePath: '/pricing' };
@@ -126,9 +130,9 @@ export function buildPageViewParams(
 ): AnalyticsParams {
   const route = analyticsRoute(pathname);
   return {
-    app_area: route.routeName === 'landing' || route.routeName === 'pricing' || route.routeName.startsWith('blog_')
+    app_area: route.routeName === 'landing' || route.routeName === 'pricing' || route.routeName === 'desktop_download' || route.routeName.startsWith('blog_')
       ? 'marketing'
-      : route.routeName === 'sign_in' || route.routeName === 'sign_up' || route.routeName === 'sso_callback'
+      : route.routeName === 'sign_in' || route.routeName === 'sign_up' || route.routeName === 'sso_callback' || route.routeName.startsWith('desktop_auth')
         ? 'authentication'
         : 'product',
     route_name: route.routeName,

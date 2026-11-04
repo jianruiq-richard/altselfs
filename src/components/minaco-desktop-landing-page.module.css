@@ -40,12 +40,13 @@
 .accountActions { display: flex; justify-content: flex-end; align-items: center; gap: 22px; }
 .headerAction { padding: 11px 17px; background: var(--ink); color: #0b0a08; border-radius: 2px 12px 2px 2px; font-size: 14px; font-weight: 650; }
 
-.hero { position: relative; min-height: 880px; padding: 76px max(24px, calc((100vw - 1392px) / 2)) 0; }
+.hero { position: relative; display: grid; grid-template-columns: minmax(410px, .88fr) minmax(560px, 1.12fr); gap: clamp(28px, 4vw, 66px); align-items: center; min-height: calc(100svh - 76px); padding: 62px max(24px, calc((100vw - 1392px) / 2)) 74px; }
 .heroMotif { position: absolute; z-index: 0; top: -260px; right: -180px; width: 860px; height: 860px; overflow: hidden; background: var(--accent); clip-path: polygon(48% 0, 58% 37%, 100% 50%, 58% 62%, 48% 100%, 39% 62%, 0 50%, 39% 37%); }
 .heroMark { position: absolute; left: 235px; top: 260px; width: 320px; height: 320px; opacity: .14; }
 .heroMarkImage { width: 100%; height: 100%; filter: brightness(0); }
-.heroCopy { position: relative; z-index: 2; max-width: 910px; }
-.hero h1 { max-width: 850px; margin: 16px 0 30px; font-size: clamp(68px, 8.4vw, 132px); line-height: .88; letter-spacing: -.07em; font-weight: 680; }
+.heroCopy { position: relative; z-index: 2; max-width: 620px; }
+.hero h1 { max-width: 620px; margin: 0 0 30px; font-size: clamp(62px, 5.55vw, 82px); line-height: .9; letter-spacing: -.07em; font-weight: 680; }
+.hero h1 span { display: block; }
 .heroCopy > p { max-width: 620px; margin: 0; color: var(--muted); font-size: clamp(18px, 1.65vw, 24px); line-height: 1.5; }
 .heroActions { display: flex; align-items: center; gap: 12px; margin-top: 36px; }
 .primaryAction, .secondaryAction { display: inline-flex; min-height: 54px; align-items: center; justify-content: center; gap: 10px; padding: 0 23px; border-radius: 2px 16px 2px 2px; font-size: 15px; font-weight: 650; }
@@ -54,6 +55,29 @@
 .secondaryAction { background: var(--soft); color: var(--ink); }
 .secondaryAction:hover { background: #2b2923; }
 .heroCopy .releaseLine { margin-top: 16px; font-size: 14px; color: #8f8677; }
+
+.heroProduct { position: relative; z-index: 2; min-width: 0; }
+.handoffDemo { overflow: hidden; background: #141310; color: #f2eee5; border-radius: 3px 26px 3px 3px; }
+.handoffDemoTop { display: flex; justify-content: space-between; align-items: center; min-height: 54px; padding: 0 20px; background: #1c1a16; color: #9f978a; font-size: 13px; }
+.handoffDemoTop > span { display: inline-flex; align-items: center; gap: 9px; }
+.handoffDemoTop i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.handoffDemoTop strong { color: #d8cebd; font-size: 13px; font-weight: 600; }
+.handoffDemoBody { display: grid; grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); align-items: stretch; min-height: 370px; }
+.handoffSource, .handoffTarget { display: flex; flex-direction: column; padding: 36px 28px 30px; }
+.handoffSource { background: #11110f; }
+.handoffTarget { background: #242019; }
+.handoffSource small, .handoffTarget small { color: #928a7d; font-size: 13px; }
+.handoffSource strong, .handoffTarget strong { margin-top: 8px; font-size: clamp(27px, 2.4vw, 40px); letter-spacing: -.045em; }
+.handoffSource p, .handoffTarget p { margin: 22px 0 24px; color: #c6bcad; font-size: 15px; line-height: 1.55; }
+.handoffSource div { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: #a9a092; font-size: 13px; }
+.handoffSource div svg { color: var(--green); }
+.handoffTarget > span { margin-top: auto; padding-top: 18px; color: #d3ae60; font-size: 13px; }
+.handoffRoute { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: var(--accent); color: #17130c; }
+.handoffRoute span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12px; font-weight: 700; }
+.handoffAgentPicker { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; padding: 1px 0 0; background: #353129; }
+.handoffAgentPicker button { min-width: 0; min-height: 58px; padding: 8px 10px; border: 0; background: #1b1915; color: #928a7d; cursor: pointer; font-size: 12px; line-height: 1.3; }
+.handoffAgentPicker button:hover { background: #28241d; color: #e7dfd2; }
+.handoffAgentPicker .handoffAgentActive { background: var(--accent); color: #17130c; font-weight: 700; }
 
 .folderStack { position: absolute; z-index: 3; left: 50%; bottom: 0; width: min(86vw, 1230px); height: 380px; transform: translateX(-50%); }
 .folder { position: absolute; left: 0; width: 100%; display: block; color: var(--ink); clip-path: polygon(0 42px, 9% 42px, 12% 0, 34% 0, 37% 42px, 100% 42px, 100% 100%, 0 100%); }
@@ -178,6 +202,7 @@
 .rateRow strong, .rateRow small { display: block; }
 .rateRow strong { font-size: 15px; }
 .rateRow small { margin-top: 3px; color: #6a6357; }
+.ratesLink { display: inline-flex; align-items: center; gap: 10px; margin-top: 18px; padding: 14px 18px; background: #181612; color: #f7f0e3; font-size: 15px; font-weight: 650; }
 .ratesUnavailable { min-height: 280px; display: grid; place-items: center; padding: 40px; background: #ded5c5; color: #5f584d; font-size: 18px; text-align: center; }
 
 .webAgent { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 70px; padding: 110px max(24px, calc((100vw - 1392px) / 2)); background: #5c4931; }
@@ -223,6 +248,9 @@
 @media (max-width: 1040px) {
   .nav { display: none; }
   .header { grid-template-columns: 1fr 1fr; }
+  .hero { grid-template-columns: 1fr; padding-top: 72px; }
+  .heroCopy { max-width: 760px; }
+  .heroProduct { width: min(100%, 820px); justify-self: center; }
   .heroMotif { right: -410px; opacity: .55; }
   .folderAgentLine { display: none; }
   .showcase { grid-template-columns: 1fr; }
@@ -245,12 +273,22 @@
   .accountActions { gap: 12px; }
   .accountActions > a:first-child { display: none; }
   .headerAction { padding: 9px 12px; font-size: 13px; }
-  .hero { min-height: 820px; padding: 70px 16px 0; }
+  .hero { display: flex; min-height: auto; flex-direction: column; gap: 44px; padding: 52px 16px 70px; }
   .heroMotif { top: -120px; right: -330px; width: 590px; height: 590px; opacity: .3; }
-  .hero h1 { font-size: clamp(52px, 14vw, 64px); }
+  .hero h1 { font-size: clamp(50px, 13.7vw, 62px); }
   .heroCopy > p { font-size: 17px; }
   .heroActions { align-items: stretch; flex-direction: column; }
   .primaryAction, .secondaryAction { width: 100%; }
+  .heroProduct { width: calc(100% + 32px); }
+  .handoffDemo { border-radius: 0; }
+  .handoffDemoTop { padding-inline: 16px; }
+  .handoffDemoBody { grid-template-columns: 1fr; min-height: 0; }
+  .handoffSource, .handoffTarget { min-height: 280px; padding: 27px 20px; }
+  .handoffRoute { min-height: 58px; flex-direction: row; }
+  .handoffRoute span { writing-mode: initial; transform: none; }
+  .handoffRoute svg { transform: rotate(90deg); }
+  .handoffAgentPicker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .handoffAgentPicker button { min-height: 52px; }
   .folderStack { width: 100%; height: 330px; }
   .folder { clip-path: polygon(0 34px, 7% 34px, 11% 0, 45% 0, 49% 34px, 100% 34px, 100% 100%, 0 100%); }
   .folder > span { top: 8px; left: 14%; font-size: 13px; }
@@ -289,7 +327,7 @@
   .stageControl > div { grid-template-columns: repeat(2, 1fr); }
   .planSteps { grid-template-columns: 1fr; }
   .plan { min-height: auto !important; }
-  .rateHeader, .rateRow { grid-template-columns: minmax(120px, 2fr) repeat(3, 1fr); gap: 8px; padding: 0 12px; font-size: 12px; }
+  .rateHeader, .rateRow { grid-template-columns: minmax(120px, 2fr) repeat(3, 1fr); gap: 8px; padding: 0 12px; font-size: 13px; }
   .rateRow small { display: none; }
   .webAgent { padding: 90px 16px; }
   .faq > h2, .faqStack { width: 100%; }
@@ -306,8 +344,13 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .hero h1 span { animation: hero-line 820ms cubic-bezier(.2,.75,.2,1) both; }
+  .hero h1 span:nth-child(2) { animation-delay: 90ms; }
+  .heroCopy > p, .heroActions, .releaseLine { animation: enter 620ms 220ms both; }
+  .heroProduct { animation: enter 700ms 130ms both; }
   .heroCopy, .showcase > *, .capabilities > *, .how > *, .pricing > *, .rates > *, .webAgent > *, .faq > *, .finalCta > * { animation: enter 650ms both; }
   .showcase > :nth-child(2), .capabilities > :nth-child(2), .pricing > :nth-child(2), .rates > :nth-child(2), .finalCta > :nth-child(2) { animation-delay: 100ms; }
   .showcase > :nth-child(3), .pricing > :nth-child(3) { animation-delay: 180ms; }
   @keyframes enter { from { opacity: .01; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes hero-line { from { opacity: .01; transform: translateY(34px); } to { opacity: 1; transform: translateY(0); } }
 }

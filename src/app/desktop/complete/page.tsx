@@ -1,9 +1,12 @@
 import { SignUp } from '@clerk/nextjs';
 import { desktopRegistrationRequest } from '@/lib/desktop-registration';
+import { DesktopAuthShell, InvalidDesktopRequest } from '@/components/desktop-auth-shell';
 
 export default async function DesktopComplete({ searchParams }: { searchParams: Promise<{ request?: string }> }) {
   const request = desktopRegistrationRequest((await searchParams).request);
-  if (!request) return <p>Return to Minaco Desktop and start sign-in again.</p>;
+  if (!request) return <InvalidDesktopRequest />;
   const query = new URLSearchParams({ request }).toString();
-  return <main className="grid min-h-svh place-items-center bg-[#100f0b]"><SignUp routing="hash" forceRedirectUrl={`/desktop/finish?${query}`} signInUrl={`/desktop/register?${query}&mode=sign-in`} /></main>;
+  return <DesktopAuthShell step={2} title="Complete your profile" description="One last step, then Minaco will reopen your desktop workspace.">
+    <SignUp routing="hash" forceRedirectUrl={`/desktop/finish?${query}`} signInUrl={`/desktop/register?${query}&mode=sign-in`} />
+  </DesktopAuthShell>;
 }
