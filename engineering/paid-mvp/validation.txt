@@ -1,0 +1,81 @@
+altselfs paid MVP review validation
+Date: 2026-10-18, Asia/Shanghai
+Baseline HEAD: 483ec8d3115f83973a74d1917e53d8a6d0f94fc3
+Scope: current checkout; existing unrelated changes retained.
+
+TYPE CHECKS
+
+cwd: repository root
+command: node_modules/.bin/tsc --noEmit --incremental false
+exit: 0
+
+cwd: services/personal-agent-server
+command: npm run typecheck
+exit: 0
+
+cwd: services/semrush-traffic-service
+command: npm run typecheck
+exit: 0
+
+EXISTING TESTS
+
+cwd: repository root
+command: node --import tsx --test <sorted Python glob src/lib/**/*.test.ts>
+files: 12
+tests: 37, passed: 37, failed: 0, skipped: 0
+exit: 0
+temporary log: /tmp/altselfs-mvp-web-tests.log
+
+cwd: services/personal-agent-server
+command: node --import tsx --test <sorted Python glob tests/*.test.ts>
+files: 24
+tests: 94, passed: 90, failed: 4, skipped: 0
+exit: 1
+temporary log: /tmp/altselfs-mvp-agent-tests.log
+Three failures were listen EPERM on 127.0.0.1 from sandbox port restrictions.
+One failure was an assertion in rapidapi-youtube-competitor.test.ts:89.
+
+cwd: services/personal-agent-server
+command: node --import tsx --test tests/blue-green-deployment.test.ts tests/semrush-traffic-tool.test.ts
+environment: local loopback access permitted for this rerun
+tests: 5, passed: 5, failed: 0, skipped: 0
+exit: 0
+temporary log: /tmp/altselfs-mvp-agent-loopback-tests.log
+These tests replace the three environment-blocked outcomes and repeat two already passing tests.
+
+cwd: services/personal-agent-server
+command: node --import tsx --test tests/rapidapi-youtube-competitor.test.ts
+exit: 1
+temporary log: /tmp/altselfs-mvp-youtube-recheck.log
+Reproduced: official.count expected 2, actual 1 at line 89.
+The test replaces fetch with a fixture response; this is not evidence of a live provider outage.
+
+cwd: services/semrush-traffic-service
+command: node --import tsx --test <sorted Python glob tests/*.test.ts>
+files: 2
+tests: 28, passed: 28, failed: 0, skipped: 0
+exit: 0
+temporary log: /tmp/altselfs-mvp-browser-tests.log
+
+UNIQUE TEST OUTCOMES AFTER TARGETED ENVIRONMENT RERUN
+159 different tests: 158 passed, 1 reproducible assertion failure.
+This is an aggregate of the runs above, not a claim that a single complete rerun passed.
+
+NOT EXECUTED IN THIS REVIEW
+- production build or browser end-to-end test
+- live database queries, database migration, or db push
+- task-analytics.postgres.test.mjs (not part of the default *.test.ts suite)
+- Stripe Sandbox or live payment, webhook replay, refund, or financial action
+- 100-user load test
+- deployment, production service mutation, backup, restore, or rollback
+
+No product implementation, deployment configuration, secret, or existing test was changed.
+The new documents and example contracts specify future work and do not implement a starter.
+
+DELIVERABLE CHECKS
+All relative Markdown file links resolve.
+Markdown code fences are paired; no trailing whitespace in the documents.
+Both example JSON files parse and share the same 10 acceptance gate identifiers.
+All example acceptance gates remain not_run.
+Inventory count and line total match the audit: 378 files, 93,544 lines.
+git diff --check passed for tracked changes; new documents were checked separately.

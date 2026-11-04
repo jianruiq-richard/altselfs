@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Minaco Desktop · 产品与技术方案 v0.1</title>
+<style>
+:root{--bg:#090909;--deep:#050505;--panel:#161513;--panel2:#1c1a17;--text:#fffaf0;--muted:#b9b3a8;--subtle:#918a80;--gold:#f2c36b;--soft:#f8dfaa;--coral:#e86f61;--green:#9bd2ab;--line:rgba(255,250,240,.13);--on:#100e0c;--radius:16px;--sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;--mono:"SFMono-Regular",Consolas,monospace}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:88px}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.8 var(--sans)}::selection{background:#765827;color:#fff}a{color:var(--soft);text-decoration:none}a:hover{text-decoration:underline}button,input,select,textarea{font:inherit}button,select{cursor:pointer}button{color:inherit}button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:4px}button{border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:7px 13px}button:hover{border-color:var(--gold)}button.primary{color:var(--on);background:var(--gold);border-color:var(--gold)}button:disabled{cursor:default;opacity:.5}h1,h2,h3,h4,p{margin:0}h1{font-size:clamp(36px,4.4vw,64px);line-height:1.16;letter-spacing:-2.3px;font-weight:500}h2{font-size:29px;line-height:1.4;letter-spacing:-.7px;font-weight:550}h3{font-size:18px;line-height:1.5;font-weight:550;margin-bottom:12px}h4{font-size:15px;font-weight:600;margin:20px 0 7px}p+p{margin-top:12px}strong{font-weight:600;color:var(--text)}small,.small{font-size:12px;line-height:1.7}.muted{color:var(--muted)}.gold{color:var(--gold)}.mono,code,pre{font-family:var(--mono)}code{font-size:.88em;background:rgba(255,250,240,.06);padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{font-size:12px;line-height:1.8;overflow:auto;padding:20px;margin:14px 0 0;border:1px solid var(--line);border-radius:10px;background:#0b0b0b;color:#e6ddca;white-space:pre-wrap;overflow-wrap:anywhere}pre code{padding:0;background:none;font-size:inherit}ul,ol{padding-left:21px;margin:10px 0}li{padding:3px 0}hr{border:0;border-top:1px solid var(--line);margin:25px 0}
+.sidebar{position:fixed;inset:0 auto 0 0;width:238px;border-right:1px solid var(--line);background:#0c0b0a;display:flex;flex-direction:column;z-index:30;padding:26px 20px 17px}.brand{display:flex;align-items:center;gap:8px}.brand img{width:48px;height:39px;object-fit:contain}.wordmark{font-family:Georgia,"Times New Roman",serif;font-size:29px;letter-spacing:-1px}.side-note{margin:8px 0 24px;font-size:11px;color:var(--subtle);letter-spacing:1.2px}.toc{overflow:auto;flex:1;padding-right:4px}.toc a{display:flex;align-items:baseline;gap:11px;font-size:12px;color:var(--muted);padding:7px 9px;border-left:2px solid transparent;margin:3px 0}.toc a:hover{background:var(--panel);text-decoration:none}.toc a.active{color:var(--soft);border-color:var(--gold);background:rgba(242,195,107,.07)}.toc .idx{font-family:var(--mono);font-size:10px;color:var(--subtle)}.side-footer{border-top:1px solid var(--line);padding-top:15px;margin-top:15px;font-size:11px;color:var(--subtle)}
+.page{margin-left:238px}.topbar{position:sticky;top:0;z-index:20;background:rgba(9,9,9,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:13px 36px;display:flex;justify-content:space-between;align-items:center;gap:15px}.topbar-title{font-size:11px;letter-spacing:1.2px;color:var(--muted)}.topbar .actions{display:flex;gap:8px}.topbar button{font-size:12px;padding:5px 11px}.content{max-width:1270px;margin:auto;padding:0 48px 80px}.hero{padding:58px 0 44px;border-bottom:1px solid var(--line)}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin-bottom:20px}.hero-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:42px;align-items:center}.hero h1 span{font-family:Georgia,serif;display:block;color:var(--gold);font-size:1.07em;letter-spacing:-2px;margin-bottom:9px}.hero .lead{margin:23px 0 22px;max-width:610px;color:var(--muted);font-size:16px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tag,.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--line);border-radius:5px;font-size:11px;white-space:nowrap;color:var(--muted)}.badge.proposed{background:rgba(242,195,107,.09);color:var(--soft);border-color:#5b4729}.badge.verified{background:rgba(120,200,137,.08);color:var(--green);border-color:#34523b}.badge.pending{background:rgba(232,111,97,.08);color:#f3a397;border-color:#67443e}.hero-map{border:1px solid #4a3c26;background:radial-gradient(ellipse at top right,rgba(242,195,107,.08),transparent 70%),var(--panel);border-radius:20px;padding:25px}.hero-map .caption{font-size:11px;color:var(--subtle);letter-spacing:1px;margin-bottom:16px}.engine-pills{display:flex;gap:7px;flex-wrap:wrap}.engine-pills span{font-size:11px;padding:4px 10px;background:#252119;border-radius:5px;border:1px solid #463a29}.map-line{height:27px;border-left:1px solid var(--gold);margin-left:18px;opacity:.7}.map-box{padding:13px 16px;border:1px solid var(--line);border-radius:10px;font-size:13px}.map-box b{display:block;font-size:15px;margin-bottom:2px}.map-box small{color:var(--muted)}.hero-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:36px}.meta-item{border-top:1px solid var(--line);padding-top:12px}.meta-item span{display:block;color:var(--subtle);font-size:11px}.meta-item b{font-weight:500;font-size:13px}
+.section{padding:45px 0;border-bottom:1px solid var(--line);scroll-margin-top:75px}.section-head{display:flex;gap:18px;align-items:baseline;margin-bottom:22px}.section-no{font:12px var(--mono);color:var(--gold)}.intro{color:var(--muted);margin-bottom:24px;max-width:950px}.grid2,.grid3{display:grid;gap:16px}.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:23px;min-width:0}.card p,.card li{color:var(--muted);font-size:14px}.card .overline{font-size:11px;color:var(--gold);letter-spacing:1px;margin-bottom:10px}.note{border-left:3px solid var(--gold);background:rgba(242,195,107,.055);padding:16px 20px;margin:22px 0 0;color:var(--muted);font-size:13px}.note.warn{border-color:var(--coral);background:rgba(232,111,97,.05)}.note strong{color:var(--soft)}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;margin:17px 0}table{width:100%;border-collapse:collapse;font-size:13px;line-height:1.75}th{background:#201d18;color:var(--soft);font-weight:500;text-align:left;padding:13px 15px;white-space:nowrap}td{padding:13px 15px;vertical-align:top;border-top:1px solid var(--line);color:var(--muted)}td:first-child{color:var(--text)}td code{font-size:11px}tbody tr:hover{background:rgba(255,250,240,.018)}.minwide{min-width:710px}.source{font-size:11px;display:block;margin-top:5px;color:var(--subtle)}details{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-top:13px;padding:0 18px}summary{cursor:pointer;padding:14px 0;color:var(--soft);font-size:14px}details>.detail-body{padding:0 0 18px;font-size:13px;color:var(--muted)}.requirement{font-family:var(--mono);font-size:10px;white-space:nowrap;color:var(--gold)}
+.prototype-wrap{margin:22px 0}.proto-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}.segmented{display:flex;gap:5px;flex-wrap:wrap}.segmented button{font-size:12px;padding:6px 12px;background:transparent}.segmented button[aria-pressed="true"]{background:var(--gold);color:var(--on);border-color:var(--gold)}.prototype{border:1px solid #53452f;border-radius:14px;overflow:hidden;background:#0d0d0d;box-shadow:0 24px 70px #0005}.window-bar{padding:9px 16px;background:#181613;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);font-size:11px;color:var(--subtle)}.dots{display:flex;gap:6px}.dots i{display:block;width:8px;height:8px;border-radius:50%;background:#665849}.window-body{display:grid;grid-template-columns:182px minmax(0,1fr) 210px;min-height:505px}.app-side{border-right:1px solid var(--line);padding:17px 11px;background:#11100e}.app-word{font:23px Georgia,serif;padding:0 9px 15px}.app-nav-label{color:var(--subtle);font-size:10px;padding:14px 9px 6px;letter-spacing:.7px}.session-item{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:7px;font-size:12px;line-height:1.6;padding:10px 9px;margin-bottom:5px}.session-item.selected{background:#2a241a;color:var(--soft)}.session-item small{display:block;font-size:10px;color:var(--subtle);margin-top:2px}.app-main{display:flex;flex-direction:column;min-width:0}.app-head{padding:13px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}.app-head strong{font-size:12px;font-weight:500}.app-head select{background:#201d17;color:var(--soft);border:1px solid #4c402e;border-radius:6px;padding:4px;font-size:11px;max-width:148px}.app-chat{padding:22px 22px 12px;flex:1;min-height:320px}.message-user{margin-left:30px;padding:12px 14px;background:#242019;border:1px solid #403527;border-radius:11px;font-size:12px}.agent-label{margin:20px 0 8px;font-size:11px;color:var(--soft)}.app-chat p{font-size:12px;line-height:1.85;color:#cdc6b9}.tool-row{font-size:11px;color:var(--muted);padding:8px 10px;background:#171613;border:1px solid var(--line);border-radius:6px;margin-top:9px}.permission-card{border:1px solid #70552b;background:#241d12;border-radius:9px;margin:12px 0;padding:13px}.permission-card h4{margin:0 0 5px;font-size:12px;color:var(--soft)}.permission-card p{font-size:11px}.permission-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.permission-actions button{font-size:11px;padding:4px 9px}.app-composer{padding:0 18px 17px}.composer-box{border:1px solid #51432d;border-radius:10px;padding:12px 13px;font-size:11px;color:var(--subtle)}.composer-bottom{display:flex;justify-content:space-between;margin-top:15px;color:var(--muted);font-size:10px}.app-inspector{border-left:1px solid var(--line);padding:18px 15px;background:#13120f}.app-inspector h4{margin:0 0 13px;font-size:11px}.inspector-field{font-size:10px;color:var(--subtle);margin-bottom:12px}.inspector-field b{font-weight:400;display:block;color:var(--text);font-size:11px;margin-top:2px}.artifact-tile{border:1px solid var(--line);border-radius:7px;padding:12px;margin-top:10px;font-size:11px;color:var(--soft)}.artifact-tile small{display:block;font-size:10px;color:var(--subtle)}.proto-caption{padding:12px 16px;background:#201a11;color:var(--soft);font-size:12px;line-height:1.8;border-top:1px solid #4b3b23}.status-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-right:5px}
+.flow-strip{display:flex;gap:9px;align-items:stretch;flex-wrap:wrap;margin:20px 0}.flow-step{flex:1;min-width:125px;padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;font-size:12px}.flow-step span{display:block;color:var(--gold);font-family:var(--mono);font-size:10px;margin-bottom:7px}.flow-arrow{align-self:center;color:var(--subtle)}.architecture{background:#11100e;border:1px solid var(--line);border-radius:16px;padding:22px;margin:20px 0}.arch-grid{display:grid;grid-template-columns:1.2fr 40px 1fr 40px .75fr;align-items:center;gap:10px}.arch-zone{border:1px solid #4c402d;background:#17140f;border-radius:12px;padding:16px}.arch-zone.cloud{border-color:#43413a;background:#141412}.arch-zone.provider{border-color:#503d37;background:#191210}.zone-title{font-size:11px;letter-spacing:1px;color:var(--gold);margin-bottom:15px}.arch-node{padding:10px 12px;margin:8px 0;border:1px solid var(--line);border-radius:7px;background:#1e1b17;font-size:12px}.arch-node small{display:block;color:var(--muted);font-size:10px}.arch-arrow{text-align:center;font-size:20px;color:var(--gold)}.arch-arrow small{font-size:9px;display:block;color:var(--subtle)}.arch-sub{font-size:11px;color:var(--muted);padding-top:10px}.flow-player{border:1px solid var(--line);border-radius:12px;overflow:hidden}.flow-tabs{display:flex;gap:0;background:#161410;overflow:auto}.flow-tabs button{border:0;border-radius:0;min-width:105px;flex:1;font-size:12px;padding:12px 9px;background:transparent;color:var(--muted);border-bottom:2px solid transparent}.flow-tabs button[aria-selected="true"]{color:var(--gold);border-color:var(--gold);background:#251e12}.flow-detail{padding:24px}.flow-detail h3{margin-bottom:10px}.flow-route{font:12px var(--mono);color:var(--gold);padding:11px 0}.flow-detail p{font-size:14px;color:var(--muted)}.state-machine{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.state{border:1px solid var(--line);border-radius:8px;padding:13px;font-size:12px;background:var(--panel)}.state b{display:block;color:var(--soft);font:11px var(--mono);margin-bottom:7px}.state small{font-size:11px;color:var(--muted)}.decision-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.decision{padding:17px 19px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.decision b{display:block;font-size:14px;margin-bottom:6px}.decision p{font-size:13px;color:var(--muted)}.footer{padding:32px 0 0;color:var(--subtle);font-size:12px;display:flex;justify-content:space-between;gap:20px}.nowrap{white-space:nowrap}.section-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}.section-links a{border-bottom:1px solid #5c492a;font-size:12px;padding-bottom:3px}.source-list{display:grid;grid-template-columns:1fr 1fr;gap:12px}.source-item{border-bottom:1px solid var(--line);padding:12px 0;font-size:12px;overflow-wrap:anywhere}.source-item span{display:block;color:var(--subtle);font-size:11px;margin-top:4px}.print-only{display:none}
+@media(min-width:1600px){.content{padding-left:65px;padding-right:65px}.hero{padding-top:75px}.window-body{min-height:530px}}
+@media(max-width:1200px){.sidebar{width:205px;padding-left:15px;padding-right:15px}.page{margin-left:205px}.content{padding:0 30px 60px}.topbar{padding-left:30px;padding-right:30px}.window-body{grid-template-columns:155px minmax(0,1fr)}.app-inspector{display:none}.hero-grid{gap:24px}.grid3{grid-template-columns:1fr}.arch-grid{grid-template-columns:1fr 30px 1fr}.arch-zone.provider{grid-column:1/-1}.arch-arrow.to-provider{display:none}}
+@media(max-width:850px){.sidebar{position:relative;width:auto;padding:14px 20px;border-right:0;border-bottom:1px solid var(--line)}.sidebar .side-note,.side-footer{display:none}.sidebar .brand img{width:35px;height:30px}.wordmark{font-size:25px}.toc{display:flex;gap:5px;overflow:auto;margin-top:10px;max-height:48px}.toc a{flex-shrink:0;font-size:11px;padding:4px 8px}.toc .idx{display:none}.page{margin-left:0}.topbar{padding:10px 20px}.topbar-title{font-size:10px;letter-spacing:0}.content{padding:0 22px 45px}.hero-grid{grid-template-columns:1fr}.hero-map{display:none}.hero{padding:35px 0}.hero-meta{gap:10px}.grid2,.decision-grid{grid-template-columns:1fr}.section{padding:32px 0}.section-head{gap:12px}h2{font-size:25px}.window-body{grid-template-columns:140px minmax(0,1fr)}.state-machine{grid-template-columns:repeat(2,1fr)}.source-list{grid-template-columns:1fr}}
+@media(max-width:560px){body{font-size:14px}.content{padding-left:16px;padding-right:16px}.topbar{padding-left:16px;padding-right:16px}.topbar-title{max-width:130px}.topbar button{font-size:10px;padding:4px 8px}.hero-meta{grid-template-columns:1fr}.hero-meta .meta-item{display:flex;justify-content:space-between;gap:12px}.hero h1{font-size:38px}.window-body{display:block;min-height:470px}.app-side{display:none}.app-head{padding:12px}.app-chat{padding:18px 14px}.message-user{margin-left:15px}.card{padding:19px}.arch-grid{display:block}.arch-arrow{padding:6px;transform:rotate(90deg)}.arch-arrow small{display:none}.arch-zone.provider{margin-top:12px}.flow-step{min-width:130px}.flow-arrow{display:none}.footer{display:block}.footer span{display:block}.badge{white-space:normal}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{@page{size:A4;margin:16mm 13mm}*{box-shadow:none!important}html,body{background:#fff!important;color:#222!important;font-size:10pt;color-scheme:light}a{color:#5b431d;text-decoration:none}.sidebar,.topbar,.proto-toolbar,.flow-tabs,.permission-actions,.app-head select{display:none!important}.page{margin:0}.content{max-width:none;padding:0}.hero{padding:0 0 20px}.hero-grid{grid-template-columns:1fr}.hero-map{display:none}h1{font-size:34pt}h2{font-size:20pt}h3{font-size:12pt}h1 span,.gold,.eyebrow,.section-no{color:#805d20!important}.section{padding:22px 0;break-inside:auto;border-color:#bbb}.section-head{break-after:avoid}.card,.note,.decision,.architecture,.arch-zone,.arch-node,.flow-player,.flow-step,.state,details,.prototype{background:#fff!important;border-color:#ccc!important;color:#222!important}.card p,.card li,.muted,.intro,td,.note,.flow-detail p,.decision p,.state small{color:#444!important}strong,.state b{color:#222!important}table{font-size:8.5pt}tr{break-inside:avoid}th{background:#eee!important;color:#222!important}td{border-color:#ddd}.table-wrap{overflow:visible;border-color:#ccc}.minwide{min-width:0}pre{background:#f7f6f3!important;color:#222!important;border-color:#ccc;font-size:8pt}.grid2,.grid3{grid-template-columns:1fr 1fr}.card{padding:14px;break-inside:avoid}.tag,.badge{color:#574627!important;border-color:#bbb!important;background:#fff!important}.window-body{grid-template-columns:135px minmax(0,1fr);min-height:0}.app-inspector{display:none}.window-bar,.app-side,.app-head,.app-chat,.app-main,.app-composer,.proto-caption,.tool-row,.permission-card,.message-user{background:#fff!important;color:#222!important;border-color:#ccc!important}.app-chat p,.app-word,.agent-label,.tool-row,.proto-caption{color:#333!important}.app-chat{min-height:0}.proto-caption{font-size:9pt}.footer,.source-item span,.source{color:#555!important}.print-only{display:block}.source-list{grid-template-columns:1fr 1fr}.arch-grid{grid-template-columns:1fr 24px 1fr 24px .7fr}.arch-zone.provider{grid-column:auto}.arch-arrow.to-provider{display:block}.arch-sub,.arch-node small{color:#444}.zone-title{color:#805d20}summary{color:#333}.flow-route{color:#805d20}.print-only.flow-print{font-size:9pt}.flow-detail{display:none}.hero-meta{margin-top:20px}.hero .lead{font-size:11pt;color:#444}.section-links{display:none}}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="#top"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjI0MCIgdmlld0JveD0iMCAwIDMyMCAyNDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPk1pbmFjbyBtYXJrPC90aXRsZT4KICA8ZGVzYyBpZD0iZGVzYyI+VHdvIHdhcm0gc3RhcmxpZ2h0cyByZXByZXNlbnRpbmcgYSBmb3VuZGVyJ3MganVkZ21lbnQgYW5kIGEgZ2VudGxlIGNvLXRoaW5raW5nIHByZXNlbmNlLjwvZGVzYz4KICA8ZGVmcz4KICAgIDxwYXRoIGlkPSJzdGFyIiBkPSJNMCAtNThDNiAtMjUgMTggLTkgNTAgMEMxOCA5IDYgMjUgMCA1OEMtNiAyNSAtMTggOSAtNTAgMEMtMTggLTkgLTYgLTI1IDAgLTU4WiIvPgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJtYWluLWZpbGwiIGN4PSI0MiUiIGN5PSI0MiUiIHI9IjcyJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI0ZGRjdFQSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjAuMzQiIHN0b3AtY29sb3I9IiNGRkQ3NzgiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIwLjcyIiBzdG9wLWNvbG9yPSIjRjRCNjRBIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0QwOEE0RiIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ic21hbGwtZmlsbCIgY3g9IjQyJSIgY3k9IjQyJSIgcj0iNzIlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRkZGMEQ3Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMC40OCIgc3RvcC1jb2xvcj0iI0U4NkY2MSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNCRjU5NDciLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgICA8ZmlsdGVyIGlkPSJtYWluLWdsb3ciIHg9IjM4IiB5PSIxOCIgd2lkdGg9IjE4OCIgaGVpZ2h0PSIxODgiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj4KICAgICAgPGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMTYiLz4KICAgIDwvZmlsdGVyPgogICAgPGZpbHRlciBpZD0ic21hbGwtZ2xvdyIgeD0iMTY0IiB5PSIyMCIgd2lkdGg9IjEwMiIgaGVpZ2h0PSIxMDIiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj4KICAgICAgPGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iOSIvPgogICAgPC9maWx0ZXI+CiAgPC9kZWZzPgogIDx1c2UgaHJlZj0iI3N0YXIiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDEzOCAxMjYpIiBmaWxsPSIjRjRCNjRBIiBvcGFjaXR5PSIwLjM0IiBmaWx0ZXI9InVybCgjbWFpbi1nbG93KSIvPgogIDx1c2UgaHJlZj0iI3N0YXIiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDIxMCA4Nikgc2NhbGUoMC40NTMpIiBmaWxsPSIjRTg2RjYxIiBvcGFjaXR5PSIwLjMiIGZpbHRlcj0idXJsKCNzbWFsbC1nbG93KSIvPgogIDx1c2UgaHJlZj0iI3N0YXIiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDEzOCAxMjYpIiBmaWxsPSJ1cmwoI21haW4tZmlsbCkiLz4KICA8dXNlIGhyZWY9IiNzdGFyIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyMTAgODYpIHNjYWxlKDAuNDUzKSIgZmlsbD0idXJsKCNzbWFsbC1maWxsKSIvPgo8L3N2Zz4K" alt="Minaco 双星标志"><span class="wordmark">Minaco</span></a>
+  <div class="side-note">PRODUCT &amp; ENGINEERING / 2026</div>
+  <nav class="toc" aria-label="文档目录">
+    <a href="#overview"><span class="idx">01</span>产品定位</a><a href="#basis"><span class="idx">02</span>现有工程与复用</a>
+    <a href="#scope"><span class="idx">03</span>版本范围与需求</a><a href="#experience"><span class="idx">04</span>桌面交互原型</a>
+    <a href="#sessions"><span class="idx">05</span>会话与跨 Agent 协作</a><a href="#engines"><span class="idx">06</span>原生引擎适配</a>
+    <a href="#extensions"><span class="idx">07</span>插件与权限</a><a href="#architecture"><span class="idx">08</span>系统架构</a>
+    <a href="#flows"><span class="idx">09</span>前后端执行时序</a><a href="#contracts"><span class="idx">10</span>接口与事件契约</a>
+    <a href="#data"><span class="idx">11</span>数据与用户隔离</a><a href="#identity"><span class="idx">12</span>登录与凭证</a>
+    <a href="#billing"><span class="idx">13</span>支付与用量</a><a href="#reliability"><span class="idx">14</span>恢复、同步与运维</a>
+    <a href="#delivery"><span class="idx">15</span>开发分期与验收</a><a href="#evidence"><span class="idx">16</span>决策清单与依据</a>
+  </nav>
+  <div class="side-footer">Think with you. Act for you.<br>评审稿 v0.1 · 2026.10.20<br>产品规划文档，非已上线能力</div>
+</aside>
+<div class="page">
+<header class="topbar"><span class="topbar-title">MINACO DESKTOP / PRODUCT SPECIFICATION</span><div class="actions"><button id="expand-all">展开技术细节</button><button id="print-doc" class="primary">打印 / 存为 PDF</button></div></header>
+<main class="content" id="top">
+<div class="hero">
+  <div class="eyebrow">PRD + INTERACTION + SYSTEM DESIGN</div>
+  <div class="hero-grid">
+    <div><h1><span>Minaco Desktop</span>产品与技术方案</h1><p class="lead">一个工作台，多家原生 Agent。<br>让会话、文件、权限和用量留在同一套工作流程里。</p><div class="tags"><span class="badge proposed">待评审 · v0.1</span><span class="tag">本地执行优先</span><span class="tag">统一账号与支付</span><span class="tag">保留原生 loop</span></div></div>
+    <div class="hero-map" aria-label="方案概览：Minaco 桌面端运行多个原生引擎，通过云端网关访问模型">
+      <div class="caption">THE PRODUCT IN ONE VIEW</div><div class="engine-pills"><span>Codex</span><span>Claude Code</span><span>Google Agent</span><span>Kimi / 更多</span></div><div class="map-line"></div><div class="map-box"><b>Minaco 桌面工作台</b><small>独立会话 · 本地文件 · 统一交互</small></div><div class="map-line"></div><div class="map-box"><b>Minaco 账号与模型网关</b><small>鉴权 · 配额 · 计量 · 可选备份</small></div>
+    </div>
+  </div>
+  <div class="hero-meta"><div class="meta-item"><span>产品关系</span><b>线上业务保持，桌面独立发布</b></div><div class="meta-item"><span>复用范围</span><b>品牌、用户、支付 · 桌面新数据库</b></div><div class="meta-item"><span>本次交付</span><b>策划文档与交互示意，不实施产品</b></div></div>
+  <div class="note"><strong>已确认的设计边界：</strong>Minaco 线上业务保持不变；另行提供桌面工具下载。对话、原生 Agent 循环和工具操作在用户本地。服务端转发已组装的模型请求、执行必要鉴权计量，并保存用户开启的历史备份；桌面数据独立存储。</div>
+  <div class="section-links"><a href="#experience">先看交互原型 ↗</a><a href="#architecture">先看系统架构 ↗</a><a href="#delivery">先看开发范围 ↗</a></div>
+</div>
+
+<section class="section" id="overview">
+<div class="section-head"><span class="section-no">01</span><h2>产品定位：你的 Agent 工作台</h2></div>
+<p class="intro">沿用 Minaco 品牌与 “Think with you. Act for you.”，新增独立下载的桌面 Agent 工作台。现有 AI cofounder workspace 继续运营；两条产品线共用身份与支付基础设施，桌面第一版聚焦个人。</p>
+<div class="grid3">
+<article class="card"><div class="overline">FOR WHOM</div><h3>独立开发者与一人公司</h3><p>同时做研发、调研、内容和运营，已经在多个助手之间切换，希望每项工作选合适的 Agent，而不重复组织资料和上下文。</p></article>
+<article class="card"><div class="overline">CORE PROMISE</div><h3>选 Agent，接着做事</h3><p>只安装 Minaco；一个订阅使用所有已接入的 Agent。不同对话可选择不同 Agent，同一对话也能切换；Minaco 将可见上下文交给新的原生 Agent 后继续显示在同一条对话中。</p></article>
+<article class="card"><div class="overline">WHY MINACO</div><h3>连续的工作资产</h3><p>会话、文件、结论、来源和待办共同构成项目资产。聚合入口服务于任务连续性；模型调用、插件兼容和费用都能解释。</p></article>
+</div>
+<div class="table-wrap"><table><thead><tr><th>核心场景</th><th>用户得到的结果</th><th>成功判断</th></tr></thead><tbody>
+<tr><td>研究 → 开发</td><td>同一对话先用 Claude 整理方案，再切换 Codex 实现</td><td>新 Agent 获得截至切换点的可见上下文与文件版本，界面仍是一条连续对话</td></tr>
+<tr><td>不同 Agent 并行工作</td><td>Kimi 调研、Codex 开发，分属不同会话与执行环境</td><td>状态与费用分别可见，共享文件写入不会静默冲突</td></tr>
+<tr><td>需要确认的本地操作</td><td>知道谁要改哪些文件或执行什么命令，并能批准或拒绝</td><td>选择真正传回原生引擎；拒绝后操作未发生</td></tr>
+<tr><td>中断后继续</td><td>关闭窗口或重启后找到原会话，知道能否恢复</td><td>区分历史可查看、引擎可续聊与正在执行，避免虚假“继续”</td></tr>
+</tbody></table></div>
+<div class="note"><strong>产品边界：</strong>“Agent”指带有原生规划、工具、上下文管理的运行时；“模型”是它调用的推理服务。UI 分别展示两者。跨 Agent 交接不承诺恢复另一家引擎的隐藏状态或完全复刻原厂桌面客户端。</div>
+</section>
+
+<section class="section" id="basis">
+<div class="section-head"><span class="section-no">02</span><h2>现有工程：复用底座，重划执行边界</h2></div>
+<p class="intro">以下“已具备”表示本次在工作区代码中找到相应结构，不代表本次重新验收了线上行为、容量或支付闭环。仓库已有未提交变更；本次只新增此文档。</p>
+<div class="table-wrap"><table class="minwide"><thead><tr><th>模块</th><th>现状证据</th><th>桌面方案处理</th><th>判断</th></tr></thead><tbody>
+<tr><td>品牌与视觉</td><td>双星标志；暖黑、暖白、蜂蜜金；侧栏 + 对话 + 右侧面板<span class="source">src/lib/brand.ts · globals.css · astromar-workspace-shell.tsx</span></td><td>复用资源、设计 token 与纯展示组件；桌面独立构建，不要求先重构线上 UI</td><td><span class="badge verified">可复用</span></td></tr>
+<tr><td>Web 与用户</td><td>Next.js 16.2.1、React 19.2.4；Clerk 身份映射业务 User.id<span class="source">package.json · src/lib/investor-auth.ts</span></td><td>保留网站、账号中心、支付入口；新增桌面登录换票与设备注册</td><td><span class="badge proposed">复用 + 扩展</span></td></tr>
+<tr><td>订阅与账本</td><td>Stripe、CreditAccount、Reservation、Ledger、UsageRecord<span class="source">prisma/schema.prisma:73–311 · credit-settlement.ts</span></td><td>复用支付接入与幂等模式；桌面新库使用通用计量。默认独立产品权益，是否共用余额另行评审</td><td><span class="badge proposed">复用接口</span></td></tr>
+<tr><td>会话服务</td><td>AgentThread / Message / ToolCall；Web 代理 personal-agent 接口<span class="source">schema.prisma:370 · src/app/api/investor/personal-agent/route.ts</span></td><td>旧表和旧路由继续服务线上业务；桌面会话使用本地库，新服务只存必要元数据和备份索引</td><td><span class="badge proposed">独立新增</span></td></tr>
+<tr><td>执行循环</td><td>仅注册 Codex；启用 HermesSourceRuntime 时清空选中 runtime 并交给 Hermes<span class="source">index.ts:49 · main-agent.ts:44–68 · types.ts:75</span></td><td>原服务保持；桌面新增 Host 和各家 Adapter，按用户选定引擎直接执行</td><td><span class="badge proposed">独立新增</span></td></tr>
+<tr><td>认证代理</td><td>现有 broker 把实际 accessToken 传入云端 Codex app-server<span class="source">codex/openai-auth-broker.ts:155–189</span></td><td>此代码不可原样移至桌面。桌面只持 Minaco 凭证，上游共享密钥停留在网关</td><td><span class="badge pending">重新设计</span></td></tr>
+<tr><td>运行目录</td><td>按 user/thread 分 hermes-home、codex-home、workspace<span class="source">sandbox-runtime.ts:23–47</span></td><td>复用命名与状态管理经验；本地每账户/会话独立引擎 home。目录隔离本身不等于系统安全沙箱</td><td><span class="badge proposed">迁移设计</span></td></tr>
+</tbody></table></div>
+<div class="grid2"><article class="card"><h3>线上业务独立保留</h3><p>网站、Business Database、Connector、Hermes 工作流和原数据库保持现有职责。桌面有自己的构建、部署、数据库迁移和回滚链路；以后访问线上业务能力另行接 API。</p></article><article class="card"><h3>桌面只复用明确的接口</h3><p>身份桥返回现有 User.id；支付桥处理桌面产品的购买与履约。桌面会话、执行状态和引擎升级不依赖线上 Agent 服务发布，服务器不组装会话提示词。</p></article></div>
+</section>
+
+<section class="section" id="scope">
+<div class="section-head"><span class="section-no">03</span><h2>版本范围与需求优先级</h2></div>
+<p class="intro">愿景是一个安装包、一个账号、一笔平台账单。技术 demo 先证明这一链路；消费者订阅令牌池作为厂家谈判事项，不作为通用接入前提。平台 API/合作渠道凭证可承担统一用量。</p>
+<div class="table-wrap"><table class="minwide"><thead><tr><th>需求</th><th>D0 技术演示</th><th>M1 内测产品</th><th>M2 后续</th></tr></thead><tbody>
+<tr><td><span class="requirement">FR-01</span> 统一登录 / 安装</td><td>一个平台测试账号；内置 2 个经过验证的引擎</td><td>正常注册登录、设备管理、签名安装包与升级</td><td>团队、集中设备策略</td></tr>
+<tr><td><span class="requirement">FR-02</span> 多 Agent 会话</td><td>Codex + Claude；不同对话选不同 Agent；同一对话切换时创建新的原生 segment 并自动携带上下文</td><td>Google 路线与一个国内引擎按验收准入</td><td>更多引擎目录与能力分级</td></tr>
+<tr><td><span class="requirement">FR-03</span> 跨 session</td><td>同一对话跨 Agent 的自动上下文包；选定消息、文件、摘要可引用到另一对话</td><td>项目知识、只读会话引用、显式委派</td><td>跨设备接力与可控的长期记忆</td></tr>
+<tr><td><span class="requirement">FR-04</span> 权限与插件</td><td>工具审批、一个公共 MCP、一份通用 Skill</td><td>兼容标识、连接账号、安装依赖、审计</td><td>第三方插件市场与发布流程</td></tr>
+<tr><td><span class="requirement">FR-05</span> 统一支付</td><td>测试积分 + 网关真实用量记录，明确显示测试账本</td><td>复用 Stripe，充值/套餐、预留、结算、账单</td><td>团队成本中心、更多地区支付</td></tr>
+<tr><td><span class="requirement">FR-06</span> 本地与备份</td><td>本地历史和文件；重启续聊；手动导出</td><td>可选云端加密传输与存储备份、恢复演练</td><td>设备接力；端到端加密另立方案</td></tr>
+</tbody></table></div>
+<div class="note"><strong>D0 的完成定义：</strong>同一 Minaco 安装中，两个原生引擎分别完成一次本地文件任务；共享密钥未进入客户端；权限拒绝生效；会话重启后可继续；网关能归属每次调用并去重计量。只把两家聊天接口放在菜单里不算完成。</div>
+<div class="note warn"><strong>首版不承诺：</strong>原厂所有插件无差别兼容、云端自动接管睡眠电脑上的任务、跨 Agent 迁移隐藏推理或活着的进程状态、系统级对抗恶意本机管理员的隔离、订阅额度可被无限转售。对话内切换通过新的原生 segment 和可移植上下文实现；授权沟通由业务侧并行推进。</div>
+</section>
+
+<section class="section" id="experience">
+<div class="section-head"><span class="section-no">04</span><h2>桌面交互：延续 Minaco 的工作空间</h2></div>
+<p class="intro">左侧组织项目和会话，中间承载对话与执行过程，右侧检查文件、上下文和用量。Agent 选择紧贴会话；模型和高级参数默认折叠。下面是可点击的静态交互示意，不会启动引擎或访问文件。</p>
+<div class="prototype-wrap">
+<div class="proto-toolbar"><div class="segmented" role="group" aria-label="交互场景"><button data-scene="working" aria-pressed="true">进行中的会话</button><button data-scene="approval" aria-pressed="false">权限确认</button><button data-scene="handoff" aria-pressed="false">交接给另一 Agent</button><button data-scene="error" aria-pressed="false">额度 / 断线</button></div><span class="small muted">交互原型 · 全部数据为示意</span></div>
+<div class="prototype">
+<div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span>Minaco · Research Project</span><span>本地工作区</span></div>
+<div class="window-body">
+<aside class="app-side"><div class="app-word">Minaco</div><button class="session-item" id="proto-new">＋ 新建会话</button><div class="app-nav-label">项目 / RESEARCH</div><button class="session-item selected" data-native="codex">实现产品原型<small>Codex · <span id="side-status">进行中</span></small></button><button class="session-item" data-native="claude">市场研究与定位<small>Claude Code · 已完成</small></button><button class="session-item" data-native="kimi">资料整理<small>Kimi Code · 草稿</small></button><div class="app-nav-label">工作空间</div><div class="session-item">文件与成果</div><div class="session-item">插件与连接</div><div class="session-item">用量与账户</div></aside>
+<div class="app-main"><div class="app-head"><strong id="proto-title">实现产品原型</strong><label><span class="small muted">Agent </span><select id="proto-engine" aria-label="切换示意会话的 Agent"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="kimi">Kimi Code</option></select></label></div><div class="app-chat" id="proto-chat" aria-live="polite"></div><div class="app-composer"><div class="composer-box" id="proto-placeholder">继续描述需求，或附加项目资料…<div class="composer-bottom"><span>＋ 文件　 ·　项目上下文</span><span>本地执行　↵</span></div></div></div></div>
+<aside class="app-inspector"><h4>任务信息</h4><div class="inspector-field">执行位置<b>这台 Mac · Research</b></div><div class="inspector-field">权限<b>写入前确认</b></div><div class="inspector-field">模型<b id="proto-model">该引擎默认模型</b></div><div class="inspector-field">预算<b>使用本任务上限 · 示例</b></div><hr><h4>项目成果</h4><div class="artifact-tile">product-brief.md<small>来自「市场研究与定位」</small></div><div class="artifact-tile">prototype.html<small id="artifact-status">等待生成</small></div><div class="inspector-field" style="margin-top:19px">同步<b>仅本地 · 尚未开启备份</b></div></aside>
+</div><div class="proto-caption" id="proto-caption"></div></div>
+</div>
+<div class="grid2"><article class="card"><h3>首次进入的 4 个步骤</h3><ol><li>系统浏览器登录 Minaco，返回桌面。</li><li>选择工作目录；清楚展示允许读取的范围。</li><li>选择已就绪的 Agent；缺失组件时显示具体安装项。</li><li>输入需求，看到执行位置、权限模式和任务预算后开始。</li></ol></article><article class="card"><h3>核心界面规则</h3><ul><li>对话内切换 Agent 时，内部创建新的原生 segment；用户仍留在同一条 Minaco 对话，并看到切换分隔。</li><li>终端日志、工具步骤按需展开；结果与下一步更突出。</li><li>待确认操作展示动作、目标、影响和批准范围。</li><li>设备离线、费用待结算、引擎不支持均有明确状态。</li></ul></article></div>
+<div class="table-wrap"><table><thead><tr><th>入口</th><th>应呈现的内容</th><th>关键异常状态</th></tr></thead><tbody>
+<tr><td>Agent 选择器</td><td>名称、版本、可用能力、接入状态；模型为二级配置</td><td>不可用 / 需更新 / 需组件 / 当前套餐不可用，不静默替换</td></tr>
+<tr><td>插件与连接</td><td>已安装、支持哪些引擎、连接账户、授权范围</td><td>组件缺失、OAuth 过期、当前引擎不兼容</td></tr>
+<tr><td>项目与文件</td><td>本地目录映射、共享文件、成果来源、版本</td><td>目录已移动、文件冲突、仅云端备份尚未下载</td></tr>
+<tr><td>会话搜索</td><td>标题、消息、产物元数据；仅当前账户已索引内容</td><td>本地无索引、未下载备份、历史引擎不可恢复</td></tr>
+<tr><td>账户与用量</td><td>订阅、剩余额度、任务消耗、待结算、设备</td><td>支付未确认 / 余额不足 / 网关故障分别提示</td></tr>
+</tbody></table></div>
+</section>
+<section class="section" id="sessions">
+<div class="section-head"><span class="section-no">05</span><h2>一个对话，可由多个原生 Agent 接力</h2></div>
+<p class="intro">用户看到的 Minaco Conversation 是持续工作单元；内部由按时间排列的 AgentSegment 组成。每个 segment 固定绑定一家 provider、一个 Paseo Agent 和一个原生会话标识。切换 Agent 会结束当前 segment、创建目标 segment 并注入可移植上下文，不篡改任何厂商原生 session。</p>
+<div class="table-wrap"><table><thead><tr><th>对象</th><th>职责</th><th>不变量</th></tr></thead><tbody>
+<tr><td>Project</td><td>资料、目录、项目记忆、成果归属</td><td>跨设备用 projectId 对应各自路径；绝对路径不直接当云端身份</td></tr>
+<tr><td>Conversation</td><td>用户看到的一条持续对话，包含一个或多个 AgentSegment</td><td>切换 Agent 不改变 conversationId；历史按 segment 保留来源</td></tr>
+<tr><td>AgentSegment</td><td>绑定 provider / Paseo agentId / nativeSessionId 的一段执行</td><td>一个 segment 只属于一家 Agent；不同引擎不得复用原生会话标识</td></tr>
+<tr><td>Run</td><td>一次用户触发的执行；包括审批等待、模型/工具往返</td><td>默认同一会话只允许一个活跃 Run；后续输入排队或使用已验证的 steer</td></tr>
+<tr><td>Artifact / ContextRef</td><td>文件成果与可追溯的上下文引用</td><td>记录来源会话、内容哈希、时间与版本，接收方知道看到的是哪个快照</td></tr>
+<tr><td>ContextEnvelope</td><td>携带可见对话、目标、决定、约束、待办和带哈希的成果引用</td><td>不复制隐藏推理、厂商凭证、临时进程状态或历史授权</td></tr>
+</tbody></table></div>
+<h3>用户说的“跨 session”，分别落到四项能力</h3>
+<div class="grid2">
+<article class="card"><div class="overline">A · REFERENCE / D0</div><h3>引用已有会话</h3><p>选定消息、结论和文件加入当前任务。引用带来源与版本；默认不把用户所有历史注入每一轮。引用范围在发送前可查看。</p></article>
+<article class="card"><div class="overline">B · HANDOFF / D0</div><h3>同一对话换 Agent</h3><p>自动生成交接包：可见对话、目标、已完成项、未完成项、约束、证据和文件引用。目标引擎以新的原生 session 开始，Minaco 把它作为同一 Conversation 的下一段展示。</p></article>
+<article class="card"><div class="overline">C · DELEGATE / M1</div><h3>委派与结果回流</h3><p>父会话通过本地 Host 创建有范围的子任务，关联 parentRunId。子任务独立预算、权限与目录；完成后以结果引用返回。调度留在本机，并限制嵌套深度与并发。</p></article>
+<article class="card"><div class="overline">D · MEMORY / M1</div><h3>共享项目知识</h3><p>共享经确认的事实、偏好和决策。保留来源、更新时间、撤销/删除入口。长期记忆是显式知识层，不能代替完整原生会话状态。</p></article>
+</div>
+<div class="flow-strip" aria-label="交接流程"><div class="flow-step"><span>01 / SELECT</span>选择来源与目标 Agent</div><div class="flow-arrow">→</div><div class="flow-step"><span>02 / SNAPSHOT</span>冻结文件版本和上下文</div><div class="flow-arrow">→</div><div class="flow-step"><span>03 / REVIEW</span>检查交接包与权限</div><div class="flow-arrow">→</div><div class="flow-step"><span>04 / CONTINUE</span>新建目标会话并建立关联</div></div>
+<details><summary>会话生命周期与并行写入约束</summary><div class="detail-body">
+<p>Session 状态：ACTIVE / ARCHIVED / DELETED；可恢复性单独存为 READY / NEEDS_ENGINE / INCOMPATIBLE / HISTORY_ONLY。归档只是隐藏，删除需明确本地记录、备份与项目文件的各自处理范围，不联动删除用户原始项目目录。</p>
+<p>同一项目允许多个会话并行，但代码写入默认各用 Git worktree；普通文档任务采用独立产物目录并在合并时检查哈希。对于可以任意访问文件系统的原生 Shell，应用层“文件锁”只能协调受控入口，不能当作系统沙箱。没有原生隔离时，提供串行写入模式，不能宣传强隔离。</p>
+<p>跨设备续接只迁移可序列化状态与文件快照，不迁移活着的终端、浏览器页面或待处理系统弹窗。目标设备重新解析本地路径与凭证，取得执行租约后启动。</p>
+</div></details>
+<h3 style="margin-top:24px">Run 状态与界面必须一致</h3>
+<div class="state-machine"><div class="state"><b>PREPARING → RUNNING</b><small>校验引擎、工作区、额度，启动执行</small></div><div class="state"><b>WAITING_APPROVAL</b><small>暂停受控操作；展示确认范围及超时</small></div><div class="state"><b>CANCELLING → CANCELLED</b><small>先停止请求与工具，再确认取消完成</small></div><div class="state"><b>COMPLETED / FAILED</b><small>原生终态落盘；账单结算另行追踪</small></div></div>
+<p class="small muted">断线时显示 RECONNECTING；进程状态不确定时进入 NEEDS_RECOVERY。拒绝某次工具调用可能让 Agent 改用其他方法，不应自动把整轮标为失败。结算状态 PENDING / SETTLED / REVIEW 与执行终态正交。</p>
+</section>
+
+<section class="section" id="engines">
+<div class="section-head"><span class="section-no">06</span><h2>引擎适配：统一协议，保留原生行为</h2></div>
+<p class="intro">Paseo 已提供 AgentClient 厂商适配层，统一进程、协议、事件、状态和权限映射。原生引擎继续负责规划、上下文压缩、工具编排及结束判断。Minaco 在其上增加 Conversation Orchestrator，只负责 segment 归属、上下文交接、成果引用和账户策略，不在外面再套一轮规划 loop。</p>
+<div class="table-wrap"><table class="minwide"><thead><tr><th>引擎</th><th>控制入口</th><th>模型出口</th><th>准入安排</th></tr></thead><tbody>
+<tr><td>Codex</td><td>app-server / JSON-RPC；start/resume、turn、审批与事件</td><td>Responses 兼容网关；配置 provider base URL 与平台凭证</td><td><span class="badge proposed">D0</span> 复用现有 RPC 经验；不把现有共享 OAuth broker 下放</td></tr>
+<tr><td>Claude Code</td><td>Agent SDK / 原生 CLI，保持默认原生提示词与工具集的配置需实测</td><td>Anthropic Messages 网关；保留 beta headers、流与相关端点</td><td><span class="badge proposed">D0</span> 核实 SDK/二进制版本、审批回调、恢复和插件加载</td></tr>
+<tr><td>Google 路线</td><td>Gemini CLI；当前 Antigravity CLI 为并行候选</td><td>按所选 CLI 验证 API key 模式、自定义 endpoint 与具体协议</td><td><span class="badge pending">M1 技术验证</span> 不把 API 网关可用直接等同于完整 SDK/审批/再分发可用</td></tr>
+<tr><td>Kimi Code</td><td>开源 CLI / ACP</td><td>可配置 provider、base_url 和凭证</td><td><span class="badge proposed">M1 国内候选</span> ACP 会话、权限、插件逐项验证</td></tr>
+<tr><td>Qwen Code / MiniMax Code</td><td>SDK 或 ACP / 后台执行</td><td>自定义模型出口</td><td><span class="badge proposed">M1 后备候选</span> 优先选集成闭环更稳定的一家</td></tr>
+<tr><td>CodeBuddy Code</td><td>本地 HTTP / ACP，部分接口 Beta</td><td>自定义 API 端点</td><td><span class="badge pending">后续</span> 不等同于完整 WorkBuddy；单独核查版本和能力范围</td></tr>
+<tr><td>原厂桌面助手 / 云端 Agent</td><td>仅在公开 SDK/API 覆盖所需能力时接入</td><td>视产品而定，可能执行在厂商云端</td><td>清晰标记“云端执行”；不通过改名冒充本地原生引擎</td></tr>
+</tbody></table></div>
+<p class="small muted">证据链接见 <a href="#evidence">第 16 节</a>。表中“D0 / M1”是建议排期，不是已跑通状态。固定版本后再形成可发布兼容矩阵。</p>
+<details><summary>已复用的 Paseo AgentClient 与 Minaco 编排层</summary><div class="detail-body"><pre><code>interface AgentClient { // Paseo 已实现，各 provider 分别适配
+  inspect(): Promise&lt;EngineDescriptor&gt;;
+  startSession(input: SessionBinding): Promise&lt;NativeSessionRef&gt;;
+  resumeSession(ref: NativeSessionRef): Promise&lt;ResumeResult&gt;;
+  sendTurn(input: TurnInput): AsyncIterable&lt;EngineEvent&gt;;
+  resolveApproval(input: ApprovalDecision): Promise&lt;void&gt;;
+  interrupt(runId: string): Promise&lt;InterruptResult&gt;;
+  closeSession(sessionId: string): Promise&lt;void&gt;;
+  exportSnapshot?(sessionId: string): Promise&lt;SnapshotManifest&gt;;
+}
+
+interface ConversationOrchestrator { // Minaco 产品层
+  createConversation(initial: AgentBinding): Promise&lt;Conversation&gt;;
+  switchAgent(conversationId: string, target: AgentBinding): Promise&lt;AgentSegment&gt;;
+  buildContextEnvelope(sourceSegmentId: string): Promise&lt;ContextEnvelope&gt;;
+  referenceConversation(sourceId: string, targetId: string, scope: ContextScope): Promise&lt;void&gt;;
+}
+
+capabilities = {
+  resume, historyReplay, interrupt, steer, fork,
+  permissionCallbacks, enforcedReadOnly,
+  mcp, skills, nativePlugins, computerUse, usageReporting
+}
+// 每项包含 supported / unsupported / experimental、适用版本与限制。
+// 不认识的原生事件保留 rawRef，不丢弃、不伪装成完成。</code></pre><p>Paseo 的单个 Agent session 固定 provider；其 fork-context 和 chat_history 附件可直接作为交接基础。Minaco 需要新增逻辑 Conversation / AgentSegment 映射和跨 session ContextEnvelope，不能把 Paseo 的 fork 标签直接当成完整产品语义。</p></div></details>
+<div class="note"><strong>只装一次的实现：</strong>Minaco 安装包携带经过验证的引擎与所需运行时，或由安装器统一下载签名清单中的组件。用户无需手动装多个 CLI。每个 OS/CPU 架构独立产物；缺少打包授权的引擎仅供授权范围内的内部演示，不宣称已可公开分发。</div>
+</section>
+
+<section class="section" id="extensions">
+<div class="section-head"><span class="section-no">07</span><h2>插件与权限：统一入口，准确保留语义</h2></div>
+<div class="table-wrap"><table><thead><tr><th>扩展类型</th><th>管理方式</th><th>兼容策略</th></tr></thead><tbody>
+<tr><td>通用 Skills</td><td>一个 Minaco 技能目录，生成各引擎可读的配置/安装映射</td><td>检查格式、工具依赖、上下文注入规则；文本可复用不代表执行结果相同</td></tr>
+<tr><td>MCP 工具</td><td>集中登记服务、工具、账户与作用域</td><td>按引擎生成 stdio/HTTP 配置；协议和认证不兼容时标记不可用</td></tr>
+<tr><td>原生插件与 Hooks</td><td>保留各家 manifest、版本与生命周期</td><td>安装在隔离的 engine home；不把同名 hook 跨引擎直接复用</td></tr>
+<tr><td>浏览器 / 电脑操作</td><td>本地组件、浏览器扩展和系统权限独立检查</td><td>声明是否支持真实浏览器登录态、独占鼠标、前台要求和操作系统限制</td></tr>
+<tr><td>Minaco 云端能力 / 后续可选</td><td>通过受控 API/MCP 使用已授权的线上业务能力；不列为桌面 D0 前置条件</td><td>服务端校验用户和连接授权；无数据库口令、平台供应商密钥下发</td></tr>
+</tbody></table></div>
+<div class="grid3"><article class="card"><div class="overline">AGENT POLICY</div><h3>工具执行确认</h3><p>引擎发出请求；Host 记录并交给 UI；用户选择映射回原生批准选项。没有回调的自动执行路径不得假装经过 Minaco 审批。</p></article><article class="card"><div class="overline">OPERATING SYSTEM</div><h3>设备授权</h3><p>文件目录、屏幕录制、辅助功能、通知等由系统控制。Minaco 展示状态并引导，不能用聊天里的“同意”取代系统授权。</p></article><article class="card"><div class="overline">SERVICE ACCOUNT</div><h3>外部账号连接</h3><p>邮箱、网盘等按用户授权。模型网关统一付款不等于统一获得用户的第三方数据权限；连接凭证与模型凭证分开管理。</p></article></div>
+<details><summary>审批对象、范围与重连处理</summary><div class="detail-body">
+<pre><code>ApprovalRequest {
+  approvalId, ownerId, deviceId, sessionId, runId,
+  nativeRequestId, toolName, normalizedAction,
+  resourceTargets, proposedChanges, options[],
+  requestedAt, expiresAt, engineVersion
+}
+ApprovalDecision {
+  approvalId, decisionId, selectedNativeOptionId,
+  scope, policyVersion, decidedAt
+}</code></pre>
+<p>审批选择来自引擎实际提供的 options；UI 不凭空增加“永久允许”。客户端展示的资源范围与真正执行的参数必须一致。相同 decisionId 幂等；已过期、已取消、其他账户或其他运行实例的决定拒绝接受。</p>
+<p>重连后只恢复仍在等待的请求；引擎已退出则将审批置为过期。原生 SDK 有超时的，显示其真实截止时间，不承诺永久等待。审批规则变更仅作用于支持并已验证的执行路径。</p>
+</div></details>
+<div class="note"><strong>体验原则：</strong>用户看到“已连接，但当前 Agent 不支持”“需要安装浏览器组件”“只允许本次操作”等具体信息。后台记录插件版本和作用域，以解释同一个任务在不同引擎上表现不同的原因。</div>
+</section>
+
+<section class="section" id="architecture">
+<div class="section-head"><span class="section-no">08</span><h2>系统架构：本地执行，云端控制与计量</h2></div>
+<p class="intro">建议桌面采用 Electron + React + TypeScript，以复用现有前端与 Node 协议适配经验。Tauri 可作为体积优化备选，待原生组件、跨平台打包和安全评估后再决策。此处为拟议架构，不是现有部署图。</p>
+<div class="architecture">
+<div class="arch-grid">
+<div class="arch-zone"><div class="zone-title">用户设备 / LOCAL</div><div class="arch-node">React 工作台<small>会话、消息、审批、文件预览</small></div><div class="arch-node">Desktop Host<small>受控 IPC · Session Manager · 权限桥</small></div><div class="arch-node">Engine Adapters → 原生进程<small>Codex / Claude / Google / 国内引擎</small></div><div class="arch-node">本地模型 Relay + 数据存储<small>绑定当前 Run · SQLite · 原生 state · 文件</small></div><div class="arch-sub">本地工具结果进入下一次模型请求<br>项目目录默认不做全量上传</div></div>
+<div class="arch-arrow">⇄<small>HTTPS</small></div>
+<div class="arch-zone cloud"><div class="zone-title">独立桌面后端 / CLOUD</div><div class="arch-node">Desktop API + 身份 / 支付桥<small>复用 Clerk · User.id · Stripe 接入</small></div><div class="arch-node">Model Gateway<small>鉴权 · 准入 · 协议转发 · 上游凭证</small></div><div class="arch-node">桌面专用 PostgreSQL<small>设备 · 调用用量 · 权益 · 备份索引</small></div><div class="arch-node">可选历史备份对象存储<small>版本化快照 · 云端不执行 Agent loop</small></div></div>
+<div class="arch-arrow to-provider">⇄<small>STREAM</small></div>
+<div class="arch-zone provider"><div class="zone-title">PROVIDERS</div><div class="arch-node">OpenAI<small>Responses</small></div><div class="arch-node">Anthropic<small>Messages</small></div><div class="arch-node">Google<small>Gemini API</small></div><div class="arch-node">国内模型服务<small>对应原生 / 兼容协议</small></div></div>
+</div>
+</div>
+<div class="table-wrap"><table><thead><tr><th>边界</th><th>负责</th><th>不承担</th></tr></thead><tbody>
+<tr><td>桌面 Renderer</td><td>展示、输入、选择、受控预览</td><td>不持真实供应商凭证，不任意启动进程或读取文件系统</td></tr>
+<tr><td>Desktop Host</td><td>账户会话、进程、文件访问入口、SQLite、审批回传、备份</td><td>不篡改原生 loop，不声称能拦截一切原生 Shell 行为</td></tr>
+<tr><td>本地模型 Relay</td><td>仅监听回环地址；校验本地随机凭证；添加当前 Run 的云端调用授权</td><td>不保存供应商真实密钥，不接受用户任意指定上游 URL</td></tr>
+<tr><td>云端控制 API</td><td>登录换票、设备、权益、引擎目录、Run 准入</td><td>不依赖客户端提供的 userId 或消费金额作为授权/结算事实</td></tr>
+<tr><td>云端模型 Gateway</td><td>按供应商协议透传、替换凭证、流式回传、计量和限制</td><td>不把所有调用强转为一种 Chat Completions 协议</td></tr>
+<tr><td>旧 personal-agent-server</td><td>继续承载线上业务，接口行为保持；仅借鉴已有工程经验</td><td>不承载桌面 loop，不读取桌面本地会话，不成为桌面发布依赖</td></tr>
+</tbody></table></div>
+<details><summary>独立仓库、工程目录与复用方法</summary><div class="detail-body"><pre><code>minaco-desktop/              # 拟议新仓库；尚未创建
+  apps/website/              # desktop.minaco.ai：产品介绍、下载、更新说明
+  apps/desktop/              # Electron main / preload / React 工作台
+  packages/engine-adapters/  # 原生引擎进程与协议适配
+  packages/contracts/        # IPC / HTTP / 事件协议
+  packages/local-runtime/    # SQLite、relay、上下文、备份客户端
+  services/api/              # 身份桥、设备、目录、备份
+  services/model-gateway/    # 流式转发、准入与计量
+  database/prisma/           # 新数据库、专用账户、独立迁移
+
+altselfs/                    # 现有 Minaco 仓库继续独立维护
+  src/app/                   # 现有线上业务
+  services/personal-agent-server/ # 现有云端执行
+  prisma/                    # 现有线上库，不混入桌面会话表
+
+// 新仓库内官网、客户端和后端分别构建、部署、发版。
+// 账号与支付通过明确接口复用；不跨仓库引用业务源码。</code></pre>
+<p>Next.js 页面含有 next/navigation、服务端组件和 Clerk Web session，不能整体搬入 Electron。桌面复用设计 token 和适用的展示组件，通过受控 IPC 与独立 Cloud API 获取数据。Electron Renderer 开启 contextIsolation / sandbox，关闭 Node integration；不可信产物使用独立受限预览，不能获得 Host bridge。</p>
+</div></details>
+<h3 style="margin-top:25px">桌面官网：desktop.minaco.ai</h3>
+<p class="intro">桌面产品页面使用已确定的子域名 desktop.minaco.ai，代码放在新仓库 apps/website，绑定独立部署项目。DNS 将子域名指向该项目；域名归属不决定代码仓库归属，无需把页面放回原线上仓库。</p>
+<div class="table-wrap"><table><thead><tr><th>变更</th><th>发布范围</th><th>维护规则</th></tr></thead><tbody>
+<tr><td>官网文案、下载说明</td><td>仅部署 apps/website</td><td>按目录变更触发检查和发布；不重新打包客户端，不发布原线上网站</td></tr>
+<tr><td>桌面客户端升级</td><td>客户端构建、签名、安装包与更新清单</td><td>构建产物放独立下载存储；官网读取版本化发布清单或下载链接</td></tr>
+<tr><td>桌面 API / 网关变更</td><td>对应后端服务</td><td>保持已发布客户端的接口兼容；共享协议变更触发相关组件检查</td></tr>
+<tr><td>登录与支付</td><td>桌面服务接现有身份、支付接口</td><td>浏览器登录后安全返回桌面；沿用用户身份，不默认依赖跨子域 cookie 共享</td></tr>
+</tbody></table></div>
+<p class="small muted">各发布单元独立版本与回滚。给官网配置 desktop 子域名和 HTTPS 不要求迁移 minaco.ai 的现有站点。当前仅确认规划，未创建仓库、修改 DNS 或部署网站。</p>
+<div class="note"><strong>为何有本地 Relay：</strong>原生引擎常把 base URL 和凭证在进程启动时固定。Relay 为每次模型请求绑定当前 runId 和云端短期授权，无需为了每轮换票就重启原生会话；启动探测、count tokens 与计费请求需分别路由。是否支持回环端点仍是各引擎的准入测试项。</div>
+</section>
+
+<section class="section" id="flows">
+<div class="section-head"><span class="section-no">09</span><h2>一轮任务如何跨越前端、本地与云端</h2></div>
+<p class="intro">点击步骤查看消息流向。用户看到一个持续的任务；内部每次模型推理、工具执行与计费都有自己的标识，避免把“收到 HTTP 200”误认为整个任务已经完成。</p>
+<div class="flow-player">
+<div class="flow-tabs" role="tablist" aria-label="执行步骤"><button role="tab" id="flow-tab-0" aria-selected="true" aria-controls="flow-detail" data-flow="0">1. 本地建档</button><button role="tab" id="flow-tab-1" aria-selected="false" aria-controls="flow-detail" data-flow="1">2. 云端准入</button><button role="tab" id="flow-tab-2" aria-selected="false" aria-controls="flow-detail" data-flow="2">3. 原生推理</button><button role="tab" id="flow-tab-3" aria-selected="false" aria-controls="flow-detail" data-flow="3">4. 本地操作</button><button role="tab" id="flow-tab-4" aria-selected="false" aria-controls="flow-detail" data-flow="4">5. 结果落盘</button><button role="tab" id="flow-tab-5" aria-selected="false" aria-controls="flow-detail" data-flow="5">6. 结算备份</button></div>
+<div class="flow-detail" id="flow-detail" role="tabpanel" aria-labelledby="flow-tab-0" aria-live="polite"></div>
+</div>
+<div class="print-only flow-print"><ol><li>Renderer → Host：校验账户与项目，写入本地用户消息和 PREPARING Run。</li><li>Host → Cloud API：按幂等键创建调用授权，校验模型和预算，获得 runGrant。</li><li>Host → 原生引擎 → Relay → Gateway → 模型厂商；流按反方向返回。</li><li>原生引擎提出工具请求，必要时经 Host/UI 审批，结果回到原生循环。</li><li>Host 先持久保存事件，再通知 UI；以原生终态判断成功、失败或中断。</li><li>Gateway 结算调用，账本对账；已开启备份的会话上传一致性快照。</li></ol></div>
+<div class="table-wrap"><table><thead><tr><th>关键链路</th><th>时序约束</th><th>用户反馈</th></tr></thead><tbody>
+<tr><td>发送消息</td><td>先持久建档，再请求准入；重复 clientRequestId 返回同一 Run</td><td>准备中 → 执行中；额度拒绝不丢失草稿</td></tr>
+<tr><td>流式响应</td><td>Gateway 转发 SSE / 协议流；Host 按 seq 持久化并推送；UI 合并 delta</td><td>增量文本与工具步骤；流断开显示重连而非完成</td></tr>
+<tr><td>工具审批</td><td>请求持久化 → 显示 → 决定校验 → 原生应答；执行在应答之后</td><td>需操作的内容与范围；过期状态；可拒绝</td></tr>
+<tr><td>停止</td><td>Host interrupt；关闭当前请求，协调工具终止；记录仍无法确认的外部副作用</td><td>“正在停止”后才显示“已停止”；停止不是撤销文件或已发送请求</td></tr>
+<tr><td>结算</td><td>真实上游用量为依据；客户端完成回报只作运行状态，不决定价格</td><td>已完成 / 用量待结算可同时存在；无 usage 时显示待核对</td></tr>
+</tbody></table></div>
+</section>
+
+<section class="section" id="contracts">
+<div class="section-head"><span class="section-no">10</span><h2>接口契约：三条通道，各有边界</h2></div>
+<p class="intro">本节接口名均为拟议规范，尚未新增路由。/v1 接口部署在独立桌面服务，不占用原线上 personal-agent 路由。桌面 IPC、云端控制 REST 和供应商模型协议分别管理版本，避免由前端直接拼接原生进程命令。</p>
+<div class="table-wrap"><table class="minwide"><thead><tr><th>通道</th><th>操作</th><th>输入 / 输出要点</th></tr></thead><tbody>
+<tr><td>UI ↔ Host / IPC</td><td>project.pickDirectory、session.create/list/resume、turn.send/interrupt</td><td>校验 sender、schema 和当前账户；返回本地资源 ID；不用裸 shell 参数</td></tr>
+<tr><td>UI ↔ Host / IPC</td><td>approval.resolve、context.handoff、artifact.preview、engine.inspect</td><td>审批必须匹配 Run；文件只允许已登记的 artifactId / projectId 范围</td></tr>
+<tr><td>Host → Cloud</td><td>POST /v1/desktop/auth/exchange<br>POST /v1/devices / revoke</td><td>一次性 code + PKCE verifier；短期 access token 与可轮换 refresh credential</td></tr>
+<tr><td>Host → Cloud</td><td>GET /v1/catalog<br>POST /v1/runs/authorize</td><td>目录含版本/能力/计价；准入返回 runGrant、budget、expiry、允许模型</td></tr>
+<tr><td>Host → Cloud</td><td>POST /v1/runs/:id/heartbeat<br>POST /v1/runs/:id/close</td><td>device/run/lease 校验；close 幂等；最终账单独立由计量服务确定</td></tr>
+<tr><td>Relay → Gateway</td><td>/inference/openai/v1/responses<br>/inference/anthropic/v1/messages<br>/inference/google/v1beta/models/…</td><td>示意路径，adapter 配合 SDK 拼接验证；保留各家协议、版本头、流与错误语义</td></tr>
+<tr><td>Host → Cloud / 可选</td><td>POST /v1/sync/manifests<br>POST /v1/artifacts/upload-intents</td><td>revision + hash；服务端生成短期上传权限；对象归属复核</td></tr>
+<tr><td>既有 Web API</td><td>/api/billing/checkout、portal、summary<br>/api/billing/stripe/webhook</td><td>继续服务现有 Web；桌面通过平台身份桥复用，不能假设 Web cookie 可直接携带</td></tr>
+</tbody></table></div>
+<details><summary>统一事件 envelope 与重放语义</summary><div class="detail-body"><pre><code>{
+  "schemaVersion": 1,
+  "eventId": "evt_...",
+  "sessionId": "ses_...",
+  "runId": "run_...",
+  "seq": 42,
+  "engineId": "codex",
+  "type": "approval.requested",
+  "occurredAt": "2026-10-20T08:00:00Z",
+  "payload": { "approvalId": "apr_...", "toolName": "shell" },
+  "rawRef": "local://native-events/..."
+}</code></pre>
+<p>统一事件包含：session.created、run.preparing/started、message.delta/completed、tool.started/updated/completed、approval.requested/resolved、artifact.created、usage.updated、run.completed/failed/cancelled。</p>
+<p>Host 为每个 Run 单调分配 seq；写入成功再发布给 UI。UI 通过 lastSeenSeq 重放，按 eventId 去重。原生事件原样留存用于诊断，不把 raw payload 全部显示给用户。COMPLETED 等终态最多确认一次，冲突转恢复流程。</p>
+</div></details>
+<details><summary>错误模型、幂等和协议版本</summary><div class="detail-body"><pre><code>{
+  "error": {
+    "code": "ENGINE_UNAVAILABLE",
+    "message": "当前 Agent 版本无法启动",
+    "retryable": false,
+    "requestId": "req_...",
+    "details": { "engineId": "codex", "requiredVersion": "catalog-version" }
+  }
+}
+
+身份：AUTH_EXPIRED / DEVICE_REVOKED / OWNER_MISMATCH
+准入：INSUFFICIENT_CREDITS / RUN_CONFLICT / RATE_LIMITED
+引擎：ENGINE_UNAVAILABLE / CAPABILITY_UNSUPPORTED / NATIVE_SESSION_INCOMPATIBLE
+权限：APPROVAL_EXPIRED / PERMISSION_DENIED
+调用：UPSTREAM_UNAVAILABLE / STREAM_INTERRUPTED / USAGE_PENDING
+数据：ARTIFACT_CONFLICT / SNAPSHOT_INCOMPLETE</code></pre>
+<p>幂等键作用域为 owner + operation + clientRequestId，保存请求摘要；同键不同请求返回冲突。供应商调用已发出后网络结果不明，不自动当作未发生而无限重试。原生自动重试也须记录 attemptId。协议主版本不兼容时拒绝并提示升级，不静默丢字段。</p>
+</div></details>
+</section>
+<section class="section" id="data">
+<div class="section-head"><span class="section-no">11</span><h2>数据设计：本地主记录，云端独立新库</h2></div>
+<p class="intro">用户的对话、工作文件和原生会话状态优先保存在电脑。桌面后端建议新建独立 PostgreSQL 数据库，配独立账号和迁移；可部署在阿里云 RDS。若已有合适的 RDS PostgreSQL 实例，可以在其中新建数据库，资源与故障域仍共享。最终托管位置待部署盘点，不要求迁移现有 Supabase。</p>
+<div class="grid2"><article class="card"><div class="overline">EXISTING / 保持</div><h3>Minaco 线上数据库</h3><p>现有用户、线上订阅、账本和 AgentThread 继续使用原有存储。桌面引用现有 User.id，不复制另一套用户密码，不向旧 AgentThread 写桌面对话。</p></article><article class="card"><div class="overline">NEW / 新增</div><h3>minaco_desktop 数据库</h3><p>设备、桌面权益、模型调用、计量与备份索引使用独立表。建议专用运行账号与迁移账号，通过身份/支付桥连接原系统，不跨库直接 join 或伪造外键。</p></article></div>
+<div class="table-wrap"><table class="minwide"><thead><tr><th>存储位置</th><th>保存内容</th><th>权威性 / 访问方式</th></tr></thead><tbody>
+<tr><td>本地 SQLite</td><td>Project、Session、Run、Message、Event、Approval、ContextRef、Artifact 索引</td><td>桌面历史与 UI 状态主记录；只由 Host 访问，账户切换时重新打开对应库</td></tr>
+<tr><td>本地原生引擎目录</td><td>nativeSession、原生事件、压缩状态、引擎配置</td><td>原生续聊的依据；不能只凭一份统一消息列表声称可以原生恢复</td></tr>
+<tr><td>用户项目目录</td><td>代码、文档、生成文件、Git worktree</td><td>用户拥有的真实文件；删除会话默认不删除项目目录</td></tr>
+<tr><td>桌面 PostgreSQL / RDS</td><td>账户关联、设备、授权、用量、权益、备份 manifest</td><td>云端准入与计费事实；不接收每个 message.delta 作为在线会话数据库</td></tr>
+<tr><td>备份对象存储 / 如 OSS</td><td>可选的历史与原生状态快照、用户选定产物</td><td>用于恢复的版本副本；数据库仅保存所有者、版本、哈希和对象定位信息</td></tr>
+<tr><td>系统凭证库</td><td>Minaco 设备 refresh credential、用户连接凭证</td><td>Host 通过 Keychain / 系统安全存储读取；不进入日志或会话备份</td></tr>
+</tbody></table></div>
+<details><summary>本地目录与数据对象示意</summary><div class="detail-body"><pre><code>{appData}/Minaco/
+  accounts/{platformUserId}/
+    local.sqlite
+    projects/{projectId}/manifest.json
+    sessions/{sessionId}/
+      native-state/          # 对应引擎的恢复状态
+      events/                # 原生事件与统一索引
+      artifacts/             # 应用管理的产物；用户项目仍在原路径
+    engines/{engineId}/      # 按引擎要求设置私有 HOME / 配置
+    backup-staging/          # 已完成一致性检查的待上传快照
+  runtime/                   # 已验证版本的引擎和组件
+
+本地 Session:
+  id, ownerId, projectId, engineId, engineVersion, nativeSessionId,
+  status, recoverability, parentSessionId, createdAt, updatedAt
+本地 Run:
+  id, sessionId, clientRequestId, nativeTurnId, state,
+  lastEventSeq, cloudGrantId, settlementState</code></pre>
+<p>路径名称为设计示意。引擎实际存储位置通过其支持的配置设置；必要时每个会话使用独立进程和配置目录。只继承明确允许的环境变量，不能把现有服务 process.env、数据库凭证或平台共享模型凭证带到客户端。</p>
+</div></details>
+<details><summary>桌面新库的最小模型与约束</summary><div class="detail-body">
+<div class="table-wrap"><table><thead><tr><th>拟议表</th><th>主要字段</th><th>必要约束</th></tr></thead><tbody>
+<tr><td>DesktopPrincipal / Device</td><td>externalUserId、deviceId、publicKey、revokedAt</td><td>外部身份唯一；所有权由服务端 token 解析，不能相信请求 body 的 ownerId</td></tr>
+<tr><td>RunGrant / ModelInvocation</td><td>runId、deviceId、provider、model、requestId、attemptId、state</td><td>请求计费去重；允许的模型、预算、到期时间与设备绑定</td></tr>
+<tr><td>UsageRecord / RateCard</td><td>providerUsage、计价版本、估算/确认状态、上游 requestId</td><td>供应商响应为事实；调整追加流水，不覆盖历史计价依据</td></tr>
+<tr><td>DesktopEntitlement / Ledger</td><td>产品权益、额度批次、reservation、扣减/释放记录</td><td>建议桌面独立权益；同一余额只设一个权威账本</td></tr>
+<tr><td>BackupManifest</td><td>ownerId、deviceId、sessionId、revision、objectKey、hash、engineVersion</td><td>完整上传并校验后才提交版本；对象存储键不能由客户端任意指定</td></tr>
+<tr><td>PaymentInbox / Outbox</td><td>支付事件 ID、业务 operationKey、payloadHash、deliveryState</td><td>支付桥至少一次投递，消费端幂等；跨数据库不承诺原子事务</td></tr>
+</tbody></table></div>
+<p>备份索引默认只存最少字段；标题或摘要属于内容，是否存云端要单独列入备份范围。仅本地的会话可以完全没有云端 Session 行，模型用量记录中的随机 sessionId 只用于归属。</p>
+</div></details>
+<div class="note"><strong>隔离要做到哪一层：</strong>应用层每次查询检查所有者，数据库角色限制库/表权限，连接池限制并发，备份对象按账户授权。RDS 同实例新库是初期成本方案；若要求桌面故障不影响线上资源，需要独立实例。实例版本、剩余连接数和负载应在实施时检查。</div>
+<p class="small muted" style="margin-top:15px">术语：PostgreSQL 是数据库引擎；Supabase 与阿里云 RDS 是不同的托管平台。原线上聊天存储保留。新增桌面业务的云端关系库只存管理数据和备份索引，历史正文备份放对象存储；模型请求转发仍会在执行期间传输必要的对话内容。</p>
+</section>
+
+<section class="section" id="identity">
+<div class="section-head"><span class="section-no">12</span><h2>统一登录与令牌：真实供应商密钥留在云端</h2></div>
+<p class="intro">一个 Minaco 登录用于识别用户和决定调用额度。原生引擎收到的只是本地 Relay 凭证；Relay 再使用限定范围的 Minaco 授权访问云端。能否跳过厂家交互登录、使用自定义出口，必须按每个引擎的固定版本验证。</p>
+<div class="flow-strip"><div class="flow-step"><span>LOGIN</span>系统浏览器登录现有 Minaco</div><div class="flow-arrow">→</div><div class="flow-step"><span>EXCHANGE</span>一次性授权码换桌面设备凭证</div><div class="flow-arrow">→</div><div class="flow-step"><span>AUTHORIZE</span>为当前任务签发有限额的 runGrant</div><div class="flow-arrow">→</div><div class="flow-step"><span>FORWARD</span>网关注入真实上游密钥并转发</div></div>
+<div class="table-wrap"><table><thead><tr><th>凭证</th><th>在哪里使用</th><th>能做什么</th></tr></thead><tbody>
+<tr><td>Clerk / Web 登录态</td><td>已有网站与身份桥</td><td>确认当前用户；不直接把 Web cookie 复制到原生子进程</td></tr>
+<tr><td>桌面 refresh credential</td><td>Host + 系统凭证库</td><td>换短期平台 access token；可按设备撤销与轮换</td></tr>
+<tr><td>本地随机 Relay token</td><td>原生引擎 → 127.0.0.1 动态端口</td><td>只关联该引擎/运行实例；单独拿到它不能直接调用厂家服务</td></tr>
+<tr><td>runGrant</td><td>Relay → Minaco Gateway</td><td>绑定账户、设备、Run、模型、预算、有效期；禁用任意上游地址</td></tr>
+<tr><td>真实供应商 API / 合作凭证</td><td>仅网关与服务器密钥存储</td><td>鉴权上游；不返回客户端，不写本地配置、安装包或备份</td></tr>
+</tbody></table></div>
+<details><summary>桌面登录、账户切换与注销流程</summary><div class="detail-body">
+<ol><li>Host 生成 state 与 PKCE challenge，系统浏览器打开 Minaco 授权入口。已有用户沿用现有账号。</li><li>身份桥校验登录后生成一次性、短期、绑定 challenge 的 code；通过允许的应用链接返回。URL 不携带 access token。</li><li>Host 以 verifier 换取设备凭证；服务端校验 redirect、state、一次性消费和有效期。这里是拟议的 Minaco 换票服务，不是假设 Clerk 已经提供了这套桌面流程。</li><li>切换账号前停止或明确结束旧账号任务、关闭子进程和 Relay，清空 UI 缓存，切换本地库和凭证命名空间。</li><li>退出登录撤销当前设备 refresh credential；选择保留或删除本地历史。远程撤销阻止后续云端调用，不能保证抹除已下载到用户设备的内容。</li></ol>
+</div></details>
+<div class="grid2"><article class="card"><h3>请求和响应都经过网关</h3><p>原生引擎在本地组装提示词、工具定义和上下文，经 Relay 发往 Minaco。网关替换鉴权后访问厂商，响应按原协议流式返回网关 → Relay → 引擎，再由引擎执行下一步本地操作。</p></article><article class="card"><h3>客户端可被检查，计费不能信任它</h3><p>用户掌控自己的电脑，平台凭证也可能被提取。安全目标是不给客户端供应商共享密钥；云端仍须限制平台凭证的作用域、并发与预算，并拒绝伪造的用量回报。</p></article></div>
+<div class="note"><strong>API 与订阅令牌分开验证：</strong>原厂消费者订阅的 OAuth 令牌可能绑定专用端点、账号权益与产品协议，不是任意 API 的通用密钥。Demo 优先使用支持自定义出口的 API/合作接入；平台订阅账户方案另列接入测试和厂家授权范围，不写成已解决能力。</div>
+</section>
+
+<section class="section" id="billing">
+<div class="section-head"><span class="section-no">13</span><h2>统一支付：复用基础设施，明确产品权益</h2></div>
+<p class="intro">用户在 Minaco 购买和查看账单，网关记录各家实际调用。复用账号、Stripe 商户与支付逻辑，不自动等于共用原线上套餐额度。建议桌面有独立 SKU 和权益，避免影响现有线上用户；共享余额作为后续明确决策。</p>
+<div class="grid3"><article class="card"><div class="overline">PURCHASE</div><h3>平台收款与履约</h3><p>复用支付入口、Checkout / Portal 经验与签名校验。购买必须携带服务端确认的 productScope=desktop 和现有用户映射。</p></article><article class="card"><div class="overline">METER</div><h3>上游真实用量</h3><p>一次任务可能多次请求。按供应商、模型、请求和重试分别记录输入、缓存、输出及其他计费项，保留计价版本。</p></article><article class="card"><div class="overline">EXPLAIN</div><h3>可解释的桌面账单</h3><p>展示任务消耗、引擎/模型、已结算和待结算。明确测试积分、平台积分与美元成本的区别，不把订阅百分比当固定 token 价格。</p></article></div>
+<div class="table-wrap"><table class="minwide"><thead><tr><th>阶段</th><th>后端处理</th><th>幂等 / 异常处理</th></tr></thead><tbody>
+<tr><td>购买到账</td><td>支付服务验证厂商事件 → 桌面产品路由 → 新库 PaymentInbox → 发放权益</td><td>eventId 与发放业务键去重；不能凭浏览器跳转成功发额度</td></tr>
+<tr><td>运行准入</td><td>校验桌面权益、设备、模型和并发，原子预留任务预算，发 runGrant</td><td>同一个 clientRequestId 不重复预留；过期授权拒绝后续调用</td></tr>
+<tr><td>每次模型调用</td><td>网关绑定 invocationId / attemptId；核查余额和预留，记录供应商 requestId</td><td>同一 HTTP 请求去重与上游实际重复执行区分处理；不能只按 Run 去重费用</td></tr>
+<tr><td>结算 / 释放</td><td>根据上游 usage 计算扣减；任务结束且在途调用核清后释放剩余预留</td><td>未知用量转 PENDING/REVIEW；不因客户端退出就记为零成本</td></tr>
+<tr><td>退款 / 失效</td><td>依据已确认支付状态更新后续可用权益，追加调整流水</td><td>不覆盖原消费记录；支付与用量跨库用 outbox + 重试 + 对账</td></tr>
+</tbody></table></div>
+<details><summary>成本公式与预算执行口径</summary><div class="detail-body">
+<pre><code>供应商调用成本 =
+  非缓存输入量 × 对应输入价格
+  + 缓存读取 / 写入量 × 各自价格
+  + 输出量 × 对应输出价格
+  + 按厂商规则计费的其他项目
+
+任务成本 = Σ 该 Run 下真实发生的调用成本
+平台消费 = 任务成本按当时费率规则换算的积分 / 货币金额
+套餐权益 = 独立产品配置；不能用月费倒推固定 token 单价</code></pre>
+<p>不同厂商的 usage 字段并不等价，缓存或推理量可能已经包含在其他字段中。按各家的定义归一，避免重复相加。价格表记录币种、版本和生效时间，本规划不锁定具体售价。</p>
+<p>要承诺硬预算，应在每次调用前按允许的最大输出及计费上界预留，并将并行请求计入。对于无法可靠取得上界的模式，只能标为“软预算提醒”，不能把停止下一次请求宣传成绝对不超支。取消流也不代表厂家没有产生费用。</p>
+</div></details>
+<div class="note"><strong>复用时的兼容门槛：</strong>同一个 Stripe 商户的 webhook 可能把桌面产品事件送到现有处理器。上线前必须验证产品路由、未知 SKU 处理和幂等，确保不会给旧线上产品误发额度或重复履约。D0 使用测试支付环境，不修改现有线上余额。</div>
+<p class="small muted" style="margin-top:15px">建议默认：桌面权益在新库独立记账，原线上账本继续服务原产品；复用支付组件与身份桥。若最终选择共用钱包，则只由一个计费服务维护该余额，新库保留调用明细并通过幂等接口结算，禁止两边各存一份可写余额。</p>
+</section>
+<section class="section" id="reliability">
+<div class="section-head"><span class="section-no">14</span><h2>恢复、备份与发布：把边界变成可验证行为</h2></div>
+<p class="intro">本地优先意味着电脑负责执行，也意味着休眠、退出、文件变化都要有明确处理。云端备份负责找回资料，不自动承担运行中的原生进程。</p>
+<div class="table-wrap"><table class="minwide"><thead><tr><th>情况</th><th>预期行为</th><th>实现约束</th></tr></thead><tbody>
+<tr><td>关闭窗口 / 退出应用</td><td>关闭窗口可留在后台；真正退出时提示正在运行的任务，停止后保存</td><td>窗口生命周期与 Host 进程区分；不能把“关闭窗口”直接视为任务完成</td></tr>
+<tr><td>电脑睡眠 / 断网</td><td>历史仍可查看；任务显示中断或待恢复；联网后检查原生状态</td><td>不承诺后台云端续跑，不盲目重放已执行工具</td></tr>
+<tr><td>原生引擎崩溃</td><td>保留最后事件和产物；给出恢复或创建交接会话的入口</td><td>原生 resume 成功才能标记可续聊；失败保留 HISTORY_ONLY</td></tr>
+<tr><td>模型流中断</td><td>保留部分结果，标记请求结果不确定；决定是否显式重试</td><td>上游可能已计费；为新尝试生成 attemptId，避免重复工具副作用</td></tr>
+<tr><td>文件路径变动 / 并行修改</td><td>重新定位或显示版本冲突，不用备份直接覆盖新文件</td><td>路径按设备解析；校验相对路径、符号链接和内容哈希</td></tr>
+<tr><td>设备丢失 / 换电脑</td><td>撤销旧设备，在新设备登录并选择恢复备份</td><td>无备份则不能恢复；引擎版本、项目文件和外部账号均须重新校验</td></tr>
+<tr><td>用量无法确认</td><td>结果可见，费用显示待结算；后台补偿和对账</td><td>预留与在途请求处理完成后才能释放；不能依赖桌面在线结算</td></tr>
+</tbody></table></div>
+<details><summary>历史备份的提交与恢复协议</summary><div class="detail-body">
+<ol><li>用户选择是否开启备份及内容范围：会话文本、原生状态、所选产物分别说明；默认不上传整个项目目录。</li><li>Host 在运行结束或经验证的一致性点生成快照。SQLite 使用一致性备份机制，不能只复制正在写入的主文件而遗漏 WAL；原生会话按引擎支持的方式导出或暂停后采集。</li><li>清单包含 schemaVersion、engineId/version、来源设备、文件哈希、父版本和所需组件；排除凭证、缓存、依赖目录和临时文件。</li><li>先上传不可变对象并验证哈希，再原子提交 manifest；半成品标为未完成，不出现在可恢复列表。失败可续传，不覆盖旧的有效版本。</li><li>恢复到新的暂存目录，验证所有者、大小、路径和哈希；兼容校验通过后切换本地索引。执行过迁移的状态先留副本，不能盲目交给旧版引擎。</li><li>多设备初期采用“导入为本地副本”，不自动合并两个原生会话历史。实时双向合并与设备租约属于 M2。</li></ol>
+<p>传输 TLS 与服务端加密存储属于 M1；端到端加密需要独立的设备密钥、恢复密钥和找回流程。未实现端到端加密之前，不能宣称平台无法读取备份。</p>
+</div></details>
+<div class="grid2"><article class="card"><h3>独立发布与组件管理</h3><p>桌面官网、安装包、桌面 API、网关分别发布和回滚；引擎目录固定兼容版本、平台架构与包哈希。签名/公证、组件来源和更新完整性纳入发布门槛。新版本失败回退时不破坏已有会话状态。</p></article><article class="card"><h3>只记录必要的运营信息</h3><p>默认记录 requestId、Run、引擎/模型版本、延迟、错误码和用量。请求正文只用于转发，不作网关日志；调试采样须显式开启并脱敏，且不得记录鉴权头。</p></article></div>
+<div class="table-wrap"><table><thead><tr><th>质量指标</th><th>建议验收口径</th></tr></thead><tbody>
+<tr><td>本地可用性</td><td>断网可打开已保存历史；强制退出后已确认持久化的消息不丢失</td></tr>
+<tr><td>界面响应</td><td>固定测试机上，普通导航与输入反馈 p95 &lt; 300 ms；模型首 token 延迟单独统计，不混入 UI 指标</td></tr>
+<tr><td>事件正确性</td><td>模拟丢包/重复事件后无重复消息、无重复审批执行、无错误完成状态</td></tr>
+<tr><td>资源与容量</td><td>测量 1 / 2 / 4 个并行引擎的内存、CPU、连接与成本，再决定默认并发；不凭在线用户数推断任务容量</td></tr>
+<tr><td>备份可恢复性</td><td>在另一台干净设备完成下载、校验、历史查看与支持引擎的续聊；只上传成功不算恢复通过</td></tr>
+</tbody></table></div>
+<p class="small muted">以上是拟议验收目标，不是已测得性能。本次只制作文档，未启动 Agent 集成、创建数据库或执行部署。</p>
+</section>
+
+<section class="section" id="delivery">
+<div class="section-head"><span class="section-no">15</span><h2>开发分期：先证明闭环，再扩大引擎目录</h2></div>
+<p class="intro">首个 demo 建议从 macOS Apple Silicon 开始，减少跨平台变量。Windows / Intel 支持在引擎依赖、签名和文件权限完成验证后进入内测。每一阶段通过验收再扩展，不把仅有文档接口当作接入完成。</p>
+<div class="table-wrap"><table class="minwide"><thead><tr><th>阶段</th><th>工作包</th><th>退出条件</th><th>涉及系统</th></tr></thead><tbody>
+<tr><td>方案评审 · 当前</td><td>确认产品边界、默认数据与计费口径；审阅本文件</td><td>关键决策形成开发基线；仍未实施产品</td><td>仅 HTML 文档</td></tr>
+<tr><td>D0-A / 接入验证</td><td>固定 Codex / Claude 版本；本地 loop + Relay + 网关；权限和 resume</td><td>两家都能创建/修改本地文件、拒绝操作、续聊、记录真实调用</td><td>隔离测试环境</td></tr>
+<tr><td>D0-B / 桌面闭环</td><td>独立 Electron 壳、本地库、登录桥、会话列表、交接、测试用量</td><td>一个安装流程、一个 Minaco 登录、两个独立原生会话；满足下方 D0 验收</td><td>桌面新项目 + 新服务/新库</td></tr>
+<tr><td>M1 / 可用内测</td><td>桌面产品支付履约、签名升级、可选备份、插件管理；Google 与国内候选准入</td><td>支付/退款/对账、跨设备恢复、原线上兼容验证；兼容矩阵可追踪</td><td>桌面正式环境 + 最小身份/支付桥</td></tr>
+<tr><td>M2 / 协作扩展</td><td>多设备接力、团队、复杂跨 Agent 委派、端到端加密</td><td>执行租约、数据合并与权限模型通过专项测试</td><td>另立设计与成本评审</td></tr>
+</tbody></table></div>
+<h3 style="margin-top:25px">关键验收清单</h3>
+<div class="table-wrap"><table class="minwide"><thead><tr><th>ID / 阶段</th><th>测试场景</th><th>必须观察到的结果</th></tr></thead><tbody>
+<tr><td><span class="requirement">AC-01 · D0</span></td><td>现有账号首次登录桌面</td><td>映射同一个业务 User.id；无第二套注册密码；旧线上登录正常</td></tr>
+<tr><td><span class="requirement">AC-02 · D0</span></td><td>干净设备安装并使用两家 Agent</td><td>用户只按 Minaco 安装指引操作；组件依赖明确，没有隐式要求自行配置厂家 CLI</td></tr>
+<tr><td><span class="requirement">AC-03 · D0</span></td><td>Codex / Claude 各完成一次文件任务</td><td>真正由对应原生引擎 loop 调用工具；本地文件与 UI 产物一致</td></tr>
+<tr><td><span class="requirement">AC-04 · D0</span></td><td>检查安装包、配置、子进程环境和请求日志</td><td>不存在平台共享供应商密钥；本地使用受限平台凭证；日志鉴权信息被移除</td></tr>
+<tr><td><span class="requirement">AC-05 · D0</span></td><td>批准 / 拒绝 / 过期审批 / 取消任务</td><td>决定传回原生引擎；拒绝的操作未发生；停止过程与最终状态可解释</td></tr>
+<tr><td><span class="requirement">AC-06 · D0</span></td><td>重启应用、引擎异常退出后恢复</td><td>历史完整可见；可恢复引擎继续原生会话，不支持时明确提示</td></tr>
+<tr><td><span class="requirement">AC-07 · D0</span></td><td>切换用户 A → B；伪造跨账户 ID</td><td>B 看不到 A 的历史/备份；后端拒绝访问；旧进程不能继续沿用新账户授权</td></tr>
+<tr><td><span class="requirement">AC-08 · D0</span></td><td>从 Claude 向 Codex 交接</td><td>新会话得到用户选定的快照和来源；不继承原会话权限或隐藏状态</td></tr>
+<tr><td><span class="requirement">AC-09 · D0</span></td><td>重复请求、并行调用、流中断与余额不足</td><td>无重复预留/结算；未知费用保持待核对；无额度时拒绝新的计费调用</td></tr>
+<tr><td><span class="requirement">AC-10 · M1</span></td><td>桌面支付、重复 webhook、退款</td><td>只履约对应产品；线上套餐和余额不误变；对账能追到支付与调用流水</td></tr>
+<tr><td><span class="requirement">AC-11 · M1</span></td><td>备份中断、损坏快照、新设备恢复</td><td>半成品不可恢复；旧有效版本保留；文件完整性校验和原生兼容检查生效</td></tr>
+<tr><td><span class="requirement">AC-12 · M1</span></td><td>升级/回滚、两会话并行写同一项目</td><td>兼容状态可追踪；冲突可见；桌面发布不要求更新原 personal-agent-server</td></tr>
+</tbody></table></div>
+<div class="note"><strong>排期依据：</strong>先给 D0-A 设独立验证门槛。SDK/二进制分发、模型出口、权限回调或恢复能力任一不满足时，先调整该引擎适配方案，再估算完整开发周期；不以“界面都像聊天”推定只需套壳。</div>
+</section>
+
+<section class="section" id="evidence">
+<div class="section-head"><span class="section-no">16</span><h2>决策清单与依据</h2></div>
+<p class="intro">已确认方向来自本轮讨论；工程现状来自工作区只读审查；引擎能力来自公开官方文档。部署位置、商业授权和集成可用性分别核实，不互相替代。</p>
+<div class="decision-grid">
+<div class="decision"><b><span class="badge verified">已确认</span> 线上与桌面并行</b><p>原 Minaco 线上业务保持；新增桌面下载工具，独立构建、发布、数据与回滚。</p></div>
+<div class="decision"><b><span class="badge verified">已确认</span> 桌面官网域名</b><p>使用 desktop.minaco.ai；官网可独立托管和更新。当前未修改 DNS 或部署页面。</p></div>
+<div class="decision"><b><span class="badge proposed">维护方案</span> 桌面产品独立仓库</b><p>新 minaco-desktop 仓库包含官网、客户端和配套后端，各自发布；原 altselfs 保持独立。仓库尚未创建。</p></div>
+<div class="decision"><b><span class="badge verified">已确认</span> 本地执行与会话主存储</b><p>各原生引擎在用户设备运行，组装模型请求；服务端转发并支持历史备份。</p></div>
+<div class="decision"><b><span class="badge verified">已确认</span> 复用用户和支付</b><p>同一品牌、同一平台身份、统一购买体验；桌面不要求用户分别登录模型厂商。</p></div>
+<div class="decision"><b><span class="badge verified">已确认</span> 当前只评审文档</b><p>本次不改业务代码、不创建数据库、不安装引擎、不发版、不部署。</p></div>
+<div class="decision"><b><span class="badge proposed">建议</span> Electron + 独立新库</b><p>沿用 React / TypeScript 经验；新库专用账号。RDS 是候选托管位置，不迁移原 Supabase。</p></div>
+<div class="decision"><b><span class="badge proposed">建议</span> 两引擎先跑闭环</b><p>D0 验证 Codex + Claude；Google 和国内路线以版本兼容测试准入，未验证不标“可用”。</p></div>
+<div class="decision"><b><span class="badge pending">待定</span> 桌面套餐与余额</b><p>默认建议独立产品权益；是否与线上共享钱包、售价、加价规则和并发上限另行确定。</p></div>
+<div class="decision"><b><span class="badge pending">待定</span> 备份和分发范围</b><p>默认备份开关、保留期限、首发系统，以及厂家允许的二进制分发和统一付费范围。</p></div>
+</div>
+<h3 style="margin-top:30px">工程依据 · 当前工作区</h3>
+<div class="table-wrap"><table><thead><tr><th>文件 / 位置</th><th>用于判断什么</th></tr></thead><tbody>
+<tr><td><code>src/lib/brand.ts</code><br><code>public/brand/minaco/README.md</code><br><code>src/app/globals.css</code></td><td>Minaco 名称、双星标志、口号、现有暖黑与金色视觉；本文件内嵌现有品牌 SVG</td></tr>
+<tr><td><code>package.json</code><br><code>src/components/astromar-workspace-shell.tsx</code></td><td>Next / React / Clerk 技术栈；三栏工作台和 Web 依赖，不能等同于现成桌面壳</td></tr>
+<tr><td><code>src/lib/investor-auth.ts:27</code><br><code>prisma/schema.prisma:73</code></td><td>Clerk → 业务用户映射；已有支付权益与账本模型</td></tr>
+<tr><td><code>prisma/schema.prisma:286</code><br><code>prisma/schema.prisma:370</code><br><code>src/app/api/investor/personal-agent/route.ts</code></td><td>现有计量字段与云端会话结构；桌面需要独立的通用模型，不直接修改原表</td></tr>
+<tr><td><code>services/personal-agent-server/src/main-agent.ts:44</code><br><code>src/index.ts:49</code>（同服务）<br><code>src/types.ts:75</code>（同服务）</td><td>Hermes 主循环、Codex 注册和现有 ChildAgentRuntime 接口范围</td></tr>
+<tr><td><code>services/personal-agent-server/src/codex/json-rpc-client.ts:30</code><br><code>src/codex/openai-auth-broker.ts:155</code>（同服务）</td><td>本机进程/RPC 经验；现有共享令牌传递路径不能直接移入桌面</td></tr>
+<tr><td><code>services/personal-agent-server/src/sandbox-runtime.ts:23</code><br><code>src/lib/ops-data.ts:461</code></td><td>云端目录布局；工程支持识别不同数据库托管方，代码本身不证明当前生产连接位置</td></tr>
+</tbody></table></div>
+<h3 style="margin-top:28px">官方依据 · 核查日期 2026.10.20</h3>
+<div class="source-list">
+<div class="source-item"><a href="https://learn.chatgpt.com/docs/app-server" target="_blank" rel="noopener noreferrer">OpenAI · Codex app-server ↗</a><span>嵌入原生 Agent 的控制协议；会话、执行与事件入口。</span></div>
+<div class="source-item"><a href="https://code.claude.com/docs/en/agent-sdk/overview" target="_blank" rel="noopener noreferrer">Anthropic · Claude Agent SDK ↗</a><span>原生 Agent 的程序化调用；所选版本需验证配置和恢复语义。</span></div>
+<div class="source-item"><a href="https://code.claude.com/docs/en/llm-gateway-connect" target="_blank" rel="noopener noreferrer">Anthropic · LLM gateway configuration ↗</a><span>自定义模型网关与鉴权配置；不等于已取得商业分发授权。</span></div>
+<div class="source-item"><a href="https://www.antigravity.google/docs/install?tab=cli" target="_blank" rel="noopener noreferrer">Google · Antigravity CLI 安装与配置 ↗</a><span>当前 Google CLI 候选；与 Gemini CLI 分别跟踪兼容性。</span></div>
+<div class="source-item"><a href="https://agentclientprotocol.com/protocol/v1/session-setup" target="_blank" rel="noopener noreferrer">Agent Client Protocol · Session setup ↗</a><span>会话与能力协商；ACP 可用不代表模型出口或全部插件通用。</span></div>
+<div class="source-item"><a href="https://www.kimi.com/code/docs/en/kimi-code-cli/reference/kimi-acp" target="_blank" rel="noopener noreferrer">Kimi Code · ACP ↗</a><span>原生引擎对外控制入口；列为国内引擎候选。</span></div>
+<div class="source-item"><a href="https://www.codebuddy.ai/docs/cli/http-api" target="_blank" rel="noopener noreferrer">CodeBuddy Code · HTTP API ↗</a><span>程序控制候选接口；不代指完整 WorkBuddy 产品。</span></div>
+<div class="source-item"><a href="https://github.com/MiniMax-AI/minimax-code" target="_blank" rel="noopener noreferrer">MiniMax · 官方代码仓库 ↗</a><span>原生引擎候选；版本、分发与兼容范围在接入时固定。</span></div>
+<div class="source-item"><a href="https://www.electronjs.org/docs/latest/tutorial/security" target="_blank" rel="noopener noreferrer">Electron · Security ↗</a><span>上下文隔离、受限 Renderer、IPC 校验与不可信内容边界。</span></div>
+<div class="source-item"><a href="https://www.alibabacloud.com/help/zh/rds/apsaradb-rds-for-postgresql/create-a-database-and-an-account-on-an-apsaradb-rds-for-postgresql-instance" target="_blank" rel="noopener noreferrer">阿里云 · RDS PostgreSQL 数据库与账号 ↗</a><span>同一实例可建立数据库与账号；部署建议与实际资源盘点分开。</span></div>
+</div>
+<div class="note"><strong>评审时先看三件事：</strong>是否接受“原生引擎本地运行 + 云端协议网关”的边界；是否接受桌面独立数据与默认独立权益；是否认可两引擎闭环作为 D0 验收。上述设计通过后，再进入具体接口冻结与开发排期。</div>
+</section>
+<footer class="footer"><span>Minaco · Think with you. Act for you.</span><span>产品与技术方案 v0.1 / 2026.10.20<br>独立 HTML · 可离线查看 · 文档原型数据仅为示意</span></footer>
+</main></div>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const engines = {
+    codex: { name: 'Codex', title: '实现产品原型' },
+    claude: { name: 'Claude Code', title: '市场研究与定位' },
+    kimi: { name: 'Kimi Code', title: '资料整理' }
+  };
+  let current = 'codex', scene = 'working', target = 'claude', draft = false, decision = '';
+  const label = (name) => '<div class="agent-label"><span class="status-dot"></span>' + name + ' · 本地原生引擎</div>';
+  function render() {
+    const e = engines[current];
+    $('#proto-title').textContent = draft ? '新会话 · 尚未开始' : e.title;
+    $('#proto-engine').value = current;
+    $$('.session-item[data-native]').forEach(b => b.classList.toggle('selected', !draft && b.dataset.native === current));
+    $$('[data-scene]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.scene === scene)));
+    $('#proto-model').textContent = e.name + ' 的已配置模型';
+    $('#artifact-status').textContent = '示意产物 · 尚未生成';
+    let content = '', caption = '';
+    if (draft) {
+      content = label(e.name) + '<p>这是一个尚未绑定原生状态的新会话。现在可以选择 Agent、工作目录和上下文，然后发送第一条消息。</p><div class="tool-row">工作目录：Research　·　权限：写入前确认</div><div class="tool-row">示意页面：不会实际创建文件或调用模型。</div>';
+      caption = '草稿阶段可以直接选择 Agent；开始原生会话后，换 Agent 通过“交接”创建新会话。';
+    } else if (scene === 'approval') {
+      content = '<div class="message-user">根据产品简报，生成一个本地 HTML 原型。</div>' + label(e.name);
+      if (!decision) {
+        content += '<p>已完成文件结构设计，等待你确认写入。</p><div class="permission-card"><h4>请求写入项目文件</h4><p>目标：Research/prototype.html<br>影响：创建一个新文件，不覆盖现有文件。<br>范围：只允许这一次写入。</p><div class="permission-actions"><button class="primary" data-action="approve">允许本次</button><button data-action="reject">拒绝</button></div></div>';
+      } else {
+        content += '<div class="permission-card"><h4>' + (decision === 'approved' ? '已允许本次写入 · 示意' : '已拒绝本次写入 · 示意') + '</h4><p>' + (decision === 'approved' ? '决定将由 Host 回传给引擎，再等待真实工具执行结果。批准本身不代表文件已经生成。' : '引擎收到拒绝；该写入不会执行。Agent 可以继续解释方案或提出其他操作。') + '</p></div>';
+      }
+      caption = '审批是引擎实际请求的映射，确认范围必须与执行参数一致。这里仅演示 UI 状态。';
+    } else if (scene === 'handoff') {
+      if (target === current) target = current === 'claude' ? 'codex' : 'claude';
+      content = label(e.name) + '<div class="permission-card"><h4>交接给 ' + engines[target].name + '</h4><p>包含：已确认的目标、product-brief.md、3 条选定结论。<br>不包含：原生隐藏状态、平台凭证、历史工具授权。<br>文件使用当前版本快照，原会话保持。</p><div class="permission-actions"><button class="primary" data-action="handoff">创建交接会话</button><button data-action="back">返回原会话</button></div></div>';
+      caption = '从 ' + e.name + ' 到 ' + engines[target].name + '：创建新的 Session 和原生状态，保留来源关联。';
+    } else if (scene === 'error') {
+      content = '<div class="message-user">继续完成原型。</div>' + label(e.name) + '<div class="permission-card"><h4>云端连接中断 · 用量待核对</h4><p>本地历史和已保存产物仍然可用。最后一次请求可能已经到达供应商，不能把它当作未计费。</p><div class="permission-actions"><button data-action="retry">重新检查连接</button><button data-action="quota">查看额度不足状态</button></div></div>';
+      caption = '先核对请求与原生状态，再决定恢复；不自动重放可能已经产生副作用的工具。';
+    } else {
+      content = '<div class="message-user">参考「市场研究与定位」的产品简报，继续完成桌面工作台原型。</div>' + label(e.name) + '<p>我会沿用项目中的 Minaco 视觉，并把 Agent 选择、会话交接和权限确认放进同一套工作流程。</p><div class="tool-row">✓ 已引用 product-brief.md · 来源会话与版本已记录</div><div class="tool-row">✓ 已读取当前项目目录 · 本地</div><div class="tool-row">◌ 正在准备 prototype.html 的文件变更</div>';
+      caption = '当前会话由 ' + e.name + ' 驱动。本地保存对话和原生状态；云端转发组装好的模型请求并计量。';
+    }
+    $('#proto-chat').innerHTML = content;
+    $('#proto-caption').textContent = caption;
+    const side = $('#side-status');
+    if (side) side.textContent = current === 'codex' && scene === 'approval' && !decision ? '等待确认' : '示意会话';
+  }
+  $$('[data-scene]').forEach(b => b.addEventListener('click', () => { scene = b.dataset.scene; draft = false; decision = ''; render(); }));
+  $$('[data-native]').forEach(b => b.addEventListener('click', () => { current = b.dataset.native; scene = 'working'; draft = false; decision = ''; render(); }));
+  $('#proto-new').addEventListener('click', () => { draft = true; scene = 'working'; render(); });
+  $('#proto-engine').addEventListener('change', e => {
+    if (draft) current = e.target.value;
+    else { target = e.target.value; scene = target === current ? 'working' : 'handoff'; }
+    decision = ''; render();
+  });
+  $('#proto-chat').addEventListener('click', e => {
+    const b = e.target.closest('[data-action]'); if (!b) return;
+    if (b.dataset.action === 'approve' || b.dataset.action === 'reject') {
+      decision = b.dataset.action === 'approve' ? 'approved' : 'rejected'; render();
+    } else if (b.dataset.action === 'handoff') {
+      const source = engines[current].name; current = target; scene = 'working'; draft = false; render();
+      $('#proto-title').textContent = '交接会话 · 来自 ' + source;
+      $('#proto-caption').textContent = '已模拟创建 ' + engines[current].name + ' 的新会话；来源 ' + source + ' 会话保留。这里只演示关系，不执行真实操作。';
+    } else if (b.dataset.action === 'back') { scene = 'working'; render(); }
+    else if (b.dataset.action === 'retry') {
+      $('#proto-caption').textContent = '连接检查示意：先查询 requestId 和原生会话状态；实际恢复前不自动重发工具调用。';
+      b.textContent = '检查示意已展示'; b.disabled = true;
+    } else if (b.dataset.action === 'quota') {
+      $('#proto-chat').innerHTML = label(engines[current].name) + '<div class="permission-card"><h4>桌面额度不足</h4><p>新的模型请求被网关拒绝。历史与草稿已保留；用户可前往账户页面购买桌面权益后再继续。</p><div class="permission-actions"><button data-action="back">返回会话示意</button></div></div>';
+      $('#proto-caption').textContent = '额度不足与网络中断分别处理；支付状态和最终用量以服务器为准。';
+    }
+  });
+  const flows = [
+    ['先保存用户输入，再启动任务', 'Renderer → Desktop Host → 本地 SQLite', 'Host 校验当前账户、项目路径和引擎状态，创建 Session / Run 并写入消息。重复提交使用同一 clientRequestId；准入失败也保留用户输入。'],
+    ['获得限定范围的调用授权', 'Host → 独立 Desktop API → 桌面权益账本', '云端校验设备、引擎/模型和预算并预留额度，返回短期 runGrant。这里保存调用管理元数据，不上传一份完整对话作为在线主记录。'],
+    ['原生 loop 在本地组装请求', '原生引擎 → 本地 Relay → Minaco Gateway → 厂商模型', '引擎将提示词、历史和工具定义组装为原生协议请求。网关注入供应商密钥并流式转发；响应经相同链路回到本地引擎，真实密钥不会下发。'],
+    ['工具在本地执行，审批返回原生引擎', '原生引擎 ⇄ Host ⇄ UI；批准后 → 本地工具', '文件、Shell 和浏览器操作由本地引擎及其工具执行。需要批准时等待 UI 决定；结果回到原生循环，再决定是否发起下一次推理。'],
+    ['以真实终态确认结果', '原生事件 → Host 持久化 → UI 展示', 'Host 写入事件并按序通知 UI。原生完成、失败或取消决定任务终态；HTTP 请求结束不等于整轮完成。工具产物保存在本地项目中。'],
+    ['云端结算；用户开启后备份', 'Gateway → 用量/账本；Host → 快照对象存储', '计费依据上游用量，桌面关闭不阻止后台对账。备份在一致性点上传快照，校验完整后提交索引；未开启备份时对话主记录只在本地。']
+  ];
+  function showFlow(i) {
+    $$('[data-flow]').forEach(b => { const selected = Number(b.dataset.flow) === i; b.setAttribute('aria-selected', String(selected)); b.tabIndex = selected ? 0 : -1; });
+    const f = flows[i]; $('#flow-detail').setAttribute('aria-labelledby', 'flow-tab-' + i);
+    $('#flow-detail').innerHTML = '<h3>' + f[0] + '</h3><div class="flow-route">' + f[1] + '</div><p>' + f[2] + '</p>';
+  }
+  $$('[data-flow]').forEach(b => {
+    b.addEventListener('click', () => showFlow(Number(b.dataset.flow)));
+    b.addEventListener('keydown', e => {
+      const i = Number(b.dataset.flow); let next;
+      if (e.key === 'ArrowRight') next = (i + 1) % flows.length;
+      if (e.key === 'ArrowLeft') next = (i + flows.length - 1) % flows.length;
+      if (e.key === 'Home') next = 0; if (e.key === 'End') next = flows.length - 1;
+      if (next !== undefined) { e.preventDefault(); showFlow(next); $('#flow-tab-' + next).focus(); }
+    });
+  });
+  $('#expand-all').addEventListener('click', () => {
+    const open = $$('details').some(d => !d.open);
+    $$('details').forEach(d => d.open = open);
+    $('#expand-all').textContent = open ? '收起技术细节' : '展开技术细节';
+  });
+  let printState = [];
+  window.addEventListener('beforeprint', () => { printState = $$('details').map(d => d.open); $$('details').forEach(d => d.open = true); });
+  window.addEventListener('afterprint', () => $$('details').forEach((d, i) => d.open = !!printState[i]));
+  $('#print-doc').addEventListener('click', () => window.print());
+  let ticking = false;
+  function updateNav() {
+    const sections = $$('main section[id]'); let active = sections[0].id;
+    sections.forEach(s => { if (s.getBoundingClientRect().top < 160) active = s.id; });
+    $$('.toc a').forEach(a => { const match = a.hash === '#' + active; a.classList.toggle('active', match); if (match) a.setAttribute('aria-current', 'location'); else a.removeAttribute('aria-current'); });
+    ticking = false;
+  }
+  window.addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(updateNav); } }, {passive:true});
+  render(); showFlow(0); updateNav();
+})();
+</script>
+</body></html>

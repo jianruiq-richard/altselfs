@@ -1,0 +1,70 @@
+{
+  "evidenceVersion": "1.0",
+  "status": "preview",
+  "isExample": true,
+  "recordedAt": null,
+  "contractPath": "product-contract.json",
+  "templateVersion": null,
+  "gitSha": null,
+  "webDeploymentId": null,
+  "workerImageDigest": null,
+  "databaseMigrationVersion": null,
+  "productionUrl": null,
+  "adminUrl": null,
+  "gates": {
+    "G1": { "status": "not_run", "evidence": [] },
+    "G2": { "status": "not_run", "evidence": [] },
+    "G3": { "status": "not_run", "evidence": [] },
+    "G4": { "status": "not_run", "evidence": [] },
+    "G5": { "status": "not_run", "evidence": [] },
+    "G6": { "status": "not_run", "evidence": [] },
+    "G7": { "status": "not_run", "evidence": [] },
+    "G8": { "status": "not_run", "evidence": [] },
+    "G9": { "status": "not_run", "evidence": [] },
+    "G10": { "status": "not_run", "evidence": [] }
+  },
+  "load": {
+    "environment": null,
+    "resourceSpecification": null,
+    "scriptVersion": null,
+    "testIdentities": null,
+    "databaseRowCounts": null,
+    "externalDependencyMode": null,
+    "achievedRps": null,
+    "readP95Ms": null,
+    "writeP95Ms": null,
+    "requestP99Ms": null,
+    "unexpectedErrorRate": null,
+    "dbPoolWaitP95Ms": null,
+    "oldestQueueWaitSeconds": null,
+    "peakWorkerMemoryMiB": null,
+    "rawReportPath": null
+  },
+  "payment": {
+    "sandboxStatus": "not_run",
+    "liveStatus": "not_run",
+    "stripeObjectId": null,
+    "webhookEventId": null,
+    "internalPaymentId": null,
+    "entitlementId": null,
+    "fulfilledJobId": null,
+    "refundValidationReference": null
+  },
+  "recovery": {
+    "backupReference": null,
+    "isolatedRestoreStatus": "not_run",
+    "measuredRpoHours": null,
+    "measuredRtoHours": null,
+    "previousWebDeploymentId": null,
+    "previousWorkerImageDigest": null,
+    "rollbackStatus": "not_run"
+  },
+  "operations": {
+    "resourceOwner": null,
+    "alertRecipient": null,
+    "budgetStatus": "not_configured",
+    "secretHandoffReference": null
+  },
+  "openIssues": [],
+  "note": "Examples are not executable provisioning inputs. Null and not_run are deliberate. Evidence must not contain credentials, payment card details, or private user content."
+}

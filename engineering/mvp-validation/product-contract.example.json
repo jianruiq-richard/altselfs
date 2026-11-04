@@ -1,0 +1,114 @@
+{
+  "templateVersion": "mvp-validation-0.1",
+  "status": "example_not_implemented",
+  "product": {
+    "name": "Scope to Quote",
+    "wish": "让自由职业者填写项目范围和费用，得到清楚、可打印的客户报价单，并验证是否有人愿意为此付费。",
+    "audience": "English-speaking freelance designers preparing a fixed-price project quote",
+    "market": "overseas",
+    "locale": "en",
+    "coreOutcome": "One saved, itemized project quote with scope, revisions and payment schedule",
+    "implementation": "Deterministic templates and calculations; no AI or external data claims"
+  },
+  "scope": {
+    "mainRoutes": ["/", "/app", "/admin"],
+    "supportingRoutes": ["/privacy", "/terms", "/contact"],
+    "coreEntity": "Quote",
+    "journey": [
+      "Inspect a labeled sample and the price",
+      "Fill in bounded scope and fee fields as a guest",
+      "See a free summary, then sign in while preserving the draft",
+      "Pay once for the saved quote version using Stripe Checkout",
+      "Open the complete quote after verified payment and print it in the browser",
+      "Return to the saved quote and optionally leave feedback"
+    ],
+    "excluded": ["AI writing", "file uploads", "subscriptions", "team collaboration", "wallet", "automated outreach"],
+    "enabledModules": ["core", "identity-data", "purchase-delivery", "validation"],
+    "optionalModules": { "jobs": false, "storage": false, "subscriptions": false, "credits": false, "organizations": false }
+  },
+  "runtime": {
+    "web": "nextjs_on_vercel",
+    "auth": "clerk_email",
+    "database": "project_database_and_restricted_role_on_managed_postgresql",
+    "worker": null,
+    "objectStorage": null,
+    "externalPaidApi": null,
+    "initialDomain": "managed_subdomain",
+    "region": null,
+    "capacityStatus": "not_verified"
+  },
+  "data": {
+    "ownerKey": "verified_clerk_subject",
+    "tables": ["CoreRecord", "Order", "PaymentEvent", "ValidationEvent"],
+    "paidRecordVersionImmutable": true,
+    "publicSharing": false,
+    "retentionPolicy": null
+  },
+  "offer": {
+    "provider": "stripe_checkout",
+    "mode": "one_time",
+    "currency": "usd",
+    "amountMinor": 500,
+    "amountIsIllustrative": true,
+    "priceId": null,
+    "deliverable": "Access to one complete saved quote version and browser printing",
+    "purchaseKey": "ownerId_and_purchaseIntentId",
+    "grantRule": "Verified paid order for this immutable record version, without refund or active dispute",
+    "fulfillment": "Short local database transaction; no external work in webhook",
+    "refundOperation": "Stripe Dashboard, with verified event sync and reconciliation",
+    "refundPolicy": null,
+    "failureResolutionDeadlineHours": null
+  },
+  "experiment": {
+    "hypothesis": "Freelance designers will pay for a usable client quote without writing the document themselves",
+    "primaryChannel": "one_relevant_freelancer_community_selected_by_creator",
+    "windowDays": 7,
+    "thresholdsAreIllustrative": true,
+    "qualifiedSampleDefinition": "Unique non-test visitors from the selected relevant channel; uncertain identity or source remains unknown",
+    "minimumQualifiedVisitors": 50,
+    "minimumIndependentPaidCustomers": 3,
+    "supportRule": "Meet the sample and paid-customer thresholds; all counted paid orders delivered, with no unresolved failures and no refunds during the observation window; collect feedback before deciding the next experiment",
+    "insufficientEvidenceRule": "Below the minimum sample or material measurement gaps means inconclusive",
+    "exclusions": ["test payments", "admin activity", "known bots", "gifted access", "friends buying only to support the creator"],
+    "events": ["visit", "core_started", "checkout_created", "payment_confirmed", "result_delivered", "result_viewed", "feedback_submitted", "payment_refunded"],
+    "attribution": "first_party_channel_parameter_with_unknown_bucket",
+    "decisionScope": "Evidence for this audience, offer and time window only; not proof of PMF or retention"
+  },
+  "capacity": {
+    "activeOnlineUsersTarget": 100,
+    "steadyApiRps": 20,
+    "steadyMinutes": 30,
+    "peakApiRps": 50,
+    "peakMinutes": 2,
+    "readP95Ms": 800,
+    "writeP95Ms": 1200,
+    "requestP99Ms": 3000,
+    "unexpectedErrorRateLessThan": 0.01,
+    "testData": { "businessRowsPerUser": 100, "orderRowsPerUser": 20 },
+    "simultaneousHeavyTaskPromise": false,
+    "reference": "../paid-mvp/architecture.md"
+  },
+  "operations": {
+    "resourceOwner": null,
+    "merchantOwner": null,
+    "adminIdentityIds": [],
+    "supportEmail": null,
+    "productionUrl": null,
+    "alertRecipient": null,
+    "reconciliationOwner": null,
+    "reconciliationIntervalHours": null,
+    "generationBudgetUsd": null,
+    "previewRuntimeBudgetUsd": null,
+    "monthlyRuntimeBudgetUsd": null,
+    "perUserRequestRateLimit": null,
+    "pauseNewPurchases": true,
+    "publicLiveCheckoutEnabled": false,
+    "rpoHoursTarget": 24,
+    "rtoHoursTarget": 4
+  },
+  "acceptance": {
+    "requiredGates": ["M1", "M2", "M3", "M4", "M5"],
+    "evidenceFile": "validation-evidence.json",
+    "completionRule": "All gates require environment-specific evidence before production_verified and public live checkout; market conclusions remain separate"
+  }
+}

@@ -45,6 +45,14 @@ services/personal-agent-server/dist/
 external_solutions/
 previews/
 
+# Local research exports and generated downloads
+/output/
+/outputs/
+/downloads/
+/producthunt-featured-*.csv
+/producthunt-featured-*.jsonl
+/producthunt-featured-*.json
+
 # Database
 /prisma/dev.db
 /prisma/dev.db-journal

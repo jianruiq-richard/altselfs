@@ -1,0 +1,97 @@
+{
+  "templateVersion": "mvp-validation-0.1",
+  "status": "example_not_implemented",
+  "productContract": "product-contract.json",
+  "technical": {
+    "deliveryStatus": "not_started",
+    "previewUrl": null,
+    "productionUrl": null,
+    "adminUrl": null,
+    "revision": null,
+    "templateRevision": null,
+    "environment": null,
+    "deployedAt": null,
+    "publicLiveCheckoutEnabled": false,
+    "gates": [
+      { "id": "M1", "name": "core_value", "status": "not_run", "evidence": [] },
+      { "id": "M2", "name": "identity_and_isolation", "status": "not_run", "evidence": [] },
+      { "id": "M3", "name": "payment_and_delivery", "status": "not_run", "evidence": [] },
+      { "id": "M4", "name": "hosting_and_capacity", "status": "not_run", "evidence": [] },
+      { "id": "M5", "name": "production_and_measurement", "status": "not_run", "evidence": [] }
+    ],
+    "evidenceRecordRequiredFields": ["environment", "revision", "executedAt", "result", "artifact"],
+    "capacity": {
+      "status": "not_run",
+      "activeOnlineUsersTarget": 100,
+      "achievedActiveUsers": null,
+      "achievedSteadyRps": null,
+      "achievedPeakRps": null,
+      "resourceSpecification": null,
+      "testDataSize": null,
+      "rawResults": [],
+      "reusedBaselineEvidence": [],
+      "externalDependencyEvidence": []
+    },
+    "payment": {
+      "testModeEvidence": [],
+      "liveModeEvidence": [],
+      "refundAndReconciliationEvidence": []
+    },
+    "operations": {
+      "budgetAndLimitEvidence": [],
+      "backupRestoreEvidence": [],
+      "rollbackEvidence": [],
+      "supportAndAlertEvidence": []
+    },
+    "unresolvedItems": ["Starter implementation, provider setup, deployment and all acceptance gates remain unexecuted in this example"]
+  },
+  "market": {
+    "status": "not_started",
+    "windowStart": null,
+    "windowEnd": null,
+    "channel": null,
+    "attributionCoverage": null,
+    "metrics": {
+      "uniqueVisitors": null,
+      "qualifiedVisitors": null,
+      "coreStartedUsers": null,
+      "checkoutStartedUsers": null,
+      "independentPaidCustomers": null,
+      "paidOrders": null,
+      "deliveredOrders": null,
+      "resultViewedUsers": null,
+      "refundedOrders": null,
+      "unresolvedDeliveryFailures": null,
+      "feedbackCount": null,
+      "grossPaymentsMinor": null,
+      "refundsMinor": null,
+      "currency": "usd"
+    },
+    "excludedTestAndSupportOrders": [],
+    "paymentSourceOfTruth": "Verified local orders reconciled with Stripe",
+    "evidence": [],
+    "conclusion": null,
+    "limitations": [],
+    "nextExperiment": null
+  },
+  "costAndTime": {
+    "measurementStatus": "not_measured",
+    "generationCostUsd": null,
+    "previewRuntimeCostUsd": null,
+    "productionRuntimeCostUsd": null,
+    "paymentFeesUsd": null,
+    "costPerDeliveredOrderUsd": null,
+    "costWindowStart": null,
+    "costWindowEnd": null,
+    "templatePreparationMinutes": null,
+    "generationMinutes": null,
+    "humanInputMinutes": null,
+    "acceptanceMinutes": null,
+    "deploymentMinutes": null,
+    "externalAccountWaitingMinutes": null,
+    "wishToPreviewElapsedMinutes": null,
+    "wishToPaidLaunchElapsedMinutes": null,
+    "humanInterventions": null,
+    "costBasis": null
+  }
+}

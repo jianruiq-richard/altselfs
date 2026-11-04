@@ -1,0 +1,115 @@
+{
+  "contractVersion": "1.0",
+  "status": "example_not_implemented",
+  "product": {
+    "name": "Website Brief",
+    "wish": "输入一个网站 URL，获得可以下载的竞品摘要，并验证用户是否愿意付费。",
+    "audience": "English-speaking independent founders",
+    "locale": "en",
+    "market": "overseas",
+    "primaryOutcome": "A saved, downloadable report with linked sources and clearly labeled unknowns",
+    "activationEvent": "first_report_completed"
+  },
+  "scope": {
+    "coreEntity": "Report",
+    "journey": [
+      "Inspect a clearly labeled sample report and price",
+      "Enter a public website URL",
+      "Sign in while preserving the draft",
+      "Pay for one report using Stripe Checkout",
+      "Observe queued and running states",
+      "Read and download the completed report",
+      "Return later to view report history"
+    ],
+    "excluded": [
+      "team collaboration",
+      "browser account automation",
+      "general-purpose agent runtime",
+      "subscription and annual billing",
+      "claims of verified private revenue"
+    ],
+    "assumptions": [
+      "Price is an illustrative product decision, not a market-validated recommendation",
+      "A reliable data provider has already been connected and verified",
+      "A tested starter implementation exists before the per-product delivery clock starts"
+    ]
+  },
+  "data": {
+    "scope": "personal_owner",
+    "databaseIsolation": "one_database_per_product",
+    "reportFields": ["id", "ownerId", "targetUrl", "status", "resultFileId", "createdAt"],
+    "publicSharing": false,
+    "retentionPolicy": "must_be_set_before_launch"
+  },
+  "billing": {
+    "provider": "stripe",
+    "mode": "one_time",
+    "currency": "usd",
+    "amountMinor": 900,
+    "amountIsIllustrative": true,
+    "priceId": null,
+    "grant": "one_report",
+    "grantSource": "verified_payment_via_durable_webhook_inbox",
+    "purchaseIdempotencyScope": "ownerId_and_purchaseAttemptId",
+    "failurePolicy": "One safe retry; persistent failure enters a visible refund or retry workflow",
+    "refundPolicy": "must_be_confirmed_and_shown_before_checkout",
+    "creditsModule": false
+  },
+  "runtime": {
+    "web": "nextjs_on_vercel",
+    "auth": "clerk",
+    "database": "managed_postgresql_with_prisma",
+    "worker": "node_container_on_acr_ecs",
+    "storage": "private_oss_with_signed_direct_uploads",
+    "region": null,
+    "provider": null,
+    "taskTimeoutSeconds": 300,
+    "taskRetries": 1,
+    "executionConcurrencyTarget": 5,
+    "maxPendingJobsTarget": 100,
+    "capacityStatus": "not_verified"
+  },
+  "capacity": {
+    "onlineUsers": 100,
+    "steadyApiRps": 20,
+    "steadyDurationMinutes": 30,
+    "peakApiRps": 50,
+    "peakDurationMinutes": 2,
+    "readP95Ms": 800,
+    "writeP95Ms": 1200,
+    "requestP99Ms": 3000,
+    "unexpectedErrorRateLessThan": 0.01,
+    "taskSubmitP95Ms": 2000,
+    "normalTasksPerMinute": 2,
+    "referenceAverageTaskSeconds": 60,
+    "normalQueueStartP95Seconds": 60,
+    "burstSubmissionCount": 100,
+    "burstSubmissionWindowSeconds": 10,
+    "simultaneousHeavyTaskPromise": false,
+    "testData": { "businessRowsPerUser": 100, "paymentOrEntitlementRowsPerUser": 20 }
+  },
+  "admin": {
+    "identityIds": [],
+    "actions": ["inspect_users", "inspect_payments", "inspect_jobs", "disable_user", "retry_safe_job", "refund_with_reason"],
+    "auditRequired": true
+  },
+  "operations": {
+    "resourceOwner": null,
+    "merchantOwner": null,
+    "productionUrl": null,
+    "supportEmail": null,
+    "alertRecipient": null,
+    "monthlyInfrastructureBudgetUsd": null,
+    "dailyProviderBudgetUsd": null,
+    "perTaskProviderBudgetUsd": null,
+    "rpoHoursTarget": 24,
+    "rtoHoursTarget": 4,
+    "livePaymentValidationOperator": null,
+    "livePaymentValidationAmountMinor": null
+  },
+  "acceptance": {
+    "requiredGates": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10"],
+    "evidenceFile": "launch-evidence.json",
+    "completionRule": "Required gates must pass with environment-specific evidence before production_verified"
+  }
+}
