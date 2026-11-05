@@ -57,6 +57,7 @@ import {
   authorizeAgentRun,
   BillingUnavailableError,
   CreditAdmissionError,
+  getBillingActivity,
   getBillingCapacity,
   getBillingDetails,
   getBillingSummary,
@@ -222,6 +223,22 @@ export function createHttpServer(
         if (section === 'overview') return json(res, 200, await getBillingCapacity(config, investorId));
         if (section === 'details') return json(res, 200, await getBillingDetails(config, investorId));
         return json(res, 200, await getBillingSummary(config, investorId));
+      }
+
+      if (req.method === 'GET' && url.pathname === '/internal/billing/activity') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const investorId = url.searchParams.get('investorId')?.trim() || '';
+        if (!investorId) return json(res, 400, { error: 'investorId is required' });
+        const requestedSource = url.searchParams.get('source')?.trim().toLowerCase();
+        const source = requestedSource === 'desktop' || requestedSource === 'intelligence'
+          ? requestedSource
+          : 'all';
+        return json(res, 200, await getBillingActivity(config, investorId, {
+          source,
+          cursor: url.searchParams.get('cursor'),
+          limit: Number(url.searchParams.get('limit') || 20),
+        }));
       }
 
       if (req.method === 'GET' && url.pathname === '/internal/billing/catalog') {

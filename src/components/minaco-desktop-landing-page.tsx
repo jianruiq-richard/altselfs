@@ -212,7 +212,7 @@ export function MinacoDesktopLandingPage({ catalog }: Props) {
         <div className={styles.footerMark}><MinacoBrandMark imageClassName={styles.footerMarkImage} variant="mark" /></div>
         <div className={styles.footerLinks}>
           <div><strong>Product</strong><a href="#agents">Agents</a><a href="#pricing">Pricing</a><Link href="/agent">Web Agent</Link></div>
-          <div><strong>Account</strong><Link href="/sign-up">Create account</Link><Link href="/sign-in">Log in</Link><Link href="/pricing">Manage plan</Link></div>
+          <div><strong>Account</strong><Link href="/sign-up">Create account</Link><Link href="/sign-in">Log in</Link><Link href="/account">Manage account</Link></div>
           <div><strong>Company</strong><Link href="/blog">Blog</Link><Link href="/contact">Contact</Link><a href={productBrand.discordUrl}>Discord</a></div>
           <div><strong>Legal</strong><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
           <p>{productBrand.supportEmail}<br />{releaseText}</p>

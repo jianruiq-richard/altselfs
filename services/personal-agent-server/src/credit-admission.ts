@@ -414,6 +414,57 @@ export async function getBillingDetails(config: ServerConfig, investorId: string
   };
 }
 
+export type BillingActivitySource = 'all' | 'desktop' | 'intelligence';
+
+export async function getBillingActivity(
+  config: ServerConfig,
+  investorId: string,
+  input: { source?: BillingActivitySource; limit?: number; cursor?: string | null } = {},
+) {
+  const pool = getRequiredBillingPool(config);
+  const source: BillingActivitySource = input.source === 'desktop' || input.source === 'intelligence'
+    ? input.source
+    : 'all';
+  const limit = Math.min(50, Math.max(1, Math.floor(numberValue(input.limit) || 20)));
+  const cursor = decodeBillingActivityCursor(input.cursor);
+  const result = await pool.query(
+    [
+      'with activity as (',
+      'select concat(\'desktop:\', r.id) as "sortId", \'desktop\'::text as source,',
+      'r.id, r."runId", r."threadId", null::text as "threadTitle", r.status,',
+      'r."capturedCredits" as "billedCredits", r."capturedCredits" as "computedCredits",',
+      'r."createdAt", r."settledAt", (coalesce(reserve.metadata, \'{}\'::jsonb) || coalesce(l.metadata, \'{}\'::jsonb)) as usage',
+      'from credit_reservations r',
+      'left join credit_ledger_entries l on l."reservationId" = r.id and l.type = \'CAPTURE\'',
+      'left join credit_ledger_entries reserve on reserve."reservationId" = r.id and reserve.type = \'RESERVE\'',
+      'where r."investorId" = $1 and r."runId" like \'desktop:%\' and l.id is not null',
+      'union all',
+      'select concat(\'intelligence:\', u.id) as "sortId", \'intelligence\'::text as source,',
+      'u.id, u."runId", u."threadId", t.title as "threadTitle", u.status,',
+      'u."billedCredits", u."computedCredits", u."createdAt", u."updatedAt" as "settledAt", u.usage',
+      'from agent_usage_records u',
+      'left join agent_threads t on t.id = u."threadId"',
+      'where u."investorId" = $1',
+      ')',
+      'select * from activity',
+      'where ($2::text = \'all\' or source = $2)',
+      'and ($3::timestamptz is null or ("createdAt", "sortId") < ($3::timestamptz, $4::text))',
+      'order by "createdAt" desc, "sortId" desc',
+      'limit $5',
+    ].join(' '),
+    [investorId, source, cursor?.createdAt || null, cursor?.sortId || '', limit + 1],
+  );
+  const rows = result.rows.slice(0, limit);
+  const last = rows.at(-1);
+  return {
+    source,
+    items: rows.map(normalizeBillingActivityRow),
+    nextCursor: result.rows.length > limit && last
+      ? encodeBillingActivityCursor(dateIso(last.createdAt), String(last.sortId || ''))
+      : null,
+  };
+}
+
 export async function ensureBillingAccount(config: ServerConfig, client: PoolClient, investorId: string): Promise<AccountRow> {
   const existing = await client.query(
     [
@@ -727,5 +778,115 @@ function dateIsoOrNull(value: unknown) {
   const iso = dateIso(value);
   return iso === new Date(0).toISOString() ? null : iso;
 }
+
+function normalizeBillingActivityRow(row: Record<string, unknown>) {
+  const source = row.source === 'desktop' ? 'desktop' : 'intelligence';
+  const metadata = isRecord(row.usage) ? row.usage : {};
+  const usage = source === 'desktop' && isRecord(metadata.usage) ? metadata.usage : metadata;
+  const pricing = source === 'desktop' && isRecord(metadata.pricing) ? metadata.pricing : {};
+  const hermes = source === 'intelligence' && isRecord(usage.hermes) ? usage.hermes : null;
+  const codex = source === 'intelligence' && isRecord(usage.codex) ? usage.codex : null;
+  const components = source === 'desktop'
+    ? [{
+        agent: stringValue(pricing.engine, 'Desktop Agent'),
+        provider: stringValue(pricing.provider, 'Minaco'),
+        model: stringValue(pricing.model, 'Unknown model'),
+        inputTokens: nonNegativeInteger(usage.input),
+        cachedInputTokens: nonNegativeInteger(usage.cachedInput),
+        cacheWriteTokens: nonNegativeInteger(usage.cacheWrite),
+        outputTokens: nonNegativeInteger(usage.output),
+        reasoningTokens: 0,
+        credits: nonNegativeInteger(metadata.billedCredits ?? row.billedCredits),
+      }]
+    : [
+        hermes ? {
+          agent: 'Minaco Intelligence',
+          provider: stringValue(hermes.provider, 'Hermes'),
+          model: stringValue(hermes.model, 'Hermes'),
+          inputTokens: nonNegativeInteger(hermes.inputTokens),
+          cachedInputTokens: nonNegativeInteger(hermes.cacheReadTokens),
+          cacheWriteTokens: nonNegativeInteger(hermes.cacheWriteTokens),
+          outputTokens: nonNegativeInteger(hermes.outputTokens),
+          reasoningTokens: nonNegativeInteger(hermes.reasoningTokens),
+          credits: nonNegativeInteger(hermes.credits),
+        } : null,
+        codex ? {
+          agent: 'Codex',
+          provider: stringValue(codex.provider, 'OpenAI'),
+          model: stringValue(codex.model, 'Codex'),
+          inputTokens: nonNegativeInteger(codex.inputTokens),
+          cachedInputTokens: nonNegativeInteger(codex.cachedInputTokens),
+          cacheWriteTokens: 0,
+          outputTokens: nonNegativeInteger(codex.outputTokens),
+          reasoningTokens: nonNegativeInteger(codex.reasoningOutputTokens),
+          credits: nonNegativeInteger(codex.credits),
+        } : null,
+      ].filter((component): component is NonNullable<typeof component> => component !== null);
+  const totals = components.reduce(
+    (total, component) => ({
+      inputTokens: total.inputTokens + component.inputTokens,
+      cachedInputTokens: total.cachedInputTokens + component.cachedInputTokens,
+      cacheWriteTokens: total.cacheWriteTokens + component.cacheWriteTokens,
+      outputTokens: total.outputTokens + component.outputTokens,
+      reasoningTokens: total.reasoningTokens + component.reasoningTokens,
+    }),
+    { inputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 0, reasoningTokens: 0 },
+  );
+  const component = source === 'intelligence' && usage.component === 'memory_review'
+    ? 'memory_review'
+    : 'agent_turn';
+  return {
+    id: String(row.id || ''),
+    source,
+    component,
+    status: String(row.status || ''),
+    runId: String(row.runId || ''),
+    threadId: typeof row.threadId === 'string' ? row.threadId : null,
+    threadTitle: typeof row.threadTitle === 'string'
+      ? row.threadTitle
+      : (typeof metadata.threadTitle === 'string' ? metadata.threadTitle : null),
+    taskLabel: typeof usage.taskLabel === 'string' ? usage.taskLabel : null,
+    billedCredits: nonNegativeInteger(metadata.billedCredits ?? row.billedCredits),
+    computedCredits: nonNegativeInteger(row.computedCredits),
+    pricingVersion: source === 'desktop'
+      ? (typeof pricing.version === 'string' ? pricing.version : null)
+      : (typeof usage.pricingVersion === 'string' ? usage.pricingVersion : AGENT_PRICING_VERSION),
+    totals,
+    components,
+    createdAt: dateIso(row.createdAt),
+    settledAt: dateIsoOrNull(row.settledAt),
+  };
+}
+
+function stringValue(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function nonNegativeInteger(value: unknown) {
+  return Math.max(0, Math.round(numberValue(value)));
+}
+
+function encodeBillingActivityCursor(createdAt: string, sortId: string) {
+  return Buffer.from(JSON.stringify({ createdAt, sortId }), 'utf8').toString('base64url');
+}
+
+function decodeBillingActivityCursor(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
+    if (!isRecord(parsed) || typeof parsed.createdAt !== 'string' || typeof parsed.sortId !== 'string') return null;
+    const date = new Date(parsed.createdAt);
+    if (Number.isNaN(date.getTime()) || !parsed.sortId) return null;
+    return { createdAt: date.toISOString(), sortId: parsed.sortId };
+  } catch {
+    return null;
+  }
+}
+
+export const __billingActivityTest = {
+  normalizeBillingActivityRow,
+  encodeBillingActivityCursor,
+  decodeBillingActivityCursor,
+};
 
 export { BillingUnavailableError };
