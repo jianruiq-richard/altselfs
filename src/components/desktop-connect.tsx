@@ -13,6 +13,7 @@ export function DesktopConnect({ requestId, registered, apiUrl }: { requestId: s
   const [busy, setBusy] = useState<'complete' | 'cancel' | 'switch' | null>(null);
   const pending = useRef(false);
   const [error, setError] = useState('');
+  const [expired, setExpired] = useState(false);
   const query = new URLSearchParams({ request: requestId }).toString();
   const registerUrl = `/desktop/register?${query}`;
   const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'your Minaco account';
@@ -37,6 +38,12 @@ export function DesktopConnect({ requestId, registered, apiUrl }: { requestId: s
       });
       const result = await response.json();
       if (!response.ok) {
+        if (result.error?.code === 'AUTH_EXPIRED') {
+          setExpired(true);
+          setBusy(null);
+          pending.current = false;
+          return;
+        }
         if (result.error?.code === 'MINACO_ACCOUNT_REQUIRED' && !registered) {
           location.assign(registerUrl);
           return;
@@ -45,11 +52,17 @@ export function DesktopConnect({ requestId, registered, apiUrl }: { requestId: s
       }
       location.assign(desktopCallback(result.redirectUrl, action === 'cancel'));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to connect. Please try again.');
+      setError(cause instanceof Error && cause.name === 'TimeoutError' ? 'The connection timed out. Check your internet connection and try again.' : cause instanceof TypeError ? 'Unable to reach Minaco. Check your internet connection and try again.' : cause instanceof Error ? cause.message : 'Unable to connect. Please try again.');
       pending.current = false;
       setBusy(null);
     }
   }
+
+  if (expired) return <div className={styles.content}>
+    <p className={styles.error} role="alert">This sign-in link has expired. Open Minaco Desktop and choose “Connect Minaco account” to start again.</p>
+    <a className={styles.primary} href="minaco://auth/complete">Open Minaco Desktop</a>
+    <p className={styles.note}>If the app doesn’t open, launch Minaco from your Applications folder. You don’t need to create another account.</p>
+  </div>;
 
   return <div className={styles.content} aria-busy={busy !== null}>
     {error && <p className={styles.error} role="alert">{error}</p>}
