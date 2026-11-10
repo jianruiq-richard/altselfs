@@ -416,19 +416,9 @@ export async function getBillingDetails(config: ServerConfig, investorId: string
 
 export type BillingActivitySource = 'all' | 'desktop' | 'intelligence';
 
-export async function getBillingActivity(
-  config: ServerConfig,
-  investorId: string,
-  input: { source?: BillingActivitySource; limit?: number; cursor?: string | null } = {},
-) {
-  const pool = getRequiredBillingPool(config);
-  const source: BillingActivitySource = input.source === 'desktop' || input.source === 'intelligence'
-    ? input.source
-    : 'all';
-  const limit = Math.min(50, Math.max(1, Math.floor(numberValue(input.limit) || 20)));
-  const cursor = decodeBillingActivityCursor(input.cursor);
-  const result = await pool.query(
-    [
+export type ActivityFilters = { source?: BillingActivitySource; limit?: number; cursor?: string | null; from?: string | null; to?: string | null; agent?: string | null; model?: string | null };
+
+const activityCte = [
       'with activity as (',
       'select concat(\'desktop:\', r.id) as "sortId", \'desktop\'::text as source,',
       'r.id, r."runId", r."threadId", null::text as "threadTitle", r.status,',
@@ -446,23 +436,65 @@ export async function getBillingActivity(
       'left join agent_threads t on t.id = u."threadId"',
       'where u."investorId" = $1',
       ')',
-      'select * from activity',
-      'where ($2::text = \'all\' or source = $2)',
-      'and ($3::timestamptz is null or ("createdAt", "sortId") < ($3::timestamptz, $4::text))',
-      'order by "createdAt" desc, "sortId" desc',
-      'limit $5',
-    ].join(' '),
-    [investorId, source, cursor?.createdAt || null, cursor?.sortId || '', limit + 1],
-  );
-  const rows = result.rows.slice(0, limit);
-  const last = rows.at(-1);
+].join(' ');
+
+export function billingActivityQuery(investorId: string, input: ActivityFilters = {}) {
+  const source = input.source === 'desktop' || input.source === 'intelligence' ? input.source : 'all';
+  const limit = Math.min(50, Math.max(1, Math.floor(numberValue(input.limit) || 20)));
+  const cursor = decodeBillingActivityCursor(input.cursor);
+  const date = (value?: string | null) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value ? value : null;
+  const from = date(input.from), to = date(input.to);
+  if ((input.from && !from) || (input.to && !to) || (from && to && from > to)) throw Object.assign(new Error('Invalid usage date range'), { httpStatus: 400 });
+  const text = activityCte + ` select * from activity
+    where ($2::text = 'all' or source = $2)
+    and ($3::timestamptz is null or ("createdAt", "sortId") < ($3::timestamptz, $4::text))
+    and ($6::timestamptz is null or "createdAt" >= $6::timestamptz)
+    and ($7::timestamptz is null or "createdAt" < $7::timestamptz + interval '1 day')
+    and (($8::text = '' and $9::text = '') or exists (
+      select 1 from jsonb_array_elements(case when source = 'desktop'
+        then jsonb_build_array(jsonb_build_object('agent', usage#>>'{pricing,engine}', 'model', usage#>>'{pricing,model}'))
+        else jsonb_build_array(jsonb_build_object('agent', 'hermes', 'model', usage#>>'{hermes,model}'), jsonb_build_object('agent', 'codex', 'model', usage#>>'{codex,model}')) end) c
+      where ($8::text = '' or strpos(lower(coalesce(c->>'agent','')), $8) > 0)
+        and ($9::text = '' or strpos(lower(coalesce(c->>'model','')), $9) > 0)))
+    order by "createdAt" desc, "sortId" desc limit $5`;
+  return { text, values: [investorId, source, cursor?.createdAt || null, cursor?.sortId || '', limit + 1, from ? `${from}T00:00:00Z` : null, to ? `${to}T00:00:00Z` : null, (input.agent || '').trim().toLowerCase().slice(0, 100), (input.model || '').trim().toLowerCase().slice(0, 150)], limit, source };
+}
+
+export async function getBillingActivity(config: ServerConfig, investorId: string, input: ActivityFilters = {}) {
+  const pool = getRequiredBillingPool(config);
+  const query = billingActivityQuery(investorId, input);
+  const [result, summary] = await Promise.all([
+    pool.query(query.text, query.values),
+    pool.query(activityCte + ` select coalesce(sum("billedCredits"), 0) as credits, count(*) as turns from activity
+      where "createdAt" >= date_trunc('month', now() at time zone 'UTC') at time zone 'UTC'`, [investorId]),
+  ]);
+  const rows = result.rows.slice(0, query.limit), last = rows.at(-1);
   return {
-    source,
+    source: query.source,
+    monthly: { credits: numberValue(summary.rows[0]?.credits), turns: numberValue(summary.rows[0]?.turns), timezone: 'UTC' },
     items: rows.map(normalizeBillingActivityRow),
-    nextCursor: result.rows.length > limit && last
-      ? encodeBillingActivityCursor(dateIso(last.createdAt), String(last.sortId || ''))
-      : null,
+    nextCursor: result.rows.length > query.limit && last ? encodeBillingActivityCursor(dateIso(last.createdAt), String(last.sortId || '')) : null,
   };
+}
+
+// Payment records and account adjustments have separate cursors, avoiding double-counting grants.
+export async function getBillingHistory(config: ServerConfig, investorId: string, input: { kind?: string | null; cursor?: string | null; limit?: number } = {}) {
+  const kind = input.kind === 'adjustments' ? 'adjustments' : 'payments';
+  const limit = Math.min(50, Math.max(1, Math.floor(numberValue(input.limit) || 20)));
+  const cursor = decodeBillingActivityCursor(input.cursor);
+  const result = await getRequiredBillingPool(config).query(kind === 'payments' ? `
+    select id, kind as title, status, "planKey", "creditsGranted" as credits,
+      "amountTotalCents" - "refundedAmountCents" as "amountCents", currency, "createdAt"
+    from credit_payments where "investorId" = $1
+      and ($2::timestamptz is null or ("createdAt", id) < ($2::timestamptz, $3::text))
+    order by "createdAt" desc, id desc limit $4` : `
+    select id, description as title, type as status, "amountCredits" as credits, "balanceAfterCredits", "createdAt"
+    from credit_ledger_entries where "investorId" = $1 and "amountCredits" <> 0
+      and type not in ('CAPTURE', 'RESERVE', 'RELEASE')
+      and ($2::timestamptz is null or ("createdAt", id) < ($2::timestamptz, $3::text))
+    order by "createdAt" desc, id desc limit $4`, [investorId, cursor?.createdAt || null, cursor?.sortId || '', limit + 1]);
+  const rows = result.rows.slice(0, limit), last = rows.at(-1);
+  return { kind, items: rows.map(row => ({ ...row, createdAt: dateIso(row.createdAt), credits: numberValue(row.credits), amountCents: row.amountCents == null ? null : numberValue(row.amountCents) })), nextCursor: result.rows.length > limit && last ? encodeBillingActivityCursor(dateIso(last.createdAt), String(last.id)) : null };
 }
 
 export async function ensureBillingAccount(config: ServerConfig, client: PoolClient, investorId: string): Promise<AccountRow> {

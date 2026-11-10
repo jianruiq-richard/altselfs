@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { MinacoAccountPage } from '@/components/minaco-account-page';
 
@@ -8,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function AccountPage() {
-  return <MinacoAccountPage />;
+  return <Suspense fallback={<main>Loading account…</main>}><MinacoAccountPage /></Suspense>;
 }

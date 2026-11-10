@@ -146,8 +146,8 @@ export async function createStripeCheckout(
   const common = {
     customer: customerId,
     client_reference_id: investorId,
-    success_url: `${config.stripeAppBaseUrl}/profile?billing=success`,
-    cancel_url: `${config.stripeAppBaseUrl}/pricing?billing=cancelled`,
+    success_url: `${config.stripeAppBaseUrl}/account?view=billing&billing=success`,
+    cancel_url: `${config.stripeAppBaseUrl}/account?view=plan&billing=checkout-cancelled`,
     automatic_tax: { enabled: config.stripeAutomaticTaxEnabled },
     customer_update: { address: 'auto' as const, name: 'auto' as const },
   };
@@ -225,7 +225,7 @@ export async function createStripePortal(
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
     configuration: configurationId,
-    return_url: `${config.stripeAppBaseUrl}/profile`,
+    return_url: `${config.stripeAppBaseUrl}/account?view=billing`,
   });
   return { url: session.url };
 }
@@ -270,13 +270,13 @@ async function createStripeCancellationPortal(
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
     ...(config.stripePortalConfigurationId ? { configuration: config.stripePortalConfigurationId } : {}),
-    return_url: `${config.stripeAppBaseUrl}/profile`,
+    return_url: `${config.stripeAppBaseUrl}/account?view=billing`,
     flow_data: {
       type: 'subscription_cancel',
       after_completion: {
         type: 'redirect',
         redirect: {
-          return_url: `${config.stripeAppBaseUrl}/profile?billing=cancelled`,
+          return_url: `${config.stripeAppBaseUrl}/account?view=plan&billing=cancelled`,
         },
       },
       subscription_cancel: {
@@ -317,7 +317,7 @@ async function ensureStripeBillingManagementPortalConfiguration(config: ServerCo
   };
   const params = {
     name: `${PRODUCT_BRAND.name} billing management`,
-    default_return_url: `${config.stripeAppBaseUrl}/profile`,
+    default_return_url: `${config.stripeAppBaseUrl}/account?view=billing`,
     features,
     metadata,
   };
@@ -395,7 +395,7 @@ async function ensureStripeUpgradePortalConfiguration(
   if (configurationId) {
     const configuration = await stripe.billingPortal.configurations.update(configurationId, {
       name,
-      default_return_url: `${config.stripeAppBaseUrl}/pricing`,
+      default_return_url: `${config.stripeAppBaseUrl}/account?view=plan`,
       features,
       metadata,
     });
@@ -405,7 +405,7 @@ async function ensureStripeUpgradePortalConfiguration(
   const configuration = await stripe.billingPortal.configurations.create(
     {
       name,
-      default_return_url: `${config.stripeAppBaseUrl}/pricing`,
+      default_return_url: `${config.stripeAppBaseUrl}/account?view=plan`,
       features,
       metadata,
     },
@@ -575,13 +575,13 @@ export async function changeStripePlan(
   const portalSession = await stripe.billingPortal.sessions.create({
     customer: requiredString(stripeId(stripeSubscription.customer), 'stripeCustomerId'),
     configuration: configurationId,
-    return_url: `${config.stripeAppBaseUrl}/pricing`,
+    return_url: `${config.stripeAppBaseUrl}/account?view=plan`,
     flow_data: {
       type: 'subscription_update_confirm',
       after_completion: {
         type: 'redirect',
         redirect: {
-          return_url: `${config.stripeAppBaseUrl}/profile?billing=success`,
+          return_url: `${config.stripeAppBaseUrl}/account?view=billing&billing=success`,
         },
       },
       subscription_update_confirm: {

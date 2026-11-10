@@ -58,6 +58,7 @@ import {
   BillingUnavailableError,
   CreditAdmissionError,
   getBillingActivity,
+  getBillingHistory,
   getBillingCapacity,
   getBillingDetails,
   getBillingSummary,
@@ -237,8 +238,18 @@ export function createHttpServer(
         return json(res, 200, await getBillingActivity(config, investorId, {
           source,
           cursor: url.searchParams.get('cursor'),
+          from: url.searchParams.get('from'), to: url.searchParams.get('to'),
+          agent: url.searchParams.get('agent'), model: url.searchParams.get('model'),
           limit: Number(url.searchParams.get('limit') || 20),
         }));
+      }
+
+      if (req.method === 'GET' && url.pathname === '/internal/billing/history') {
+        if (!config) return json(res, 500, { error: 'config missing' });
+        if (!isOpsAuthorized(req)) return json(res, 403, { error: 'Forbidden' });
+        const investorId = url.searchParams.get('investorId')?.trim() || '';
+        if (!investorId) return json(res, 400, { error: 'investorId is required' });
+        return json(res, 200, await getBillingHistory(config, investorId, { kind: url.searchParams.get('kind'), cursor: url.searchParams.get('cursor'), limit: Number(url.searchParams.get('limit') || 20) }));
       }
 
       if (req.method === 'GET' && url.pathname === '/internal/billing/catalog') {

@@ -13,7 +13,7 @@ import {
 import type { MinacoProductCatalog, PublicModelRate } from '@/lib/minaco-product-catalog';
 import styles from './public-pricing-page.module.css';
 
-const signInHref = '/sign-in?method=email&redirect_url=/app';
+import { planHref } from '@/lib/account-navigation';
 const pageSize = 8;
 
 export function PublicPricingPage() {
@@ -87,7 +87,7 @@ export function PublicPricingPage() {
             <div><dt>Model access</dt><dd>{plan.modelTiers.join(' + ')}</dd></div>
             <div><dt>Products</dt><dd>Desktop + Web Agent</dd></div>
           </dl>
-          <Link href={signInHref} data-analytics-cta={`pricing_plan_${plan.key.toLowerCase()}`} data-analytics-location="pricing_table">Choose {plan.name}<ArrowRight size={16} /></Link>
+          <Link href={planHref(plan.key, cycle)} data-analytics-cta={`pricing_plan_${plan.key.toLowerCase()}`} data-analytics-location="pricing_table">Choose {plan.name}<ArrowRight size={16} /></Link>
         </article>;
       })}
     </section>

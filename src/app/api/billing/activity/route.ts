@@ -18,6 +18,10 @@ export async function GET(req: NextRequest) {
   query.set('source', source === 'desktop' || source === 'intelligence' ? source : 'all');
   query.set('limit', String(Math.min(50, Math.max(1, Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 20))));
   if (cursor) query.set('cursor', cursor);
+  for (const key of ['from', 'to', 'agent', 'model']) {
+    const value = req.nextUrl.searchParams.get(key);
+    if (value) query.set(key, value.slice(0, 150));
+  }
 
   try {
     const activity = await timing.time(

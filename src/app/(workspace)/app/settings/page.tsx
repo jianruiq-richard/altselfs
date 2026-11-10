@@ -654,7 +654,7 @@ export default function ProfilePage() {
                   <button
                     key={tab.key}
                     type="button"
-                    onClick={() => setActiveView(tab.key)}
+                    onClick={() => { if (tab.key === "plan") window.location.assign("/account?view=plan"); else setActiveView(tab.key); }}
                     className={`flex min-h-[38px] shrink-0 items-center gap-2.5 rounded-[7px] px-2.5 text-left text-xs transition-colors md:w-full ${
                       active
                         ? 'bg-white/[0.075] text-white'

@@ -84,3 +84,15 @@ test('billing activity cursors round-trip and reject malformed values', () => {
   });
   assert.equal(__billingActivityTest.decodeBillingActivityCursor('not-a-cursor'), null);
 });
+
+test('usage filters stay parameterized and validate date bounds before querying', async () => {
+  const { billingActivityQuery } = await import('../src/credit-admission.js');
+  const query = billingActivityQuery('owner', { agent: "codex' OR 1=1 --", model: 'GPT', from: '2026-11-01', to: '2026-11-10', limit: 999 });
+  assert.equal(query.limit, 50);
+  assert.equal(query.values[0], 'owner');
+  assert.equal(query.values[5], '2026-11-01T00:00:00Z');
+  assert.equal(query.values[8], 'gpt');
+  assert.ok(!query.text.includes("codex' OR"));
+  assert.throws(() => billingActivityQuery('owner', { from: '2026-02-30' }));
+  assert.throws(() => billingActivityQuery('owner', { from: '2026-11-10', to: '2026-11-01' }));
+});
