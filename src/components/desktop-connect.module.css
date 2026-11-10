@@ -1,0 +1,16 @@
+.content { display: grid; gap: 16px; }
+.account { display: flex; align-items: center; gap: 16px; padding: 20px; border: 1px solid #393226; border-radius: 16px; background: #0d0c09; min-width: 0; }
+.account > div { min-width: 0; overflow-wrap: anywhere; }
+.account strong { display: block; color: #f6f0e4; }
+.account div > span { display: block; color: #a69d8e; margin-top: 6px; font-size: 13px; }
+.avatar { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; background: #f2c36b; color: #17140f; font-weight: 600; }
+.primary, .secondary, .cancel { display: flex; justify-content: center; align-items: center; min-height: 48px; padding: 12px 20px; border-radius: 12px; text-align: center; font-size: 15px; cursor: pointer; overflow-wrap: anywhere; }
+.primary { background: #f2c36b; color: #17140f; font-weight: 600; border: 1px solid transparent; }
+.secondary { border: 1px solid #665434; color: #f6f0e4; background: transparent; }
+.cancel { color: #b9ad95; background: transparent; border: 1px solid transparent; }
+.primary:hover { background: #ffd788; }
+.secondary:hover, .cancel:hover { background: #262016; }
+.content :focus-visible { outline: 2px solid #f2c36b; outline-offset: 4px; }
+.content button:disabled { cursor: wait; opacity: .6; }
+.error { color: #ffb6a9; font-size: 14px; line-height: 1.5; }
+.note { color: #a69d8e; font-size: 12px; line-height: 1.6; margin-top: 8px; }

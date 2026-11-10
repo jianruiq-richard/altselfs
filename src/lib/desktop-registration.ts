@@ -6,5 +6,5 @@ export function desktopRegistrationRequest(value: unknown): string | null {
 export function desktopRegistrationReturn(request: string): string {
   const id = desktopRegistrationRequest(request);
   if (!id) throw new Error('Invalid desktop sign-in request.');
-  return `https://desktop.minaco.ai/connect?${new URLSearchParams({ request: id, registered: '1' })}`;
+  return `https://minaco.ai/connect?${new URLSearchParams({ request: id, registered: '1' })}`;
 }
