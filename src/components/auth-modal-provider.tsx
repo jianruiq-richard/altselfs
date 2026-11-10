@@ -10,6 +10,7 @@ import { PhonePasswordAuthForm } from './phone-code-auth-form';
 import { EmbeddedBrowserAuthGuard } from './embedded-browser-auth-guard';
 import { MinacoBrandMark } from './minaco-brand-mark';
 import { ModalEmailSignIn } from './modal-email-sign-in';
+import { authDestination, authHref } from '@/lib/auth-destination';
 import { productBrand } from '@/lib/brand';
 import styles from './astromar-auth.module.css';
 
@@ -41,6 +42,7 @@ export function AuthModalProvider({ children }: { children: ReactNode }) {
   }
 
   function interceptAuthLink(event: MouseEvent<HTMLDivElement>) {
+    if (!request && !/^\/(agent|app)(\/|$)/.test(pathname)) return;
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!(event.target instanceof Element)) return;
     const anchor = event.target.closest('a[href]');
@@ -54,8 +56,7 @@ export function AuthModalProvider({ children }: { children: ReactNode }) {
     setRequest({
       mode: url.pathname.startsWith('/sign-up') ? 'sign-up' : 'sign-in',
       method: url.searchParams.get('method') === 'phone' ? 'phone' : 'email',
-      redirectUrl: target?.startsWith('/') && !target.startsWith('//') && !/^\/sign-(in|up)/.test(target)
-        ? target : request?.redirectUrl || '/app',
+      redirectUrl: authDestination(target, request?.redirectUrl || '/app'),
     });
   }
 
@@ -71,14 +72,14 @@ export function AuthModalProvider({ children }: { children: ReactNode }) {
                 <button type="button" onClick={() => setRequest(null)} aria-label="Close authentication" className="absolute right-3 top-3 rounded-lg p-2 text-zinc-500 hover:bg-white/5 hover:text-white"><X size={18} /></button>
                 <MinacoBrandMark className="mb-5 block h-10 w-10 overflow-hidden rounded-xl" imageClassName="h-full w-full object-contain" />
                 <DialogTitle className="text-2xl font-semibold tracking-tight text-[#fffaf0]">{request.mode === 'sign-in' ? `Sign in to ${productBrand.name}` : `Join ${productBrand.name}`}</DialogTitle>
-                <p className="mt-2 text-sm text-zinc-400">Your AI cofounder. Think with you. Act for you.</p>
+                <p className="mt-2 text-sm text-zinc-400">One account for your agents, tools, and connected apps.</p>
                 <nav className={`${styles.modeTabs} mt-6`} aria-label="Authentication method">
                   {(['email', 'phone'] as const).map(method => <button key={method} type="button" className={request.method === method ? styles.modeTabActive : styles.modeTab} onClick={() => setRequest({ ...request, method })}>{method === 'email' ? 'Email / Google' : 'Phone / password'}</button>)}
                 </nav>
                 <div className={`${styles.authContent} mt-5`}>
-                  {request.method === 'phone' ? <PhonePasswordAuthForm key={request.mode} mode={request.mode} redirectUrl={request.mode === 'sign-in' ? request.redirectUrl : undefined} /> :
-                    <EmbeddedBrowserAuthGuard fallbackUrl={`${productBrand.canonicalUrl}/${request.mode}?method=email`} initiallyBlocked={false} mode={request.mode}>
-                      {request.mode === 'sign-in' ? <ModalEmailSignIn redirectUrl={request.redirectUrl} /> : <EmailPasswordSignUpForm />}
+                  {request.method === 'phone' ? <PhonePasswordAuthForm key={request.mode} mode={request.mode} redirectUrl={request.redirectUrl} /> :
+                    <EmbeddedBrowserAuthGuard fallbackUrl={`${productBrand.canonicalUrl}${authHref('/' + request.mode, request.redirectUrl, 'email')}`} initiallyBlocked={false} mode={request.mode}>
+                      {request.mode === 'sign-in' ? <ModalEmailSignIn redirectUrl={request.redirectUrl} /> : <EmailPasswordSignUpForm redirectUrl={request.redirectUrl} oauthCallbackUrl={authHref('/sso-callback', request.redirectUrl)} signInUrl={authHref('/sign-in', request.redirectUrl, 'email')} />}
                     </EmbeddedBrowserAuthGuard>}
                 </div>
                 <div className="mt-5 border-t border-white/10 pt-5 text-center text-xs text-zinc-400">

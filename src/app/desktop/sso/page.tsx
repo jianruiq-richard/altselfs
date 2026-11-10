@@ -6,7 +6,7 @@ export default async function DesktopSso({ searchParams }: { searchParams: Promi
   const request = desktopRegistrationRequest((await searchParams).request);
   if (!request) return <InvalidDesktopRequest />;
   const query = new URLSearchParams({ request }).toString();
-  return <DesktopAuthShell step={2} title="Connecting your account" description="Keep this page open. We’ll return you to Minaco when the secure handoff finishes.">
+  return <DesktopAuthShell step={2} title="Finishing your sign-in." description="Keep this page open. Next, you’ll confirm which account to connect to Minaco Desktop.">
     <AuthenticateWithRedirectCallback
       signInForceRedirectUrl={`/desktop/finish?${query}`}
       signUpForceRedirectUrl={`/desktop/finish?${query}`}

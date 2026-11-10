@@ -2,7 +2,6 @@ const transparent = 'rgba(0,0,0,0)';
 const inputBackground = 'rgba(255,250,240,0.045)';
 const line = 'rgba(255,250,240,0.11)';
 const warm = '#f2c36b';
-const warmSoft = '#f8dfaa';
 const warmText = '#fffaf0';
 const onWarm = '#100e0c';
 
@@ -22,7 +21,7 @@ export const clerkAuthAppearance = {
     colorShadow: '#000000',
     borderRadius: '8px',
     spacing: '0.85rem',
-    fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: 'MinacoSans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   },
   elements: {
     rootBox: {
@@ -46,19 +45,19 @@ export const clerkAuthAppearance = {
       display: 'none',
     },
     socialButtonsBlockButton: {
-      minHeight: '44px',
+      minHeight: '48px',
       border: '1px solid rgba(255,250,240,0.18)',
       borderRadius: '8px',
-      background: 'rgba(255,250,240,0.07)',
+      background: warmText,
       boxShadow: 'none',
       color: warmText,
       '&:hover, &:focus': {
         borderColor: 'rgba(242,195,107,0.34)',
-        background: 'rgba(242,195,107,0.10)',
+        background: '#f0e9dc',
       },
     },
     socialButtonsBlockButtonText: {
-      color: warmText,
+      color: onWarm,
       fontWeight: 650,
     },
     dividerLine: {
@@ -112,7 +111,7 @@ export const clerkAuthAppearance = {
       fontWeight: 650,
     },
     formFieldInput: {
-      minHeight: '44px',
+      minHeight: '48px',
       border: `1px solid ${line}`,
       borderRadius: '8px',
       background: inputBackground,
@@ -124,17 +123,17 @@ export const clerkAuthAppearance = {
       },
     },
     formButtonPrimary: {
-      minHeight: '44px',
+      minHeight: '48px',
       border: '1px solid rgba(242,195,107,0.72)',
       borderRadius: '8px',
-      background: `linear-gradient(180deg, ${warmSoft}, ${warm})`,
-      boxShadow: '0 14px 38px rgba(242,195,107,0.14)',
+      background: warm,
+      boxShadow: 'none',
       color: onWarm,
-      fontSize: '14px',
+      fontSize: '15px',
       fontWeight: 750,
       textTransform: 'none',
       '&:hover, &:focus, &:active': {
-        background: `linear-gradient(180deg, #ffe8b7, ${warm})`,
+        background: '#ffd58a',
       },
     },
     formFieldAction: {

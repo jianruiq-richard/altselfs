@@ -11,8 +11,8 @@ import {
 } from "@/lib/analytics/client";
 import styles from "./astromar-auth.module.css";
 
-const DEFAULT_SIGN_IN_REDIRECT = "/app";
-const DEFAULT_SIGN_UP_REDIRECT = "/dashboard/setup?role=investor";
+const DEFAULT_SIGN_IN_REDIRECT = "/account";
+const DEFAULT_SIGN_UP_REDIRECT = "/get-started";
 
 type PhonePasswordAuthFormProps = {
   mode: "sign-in" | "sign-up";

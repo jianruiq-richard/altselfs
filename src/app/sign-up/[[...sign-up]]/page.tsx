@@ -1,3 +1,4 @@
+import { authDestination, authHref, type AuthSearchParams } from '@/lib/auth-destination';
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { AstromarAuthShell } from "@/components/astromar-auth-shell";
@@ -9,7 +10,7 @@ import { isOauthBlockedEmbeddedBrowser } from "@/lib/oauth-browser";
 
 export const metadata: Metadata = {
   title: `Create account | ${productBrand.name}`,
-  description: `Create your ${productBrand.name} AI cofounder account.`,
+  description: `Create your ${productBrand.name} Desktop account.`,
 };
 
 function buildFallbackUrl(path: string, headersList: Headers): string {
@@ -22,30 +23,32 @@ function buildFallbackUrl(path: string, headersList: Headers): string {
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ method?: string }>;
+  searchParams: Promise<AuthSearchParams>;
 }) {
   const params = await searchParams;
   const method = params.method === "phone" ? "phone" : "email";
+  const redirectTarget = authDestination(params.redirect_url || params.redirectUrl || params.next);
   const headersList = await headers();
-  const fallbackUrl = buildFallbackUrl(`/sign-up?method=${method}`, headersList);
+  const fallbackUrl = buildFallbackUrl(authHref('/sign-up', redirectTarget, method), headersList);
   const isEmbeddedBrowser = isOauthBlockedEmbeddedBrowser(headersList.get("user-agent"));
 
   return (
     <AstromarAuthShell
-      emailHref="/sign-up?method=email"
+      alternateHref={authHref('/sign-in', redirectTarget, method)}
+      emailHref={authHref('/sign-up', redirectTarget, 'email')}
       method={method}
       mode="sign-up"
-      phoneHref="/sign-up?method=phone"
+      phoneHref={authHref('/sign-up', redirectTarget, 'phone')}
     >
       {method === "phone" ? (
-        <PhonePasswordAuthForm mode="sign-up" />
+        <PhonePasswordAuthForm mode="sign-up" redirectUrl={redirectTarget} />
       ) : (
         <EmbeddedBrowserAuthGuard
           fallbackUrl={fallbackUrl}
           initiallyBlocked={isEmbeddedBrowser}
           mode="sign-up"
         >
-          <EmailPasswordSignUpForm />
+          <EmailPasswordSignUpForm redirectUrl={redirectTarget} oauthCallbackUrl={authHref('/sso-callback', redirectTarget)} signInUrl={authHref('/sign-in', redirectTarget, 'email')} />
         </EmbeddedBrowserAuthGuard>
       )}
     </AstromarAuthShell>

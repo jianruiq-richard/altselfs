@@ -58,13 +58,13 @@ export function DesktopConnect({ requestId, registered, apiUrl }: { requestId: s
         <span className={styles.avatar} aria-hidden="true">{name.trim().charAt(0).toUpperCase()}</span>
         <div><strong>{name}</strong><span>{user?.primaryEmailAddress?.emailAddress}</span></div>
       </div>
-      <button className={styles.primary} disabled={busy !== null} onClick={() => void act('complete')}>{busy === 'complete' ? 'Connecting…' : `Continue as ${name}`}</button>
+      <button className={styles.primary} disabled={busy !== null} onClick={() => void act('complete')}>{busy === 'complete' ? 'Connecting…' : 'Connect this Mac'}</button>
       <button className={styles.secondary} disabled={busy !== null} onClick={() => void act('switch')}>{busy === 'switch' ? 'Switching account…' : 'Use another account'}</button>
     </> : <>
       <Link className={styles.primary} href={`${registerUrl}&mode=sign-in`}>Sign in to Minaco</Link>
       <Link className={styles.secondary} href={registerUrl}>Create an account</Link>
     </>}
     <button className={styles.cancel} disabled={busy !== null} onClick={() => void act('cancel')}>{busy === 'cancel' ? 'Cancelling…' : 'Cancel'}</button>
-    <p className={styles.note}>A one-time authorization code securely connects this device.</p>
+    <p className={styles.note}>Only connect if you started this sign-in from Minaco Desktop on this Mac.</p>
   </div>;
 }

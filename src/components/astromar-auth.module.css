@@ -1262,15 +1262,15 @@
   min-height: 48px;
   border: 1px solid rgba(242, 195, 107, 0.72);
   border-radius: 8px;
-  background: linear-gradient(180deg, #f8dfaa, #f2c36b);
+  background: #f2c36b;
   color: #100e0c;
   font-size: 14px;
   font-weight: 780;
-  box-shadow: 0 14px 38px rgba(242, 195, 107, 0.14);
+  box-shadow: none;
 }
 
 .phoneSubmit:hover:not(:disabled) {
-  background: linear-gradient(180deg, #ffe8b7, #f2c36b);
+  background: #ffd58a;
 }
 
 .phoneSubmit:disabled {
@@ -1481,3 +1481,6 @@
   --auth-blue: #f2c36b;
   --auth-amber: #f2c36b;
 }
+
+/* Shared with the Desktop account flow. */
+.phoneInput,.phoneSelect{min-height:48px;font-size:16px}.phoneSubmit{font-size:15px}.googleButton{min-height:48px;background:#fffaf0;color:#17130c;border:1px solid #fffaf0;box-shadow:none}.googleButton:hover:not(:disabled){background:#f0e9dc;color:#17130c}.authTextButton,.authBackButton{min-height:44px}.phoneError{font-size:14px}.phoneFinePrint{font-size:12px}

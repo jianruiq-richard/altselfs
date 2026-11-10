@@ -1,9 +1,10 @@
 import { SignUp } from '@clerk/nextjs';
+import { MinacoAuthFrame } from '@/components/minaco-auth-frame';
 import { clerkAuthAppearance } from '@/lib/clerk-auth-appearance';
-
-export default function CompleteOAuthSignUpPage() {
-  return <main className="flex min-h-screen items-center justify-center bg-[#111213] p-6">
-    <SignUp routing="path" path="/auth/complete" signInUrl="/sign-in?method=email"
-      forceRedirectUrl="/dashboard/setup?role=investor" appearance={clerkAuthAppearance} />
-  </main>;
+import { authDestination, authHref, type AuthSearchParams } from '@/lib/auth-destination';
+export default async function CompleteOAuthSignUpPage({ searchParams }: { searchParams: Promise<AuthSearchParams> }) {
+  const target = authDestination((await searchParams).redirect_url);
+  return <MinacoAuthFrame title="One last step." description="Complete the details required to finish creating your Minaco account.">
+    <SignUp routing="hash" signInUrl={authHref('/sign-in', target, 'email')} forceRedirectUrl={target} appearance={clerkAuthAppearance} />
+  </MinacoAuthFrame>;
 }

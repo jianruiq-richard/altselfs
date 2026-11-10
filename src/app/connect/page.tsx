@@ -10,7 +10,7 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
   const request = desktopRegistrationRequest(params.request);
   if (!request) return <InvalidDesktopRequest />;
   const apiUrl = process.env.MINACO_DESKTOP_API_URL || 'https://desktop-api.minaco.ai';
-  return <DesktopAuthShell step={2} title="Connect Minaco Desktop" description="Choose the Minaco account to use on this device.">
+  return <DesktopAuthShell step={2} title="Connect Minaco Desktop." description="Use this account for Minaco Desktop on this Mac.">
     <DesktopConnect requestId={request} registered={params.registered === '1'} apiUrl={apiUrl} />
   </DesktopAuthShell>;
 }

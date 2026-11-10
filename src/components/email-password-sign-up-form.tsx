@@ -13,7 +13,7 @@ import {
 } from "@/lib/analytics/client";
 import styles from "./astromar-auth.module.css";
 
-const DEFAULT_AUTH_REDIRECT = "/dashboard/setup?role=investor";
+const DEFAULT_AUTH_REDIRECT = "/get-started";
 
 type ClerkErrorDetail = {
   code?: string;
@@ -269,7 +269,7 @@ export function EmailPasswordSignUpForm({ redirectUrl = DEFAULT_AUTH_REDIRECT, o
         </button>
 
         <div className={styles.verificationIntro}>
-          <h2>Check your email</h2>
+          <h2>Verify your email.</h2>
           <p>Enter the verification code sent to <strong>{emailAddress}</strong>.</p>
         </div>
 

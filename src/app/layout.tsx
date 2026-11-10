@@ -10,8 +10,8 @@ import { AuthModalProvider } from "@/components/auth-modal-provider";
 
 export const metadata: Metadata = {
   metadataBase: new URL(productBrand.canonicalUrl),
-  title: `${productBrand.name} - AI Cofounder Workspace`,
-  description: `${productBrand.name} connects AI teammates with your work context and decision preferences.`,
+  title: `${productBrand.name} — All your AI agents. One subscription.`,
+  description: `${productBrand.name} brings your AI agents, tools, and connected apps together in one desktop workspace.`,
   icons: {
     icon: [
       { url: '/brand/minaco/png/minaco-favicon-96.png', sizes: '96x96', type: 'image/png' },

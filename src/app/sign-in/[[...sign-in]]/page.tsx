@@ -1,3 +1,4 @@
+import { authDestination, authHref, type AuthSearchParams } from '@/lib/auth-destination';
 import type { Metadata } from "next";
 import { SignIn } from "@clerk/nextjs";
 import { headers } from "next/headers";
@@ -8,11 +9,11 @@ import { productBrand } from "@/lib/brand";
 import { clerkAuthAppearance } from "@/lib/clerk-auth-appearance";
 import { isOauthBlockedEmbeddedBrowser } from "@/lib/oauth-browser";
 
-const DEFAULT_AUTH_REDIRECT = "/app";
+const DEFAULT_AUTH_REDIRECT = "/account";
 
 export const metadata: Metadata = {
   title: `Sign in | ${productBrand.name}`,
-  description: `Sign in to ${productBrand.name}, your AI cofounder.`,
+  description: `Sign in to ${productBrand.name}, your account for Minaco Desktop.`,
 };
 
 function buildFallbackUrl(path: string, headersList: Headers): string {
@@ -22,36 +23,23 @@ function buildFallbackUrl(path: string, headersList: Headers): string {
   return `${protocol}://${host}${path}`;
 }
 
-function normalizeRedirectPath(value: unknown): string {
-  if (typeof value !== "string") return DEFAULT_AUTH_REDIRECT;
-  const path = value.trim();
-  if (!path || !path.startsWith("/") || path.startsWith("//")) return DEFAULT_AUTH_REDIRECT;
-  if (path.startsWith("/sign-in") || path.startsWith("/sign-up")) return DEFAULT_AUTH_REDIRECT;
-  return path;
-}
-
-function buildMethodHref(method: "phone" | "email", redirectTarget: string) {
-  const params = new URLSearchParams({ method });
-  if (redirectTarget !== DEFAULT_AUTH_REDIRECT) params.set("redirect_url", redirectTarget);
-  return `/sign-in?${params.toString()}`;
-}
-
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ method?: string; redirect_url?: string; redirectUrl?: string; next?: string }>;
+  searchParams: Promise<AuthSearchParams>;
 }) {
   const params = await searchParams;
   const method = params.method === "phone" ? "phone" : "email";
-  const redirectTarget = normalizeRedirectPath(params.redirect_url || params.redirectUrl || params.next);
-  const emailHref = buildMethodHref("email", redirectTarget);
-  const phoneHref = buildMethodHref("phone", redirectTarget);
+  const redirectTarget = authDestination(params.redirect_url || params.redirectUrl || params.next, DEFAULT_AUTH_REDIRECT);
+  const emailHref = authHref('/sign-in', redirectTarget, 'email');
+  const phoneHref = authHref('/sign-in', redirectTarget, 'phone');
   const headersList = await headers();
-  const fallbackUrl = buildFallbackUrl(buildMethodHref(method, redirectTarget), headersList);
+  const fallbackUrl = buildFallbackUrl(authHref('/sign-in', redirectTarget, method), headersList);
   const isEmbeddedBrowser = isOauthBlockedEmbeddedBrowser(headersList.get("user-agent"));
 
   return (
     <AstromarAuthShell
+      alternateHref={authHref('/sign-up', redirectTarget, method)}
       emailHref={emailHref}
       method={method}
       mode="sign-in"
@@ -68,7 +56,7 @@ export default async function Page({
           <SignIn
             forceRedirectUrl={redirectTarget}
             fallbackRedirectUrl={redirectTarget}
-            signUpUrl="/sign-up?method=email"
+            signUpUrl={authHref('/sign-up', redirectTarget, 'email')}
             appearance={clerkAuthAppearance}
           />
         </EmbeddedBrowserAuthGuard>

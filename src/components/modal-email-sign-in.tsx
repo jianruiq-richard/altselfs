@@ -1,5 +1,6 @@
 'use client';
 
+import { authHref } from '@/lib/auth-destination';
 import { useState } from 'react';
 import { SignIn } from '@clerk/nextjs';
 import { useSignIn } from '@clerk/nextjs/legacy';
@@ -21,7 +22,7 @@ export function ModalEmailSignIn({ redirectUrl }: { redirectUrl: string }) {
       // on an always-mounted route instead of SignIn's internal hash callback.
       await signIn.authenticateWithRedirect({
         strategy: 'oauth_google',
-        redirectUrl: '/sso-callback',
+        redirectUrl: authHref('/sso-callback', redirectUrl),
         redirectUrlComplete: redirectUrl,
       });
     } catch {
@@ -37,7 +38,7 @@ export function ModalEmailSignIn({ redirectUrl }: { redirectUrl: string }) {
     {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
     <div className={styles.authDivider}><span>or</span></div>
     <SignIn routing="hash" forceRedirectUrl={redirectUrl} fallbackRedirectUrl={redirectUrl}
-      signUpUrl="/sign-up?method=email"
+      signUpUrl={authHref('/sign-up', redirectUrl, 'email')}
       appearance={{ ...clerkAuthAppearance, elements: {
         ...clerkAuthAppearance.elements,
         socialButtons: { display: 'none' },
