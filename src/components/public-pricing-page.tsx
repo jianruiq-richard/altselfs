@@ -125,7 +125,7 @@ export function PublicPricingPage() {
 
 function ModelRow({ model }: { model: PublicModelRate }) {
   return <div className={styles.rateRow}>
-    <span><strong>{model.label}</strong><small>{model.engines.join(', ') || model.provider}</small></span>
+    <span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small></span>
     <span data-label="Input">{formatRate(model.input)}</span>
     <span data-label="Cached">{formatRate(model.cachedInput)}</span>
     <span data-label="Output">{formatRate(model.output)}</span>

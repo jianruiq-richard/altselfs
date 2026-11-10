@@ -52,6 +52,15 @@ try {
   await page.evaluate(label=>[...document.querySelectorAll('a')].find(b=>b.querySelector('strong')?.textContent===label).click(),label);
   await page.waitForFunction(view=>new URLSearchParams(location.search).get('view')===view,{},view);
   await waitText(content);
+  if (view === 'rates') {
+   assert(!await page.evaluate(()=>[...document.querySelectorAll('span')].some(e=>e.textContent==='Provider')));
+   await page.screenshot({path:root+'/artifacts/account-rates-desktop.png',fullPage:true});
+   await page.setViewport({width:390,height:844});
+   await page.screenshot({path:root+'/artifacts/account-rates-mobile.png',fullPage:true});
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   for (const text of ['Input','Cached','Output']) assert(await page.evaluate(text=>[...document.querySelectorAll('span')].some(e=>e.textContent===text&&getComputedStyle(e).display!=='none'),text));
+   await page.setViewport({width:1440,height:1050});
+  }
  }
  await page.goto(url+'/account?view=usage');await waitText('Redesign the Minaco website');const n=calls.filter(c=>c.path.endsWith('/activity')).length;await clickText('Refresh');await page.waitForFunction(()=>!document.querySelector('button[disabled]'));assert(calls.filter(c=>c.path.endsWith('/activity')).length>n);
  await page.click('input[name=model]');await page.type('input[name=model]','gpt-6');await clickText('Apply filters');await page.waitForFunction(()=>location.search.includes('model=gpt-6'));await waitText('Redesign the Minaco website');
@@ -64,5 +73,5 @@ try {
  failBilling=true;await clickText('Refresh');await waitText('Billing history is unavailable.');assert(!await page.evaluate(()=>document.body.innerText.includes('No balance changes yet')));failBilling=false;
  failUsage=true;await page.goto(url+'/account?view=usage');await waitText('Usage history is temporarily unavailable.');assert(!await page.evaluate(()=>document.body.innerText.includes('No usage matches')));failUsage=false;await clickText('Retry usage');await waitText('Redesign the Minaco website');
  await page.goto(url+'/account?view=usage&source=desktop&signedout=1');const href=await page.$eval('a',e=>e.getAttribute('href'));assert(new URL(href,url).searchParams.get('redirect_url').includes('view=usage&source=desktop'));
- assert.deepEqual(errors,[]);await writeFile(root+'/artifacts/account-ui-verification.json',JSON.stringify({passed:true,scope:'Actual React components with isolated authentication and billing fixtures; no live payment',checks:['English billing dates under Chinese browser locale','account sidebar navigation','overview','usage refresh','server filter query','cursor with filters','mobile credits and no overflow','cancel intent no automatic POST','explicit cancellation confirmation','independent billing histories','error vs empty','login continuation'],calls},null,2));console.log('Account UI: 12 behavior checks passed; desktop/mobile screenshots saved.');
+ assert.deepEqual(errors,[]);await writeFile(root+'/artifacts/account-ui-verification.json',JSON.stringify({passed:true,scope:'Actual React components with isolated authentication and billing fixtures; no live payment',checks:['rates without provider and mobile token columns','English billing dates under Chinese browser locale','account sidebar navigation','overview','usage refresh','server filter query','cursor with filters','mobile credits and no overflow','cancel intent no automatic POST','explicit cancellation confirmation','independent billing histories','error vs empty','login continuation'],calls},null,2));console.log('Account UI: 13 behavior checks passed; desktop/mobile screenshots saved.');
 } catch(e) { console.log(JSON.stringify({errors,body:await page.evaluate(()=>document.body.innerText),calls},null,2));throw e; } finally {await browser.close();server.close();}

@@ -144,7 +144,7 @@
 .billingTable > div,
 .rateTable > div { display: grid; min-height: 64px; align-items: center; gap: 18px; border-bottom: 1px solid var(--line); color: #aaa59d; font-size: 10px; }
 .billingTable > div { grid-template-columns: minmax(220px, 1.7fr) 120px 90px 100px 120px; }
-.rateTable > div { grid-template-columns: minmax(240px, 1.7fr) 130px repeat(3, 100px); }
+.rateTable > div { grid-template-columns: minmax(240px, 1.7fr) repeat(3, 100px); }
 .billingTable > div:first-child,
 .rateTable > div:first-child { min-height: 43px; color: #6e6a64; font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .billingTable strong,
@@ -206,7 +206,6 @@
   .billingTable > div > span:nth-child(2),
   .billingTable > div > span:nth-child(4) { display: none; }
   .rateTable > div { grid-template-columns: minmax(160px, 1.4fr) repeat(3, 80px); }
-  .rateTable > div > span:nth-child(2) { display: none; }
 }
 
 @media (max-width: 560px) {
@@ -227,9 +226,7 @@
   .activityDetail footer { flex-direction: column; gap: 5px; }
   .rateTools { grid-template-columns: 1fr; }
   .rateTools select { min-height: 42px; }
-  .rateTable > div { grid-template-columns: minmax(130px, 1fr) repeat(2, 70px); }
-  .rateTable > div > span:nth-child(2),
-  .rateTable > div > span:nth-child(4) { display: none; }
+  .rateTable > div { grid-template-columns: minmax(110px, 1fr) repeat(3, minmax(42px, .45fr)); gap: 8px; }
   .billingTable > div { grid-template-columns: minmax(135px, 1fr) 76px; }
   .billingTable > div > span:nth-child(2),
   .billingTable > div > span:nth-child(4),

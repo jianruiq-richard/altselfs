@@ -318,11 +318,11 @@ function UsageView(props: { activity: ActivityItem[]; cursor: string | null; exp
 
 function RatesView(props: { agents: Array<[string, string]>; agent: string; models: PublicModelRate[]; page: number; pageCount: number; query: string; visible: PublicModelRate[]; onAgent: (value: string) => void; onPage: (value: number) => void; onQuery: (value: string) => void }) {
   return <div className={styles.ratesView}>
-    <div className={styles.sectionIntro}><div><h2>Current model rates</h2><p>Rates come from the Desktop API. Historical usage keeps the pricing version captured when the turn settled.</p></div><Link className={styles.secondary} href="/pricing">Compare plans <ArrowUpRight size={14} /></Link></div>
+    <div className={styles.sectionIntro}><div><h2>Current model rates</h2><p>Compare current model prices. Past turns keep the rates used when they were billed.</p></div><Link className={styles.secondary} href="/pricing">Compare plans <ArrowUpRight size={14} /></Link></div>
     <div className={styles.rateTools}><label><Search size={16} /><input value={props.query} onChange={(event) => props.onQuery(event.target.value)} placeholder="Search models" /></label><select value={props.agent} onChange={(event) => props.onAgent(event.target.value)}><option value="all">All Agents</option>{props.agents.map(([id, name]) => <option value={id} key={id}>{name}</option>)}</select></div>
     <div className={styles.rateTable}>
-      <div><span>Model</span><span>Provider</span><span>Input</span><span>Cached</span><span>Output</span></div>
-      {props.visible.map((model) => <div key={`${model.provider}:${model.model}`}><span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small></span><span>{model.provider}</span><span>{formatRate(model.input)}</span><span>{formatRate(model.cachedInput)}</span><span>{formatRate(model.output)}</span></div>)}
+      <div><span>Model</span><span>Input</span><span>Cached</span><span>Output</span></div>
+      {props.visible.map((model) => <div key={`${model.provider}:${model.model}`}><span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small></span><span>{formatRate(model.input)}</span><span>{formatRate(model.cachedInput)}</span><span>{formatRate(model.output)}</span></div>)}
       {!props.visible.length ? <div className={styles.empty}>No current models match this filter.</div> : null}
     </div>
     <Pagination count={props.models.length} page={props.page} pageCount={props.pageCount} pageSize={ratePageSize} onPage={props.onPage} />
