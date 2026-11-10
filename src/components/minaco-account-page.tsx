@@ -108,7 +108,6 @@ export function MinacoAccountPage() {
   const { signOut } = useClerk();
   const query = params.toString();
   const view = params.get('intent') === 'cancel' ? 'plan' : accountView(params.get('view'));
-  const setView = (next: AccountView) => router.push(accountHref(next), { scroll: false });
   const [monthly, setMonthly] = useState<{ credits: number; turns: number } | null>(null);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -244,7 +243,7 @@ export function MinacoAccountPage() {
 
     <div className={styles.shell}>
       <aside className={styles.rail}>
-        {views.map((item) => <button key={item.key} aria-current={view === item.key ? "page" : undefined} className={view === item.key ? styles.railActive : ''} onClick={() => setView(item.key)}><strong>{item.label}</strong><span>{item.detail}</span></button>)}
+        {views.map((item) => <a key={item.key} href={accountHref(item.key)} aria-current={view === item.key ? "page" : undefined} className={view === item.key ? styles.railActive : ''}><strong>{item.label}</strong><span>{item.detail}</span></a>)}
         <div className={styles.railFoot}><Sparkles size={16} /><span>One account across Desktop and Web.</span></div>
       </aside>
 

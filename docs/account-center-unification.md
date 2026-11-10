@@ -24,3 +24,9 @@ Deployment evidence and release IDs follow after publication.
 - ECS account backend `minaco-account:6e5e9f60`, blue active; prior green drained/stopped. Incremental image replaces only credit-admission/http-server/stripe-billing modules over the existing pinned runtime. Existing provider/concurrency settings, Skills, desktop API and inference gateway remain unchanged.
 - Production read-only queries verified usage/monthly summary/payment history and empty results for a nonexistent account. Public account/pricing/download/connect routes return 200, legacy billing routes redirect correctly, unauthenticated billing history returns 401.
 - No real purchase, renewal cancellation or new-account sign-in was performed.
+
+## Navigation follow-up — 2026-11-10
+
+Account sections now use ordinary links with explicit `view` destinations, so navigation has browser-native behavior instead of depending on a JavaScript-only button/router transition. Billing dates and numeric allowances explicitly use English formatting, including under a Chinese browser locale. User-provided names and conversation titles are not translated.
+
+The reported no-op click was not reproduced in isolated components or a real Next.js router with fixture authentication/API data; the exact live-session cause remains unconfirmed. Regression coverage now clicks every section, and a real-router check verified refresh and browser back. Twelve isolated UI checks, ten routing/auth tests and TypeScript checks passed. No API, billing calculation or desktop changes are needed.

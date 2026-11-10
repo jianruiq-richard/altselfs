@@ -49,10 +49,10 @@
 .shell { width: min(1208px, calc(100% - 68px)); min-height: calc(100vh - 68px); margin: 0 auto; }
 .rail { display: flex; min-height: 70px; align-items: stretch; gap: 28px; border-bottom: 1px solid var(--line); }
 .rail > p { display: flex; align-items: center; margin: 0 12px 0 0; color: #77736d; font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
-.rail button { display: flex; min-width: 120px; flex-direction: column; justify-content: center; gap: 3px; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 11px 0 9px; color: #8f8a82; text-align: left; cursor: pointer; }
-.rail button strong { font-size: 12px; font-weight: 650; }
-.rail button span { font-size: 10px; }
-.rail button:hover { color: var(--text); }
+.rail a { text-decoration: none; display: flex; min-width: 120px; flex-direction: column; justify-content: center; gap: 3px; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 11px 0 9px; color: #8f8a82; text-align: left; cursor: pointer; }
+.rail a strong { font-size: 12px; font-weight: 650; }
+.rail a span { font-size: 10px; }
+.rail a:hover { color: var(--text); }
 .rail .railActive { border-bottom-color: #f4b94f; color: var(--text); }
 .railFoot { display: flex; margin-left: auto; align-items: center; gap: 9px; color: #6f6b64; font-size: 10px; line-height: 1.5; }
 .railFoot svg { flex: 0 0 auto; color: #b78a42; }
@@ -186,7 +186,7 @@
   .rail { gap: 4px; overflow-x: auto; }
   .rail > p,
   .railFoot { display: none; }
-  .rail button { min-width: 118px; border-left: 0; border-bottom: 2px solid transparent; }
+  .rail a { min-width: 118px; border-left: 0; border-bottom: 2px solid transparent; }
   .rail .railActive { border-bottom-color: #f4b94f; border-left-color: transparent; }
   .content { padding-top: 30px; }
   .metrics { grid-template-columns: 1fr; }
@@ -248,9 +248,9 @@
 .switchAccount { border: 0; background: none; color: #e2c48f; padding: 6px 0; font-size: 12px; cursor: pointer; }
 .shell { max-width: 1200px; }
 .rail { gap: 30px; }
-.rail button { min-height: 76px; min-width: 100px; }
-.rail button strong { font-size: 14px; }
-.rail button span { font-size: 12px; color: var(--muted); }
+.rail a { min-height: 76px; min-width: 100px; }
+.rail a strong { font-size: 14px; }
+.rail a span { font-size: 12px; color: var(--muted); }
 .railFoot { display: none; }
 .contentHead h1 { font-family: inherit; font-size: 28px; letter-spacing: -.025em; }
 .content { padding-bottom: 80px; }
@@ -314,8 +314,8 @@
   .identity { max-width: 220px; }
   .identity small { display: block; max-width: 200px; }
   .rail { gap: 22px; }
-  .rail button { min-width: max-content; }
-  .rail button span { display: none; }
+  .rail a { min-width: max-content; }
+  .rail a span { display: none; }
   .refresh { width: auto; }
   .planTitle h2 { font-size: 32px; }
   .planGrid { grid-template-columns: 1fr; }
