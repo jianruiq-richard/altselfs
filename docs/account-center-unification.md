@@ -16,3 +16,11 @@ Design follows Impeccable 4.8.2 Operate guidance while retaining Minaco's warm d
 - PostgreSQL-compatible engine validation: account isolation, 45-row pagination, dates, model/Agent filters, malicious filter values, payment pagination and separate grants.
 
 Deployment evidence and release IDs follow after publication.
+
+## Production 2026-11-10
+
+- Source includes remote onboarding commits `79ba0618` and `23ee6f43`; account change `6e5e9f60`, deployment exclusions `0e31925c`.
+- Vercel production `dpl_ES2Q7EWwGFiAVNRGkNrwYEvTrFWC`, aliased to minaco.ai.
+- ECS account backend `minaco-account:6e5e9f60`, blue active; prior green drained/stopped. Incremental image replaces only credit-admission/http-server/stripe-billing modules over the existing pinned runtime. Existing provider/concurrency settings, Skills, desktop API and inference gateway remain unchanged.
+- Production read-only queries verified usage/monthly summary/payment history and empty results for a nonexistent account. Public account/pricing/download/connect routes return 200, legacy billing routes redirect correctly, unauthenticated billing history returns 401.
+- No real purchase, renewal cancellation or new-account sign-in was performed.
