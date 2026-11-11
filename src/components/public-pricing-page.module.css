@@ -8,6 +8,7 @@
 .header nav,.header>div { display:flex; align-items:center; gap:27px; }.header>div{justify-content:flex-end;}
 .header nav a,.header>div>a:first-child { color:var(--muted); font-size:14px; }.header nav a:hover,.header>div>a:first-child:hover{color:var(--ink);}
 .navAction { padding:11px 17px; border-radius:2px 12px 2px 2px; background:var(--ink); color:#0b0a08; font-size:14px; font-weight:650; }
+.header>div>a[href="/account"] { display:inline-flex; }
 .intro { display:grid; grid-template-columns:1fr auto; gap:60px; align-items:end; padding:108px max(24px,calc((100vw - 1392px)/2)) 64px; }
 .intro h1,.rateIntro h2,.explainer h2 { margin:0; letter-spacing:-.065em; line-height:.93; }
 .intro h1 { font-size:clamp(68px,8vw,124px); }.intro p{max-width:680px;margin:30px 0 0;color:var(--muted);font-size:19px;line-height:1.55;}

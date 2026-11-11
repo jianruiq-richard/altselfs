@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
+import { PublicAccountActions } from '@/components/public-account-actions';
 import {
   BILLING_PLANS,
   type BillingCycle,
@@ -57,7 +58,7 @@ export function PublicPricingPage() {
         <span>Minaco</span>
       </Link>
       <nav><Link href="/#agents">Agents</Link><Link href="/download">Download</Link><Link href="/agent">Web Agent</Link></nav>
-      <div><Link href="/sign-in">Log in</Link><Link className={styles.navAction} href="/sign-up">Create account</Link></div>
+      <PublicAccountActions signUpClassName={styles.navAction} />
     </header>
 
     <section className={styles.intro}>

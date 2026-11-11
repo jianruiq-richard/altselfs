@@ -1,0 +1,4 @@
+.actions { display:flex; align-items:center; gap:18px; white-space:nowrap; }
+.loading { width:190px; height:44px; }
+.actions .accountLink { display:inline-flex; align-items:center; min-height:44px; color:inherit; font-size:14px; }
+@media(max-width:650px) { .actions { gap:12px; } .loading { width:130px; } }

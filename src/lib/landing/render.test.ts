@@ -24,3 +24,32 @@ test('standalone homepage includes exactly one configured Clarity script in head
  assert.ok(page.includes("minaco.consent.v1"));
  assert.ok(!renderLanding(catalog, '').includes('id="minaco-microsoft-clarity"'));
 });
+
+test('homepage reflects each session without changing download or homepage access', () => {
+ const signedOut = renderLanding(catalog, '');
+ const signedIn = renderLanding(catalog, '', { name: 'Richard', imageUrl: 'https://img.clerk.com/avatar.png' });
+ const header = (page: string) => page.match(/<header class="sitehead">[\s\S]*?<\/header>/)![0];
+ assert.match(header(signedOut), />Log in<\/a>/);
+ assert.doesNotMatch(header(signedOut), /My account|account-avatar/);
+ assert.match(header(signedIn), /My account/);
+ assert.match(header(signedIn), /href="\/account"/);
+ assert.match(header(signedIn), /https:\/\/img.clerk.com\/avatar.png/);
+ assert.doesNotMatch(header(signedIn), /Log in|\/sign-in/);
+ for (const page of [signedOut, signedIn]) {
+  assert.match(header(page), /href="\/api\/download"/);
+  assert.doesNotMatch(page, /__SERVER_(?:MOBILE_ACCOUNT|ACCOUNT_ACTION)__/);
+ }
+ // Rendering a signed-in page must not mutate the shared template for the next visitor.
+ assert.equal(renderLanding(catalog, ''), signedOut);
+});
+
+test('account profile markup is escaped and unavailable images have an initial fallback', () => {
+ const page = renderLanding(catalog, '', { name: '<script>', imageUrl: 'https://img.example/avatar?x=" onerror="alert(1)' });
+ assert.match(page, /&lt;<\/span>/);
+ assert.match(page, /x=&quot; onerror=&quot;alert\(1\)/);
+ assert.doesNotMatch(page, /src="[^"]*" onerror=/);
+ const fallback = renderLanding(catalog, '', { name: '', imageUrl: 'javascript:alert(1)' });
+ assert.match(fallback, /<span>M<\/span>/);
+ assert.doesNotMatch(fallback, /javascript:alert/);
+ assert.match(fallback, /My account/);
+});

@@ -1,4 +1,7 @@
 const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// A history restore can otherwise show the account state from before sign-in/out.
+window.addEventListener('pageshow',event=>{if(event.persisted)window.location.reload()});
+document.querySelectorAll('.account-avatar img').forEach(img=>{img.addEventListener('error',()=>img.remove());if(img.complete&&img.naturalWidth===0)img.remove()});
 const icon=name=>'<svg class="icon" aria-hidden="true"><use href="#i-'+name+'"/></svg>';
 // Only the requested ecosystem strip loops; it pauses offscreen, on hover/focus, or by choice.
 const ribbon=document.querySelector('.agent-ribbon'),ribbonButton=document.querySelector('.ribbon-control');
