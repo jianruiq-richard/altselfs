@@ -1,3 +1,4 @@
+import { agentProfiles, modelProfiles } from './profiles';
 export type GuideSection = { id: string; title: string; paragraphs?: string[]; steps?: { title: string; body: string }[]; bullets?: string[] };
 export type Guide = { slug: string; title: string; seoTitle: string; description: string; intro: string; sections: GuideSection[]; related: string[] };
 
@@ -58,9 +59,6 @@ export const guides: Guide[] = [
   },
 ];
 
-export const featuredAgents = [
-  { slug: 'claude-code', id: 'claude', name: 'Claude Code', vendor: 'Anthropic', title: 'Claude Code. In your workspace.', description: 'Use native Claude Code in Minaco on your Mac. Keep your project and conversation together, choose an available account mode, and hand the work to another agent.', lead: 'Bring Claude Code into a workspace that can continue with your next agent. Keep its native way of working alongside your project files and shared conversation.', prompt: 'Read this project and propose the smallest useful change. Explain your plan and what you will verify before editing files.' },
-  { slug: 'codex', id: 'codex', name: 'Codex', vendor: 'OpenAI', title: 'Codex. Part of the same work.', description: 'Use native Codex in Minaco on your Mac. Start a project, work with your files, and continue a conversation handed over from another agent.', lead: 'Work with Codex in the same place as your other agents. Continue an existing brief, review the files and move the project forward.', prompt: 'Continue from the agreed plan. First summarize the next change and its acceptance criteria, then implement it and report the checks you ran.' },
-] as const;
+export const featuredAgents = agentProfiles;
 
-export const marketingPaths = ['/agents', ...featuredAgents.map(a => `/agents/${a.slug}`), '/guides', ...guides.map(g => `/guides/${g.slug}`)];
+export const marketingPaths = ['/models', ...modelProfiles.map(m => `/models/${m.slug}`), '/agents', ...featuredAgents.map(a => `/agents/${a.slug}`), '/guides', ...guides.map(g => `/guides/${g.slug}`)];

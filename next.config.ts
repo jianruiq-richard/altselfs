@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     // Move only public marketing URLs. Account, API and authentication stay on their host.
-    const publicPaths = ['/', '/pricing', '/download', '/contact', '/terms', '/privacy', '/agents/:path*', '/guides/:path*'];
+    const publicPaths = ['/', '/pricing', '/download', '/contact', '/terms', '/privacy', '/agents/:path*', '/guides/:path*', '/models/:path*'];
     return ['altselfs.com', 'www.altselfs.com'].flatMap(host => publicPaths.map(source => ({
       source,
       has: [{ type: 'host' as const, value: host }],

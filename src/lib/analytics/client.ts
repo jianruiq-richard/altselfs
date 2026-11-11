@@ -83,7 +83,7 @@ export function setAnalyticsUser(
 }
 
 export function analyticsRoute(pathname: string) {
-  if (/^\/(agents|guides)(\/[a-z0-9-]+)?\/?$/.test(pathname)) return { routeName: pathname.split('/').filter(Boolean).join('_'), pagePath: pathname };
+  if (/^\/(agents|guides|models)(\/[a-z0-9-]+)?\/?$/.test(pathname)) return { routeName: pathname.split('/').filter(Boolean).join('_'), pagePath: pathname };
   if (pathname === '/') return { routeName: 'landing', pagePath: '/' };
   if (pathname === '/download') return { routeName: 'desktop_download', pagePath: '/download' };
   if (pathname.startsWith('/desktop/register')) return { routeName: 'desktop_auth', pagePath: '/desktop/register' };

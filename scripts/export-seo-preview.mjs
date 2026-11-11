@@ -8,6 +8,8 @@ delete process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID;
 const require = createRequire(import.meta.url);
 const { renderLanding } = require('../src/lib/landing/render.ts');
 const { renderAgentDirectory, renderAgentPage, renderGuideIndex, renderGuide } = require('../src/lib/marketing/render.ts');
+const { renderModelDirectory, renderModelPage } = require('../src/lib/marketing/models.ts');
+const { modelProfiles } = require('../src/lib/marketing/profiles.ts');
 const { featuredAgents, guides } = require('../src/lib/marketing/content.ts');
 const root = path.resolve(import.meta.dirname, '..');
 const output = path.resolve(process.argv[2] || '../altselfs-seo-review');
@@ -19,6 +21,8 @@ const pages = new Map([
   ['/', renderLanding(catalog, '')],
   ['/agents', renderAgentDirectory(catalog)],
   ...featuredAgents.map(a => ['/agents/' + a.slug, renderAgentPage(a.slug, catalog)]),
+  ['/models', renderModelDirectory(catalog)],
+  ...modelProfiles.map(m => ['/models/' + m.slug, renderModelPage(m.slug, catalog)]),
   ['/guides', renderGuideIndex()],
   ...guides.map(g => ['/guides/' + g.slug, renderGuide(g.slug)]),
 ]);
@@ -51,5 +55,5 @@ for (const [route, source] of pages) {
     await writeFile(path.join(output, 'minaco-homepage-preview.html'), standalone);
   }
 }
-await writeFile(path.join(output, 'README.txt'), `Minaco P0–P1 local review\nOpen minaco-homepage-preview.html for the homepage, or index.html for the linked 8-page preview.\nKeep the entire folder together to follow the new agent/guide links.\nLogin, pricing, account, download and legal links open the real Minaco site.\nNo production analytics are included. All exported pages are noindex.\nCatalog snapshot: ${catalog.generatedAt}. No files have been pushed or deployed.\n`);
+await writeFile(path.join(output, 'README.txt'), `Minaco P0–P1 local review\nOpen minaco-homepage-preview.html for the homepage, or index.html for the linked content preview.\nKeep the entire folder together to follow the new agent/guide links.\nLogin, pricing, account, download and legal links open the real Minaco site.\nNo production analytics are included. All exported pages are noindex.\nCatalog snapshot: ${catalog.generatedAt}. No files have been pushed or deployed.\n`);
 console.log(`Exported ${pages.size} pages and standalone homepage to ${output}`);

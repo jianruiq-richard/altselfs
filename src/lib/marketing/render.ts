@@ -4,6 +4,7 @@ import { renderLandingAccount, type LandingAccount } from '../landing/account';
 import { landingGoogleTag } from '../analytics/google-tag';
 import { clarityScriptTag } from '../analytics/clarity';
 import { guides, featuredAgents, type Guide } from './content';
+import { modelProfiles, reviewedAt } from './profiles';
 import { canonicalOrigin, escapeHtml as e, jsonLd, pageMetadata } from './seo';
 
 const arrow = '<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>';
@@ -11,18 +12,18 @@ const iconSymbols = landingTemplate.match(/<svg aria-hidden="true"[\s\S]*?<\/svg
 const baseHeader = landingTemplate.match(/<header class="sitehead">[\s\S]*?<\/header>/)![0];
 const footer = landingTemplate.match(/<footer class="footer">[\s\S]*?<\/footer>/)![0].replaceAll('href="#home"', 'href="/"');
 
-function shell(path: string, title: string, description: string, content: string, account: LandingAccount | null, schema?: unknown) {
+export function shell(path: string, title: string, description: string, content: string, account: LandingAccount | null, schema?: unknown) {
   const header = baseHeader.replaceAll('href="#home"', 'href="/"').replaceAll('href="#demo"', 'href="/#demo"').replaceAll('href="#pricing"', 'href="/pricing"')
     .replace('__SERVER_ACCOUNT_ACTION__', () => renderLandingAccount(account))
     .replace('__SERVER_MOBILE_ACCOUNT__', account ? '<a class="mobilelogin" href="/account">My account</a>' : '<a class="mobilelogin" href="/sign-in?redirect_url=/account">Log in</a>');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">${pageMetadata(path, title, description)}<link rel="icon" href="/brand/minaco/png/minaco-favicon-96.png"><link rel="stylesheet" href="/landing/marketing.css"><link rel="stylesheet" href="/landing/resources.css">${schema ? jsonLd(schema) : ''}${clarityScriptTag(process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID)}${landingGoogleTag()}</head><body class="resource-page">${iconSymbols}<a class="skip" href="#main">Skip to content</a>${header}<main id="main" class="resource-main">${content}</main>${footer}<script src="/landing/resources.js" defer></script></body></html>`;
 }
 
-function crumbs(items: { name: string; path?: string }[]) {
+export function crumbs(items: { name: string; path?: string }[]) {
   return `<nav class="resource-crumbs" aria-label="Breadcrumb"><a href="/">Minaco</a>${items.map(item => `<span aria-hidden="true">/</span>${item.path ? `<a href="${item.path}">${e(item.name)}</a>` : `<span aria-current="page">${e(item.name)}</span>`}`).join('')}</nav>`;
 }
 
-function breadcrumbs(items: { name: string; path: string }[]) {
+export function breadcrumbs(items: { name: string; path: string }[]) {
   return { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ name: 'Minaco', path: '/' }, ...items].map((item, i) => ({ '@type': 'ListItem', position: i + 1, name: item.name, item: canonicalOrigin + item.path })) };
 }
 
@@ -33,7 +34,7 @@ function readingLinks(slugs: string[]) {
   }).join('')}</div></section>`;
 }
 
-function closing(title = 'Bring your next project.') {
+export function closing(title = 'Bring your next project.') {
   return `<section class="resource-closing wrap"><div><h2>${title}</h2><p>Your agents. Your workspace. One place to continue.</p></div><a class="btn primary" href="/download">Download for Mac ${arrow}</a></section>`;
 }
 
@@ -57,16 +58,18 @@ export function renderAgentPage(slug: string, catalog: MinacoProductCatalog, acc
   if (!agent) return null;
   const path = `/agents/${agent.slug}`;
   const published = catalog.agents.find(a => a.id === agent.id);
-  const modelNames = [...new Set(catalog.models.filter(m => m.engines.includes(agent.id)).map(m => m.label))];
+  const fundedModels = catalog.models.filter(m => m.engines.includes(agent.id));
+  const modelNames = fundedModels.map(m => m.label);
   return shell(path, `${agent.name} in Minaco for Mac | Native AI Agent Workspace`, agent.description, `
-    <section class="resource-hero wrap">${crumbs([{ name: 'Agents', path: '/agents' }, { name: agent.name }])}<h1>${e(agent.name)}.<br>Same workspace.</h1><p>${e(agent.lead)}</p><div class="actions"><a class="btn primary" href="/download">Get Minaco for Mac ${arrow}</a><a class="text-link" href="/guides/claude-code-and-codex">Use Claude Code + Codex ${arrow}</a></div></section>
+    <section class="resource-hero wrap">${crumbs([{ name: 'Agents', path: '/agents' }, { name: agent.name }])}<h1>${e(agent.name)}.<br>Same workspace.</h1><p>${e(agent.lead)}</p><div class="actions"><a class="btn primary" href="/download">Get Minaco for Mac ${arrow}</a><a class="text-link" href="#models">Models and accounts ${arrow}</a></div></section>
     <section class="resource-feature wrap"><div><h2>Keep the agent.<br>Continue the work.</h2><p>Minaco runs the native agent and keeps the project around it. When another agent takes over, relevant visible context travels with the conversation.</p><p>The next agent uses its own permissions and settings. Your provider credentials and private model state stay separate.</p></div><figure><img src="/landing/workflow-preview.webp" alt="Example of the shared conversation and project workspace in Minaco" width="1200" height="760"><figcaption>The shared Minaco workspace; example content shown.</figcaption></figure></section>
-    <div class="resource-article wrap"><aside><nav aria-label="On this page"><a href="#setup">Get started</a><a href="#first-task">First task</a><a href="#models">Models and accounts</a><a href="#handoff">Switch agents</a></nav></aside><article>
+    <div class="resource-article wrap"><aside><nav aria-label="On this page"><a href="#overview">About the agent</a><a href="#setup">Get started</a><a href="#first-task">First task</a><a href="#models">Models and accounts</a><a href="#handoff">Switch agents</a></nav></aside><article>
+      <section id="overview"><h2>What is ${e(agent.name)}?</h2><p>${e(agent.overview)}</p><h3>A workflow to try</h3><p>${e(agent.workflow)}</p><h3>Know the boundary</h3><p>${e(agent.boundary)}</p></section>
       <section id="setup"><h2>Get started.</h2><ol class="resource-steps"><li><h3>Install Minaco</h3><p>Download the signed app for an Apple silicon Mac running macOS 13 or later, move it to Applications, and connect your Minaco account.</p></li><li><h3>Prepare ${e(agent.name)}</h3><p>Open the Agent settings, install ${e(agent.name)} if needed, and complete the setup shown in the app. The current catalog ${published ? `lists this integration as ${e(published.status)}` : 'does not list this integration; check in the app before proceeding'}.</p></li><li><h3>Choose an account mode</h3><p>Select a Minaco-credit model available to your plan, or connect a supported personal account. The available choices are specific to ${e(agent.name)}.</p></li><li><h3>Open your workspace</h3><p>Choose the project folder, create a conversation and send a focused task. Review any approval requests before the agent acts.</p></li></ol></section>
       <section id="first-task"><h2>Start with a clear brief.</h2><p>Give the agent a concrete goal and ask it to check the workspace before changing it. For example:</p><blockquote>${e(agent.prompt)}</blockquote><p>Review the plan and result against your own acceptance criteria. The agent’s available tools and connected services determine what it can do.</p></section>
-      <section id="models"><h2>Models and accounts.</h2><p>${modelNames.length ? `Currently published funded models include ${e(modelNames.join(', '))}.` : 'No funded models are currently listed for this agent. Check the available account modes inside Minaco.'}</p><p>Model access depends on your plan and current availability. Minaco-credit turns use your shared balance. Personal-account turns follow the provider’s own subscription, quotas and billing.</p><a class="text-link" href="/pricing#model-rates">See current model rates ${arrow}</a></section>
+      <section id="models"><h2>Models and accounts.</h2><p>${modelNames.length ? `Currently published funded models: ${fundedModels.map(m => { const profile = modelProfiles.find(p => p.id === m.model && p.provider === m.provider); return profile ? `<a href="/models/${profile.slug}">${e(m.label)}</a>` : e(m.label); }).join(', ')}.` : 'No funded models are currently listed for this agent. Check the available account modes inside Minaco.'}</p><p>Model access depends on your plan and current availability. Minaco-credit turns use your shared balance. Personal-account turns follow the provider’s own subscription, quotas and billing.</p><a class="text-link" href="/pricing#model-rates">See current model rates ${arrow}</a></section>
       <section id="handoff"><h2>Pass the work forward.</h2><p>Finish the current turn, resolve pending approvals and choose a ready agent in the conversation’s Agent selector. Minaco prepares the visible working context for its next turn.</p><p>A long history can be shortened in the context sent to the model. Save important decisions in a project file and ask the next agent to confirm its understanding.</p><a class="text-link" href="/guides/agent-context-handoff">Read the handoff guide ${arrow}</a></section>
-      <p class="resource-note">${e(agent.name)} is developed by ${e(agent.vendor)}. Minaco is an independent workspace, not the vendor’s official desktop application. Catalog checked ${e(catalog.generatedAt.slice(0, 10))}.</p>
+      <section id="sources"><h2>Read the source.</h2><p><a href="${e(agent.source.url)}" rel="external">${e(agent.source.title)}</a> — editorial facts checked ${reviewedAt}. The workflow examples on this page are Minaco suggestions, not vendor benchmarks.</p></section><p class="resource-note">${e(agent.name)} is developed by ${e(agent.vendor)}. Minaco is an independent workspace, not the vendor’s official desktop application. Catalog checked ${e(catalog.generatedAt.slice(0, 10))}.</p>
     </article></div>${readingLinks(['claude-code-and-codex', 'one-subscription-multiple-agents'])}${closing()}`, account, breadcrumbs([{ name: 'Agents', path: '/agents' }, { name: agent.name, path }]));
 }
 

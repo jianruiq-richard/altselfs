@@ -16,6 +16,7 @@ export type PublicModelRate = {
   version: string;
   input: number;
   cachedInput: number;
+  cacheWrite?: number;
   output: number;
   unit: 'credits' | 'microUSD';
 };
@@ -131,6 +132,7 @@ function publicModels(value: unknown): PublicModelRate[] {
       version: entry.version as string,
       input: entry.input as number,
       cachedInput: entry.cachedInput as number,
+      ...(typeof entry.cacheWrite === 'number' && Number.isFinite(entry.cacheWrite) && entry.cacheWrite >= 0 ? { cacheWrite: entry.cacheWrite } : {}),
       output: entry.output as number,
       unit,
     }];
