@@ -57,14 +57,14 @@ export function PublicPricingPage() {
         <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandImage} />
         <span>Minaco</span>
       </Link>
-      <nav><Link href="/#agents">Agents</Link><Link href="/download">Download</Link><Link href="/agent">Web Agent</Link></nav>
+      <nav><Link href="/#agents">Agents</Link><Link href="/download">Download</Link></nav>
       <PublicAccountActions signUpClassName={styles.navAction} />
     </header>
 
     <section className={styles.intro}>
       <div>
-        <h1>One plan.<br />Desktop + Web.</h1>
-        <p>Your subscription, Credits, and account work across supported Minaco-credit Agents and the original browser-based Minaco Agent.</p>
+        <h1>One plan.<br />Your AI agents.</h1>
+        <p>Bring your supported native AI agents together in one desktop workspace, with a shared Minaco subscription and Credit balance.</p>
       </div>
       <div className={styles.cycleControl} aria-label="Billing cycle">
         {(['monthly', 'yearly'] as BillingCycle[]).map((value) => <button key={value} className={cycle === value ? styles.cycleActive : ''} onClick={() => setCycle(value)}>{value === 'monthly' ? 'Monthly' : 'Annual · 20% less'}</button>)}
@@ -73,7 +73,7 @@ export function PublicPricingPage() {
 
     <section className={styles.planTable} aria-label="Minaco plans">
       <div className={styles.planLabels}>
-        <strong>Plans</strong><span>Credits</span><span>Concurrent tasks</span><span>Scheduled tasks</span><span>Model access</span><span>Products</span><span />
+        <strong>Plans</strong><span>Credits</span><span>Concurrent tasks</span><span>Scheduled tasks</span><span>Model access</span><span>Workspace</span><span />
       </div>
       {BILLING_PLANS.map((plan) => {
         const price = getPlanBillingPriceUsd(plan, cycle);
@@ -86,7 +86,7 @@ export function PublicPricingPage() {
             <div><dt>Concurrent tasks</dt><dd>{plan.concurrentTasks}</dd></div>
             <div><dt>Scheduled tasks</dt><dd>{plan.scheduledTasks}</dd></div>
             <div><dt>Model access</dt><dd>{plan.modelTiers.join(' + ')}</dd></div>
-            <div><dt>Products</dt><dd>Desktop + Web Agent</dd></div>
+            <div><dt>Workspace</dt><dd>Minaco Desktop</dd></div>
           </dl>
           <Link href={planHref(plan.key, cycle)} data-analytics-cta={`pricing_plan_${plan.key.toLowerCase()}`} data-analytics-location="pricing_table">Choose {plan.name}<ArrowRight size={16} /></Link>
         </article>;

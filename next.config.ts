@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { legacyMarketingPaths } from './src/lib/legacy-marketing-pages';
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
@@ -10,6 +11,10 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      ...legacyMarketingPaths.map((source) => ({
+        source,
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, follow' }],
+      })),
       {
         source: '/connect',
         headers: [
