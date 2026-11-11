@@ -1,3 +1,4 @@
+import { processPaymentAnalyticsOutbox } from './payment-analytics.js';
 import type { ServerConfig } from './config.js';
 import type { PersonalMainAgent } from './main-agent.js';
 import {
@@ -101,7 +102,11 @@ export class AgentTurnQueueWorker {
     if (!this.acceptingClaims || this.deliveringAnalytics) return;
     this.deliveringAnalytics = true;
     try {
-      await processTaskAnalyticsOutbox(this.config);
+      // Independent failures must not starve the other outbox.
+      const results = await Promise.allSettled([
+        processTaskAnalyticsOutbox(this.config), processPaymentAnalyticsOutbox(this.config),
+      ]);
+      for (const result of results) if (result.status === 'rejected') console.warn('[ga4] analytics outbox failed', result.reason instanceof Error ? result.reason.message : 'unknown');
     } catch (error) {
       console.warn(`[ga4] task outbox failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {

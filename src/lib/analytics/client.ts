@@ -83,7 +83,7 @@ export function setAnalyticsUser(
 }
 
 export function analyticsRoute(pathname: string) {
-  if (pathname === '/') return { routeName: 'workspace_preview', pagePath: '/' };
+  if (pathname === '/') return { routeName: 'landing', pagePath: '/' };
   if (pathname === '/download') return { routeName: 'desktop_download', pagePath: '/download' };
   if (pathname.startsWith('/desktop/register')) return { routeName: 'desktop_auth', pagePath: '/desktop/register' };
   if (pathname.startsWith('/desktop/sso')) return { routeName: 'desktop_auth_callback', pagePath: '/desktop/sso' };
@@ -123,6 +123,16 @@ export function analyticsRoute(pathname: string) {
   return { routeName: 'other', pagePath: pathname };
 }
 
+
+export function safeAnalyticsLocation(value: string) {
+  const url = new URL(value);
+  const safe = new URL(url.origin + url.pathname);
+  for (const [key, val] of url.searchParams) {
+    if (/^(utm_(source|medium|campaign|id|term|content|source_platform|creative_format|marketing_tactic)|gclid|gbraid|wbraid)$/.test(key)) safe.searchParams.set(key, val.slice(0, 200));
+  }
+  return safe.href;
+}
+
 export function buildPageViewParams(
   pathname: string,
   pageLocation: string,
@@ -136,10 +146,9 @@ export function buildPageViewParams(
         ? 'authentication'
         : 'product',
     route_name: route.routeName,
-    // GA4 derives first-user and session acquisition from campaign parameters in
-    // the full page location. Keep the query string here while retaining the
-    // normalized page_path below for low-cardinality route reporting.
-    page_location: pageLocation,
+    // Preserve campaign parameters, but never send auth codes, state or other
+    // arbitrary query values to the analytics vendor.
+    page_location: safeAnalyticsLocation(pageLocation),
     page_path: route.pagePath,
     page_title: pageTitle,
   };
@@ -259,11 +268,12 @@ export async function getAnalyticsSessionContext(): Promise<AnalyticsSessionCont
     getGtagValue('client_id'),
     getGtagValue('session_id'),
   ]);
+  const latestConsent = consentParameters(getConsentChoice());
   return {
-    clientId,
-    sessionId,
-    analyticsConsent: consent.analytics_storage,
-    adUserDataConsent: consent.ad_user_data,
+    clientId: latestConsent.analytics_storage === 'granted' ? clientId : null,
+    sessionId: latestConsent.analytics_storage === 'granted' ? sessionId : null,
+    analyticsConsent: latestConsent.analytics_storage,
+    adUserDataConsent: latestConsent.ad_user_data,
   };
 }
 

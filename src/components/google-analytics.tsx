@@ -6,12 +6,19 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   completePendingAuthFlow,
   GA4_MEASUREMENT_ID,
+  getAnalyticsSessionContext,
   setAnalyticsUser,
   trackEvent,
   trackPageView,
 } from '@/lib/analytics/client';
 
 import { getConsentChoice, subscribeConsent } from '@/lib/analytics/consent';
+
+declare global {
+  interface Window {
+    minacoAttribution?: {read: (userId: string) => unknown; bind: (userId: string) => void};
+  }
+}
 
 type AnalyticsIdentity = {
   userId: string;
@@ -33,28 +40,39 @@ export function GoogleAnalytics() {
   }, [pathname]);
 
   useEffect(() => {
-    if (!GA4_MEASUREMENT_ID || !isLoaded) return;
+    if (!isLoaded) return;
     if (!isSignedIn) {
       setAnalyticsUser(null);
       return;
     }
 
     const controller = new AbortController();
-    void fetch('/api/analytics/context', {
-      cache: 'no-store',
-      credentials: 'same-origin',
-      signal: controller.signal,
-    }).then(async (response) => {
-      if (!response.ok) return null;
-      return response.json() as Promise<AnalyticsIdentity>;
-    }).then((identity) => {
-      if (!identity || controller.signal.aborted) return;
-      setAnalyticsUser(identity.userId, {
-        account_role: identity.role.toLowerCase(),
-        plan_key: identity.planKey.toLowerCase(),
-      });
-      void completePendingAuthFlow(identity.registrationPending);
-    }).catch(() => null);
+    void (async () => {
+      for (let attempt = 0; attempt < 4 && !controller.signal.aborted; attempt++) {
+        try {
+          const response = await fetch('/api/analytics/context', {
+            cache:'no-store', credentials:'same-origin', signal:controller.signal,
+          });
+          if (!response.ok) throw new Error('Analytics identity not ready');
+          const identity = await response.json() as AnalyticsIdentity;
+          if (controller.signal.aborted) return;
+          setAnalyticsUser(identity.userId, {account_role:identity.role.toLowerCase(),plan_key:identity.planKey.toLowerCase()});
+          void completePendingAuthFlow(identity.registrationPending);
+          const analytics = await getAnalyticsSessionContext();
+          if (controller.signal.aborted) return;
+          const attribution = window.minacoAttribution?.read(identity.userId);
+          const saved = await fetch('/api/analytics/context', {
+            method:'POST', credentials:'same-origin', keepalive:true,
+            headers:{'Content-Type':'application/json'}, body:JSON.stringify({analytics,attribution}),
+          });
+          if (!saved.ok) throw new Error('Analytics binding not ready');
+          window.minacoAttribution?.bind(identity.userId);
+          return;
+        } catch {
+          if (attempt < 3 && !controller.signal.aborted) await new Promise(resolve => setTimeout(resolve, 250 * 4 ** attempt));
+        }
+      }
+    })();
 
     return () => controller.abort();
   }, [isLoaded, isSignedIn, pathname, consent]);

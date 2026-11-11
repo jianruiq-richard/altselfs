@@ -1,5 +1,5 @@
 import Script from 'next/script';
-import { CONSENT_BOOTSTRAP } from '@/lib/analytics/consent';
+import { googleTagInitialization } from '@/lib/analytics/google-tag';
 
 const configuredMeasurementId = process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID?.trim() || '';
 const measurementId = /^G-[A-Z0-9]+$/i.test(configuredMeasurementId)
@@ -8,29 +8,13 @@ const measurementId = /^G-[A-Z0-9]+$/i.test(configuredMeasurementId)
 const debugMode = process.env.NEXT_PUBLIC_GA4_DEBUG === 'true';
 
 export function GoogleAnalyticsScripts() {
-  if (!measurementId) return null;
+  if (!measurementId) return <script defer src="/minaco-analytics.js" />;
 
-  const initialization = `
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    window.gtag = window.gtag || gtag;
-    ${CONSENT_BOOTSTRAP}
-    gtag('consent', 'default', {
-      analytics_storage: minacoAnalyticsConsent,
-      ad_storage: minacoAdConsent,
-      ad_user_data: minacoAdConsent,
-      ad_personalization: 'denied'
-    });
-    gtag('js', new Date());
-    gtag('config', '${measurementId}', {
-      send_page_view: false,
-      allow_google_signals: false,
-      debug_mode: ${debugMode ? 'true' : 'false'}
-    });
-  `;
+  const initialization = googleTagInitialization(measurementId, debugMode);
 
   return (
     <>
+      <script defer src="/minaco-analytics.js" />
       <script
         id="minaco-ga4-init"
         dangerouslySetInnerHTML={{ __html: initialization }}

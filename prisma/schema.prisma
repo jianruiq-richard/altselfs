@@ -16,6 +16,8 @@ datasource db {
 // SQLite doesn't support enums, using String with constraints instead
 
 model User {
+  accountAttribution AccountAttribution?
+  conversionAnalyticsEvents ConversionAnalyticsEvent[]
   id        String   @id @default(cuid())
   clerkId   String   @unique
   email     String
@@ -557,4 +559,37 @@ model Message {
   chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
   @@map("messages")
+}
+
+
+model AccountAttribution {
+  userId String @id @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstTouch Json? @map("first_touch")
+  lastTouch Json? @map("last_touch")
+  analyticsContext Json @default("{}") @map("analytics_context")
+  contextUpdatedAt DateTime @default(now()) @map("context_updated_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  @@map("account_attribution")
+}
+
+model ConversionAnalyticsEvent {
+  eventId String @id @map("event_id")
+  userId String @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventName String @map("event_name")
+  context Json
+  params Json
+  attribution Json?
+  includeSession Boolean @default(false) @map("include_session")
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz
+  deliveryStatus String @map("delivery_status")
+  attempts Int @default(0)
+  availableAt DateTime @default(now()) @map("available_at") @db.Timestamptz
+  leaseUntil DateTime? @map("lease_until") @db.Timestamptz
+  leaseToken String? @map("lease_token")
+  lastError String? @map("last_error")
+  deliveredAt DateTime? @map("delivered_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@map("conversion_analytics_outbox")
 }

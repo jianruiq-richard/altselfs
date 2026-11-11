@@ -1,3 +1,4 @@
+import { enqueuePaymentAnalytics, resolvePaymentContext } from './payment-analytics.js';
 import Stripe from 'stripe';
 import type { PoolClient } from 'pg';
 import type { ServerConfig } from './config.js';
@@ -15,8 +16,6 @@ import {
 import {
   ga4ContextFromMetadata,
   ga4ContextMetadata,
-  normalizeGa4ClientContext,
-  sendGa4Event,
 } from './google-analytics.js';
 import { id, isRecord } from './util.js';
 
@@ -141,7 +140,7 @@ export async function createStripeCheckout(
     name: optionalString(input.name),
   });
   const requestId = optionalString(input.requestId) || id('stripe_checkout');
-  const analytics = normalizeGa4ClientContext(input.analytics);
+  const analytics = await resolvePaymentContext(config, investorId, input.analytics);
   const analyticsMetadata = ga4ContextMetadata(analytics);
   const common = {
     customer: customerId,
@@ -539,7 +538,7 @@ export async function changeStripePlan(
   const planKey = paidPlanKey(targetPlanKey);
   const priceId = priceIdForPlan(config, planKey, selectedBillingCycle);
   const requestId = optionalString(input.requestId) || id('upgrade');
-  const analyticsMetadata = ga4ContextMetadata(normalizeGa4ClientContext(input.analytics));
+  const analyticsMetadata = ga4ContextMetadata(await resolvePaymentContext(config, investorId, input.analytics));
   const configurationId = await ensureStripeUpgradePortalConfiguration(
     config,
     stripe,
@@ -687,6 +686,7 @@ export async function refundStripePayment(
     reversalId: refund.id,
     status: 'REFUNDED',
     refundedAmountCents: refund.amount,
+    analyticsRefund: {id: refund.id, occurredAt: refund.created},
     reason,
     metadata: {
       platformFault,
@@ -695,9 +695,6 @@ export async function refundStripePayment(
       usedSinceGrant: usage.usedSinceGrant,
     },
   });
-  if (!result.duplicate) {
-    await sendRefundAnalytics(config, payment, refund.amount);
-  }
   return { ...result, stripeRefundId: refund.id, usage };
 }
 
@@ -709,14 +706,14 @@ async function processStripeEvent(config: ServerConfig, stripe: Stripe, event: S
       const investorId = optionalString(session.metadata?.investorId);
       if (!investorId) return null;
       if (session.mode === 'payment' && session.payment_status === 'paid') {
-        await grantCreditPack(config, session);
+        await grantCreditPack(config, session, event.created);
       } else if (session.mode === 'subscription') {
         await syncCheckoutSubscription(config, session);
       }
       return investorId;
     }
     case 'invoice.paid': {
-      return grantSubscriptionInvoice(config, stripe, event.data.object as Stripe.Invoice);
+      return grantSubscriptionInvoice(config, stripe, event.data.object as Stripe.Invoice, event.created);
     }
     case 'invoice.payment_failed': {
       return markSubscriptionPastDue(config, event.data.object as Stripe.Invoice);
@@ -729,7 +726,7 @@ async function processStripeEvent(config: ServerConfig, stripe: Stripe, event: S
     }
     case 'refund.created':
     case 'charge.refunded': {
-      return handleExternalRefund(config, stripe, event.data.object);
+      return handleExternalRefund(config, stripe, event.data.object, event.created);
     }
     case 'charge.dispute.created': {
       return handleDispute(config, event.data.object as Stripe.Dispute);
@@ -739,13 +736,13 @@ async function processStripeEvent(config: ServerConfig, stripe: Stripe, event: S
   }
 }
 
-async function grantCreditPack(config: ServerConfig, session: Stripe.Checkout.Session) {
+async function grantCreditPack(config: ServerConfig, session: Stripe.Checkout.Session, occurredAt: number) {
   const investorId = requiredString(session.metadata?.investorId, 'metadata.investorId');
   const packKey = creditPackKey(session.metadata?.packKey);
   const pack = CREDIT_PACKS[packKey];
   const paymentIntentId = stripeId(session.payment_intent);
   const analyticsContext = ga4ContextFromMetadata(session.metadata);
-  const inserted = await runSerializableBillingTransaction(config, async (client) => {
+  await runSerializableBillingTransaction(config, async (client) => {
     const account = await ensureBillingAccount(config, client, investorId);
     const existing = await client.query(
       'select id from credit_payments where "providerCheckoutSessionId" = $1',
@@ -802,11 +799,10 @@ async function grantCreditPack(config: ServerConfig, session: Stripe.Checkout.Se
       ].join(' '),
       [account.id, nextBalance, pack.credits],
     );
-    return true;
-  });
-  if (inserted) {
+
     const amount = numberValue(session.amount_total) / 100;
-    await sendGa4Event(config, {
+    await enqueuePaymentAnalytics(client, `purchase:${paymentIntentId || session.id}`, {
+      timestampMicros: occurredAt * 1_000,
       name: 'purchase',
       userId: investorId,
       context: analyticsContext,
@@ -826,10 +822,12 @@ async function grantCreditPack(config: ServerConfig, session: Stripe.Checkout.Se
         }],
       },
     });
-  }
+    return true;
+  });
+
 }
 
-async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, invoice: Stripe.Invoice) {
+async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, invoice: Stripe.Invoice, occurredAt: number) {
   const subscriptionId = invoiceSubscriptionId(invoice);
   if (!subscriptionId) return null;
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
@@ -854,7 +852,7 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
   const period = subscriptionPeriod(subscription);
   const analyticsContext = ga4ContextFromMetadata(subscription.metadata);
 
-  const inserted = await runSerializableBillingTransaction(config, async (client) => {
+  await runSerializableBillingTransaction(config, async (client) => {
     const account = await ensureBillingAccount(config, client, investorId);
     const existing = await client.query(
       'select id from credit_payments where "providerInvoiceId" = $1',
@@ -930,16 +928,15 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
       );
     }
     await upsertSubscriptionFromStripe(client, investorId, subscription, planKey, period, invoice.id);
-    return true;
-  });
-  if (inserted) {
+
     const amount = numberValue(invoice.total) / 100;
     const purchaseType = isUpgrade
       ? 'subscription_upgrade'
       : billingReason === 'subscription_cycle'
         ? 'subscription_renewal'
         : 'subscription_new';
-    await sendGa4Event(config, {
+    await enqueuePaymentAnalytics(client, `purchase:${invoice.id}`, {
+      timestampMicros: occurredAt * 1_000,
       name: 'purchase',
       userId: investorId,
       context: analyticsContext,
@@ -961,7 +958,9 @@ async function grantSubscriptionInvoice(config: ServerConfig, stripe: Stripe, in
         }],
       },
     });
-  }
+    return true;
+  });
+
   if (isUpgrade) {
     await stripe.subscriptions.update(subscription.id, {
       metadata: {
@@ -1074,6 +1073,7 @@ async function handleExternalRefund(
   config: ServerConfig,
   stripe: Stripe,
   object: Stripe.Event.Data.Object,
+  occurredAt: number,
 ) {
   const record = object as unknown as Record<string, unknown>;
   const refundId = optionalString(record.id);
@@ -1083,23 +1083,19 @@ async function handleExternalRefund(
   const payment = await findPaymentByStripeSource(config, paymentIntentId, chargeId);
   if (!payment) return null;
   await revertStripeSubscriptionAfterRefund(config, stripe, payment);
-  const result = await reversePaymentCredits(config, {
+  await reversePaymentCredits(config, {
     payment,
     reversalId: refundId || `charge-refund:${chargeId}`,
     status: 'REFUNDED',
     refundedAmountCents: numberValue(record.amount_refunded ?? record.amount),
     reason: 'Stripe refund',
+    analyticsRefund: record.object === 'refund' && refundId ? {id:refundId, occurredAt} : undefined,
     metadata: { source: 'stripe_webhook' },
   });
-  // Stripe also emits charge.refunded for the same operation. The refund event is
-  // the canonical analytics source, so one refund is not reported twice.
-  if (!result.duplicate && record.object === 'refund') {
-    await sendRefundAnalytics(config, payment, numberValue(record.amount_refunded ?? record.amount));
-  }
   return payment.investorId;
 }
 
-async function sendRefundAnalytics(config: ServerConfig, payment: PaymentRow, refundedAmountCents: number) {
+async function enqueueRefundAnalytics(client: PoolClient, payment: PaymentRow, refundedAmountCents: number, refund: {id:string; occurredAt:number}) {
   const context = ga4ContextFromMetadata(payment.metadata);
   const transactionId = payment.providerInvoiceId || payment.providerPaymentIntentId || payment.id;
   const value = Math.max(0, refundedAmountCents) / 100;
@@ -1116,7 +1112,8 @@ async function sendRefundAnalytics(config: ServerConfig, payment: PaymentRow, re
         item_category: 'credit_pack',
         quantity: 1,
       };
-  await sendGa4Event(config, {
+  await enqueuePaymentAnalytics(client, `refund:${refund.id}`, {
+    timestampMicros: refund.occurredAt * 1_000,
     name: 'refund',
     userId: payment.investorId,
     context,
@@ -1214,6 +1211,7 @@ async function reversePaymentCredits(
     payment: PaymentRow;
     reversalId: string;
     status: 'REFUNDED' | 'DISPUTED';
+    analyticsRefund?: {id:string; occurredAt:number};
     refundedAmountCents: number;
     reason: string;
     metadata: Record<string, unknown>;
@@ -1230,6 +1228,9 @@ async function reversePaymentCredits(
     );
     const row = paymentResult.rows[0];
     if (!row) throw new StripeBillingError(404, 'PAYMENT_NOT_FOUND', 'Payment record not found.');
+    if (input.analyticsRefund && input.status === 'REFUNDED') {
+      await enqueueRefundAnalytics(client, input.payment, input.refundedAmountCents, input.analyticsRefund);
+    }
     if (row.status === 'REFUNDED' || row.status === 'DISPUTED') {
       const account = await ensureBillingAccount(config, client, input.payment.investorId);
       return { reversedCredits: 0, balanceCredits: account.balanceCredits, duplicate: true };
