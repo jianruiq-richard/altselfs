@@ -35,5 +35,14 @@ try {
  assert.equal(await page.evaluate(()=>window.minacoAttribution.read('user-one').last.gclid),'local-click');
  await page.evaluate(()=>{localStorage.setItem('minaco.consent.v1','denied');window.dispatchEvent(new Event('minaco:consent-changed'));});
  assert.equal(await page.evaluate(()=>localStorage.getItem('minaco.attribution.v1')),null);
+ for (const route of ['/agents', '/agents/claude-code', '/guides/agent-context-handoff']) {
+  await page.goto(origin + route + '?state=DO_NOT_SEND', {waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>Boolean(window.minacoAttribution));
+  const views=await page.evaluate(()=>Array.from(window.dataLayer||[],x=>Array.from(x)).filter(x=>x[0]==='event'&&x[1]==='page_view'));
+  assert.equal(views.length,1);
+  assert.equal(views[0][2].page_path,route);
+  assert.equal(views[0][2].route_name,route.slice(1).replaceAll('/','_'));
+  assert.ok(!JSON.stringify(views).includes('DO_NOT_SEND'));
+ }
  console.log('PASS: actual homepage + Chrome: one page view, download click, secret stripping, attribution persistence/account isolation and consent withdrawal. No vendor events sent.');
 } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

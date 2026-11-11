@@ -7,7 +7,15 @@ import puppeteer from 'puppeteer-core';
 const { renderLanding } = createRequire(import.meta.url)('../src/lib/landing/render.ts');
 const catalog = { generatedAt: '2026-11-11T00:00:00Z', plans: [], agents: [], models: [], release: null, sources: {} };
 const homeScript = await readFile(new URL('../public/landing/home.js', import.meta.url), 'utf8');
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
+  if (req.url.startsWith('/landing/') && !req.url.includes('..')) {
+    try {
+      const ext = req.url.split('.').pop();
+      res.setHeader('Content-Type', ({ css: 'text/css', js: 'text/javascript', html: 'text/html', woff2: 'font/woff2', svg: 'image/svg+xml' })[ext] || 'application/octet-stream');
+      res.end(await readFile(new URL('../public' + req.url, import.meta.url)));
+    } catch { res.writeHead(404).end(); }
+    return;
+  }
   if (req.url === '/landing/home.js') {
     res.setHeader('Content-Type', 'text/javascript');
     res.end(homeScript);
@@ -59,6 +67,12 @@ try {
         assert.equal(mobileLink.text, state === 'signed-in' ? 'My account' : 'Log in');
         assert.equal(mobileLink.href, state === 'signed-in' ? '/account' : '/sign-in?redirect_url=/account');
         await page.click('#menubtn');
+      }
+      if (width === 1440 && state === 'signed-out') {
+        await page.$eval('#workflow-frame', el => el.scrollIntoView());
+        await page.waitForFunction(() => typeof document.querySelector('#workflow-frame').contentWindow.renderDemo === 'function');
+        assert.ok(await page.evaluate(() => window.previewWorkflow(1, 40)));
+        await page.evaluate(() => scrollTo(0, 0));
       }
       if ([1440, 375].includes(width)) await page.screenshot({ path: `/tmp/minaco-account-${state}-${width}.png` });
     }

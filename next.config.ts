@@ -9,6 +9,16 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: projectRoot,
   },
+  async redirects() {
+    // Move only public marketing URLs. Account, API and authentication stay on their host.
+    const publicPaths = ['/', '/pricing', '/download', '/contact', '/terms', '/privacy', '/agents/:path*', '/guides/:path*'];
+    return ['altselfs.com', 'www.altselfs.com'].flatMap(host => publicPaths.map(source => ({
+      source,
+      has: [{ type: 'host' as const, value: host }],
+      destination: `https://minaco.ai${source}`,
+      permanent: true,
+    })));
+  },
   async headers() {
     return [
       ...legacyMarketingPaths.map((source) => ({

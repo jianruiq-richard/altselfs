@@ -57,7 +57,7 @@ export function PublicPricingPage() {
         <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandImage} />
         <span>Minaco</span>
       </Link>
-      <nav><Link href="/#agents">Agents</Link><Link href="/download">Download</Link></nav>
+      <nav><Link href="/agents">Agents</Link><Link href="/guides">Guides</Link><Link href="/download">Download</Link></nav>
       <PublicAccountActions signUpClassName={styles.navAction} />
     </header>
 

@@ -65,7 +65,9 @@
     var url = new URL(location.origin + location.pathname);
     var query = new URLSearchParams(location.search);
     fields.forEach(function (field) { if (query.has(field)) url.searchParams.set(field, query.get(field).slice(0, 200)); });
-    if (window.gtag) window.gtag('event', 'page_view', {page_location: url.href, page_path:'/', page_title:document.title, route_name:'landing', app_area:'marketing'});
+    var resourcePath = /^\/(agents|guides)(\/[a-z0-9-]+)?\/?$/.test(location.pathname) ? location.pathname : '/';
+    var routeName = resourcePath === '/' ? 'landing' : resourcePath.split('/').filter(Boolean).join('_');
+    if (window.gtag) window.gtag('event', 'page_view', {page_location: url.href, page_path:resourcePath, page_title:document.title, route_name:routeName, app_area:'marketing'});
     document.addEventListener('click', function (event) {
       var link = event.target instanceof Element && event.target.closest('a[href]');
       if (!link || !window.gtag) return;
