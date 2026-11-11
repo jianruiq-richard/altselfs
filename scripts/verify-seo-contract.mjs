@@ -15,6 +15,7 @@ const urls = sitemap().map(entry => entry.url);
 for (const route of marketingPaths) assert.ok(urls.includes('https://minaco.ai' + route));
 for (const route of legacyMarketingPaths) assert.ok(!urls.includes('https://minaco.ai' + route));
 const headers = await config.headers();
+assert.ok(headers.some(entry => entry.source === '/landing/workflow-demo.html' && entry.headers.some(header => header.key === 'X-Robots-Tag' && header.value.includes('noindex'))));
 for (const route of legacyMarketingPaths) assert.ok(headers.some(entry => entry.source === route && entry.headers.some(header => header.key === 'X-Robots-Tag' && header.value.includes('noindex'))));
 for (const redirect of await config.redirects()) {
   assert.ok(!/^\/(api|account|sign-in|sign-up|desktop|connect)(\/|$)/.test(redirect.source));

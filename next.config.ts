@@ -21,6 +21,11 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        // This document exists only to render the embedded product demo.
+        source: '/landing/workflow-demo.html',
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, follow' }],
+      },
       ...legacyMarketingPaths.map((source) => ({
         source,
         headers: [{ key: 'X-Robots-Tag', value: 'noindex, follow' }],
