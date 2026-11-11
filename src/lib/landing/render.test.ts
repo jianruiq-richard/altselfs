@@ -16,3 +16,11 @@ test('production actions use real routes and omit simulated account views',()=>{
  assert.ok(!page.includes('id="account-page"'));
  assert.ok(!page.includes('id="dialog"'));
 });
+
+test('standalone homepage includes exactly one configured Clarity script in head',()=>{
+ const page=renderLanding(catalog, 'abc123');
+ assert.equal(page.split('id="minaco-microsoft-clarity"').length-1, 1);
+ assert.ok(page.indexOf('id="minaco-microsoft-clarity"') < page.indexOf('</head>'));
+ assert.ok(page.includes("minaco.consent.v1"));
+ assert.ok(!renderLanding(catalog, '').includes('id="minaco-microsoft-clarity"'));
+});
