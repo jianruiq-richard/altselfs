@@ -1,3 +1,4 @@
+import { websiteIconLinks } from '../brand-icons';
 import type { MinacoProductCatalog } from '../minaco-product-catalog';
 import { landingTemplate } from '../landing/template';
 import { renderLandingAccount, type LandingAccount } from '../landing/account';
@@ -16,7 +17,7 @@ export function shell(path: string, title: string, description: string, content:
   const header = baseHeader.replaceAll('href="#home"', 'href="/"').replaceAll('href="#demo"', 'href="/#demo"').replaceAll('href="#pricing"', 'href="/pricing"')
     .replace('__SERVER_ACCOUNT_ACTION__', () => renderLandingAccount(account))
     .replace('__SERVER_MOBILE_ACCOUNT__', account ? '<a class="mobilelogin" href="/account">My account</a>' : '<a class="mobilelogin" href="/sign-in?redirect_url=/account">Log in</a>');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">${pageMetadata(path, title, description)}<link rel="icon" href="/brand/minaco/png/minaco-favicon-96.png"><link rel="stylesheet" href="/landing/marketing.css"><link rel="stylesheet" href="/landing/resources.css">${schema ? jsonLd(schema) : ''}${clarityScriptTag(process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID)}${landingGoogleTag()}</head><body class="resource-page">${iconSymbols}<a class="skip" href="#main">Skip to content</a>${header}<main id="main" class="resource-main">${content}</main>${footer}<script src="/landing/resources.js" defer></script></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">${pageMetadata(path, title, description)}${websiteIconLinks}<link rel="stylesheet" href="/landing/marketing.css"><link rel="stylesheet" href="/landing/resources.css">${schema ? jsonLd(schema) : ''}${clarityScriptTag(process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID)}${landingGoogleTag()}</head><body class="resource-page">${iconSymbols}<a class="skip" href="#main">Skip to content</a>${header}<main id="main" class="resource-main">${content}</main>${footer}<script src="/landing/resources.js" defer></script></body></html>`;
 }
 
 export function crumbs(items: { name: string; path?: string }[]) {

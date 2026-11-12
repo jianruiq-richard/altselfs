@@ -45,3 +45,11 @@ The wordmark uses a high-contrast serif stack:
 `Georgia, Times New Roman, serif`.
 
 For final production identity work, convert the wordmark text to outlines in a vector editor after choosing the exact brand typeface.
+
+## Search and browser icons
+
+`minaco-search-favicon.svg` is the dedicated web icon master. It preserves the existing star shapes and colors, enlarges the pair by 10%, and centers the combined bounds inside a circular crop. The background fills the complete square without a nested rounded tile.
+
+Run `node scripts/export-search-favicons.mjs` from the repository root to regenerate all favicon PNG sizes, `/favicon.ico`, Next.js `icon.png`, and web touch icons. Shared declarations live in `src/lib/brand-icons.ts`. Keep the canonical favicon URL stable so crawlers can refresh it.
+
+The original `minaco-favicon.svg` is retained for existing in-page brand marks. Desktop app icon masters and wordmarks are unchanged.
