@@ -16,8 +16,18 @@ export type PublicModelRate = {
   version: string;
   input: number;
   cachedInput: number;
-  cacheWrite?: number;
   output: number;
+  cacheWrite?: number;
+  cacheWrite1h?: number;
+  longContext?: {
+    threshold: number;
+    input: number;
+    cachedInput: number;
+    output: number;
+    cacheWrite?: number;
+    cacheWrite1h?: number;
+  };
+  pricingNote?: string;
   unit: 'credits' | 'microUSD';
 };
 
@@ -132,11 +142,30 @@ function publicModels(value: unknown): PublicModelRate[] {
       version: entry.version as string,
       input: entry.input as number,
       cachedInput: entry.cachedInput as number,
-      ...(typeof entry.cacheWrite === 'number' && Number.isFinite(entry.cacheWrite) && entry.cacheWrite >= 0 ? { cacheWrite: entry.cacheWrite } : {}),
       output: entry.output as number,
+      ...cachePrices(entry),
+      ...(isRecord(entry.longContext) &&
+        typeof entry.longContext.threshold === 'number' && entry.longContext.threshold > 0 &&
+        [entry.longContext.input, entry.longContext.cachedInput, entry.longContext.output].every(
+          (n) => typeof n === 'number' && Number.isFinite(n) && n >= 0,
+        ) ? { longContext: {
+          threshold: entry.longContext.threshold,
+          input: entry.longContext.input as number,
+          cachedInput: entry.longContext.cachedInput as number,
+          output: entry.longContext.output as number,
+          ...cachePrices(entry.longContext),
+        } } : {}),
+      ...(typeof entry.pricingNote === 'string' ? { pricingNote: entry.pricingNote } : {}),
       unit,
     }];
   });
+}
+
+function cachePrices(entry: Record<string, unknown>) {
+  return {
+    ...(typeof entry.cacheWrite === 'number' && Number.isFinite(entry.cacheWrite) && entry.cacheWrite >= 0 ? { cacheWrite: entry.cacheWrite } : {}),
+    ...(typeof entry.cacheWrite1h === 'number' && Number.isFinite(entry.cacheWrite1h) && entry.cacheWrite1h >= 0 ? { cacheWrite1h: entry.cacheWrite1h } : {}),
+  };
 }
 
 function publicRelease(value: unknown): PublicRelease | null {

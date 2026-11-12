@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import type { MinacoProductCatalog, PublicModelRate } from '@/lib/minaco-product-catalog';
+import { modelRateRows, cacheWriteNote } from '@/lib/model-rate-display';
 import styles from './minaco-account-page.module.css';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { accountView, accountHref, accountSignInHref, type AccountView } from '@/lib/account-navigation';
@@ -322,7 +323,7 @@ function RatesView(props: { agents: Array<[string, string]>; agent: string; mode
     <div className={styles.rateTools}><label><Search size={16} /><input value={props.query} onChange={(event) => props.onQuery(event.target.value)} placeholder="Search models" /></label><select value={props.agent} onChange={(event) => props.onAgent(event.target.value)}><option value="all">All Agents</option>{props.agents.map(([id, name]) => <option value={id} key={id}>{name}</option>)}</select></div>
     <div className={styles.rateTable}>
       <div><span>Model</span><span>Input</span><span>Cached</span><span>Output</span></div>
-      {props.visible.map((model) => <div key={`${model.provider}:${model.model}`}><span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small></span><span>{formatRate(model.input)}</span><span>{formatRate(model.cachedInput)}</span><span>{formatRate(model.output)}</span></div>)}
+      {props.visible.flatMap(modelRateRows).map((model) => <div key={`${model.provider}:${model.model}:${model.label}`}><span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small>{model.pricingNote ? <small>{model.pricingNote}</small> : null}{cacheWriteNote(model) ? <small>{cacheWriteNote(model)}</small> : null}</span><span>{formatRate(model.input)}</span><span>{formatRate(model.cachedInput)}</span><span>{formatRate(model.output)}</span></div>)}
       {!props.visible.length ? <div className={styles.empty}>No current models match this filter.</div> : null}
     </div>
     <Pagination count={props.models.length} page={props.page} pageCount={props.pageCount} pageSize={ratePageSize} onPage={props.onPage} />

@@ -7,6 +7,7 @@ import { DiscordLogo } from '@/components/discord-logo';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import { productBrand } from '@/lib/brand';
 import type { MinacoProductCatalog, PublicAgent, PublicModelRate } from '@/lib/minaco-product-catalog';
+import { modelRateRows, cacheWriteNote } from '@/lib/model-rate-display';
 import styles from './minaco-desktop-landing-page.module.css';
 
 type Props = { catalog: MinacoProductCatalog };
@@ -286,7 +287,7 @@ function StageFragment({ view, release, agent }: { view: string; release?: strin
 function ModelRateTable({ models }: { models: PublicModelRate[] }) {
   return <div className={styles.rateTable} role="table" aria-label="Minaco model credit rates">
     <div className={styles.rateHeader} role="row"><span>Model</span><span>Input</span><span>Cached</span><span>Output</span></div>
-    {models.map((model) => <div key={`${model.provider}:${model.model}`} className={styles.rateRow} role="row"><span><strong>{model.label}</strong><small>{model.engines.join(', ') || model.provider}</small></span><span>{formatRate(model.input)}</span><span>{formatRate(model.cachedInput)}</span><span>{formatRate(model.output)}</span></div>)}
+    {models.flatMap(modelRateRows).map((model) => <div key={`${model.provider}:${model.model}:${model.label}`} className={styles.rateRow} role="row"><span><strong>{model.label}</strong><small>{model.engines.join(', ') || model.provider}</small>{model.pricingNote ? <small>{model.pricingNote}</small> : null}{cacheWriteNote(model) ? <small>{cacheWriteNote(model)}</small> : null}</span><span>{formatRate(model.input)}</span><span>{formatRate(model.cachedInput)}</span><span>{formatRate(model.output)}</span></div>)}
   </div>;
 }
 

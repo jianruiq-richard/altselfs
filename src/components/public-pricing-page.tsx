@@ -12,6 +12,7 @@ import {
   getPlanBillingPriceUsd,
 } from '@/lib/billing-plans';
 import type { MinacoProductCatalog, PublicModelRate } from '@/lib/minaco-product-catalog';
+import { modelRateRows, cacheWriteNote } from '@/lib/model-rate-display';
 import styles from './public-pricing-page.module.css';
 
 import { planHref } from '@/lib/account-navigation';
@@ -125,8 +126,12 @@ export function PublicPricingPage() {
 }
 
 function ModelRow({ model }: { model: PublicModelRate }) {
+  return <>{modelRateRows(model).map((row) => <ModelRateRow key={row.label} model={row} />)}</>;
+}
+
+function ModelRateRow({ model }: { model: PublicModelRate }) {
   return <div className={styles.rateRow}>
-    <span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small></span>
+    <span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small>{model.pricingNote ? <small>{model.pricingNote}</small> : null}{cacheWriteNote(model) ? <small>{cacheWriteNote(model)}</small> : null}</span>
     <span data-label="Input">{formatRate(model.input)}</span>
     <span data-label="Cached">{formatRate(model.cachedInput)}</span>
     <span data-label="Output">{formatRate(model.output)}</span>
