@@ -13,7 +13,9 @@ test('commercial catalog keeps plans local and follows Desktop authorities for m
     });
     if (url.endsWith('/v1/public/models')) return Response.json([{
       provider: 'minaco-codex', model: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', engines: ['codex'],
-      version: 'rate-v1', input: 125, cachedInput: 6.25, output: 625, unit: 'credits',
+      version: 'rate-v1', input: 125, cachedInput: 6.25, output: 625, cacheWrite: 156.25,
+      cacheWrite1h: 250, longContext: { threshold: 100_000, input: 250, cachedInput: 12.5, output: 1_250, cacheWrite: 312.5, cacheWrite1h: 500 },
+      pricingNote: 'Prompt total selects the tier.', unit: 'credits',
     }]);
     if (url.endsWith('/releases/latest.json')) return Response.json({
       version: '0.12.62', releasedAt: '2026-11-03T00:00:00.000Z', assets: [{
@@ -26,6 +28,10 @@ test('commercial catalog keeps plans local and follows Desktop authorities for m
   const catalog = await loadMinacoProductCatalog(fetcher, 'https://desktop-api.minaco.ai');
   assert.equal(catalog.plans.find((plan) => plan.key === 'SCALE')?.name, 'Ultra');
   assert.equal(catalog.models[0]?.input, 125);
+  assert.equal(catalog.models[0]?.cacheWrite, 156.25);
+  assert.equal(catalog.models[0]?.cacheWrite1h, 250);
+  assert.equal(catalog.models[0]?.longContext?.cacheWrite, 312.5);
+  assert.equal(catalog.models[0]?.pricingNote, 'Prompt total selects the tier.');
   assert.equal(catalog.release?.version, '0.12.62');
   assert.deepEqual(catalog.agents.map((agent) => agent.id), ['codex']);
   assert.deepEqual(calls, [

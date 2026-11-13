@@ -21,7 +21,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MinacoBrandMark } from '@/components/minaco-brand-mark';
 import type { MinacoProductCatalog, PublicModelRate } from '@/lib/minaco-product-catalog';
-import { modelRateRows, cacheWriteNote } from '@/lib/model-rate-display';
+import { cacheWriteRateCaption, formatCacheWriteRate, modelRateRows } from '@/lib/model-rate-display';
 import styles from './minaco-account-page.module.css';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { accountView, accountHref, accountSignInHref, type AccountView } from '@/lib/account-navigation';
@@ -214,7 +214,7 @@ export function MinacoAccountPage() {
     if (rateAgent !== 'all' && !model.engines.includes(rateAgent)) return false;
     const query = rateQuery.trim().toLowerCase();
     return !query || `${model.label} ${model.provider} ${model.model}`.toLowerCase().includes(query);
-  }), [catalog, rateAgent, rateQuery]);
+  }).flatMap(modelRateRows), [catalog, rateAgent, rateQuery]);
   const ratePageCount = Math.max(1, Math.ceil(models.length / ratePageSize));
   const safeRatePage = Math.min(ratePage, ratePageCount - 1);
   const visibleModels = models.slice(safeRatePage * ratePageSize, (safeRatePage + 1) * ratePageSize);
@@ -322,14 +322,16 @@ function RatesView(props: { agents: Array<[string, string]>; agent: string; mode
     <div className={styles.sectionIntro}><div><h2>Current model rates</h2><p>Compare current model prices. Past turns keep the rates used when they were billed.</p></div><Link className={styles.secondary} href="/pricing">Compare plans <ArrowUpRight size={14} /></Link></div>
     <div className={styles.rateTools}><label><Search size={16} /><input value={props.query} onChange={(event) => props.onQuery(event.target.value)} placeholder="Search models" /></label><select value={props.agent} onChange={(event) => props.onAgent(event.target.value)}><option value="all">All Agents</option>{props.agents.map(([id, name]) => <option value={id} key={id}>{name}</option>)}</select></div>
     <div className={styles.rateTable}>
-      <div><span>Model</span><span>Input</span><span>Cached</span><span>Output</span></div>
-      {props.visible.flatMap(modelRateRows).map((model) => <div key={`${model.provider}:${model.model}:${model.label}`}><span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small>{model.pricingNote ? <small>{model.pricingNote}</small> : null}{cacheWriteNote(model) ? <small>{cacheWriteNote(model)}</small> : null}</span><span>{formatRate(model.input)}</span><span>{formatRate(model.cachedInput)}</span><span>{formatRate(model.output)}</span></div>)}
+      <div><span>Model</span><span>Input</span><span>Cached</span><span>Cache write</span><span>Output</span></div>
+      {props.visible.map((model) => <div key={`${model.provider}:${model.model}:${model.label}`}><span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small>{model.pricingNote ? <small>{model.pricingNote}</small> : null}</span><RateValue value={formatRate(model.input)} /><RateValue value={formatRate(model.cachedInput)} /><RateValue value={formatCacheWriteRate(model)} note={cacheWriteRateCaption(model)} /><RateValue value={formatRate(model.output)} /></div>)}
       {!props.visible.length ? <div className={styles.empty}>No current models match this filter.</div> : null}
     </div>
     <Pagination count={props.models.length} page={props.page} pageCount={props.pageCount} pageSize={ratePageSize} onPage={props.onPage} />
     <p className={styles.rateNote}>Credits per 1 million tokens. A completed turn can include more than one model component.</p>
   </div>;
 }
+
+function RateValue({ value, note }: { value: string; note?: string }) { return <span><span>{value}</span>{note ? <small>{note}</small> : null}</span>; }
 
 function Pagination({ count, page, pageCount, pageSize, onPage }: { count: number; page: number; pageCount: number; pageSize: number; onPage: (page: number) => void }) {
   return <div className={styles.pagination}><span>{count ? `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, count)} of ${count}` : '0 items'}</span><div><button onClick={() => onPage(Math.max(0, page - 1))} disabled={page === 0}><ChevronLeft size={17} /></button><button onClick={() => onPage(Math.min(pageCount - 1, page + 1))} disabled={page >= pageCount - 1}><ChevronRight size={17} /></button></div></div>;

@@ -12,7 +12,7 @@ import {
   getPlanBillingPriceUsd,
 } from '@/lib/billing-plans';
 import type { MinacoProductCatalog, PublicModelRate } from '@/lib/minaco-product-catalog';
-import { modelRateRows, cacheWriteNote } from '@/lib/model-rate-display';
+import { cacheWriteRateCaption, formatCacheWriteRate, modelRateRows } from '@/lib/model-rate-display';
 import styles from './public-pricing-page.module.css';
 
 import { planHref } from '@/lib/account-navigation';
@@ -45,7 +45,7 @@ export function PublicPricingPage() {
     return distinctModels(catalog?.models || []).filter((model) => {
       if (agent !== 'all' && !model.engines.includes(agent)) return false;
       return !normalized || `${model.label} ${model.provider} ${model.model}`.toLowerCase().includes(normalized);
-    });
+    }).flatMap(modelRateRows);
   }, [agent, catalog, query]);
 
   const pageCount = Math.max(1, Math.ceil(models.length / pageSize));
@@ -100,14 +100,14 @@ export function PublicPricingPage() {
         <p>These live rates come from the Desktop API. Figures are Minaco Credits per one million tokens.</p>
         <Link href="/download"><Download size={17} /> Download Minaco</Link>
       </div>
-      <div className={styles.rateBrowser} data-ui>
+      <div className={styles.rateBrowser}>
         <div className={styles.rateTools}>
           <label><Search size={16} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Search models" aria-label="Search models" /></label>
           <select value={agent} onChange={(event) => { setAgent(event.target.value); setPage(0); }} aria-label="Filter by Agent"><option value="all">All Agents</option>{agents.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
         </div>
         {visibleModels.length ? <div className={styles.rateRows}>
-          <div className={styles.rateHeader}><span>Model</span><span>Input</span><span>Cached</span><span>Output</span></div>
-          {visibleModels.map((model) => <ModelRow key={`${model.provider}:${model.model}`} model={model} />)}
+          <div className={styles.rateHeader}><span>Model</span><span>Input</span><span>Cached</span><span>Cache write</span><span>Output</span></div>
+          {visibleModels.map((model) => <ModelRateRow key={`${model.provider}:${model.model}:${model.label}`} model={model} />)}
         </div> : <p className={styles.emptyRates}>{catalog ? 'No models match this filter.' : 'Live model rates are temporarily unavailable.'}</p>}
         <div className={styles.pagination}>
           <span>{models.length ? `${safePage * pageSize + 1}–${Math.min((safePage + 1) * pageSize, models.length)} of ${models.length}` : '0 models'}</span>
@@ -125,17 +125,18 @@ export function PublicPricingPage() {
   </main>;
 }
 
-function ModelRow({ model }: { model: PublicModelRate }) {
-  return <>{modelRateRows(model).map((row) => <ModelRateRow key={row.label} model={row} />)}</>;
-}
-
 function ModelRateRow({ model }: { model: PublicModelRate }) {
   return <div className={styles.rateRow}>
-    <span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small>{model.pricingNote ? <small>{model.pricingNote}</small> : null}{cacheWriteNote(model) ? <small>{cacheWriteNote(model)}</small> : null}</span>
-    <span data-label="Input">{formatRate(model.input)}</span>
-    <span data-label="Cached">{formatRate(model.cachedInput)}</span>
-    <span data-label="Output">{formatRate(model.output)}</span>
+    <span><strong>{model.label}</strong><small>{model.engines.join(', ') || 'Minaco'}</small>{model.pricingNote ? <small>{model.pricingNote}</small> : null}</span>
+    <RateValue label="Input" value={formatRate(model.input)} />
+    <RateValue label="Cached" value={formatRate(model.cachedInput)} />
+    <RateValue label="Cache write" value={formatCacheWriteRate(model)} note={cacheWriteRateCaption(model)} />
+    <RateValue label="Output" value={formatRate(model.output)} />
   </div>;
+}
+
+function RateValue({ label, value, note }: { label: string; value: string; note?: string }) {
+  return <span data-label={label}><span>{value}</span>{note ? <small>{note}</small> : null}</span>;
 }
 
 function distinctModels(models: PublicModelRate[]) {
