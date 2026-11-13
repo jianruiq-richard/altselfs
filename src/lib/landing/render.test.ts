@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { renderLanding } from './render';
 import type { MinacoProductCatalog } from '../minaco-product-catalog';
-const catalog: MinacoProductCatalog = {generatedAt:'2026-11-10T00:00:00Z',plans:[],agents:[],models:[{provider:'test',model:'test',label:'</script><script>alert(1)</script>',engines:[],version:'test',input:1000,cachedInput:500,output:2000,unit:'microUSD'}],release:null,sources:{plans:'minaco-billing',agentsAndModels:'unavailable',release:'unavailable'}};
+const catalog: MinacoProductCatalog = {generatedAt:'2026-11-10T00:00:00Z',plans:[],agents:[],models:[{provider:'test',model:'test',label:'</script><script>alert(1)</script>',engines:[],version:'test',input:1000,cachedInput:500,cacheWrite:1250,cacheWrite1h:2000,output:2000,unit:'microUSD'}],release:null,sources:{plans:'minaco-billing',agentsAndModels:'unavailable',release:'unavailable'}};
 test('server renders rates safely and normalizes microUSD to credits',()=>{
  const page=renderLanding(catalog);
  assert.ok(page.includes('&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;'));
  assert.ok(!page.includes('</script><script>alert(1)</script>'));
- assert.ok(page.includes('"input":1,"cachedInput":0.5,"output":2'));
+ for (const field of ['"input":1', '"cachedInput":0.5', '"cacheWrite":1.25', '"cacheWrite1h":2', '"output":2']) assert.ok(page.includes(field), field);
+ assert.match(page, /<th scope="col">Cached input<\/th><th scope="col">Cache write<small>5 min \/ 1 hour<\/small><\/th><th scope="col">Output<\/th>/);
+ assert.match(page, /<td>0.5<\/td><td>1.25 \/ 2<\/td><td>2<\/td>/);
  assert.ok(!page.includes('__CATALOG_JSON__'));
 });
 test('production actions use real routes and omit simulated account views',()=>{

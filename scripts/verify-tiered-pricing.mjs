@@ -55,11 +55,15 @@ try {
     await page.setViewport({ width, height: 1000 });
     for (const [name, path] of [['pricing', '/pricing'], ['account', '/account?view=rates'], ['home', '/'], ['model', '/model']]) {
       await page.goto(origin + path, { waitUntil: 'networkidle0' });
-      await page.waitForFunction(() => document.body.innerText.includes('> 100,000 prompt tokens'));
+      await page.waitForFunction(() => document.body.innerText.includes('prompt > 100,000'));
       const text = await page.evaluate(() => document.body.innerText);
-      assert(text.includes('≤ 100,000 prompt tokens'), name);
+      assert(text.includes('prompt ≤ 100,000'), name);
       assert(text.includes('1,250') && text.includes('2,000'), name + ' long cache writes');
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), name + ' overflows');
+      if (name === 'home') {
+        assert.equal(await page.$$eval('.model-rate-table th', cells => cells.map(cell => cell.textContent.trim()).join('|')), 'Model|Agent|Input|Cached input|Cache write5 min / 1 hour|Output');
+        assert.equal(await page.$$eval('.model-rate-table tbody tr:first-child td', cells => cells.length), 6);
+      }
       if (name === 'model') {
         for (const [tokens, expected] of [[100000, '21 Credits'], [100001, '105.001 Credits']]) {
           await page.$eval('input[name="input"]', (el, v) => { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, tokens);
