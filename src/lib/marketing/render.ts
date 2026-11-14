@@ -41,15 +41,25 @@ export function closing(title = 'Bring your next project.') {
 
 export function renderAgentDirectory(catalog: MinacoProductCatalog, account: LandingAccount | null = null) {
   const path = '/agents';
-  const rows = catalog.agents.map(agent => {
+  const renderAgent = (agent: MinacoProductCatalog['agents'][number], featured = false) => {
     const feature = featuredAgents.find(a => a.id === agent.id);
     const funded = catalog.models.filter(m => m.engines.includes(agent.id));
-    return `<div class="resource-agent-directory-row"><div><h2>${feature ? `<a href="/agents/${feature.slug}">${e(agent.name)} ${arrow}</a>` : e(agent.name)}</h2><p>${e(agent.vendor)}</p></div><div><span>${funded.length ? 'Minaco Credits available' : 'No funded model currently listed'}</span><small>${agent.status === 'experimental' ? 'Experimental integration' : 'Available integration'}</small></div><div>${feature ? `<a class="text-link" href="/agents/${feature.slug}">Explore ${e(agent.name)} ${arrow}</a>` : '<a class="text-link" href="/download">Set up in Minaco '+arrow+'</a>'}</div></div>`;
-  }).join('');
+    const description = feature?.overview || agent.description;
+    const availability = funded.length ? 'Minaco Credits available' : 'Use a supported provider account';
+    const status = agent.status === 'experimental' ? '<span class="agent-status">Early access</span>' : '';
+    const href = feature ? `/agents/${feature.slug}` : '/download';
+    const cta = feature ? `See how ${e(agent.name)} works` : 'Set up in Minaco';
+    return `<article class="${featured ? 'agent-spotlight' : 'agent-choice'}"><div class="agent-choice-heading"><div><span>${e(agent.vendor)}</span><h3><a href="${href}">${e(agent.name)}</a></h3></div>${status}</div><p>${e(description)}</p><div class="agent-choice-footer"><span>${availability}</span><a class="text-link" href="${href}">${cta} ${arrow}</a></div></article>`;
+  };
+  const primaryIds = new Set(['codex', 'claude']);
+  const primaryAgents = catalog.agents.filter(agent => primaryIds.has(agent.id));
+  const additionalAgents = catalog.agents.filter(agent => !primaryIds.has(agent.id));
+  const primary = primaryAgents.map(agent => renderAgent(agent, true)).join('');
+  const additional = additionalAgents.map(agent => renderAgent(agent)).join('');
   return shell(path, 'Native AI Agents for Mac | Minaco', 'Explore the native AI agents published for Minaco. See funded model availability, learn how to get started, and continue your work between agents.', `
     <section class="resource-hero wrap">${crumbs([{ name: 'Agents' }])}<h1>Your agents.<br>One workspace.</h1><p>Choose the agent for the work in front of you. Keep your project and conversation together when it is time to switch.</p><div class="actions"><a class="btn primary" href="/download">Download for Mac ${arrow}</a><a class="text-link" href="/guides/agent-context-handoff">How context handoff works ${arrow}</a></div></section>
     <section class="resource-feature wrap"><div><h2>Native agents.<br>Shared momentum.</h2><p>Each agent keeps its own execution loop, tools and account boundaries. Minaco brings the workspace and visible working context together.</p><a class="text-link" href="/guides/claude-code-and-codex">Try Claude Code with Codex ${arrow}</a></div><figure><img src="/landing/workflow-preview.webp" alt="Minaco conversation interface with a project workflow and agent selection" width="1200" height="760"><figcaption>An illustrative workflow in the Minaco interface.</figcaption></figure></section>
-    <section class="resource-agent-directory wrap" aria-labelledby="catalog-heading"><div class="resource-section-head"><h2 id="catalog-heading">Explore the catalog.</h2><p>Published ${e(catalog.generatedAt.slice(0, 10))}. Installation and account setup happen in the app.</p></div>${rows || '<p>The catalog is temporarily unavailable. Open Minaco to check current agent availability.</p>'}<p class="resource-note">Published support and funded model access are different. Availability depends on the agent, model, account mode and plan. Experimental integrations may have limitations. <a href="/guides/one-subscription-multiple-agents">Understand your subscription.</a></p></section>
+    <section class="resource-agent-directory wrap" aria-labelledby="agents-heading"><div class="resource-section-head"><div><h2 id="agents-heading">Choose the right agent<br>for the job.</h2><p>Start with Codex or Claude Code, then bring in another agent when the work calls for a different approach. Your project and working context stay together in Minaco.</p></div></div>${primary ? `<div class="agent-spotlights">${primary}</div>` : ''}${additional ? `<div class="agent-more"><div class="agent-more-heading"><h2>More agents in Minaco.</h2><p>Explore additional native agents and choose the account mode that fits your workflow.</p></div><div class="agent-choice-list">${additional}</div></div>` : ''}${!primary && !additional ? '<p class="agent-directory-empty">Agent availability is temporarily unavailable. Open Minaco to see the agents available for your account.</p>' : ''}<p class="resource-note">Agent, model, and account availability can vary by plan. Early-access integrations may have capability limitations. <a href="/guides/one-subscription-multiple-agents">See how accounts and Minaco Credits work.</a></p></section>
     ${readingLinks(['agent-context-handoff', 'one-subscription-multiple-agents'])}${closing()}`, account,
     [breadcrumbs([{ name: 'Agents', path }]), { '@context': 'https://schema.org', '@type': 'ItemList', name: 'Minaco native agent catalog', itemListElement: catalog.agents.map((agent, i) => ({ '@type': 'ListItem', position: i + 1, name: agent.name })) }]);
 }
