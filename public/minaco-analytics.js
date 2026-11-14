@@ -2,6 +2,7 @@
 (function () {
   if (window.minacoAttribution) return;
   var key = 'minaco.attribution.v1';
+  var posthogKey = 'minaco.posthog.distinct-id.v1';
   var maxAge = 90 * 86400000;
   var fields = ['gclid', 'gbraid', 'wbraid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_id', 'utm_term', 'utm_content', 'utm_source_platform', 'utm_creative_format', 'utm_marketing_tactic'];
   var landing = document.currentScript && document.currentScript.dataset.landing === 'true';
@@ -24,8 +25,26 @@
     memory = value;
     try { if (value) localStorage.setItem(key, JSON.stringify(value)); else localStorage.removeItem(key); } catch (_) {}
   }
+  function clearPosthogId() {
+    try { localStorage.removeItem(posthogKey); } catch (_) {}
+    document.cookie = 'minaco_ph_id=; Path=/; Max-Age=0; SameSite=Lax; Secure';
+  }
+  function readPosthogId() {
+    if (!allowed()) return null;
+    var value = null;
+    try { value = localStorage.getItem(posthogKey); } catch (_) {}
+    if (!/^[a-zA-Z0-9._-]{1,160}$/.test(value || '')) {
+      value = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : 'anon-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+      try { localStorage.setItem(posthogKey, value); } catch (_) {}
+    }
+    document.cookie = 'minaco_ph_id=' + encodeURIComponent(value) + '; Path=/; Max-Age=34560000; SameSite=Lax; Secure';
+    return value;
+  }
   function capture() {
-    if (!allowed()) { write(null); return; }
+    if (!allowed()) { write(null); clearPosthogId(); return; }
+    readPosthogId();
     var params = new URLSearchParams(location.search);
     var touch = {};
     fields.forEach(function (field) {
@@ -55,6 +74,7 @@
       }
     }
   };
+  window.minacoPosthog = { read: readPosthogId };
   capture();
   window.addEventListener('minaco:consent-changed', capture);
   window.addEventListener('storage', function (event) {

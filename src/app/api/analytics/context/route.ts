@@ -1,6 +1,7 @@
 import { saveAccountAnalytics } from '@/lib/analytics/attribution';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
+import { identifyPostHogUser } from '@/lib/analytics/posthog';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,5 +42,9 @@ export async function POST(request: Request) {
   let body: unknown;
   try { body = JSON.parse(text); } catch { return Response.json({error:'Invalid JSON'}, {status:400}); }
   await saveAccountAnalytics(prisma, user.id, body);
+  const posthogDistinctId = body && typeof body === 'object'
+    ? (body as Record<string, unknown>).posthogDistinctId
+    : null;
+  await identifyPostHogUser(user.id, posthogDistinctId);
   return Response.json({saved:true}, {headers:{'Cache-Control':'no-store'}});
 }

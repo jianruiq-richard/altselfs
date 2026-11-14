@@ -11,7 +11,8 @@ function browser(url: string, storage = new Map<string,string>()) {
   const callbacks: Record<string, () => void> = {};
   const events: unknown[][] = [];
   const win: any = {gtag: (...args: unknown[]) => events.push(args), addEventListener:(name:string, cb:()=>void) => {callbacks[name]=cb;}};
-  const context = {window:win, document:{currentScript:{dataset:{landing:'true'}}, title:'Minaco', addEventListener:()=>{}}, location:new URL(url), URL, URLSearchParams,
+  const document = {currentScript:{dataset:{landing:'true'}}, title:'Minaco', cookie:'', addEventListener:()=>{}};
+  const context = {window:win, document, location:new URL(url), URL, URLSearchParams,
     localStorage:{getItem:(key:string)=>storage.get(key)||null,setItem:(key:string,v:string)=>storage.set(key,v),removeItem:(key:string)=>storage.delete(key)}, Date};
   runInNewContext(source, context);
   return {win, events, callbacks, storage, context};
@@ -35,8 +36,12 @@ test('first-party sources survive navigation but cannot be rebound to another ac
 
 test('consent withdrawal erases browser attribution and blocks further capture', () => {
   const ctx=browser('https://minaco.ai/?gclid=test');
+  assert.match(ctx.context.document.cookie,/^minaco_ph_id=/);
+  assert.ok(ctx.storage.has('minaco.posthog.distinct-id.v1'));
   ctx.storage.set('minaco.consent.v1','denied'); ctx.callbacks['minaco:consent-changed']();
   assert.equal(ctx.storage.has('minaco.attribution.v1'),false);
+  assert.equal(ctx.storage.has('minaco.posthog.distinct-id.v1'),false);
+  assert.match(ctx.context.document.cookie,/Max-Age=0/);
   assert.equal(ctx.win.minacoAttribution.read('u1'),null);
   assert.equal(browser('https://minaco.ai/?gclid=test',new Map([['minaco.consent.v1','analytics']])).storage.has('minaco.attribution.v1'),false);
 });

@@ -31,6 +31,34 @@ Do not expose `GA4_API_SECRET` to the browser. With no Measurement ID, analytics
 | Activation | `message_send_attempt`, `message_sent`, `agent_response_complete`, `activation_complete`, `agent_run_error` | `is_first_message`, `prompt_source`, `latency_ms`, `model_tier`, `error_stage`, `error_code` |
 | Monetization | `view_item_list`, `select_item`, `begin_checkout`, `checkout_error`, `purchase`, `refund` | `plan_key`, `billing_cycle`, `purchase_type`, `currency`, `value`, `transaction_id`, `items` |
 
+## Desktop download funnel in PostHog
+
+Configure the website deployment with the same PostHog project used by the
+Desktop application:
+
+```dotenv
+POSTHOG_PROJECT_KEY=phc_your_public_project_token
+POSTHOG_HOST=https://us.i.posthog.com
+```
+
+The main download route records `desktop_downloaded` only when an analytics-
+consented browser has a first-party anonymous ID. On a later sign-in in that
+browser, the authenticated analytics-context route sends PostHog `$identify`
+to merge the anonymous download with the opaque Minaco account ID. The shipped
+Desktop already identifies with that same account ID and emits
+`account_session_started` and `message_send_accepted`.
+
+Build the PostHog funnel as:
+
+1. `desktop_downloaded`
+2. `account_session_started`
+3. `message_send_accepted`
+
+Direct CDN requests, monitoring without the consented cookie, rejected
+analytics consent, another browser, and cleared browser storage remain
+anonymous or uncounted. No IP address, email, Clerk ID, download URL, prompt,
+conversation, or file data is sent to PostHog.
+
 `purchase` and `refund` are emitted by the billing service after Stripe/ledger processing. This makes them authoritative and avoids counting users who merely reached a success URL. Transaction IDs are used for GA4 purchase deduplication.
 
 ## GA4 setup

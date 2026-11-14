@@ -17,6 +17,7 @@ import { getConsentChoice, subscribeConsent } from '@/lib/analytics/consent';
 declare global {
   interface Window {
     minacoAttribution?: {read: (userId: string) => unknown; bind: (userId: string) => void};
+    minacoPosthog?: {read: () => string | null};
   }
 }
 
@@ -63,7 +64,11 @@ export function GoogleAnalytics() {
           const attribution = window.minacoAttribution?.read(identity.userId);
           const saved = await fetch('/api/analytics/context', {
             method:'POST', credentials:'same-origin', keepalive:true,
-            headers:{'Content-Type':'application/json'}, body:JSON.stringify({analytics,attribution}),
+            headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+              analytics,
+              attribution,
+              posthogDistinctId: window.minacoPosthog?.read() || null,
+            }),
           });
           if (!saved.ok) throw new Error('Analytics binding not ready');
           window.minacoAttribution?.bind(identity.userId);
