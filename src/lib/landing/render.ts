@@ -16,6 +16,9 @@ export function renderLanding(source: MinacoProductCatalog, clarityProjectId = p
   return landingTemplate.replace('__SERVER_ACCOUNT_ACTION__', () => renderLandingAccount(account)).replace('__SERVER_MOBILE_ACCOUNT__', () => account ? '<a class="mobilelogin" href="/account">My account</a>' : '<a class="mobilelogin" href="/sign-in?redirect_url=/account">Log in</a>')
     .replace('<a href="#demo">Workflows</a>', '')
     .replaceAll('<a href="/guides">Guides</a>', '<a href="/guidance">Guidance</a>')
+    .replaceAll('href="/guides/agent-context-handoff"', 'href="/guidance#switch-agents"')
+    .replaceAll('href="/guides/claude-code-and-codex"', 'href="/guidance#switch-agents"')
+    .replaceAll('href="/guides/one-subscription-multiple-agents"', 'href="/guidance#usage"')
     .replace('href="#pricing">Pricing</a>', 'href="/pricing">Pricing</a>')
     .replace('<a class="btn primary" href="/api/download">Get Minaco', '<a class="btn primary" href="/download">Get Minaco')
     .replace('</head>', () => homepageStructuredData(catalog) + clarityScriptTag(clarityProjectId) + landingGoogleTag() + '</head>').replace('__SERVER_RATE_ROWS__',rows).replace('__SERVER_PLANS__',plans).replace('__CATALOG_DATE__',escape(catalog.generatedAt.slice(0,10))).replace('__CATALOG_JSON__',()=>JSON.stringify(catalog).replace(/</g,'\\u003c'));

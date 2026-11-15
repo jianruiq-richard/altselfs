@@ -34,11 +34,19 @@ test('guidance explains the product without exposing account implementation deta
   const html = renderGuidancePage();
 
   assert.match(html, /How to Use Minaco/);
+  assert.match(html, /How to use Minaco\./);
+  assert.match(html, /choose an agent first, then choose a model/);
   assert.match(html, /\/landing\/workflow-demo\.html/);
   assert.match(html, /Minaco Credits/);
   assert.match(html, /personal provider account/);
   assert.match(html, /those turns do not use Minaco Credits/);
+  assert.match(html, /supported connectors available across its agent ecosystems/);
+  assert.match(html, /Composio hosts connector authorization and credentials/);
   assert.match(html, /relevant visible conversation and working context/);
+  assert.match(html, /Reference another conversation/);
+  assert.match(html, /Select one or more conversations and add them to the composer/);
   assert.match(html, /Try for free/);
+  assert.doesNotMatch(html, /Illustrative project content|availability depends/i);
+  assert.doesNotMatch(html, /href="\/guides/);
   assert.doesNotMatch(html, /shared account|shared provider account|credential routing/i);
 });
