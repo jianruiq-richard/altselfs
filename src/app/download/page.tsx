@@ -5,8 +5,8 @@ import { loadMinacoProductCatalog } from '@/lib/minaco-product-catalog';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Download Minaco for macOS',
-  description: 'Download the signed Minaco Desktop app for Apple silicon, then connect your Minaco account in the app.',
+  title: 'Download Minaco for macOS | Try for free',
+  description: 'Try Minaco for free. Download the signed Minaco Desktop app for Apple silicon, then connect your Minaco account in the app.',
   alternates: { canonical: '/download' },
 };
 

@@ -5,8 +5,9 @@ import { isLegacyMarketingPath } from '@/lib/legacy-marketing-pages';
 import { marketingPaths } from '@/lib/marketing/content';
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const primaryPaths = ['/pricing', '/agents', '/models', '/guidance', '/download'];
   return [
-    ...['/', '/download', '/pricing', '/contact', '/terms', '/privacy', ...marketingPaths].map((path) => ({
+    ...['/', ...primaryPaths, '/contact', '/terms', '/privacy', ...marketingPaths.filter((path) => !primaryPaths.includes(path))].map((path) => ({
       url: `${productBrand.canonicalUrl}${path === '/' ? '' : path}`,
     })),
     ...blogPosts.filter((post) => !isLegacyMarketingPath(`/blog/${post.slug}`)).map((post) => ({

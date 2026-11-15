@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { MinacoProductCatalog } from '../minaco-product-catalog';
-import { renderAgentDirectory } from './render';
+import { renderAgentDirectory, renderGuidancePage } from './render';
 
 const catalog: MinacoProductCatalog = {
   generatedAt: '2026-11-14T00:00:00.000Z',
@@ -28,4 +28,17 @@ test('agent directory presents a curated product choice instead of the internal 
   assert.doesNotMatch(html, /Explore the catalog/);
   assert.doesNotMatch(html, /Experimental integration/);
   assert.doesNotMatch(html, /Published 2026-11-14/);
+});
+
+test('guidance explains the product without exposing account implementation details', () => {
+  const html = renderGuidancePage();
+
+  assert.match(html, /How to Use Minaco/);
+  assert.match(html, /\/landing\/workflow-demo\.html/);
+  assert.match(html, /Minaco Credits/);
+  assert.match(html, /personal provider account/);
+  assert.match(html, /those turns do not use Minaco Credits/);
+  assert.match(html, /relevant visible conversation and working context/);
+  assert.match(html, /Try for free/);
+  assert.doesNotMatch(html, /shared account|shared provider account|credential routing/i);
 });

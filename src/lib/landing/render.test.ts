@@ -17,7 +17,12 @@ test('production actions use real routes and omit simulated account views',()=>{
  for(const path of ['/api/download','/sign-up?redirect_url=/get-started','/terms'])assert.ok(page.includes('href="'+path+'"'));
  const mainNav=page.match(/<nav class="mainnav"[\s\S]*?<\/nav>/)![0];
  assert.match(mainNav, /href="\/pricing">Pricing<\/a>/);
+ assert.match(mainNav, /href="\/agents">Agents<\/a>/);
+ assert.match(mainNav, /href="\/models">Models<\/a>/);
+ assert.match(mainNav, /href="\/guidance">Guidance<\/a>/);
+ assert.doesNotMatch(mainNav, /Workflows|\/guides/);
  assert.doesNotMatch(mainNav, /href="#pricing"/);
+ assert.match(page.match(/<header class="sitehead">[\s\S]*?<\/header>/)![0], /href="\/download">Get Minaco/);
  assert.ok(!page.includes('id="account-page"'));
  assert.ok(!page.includes('id="dialog"'));
 });
@@ -41,7 +46,7 @@ test('homepage reflects each session without changing download or homepage acces
  assert.match(header(signedIn), /https:\/\/img.clerk.com\/avatar.png/);
  assert.doesNotMatch(header(signedIn), /Log in|\/sign-in/);
  for (const page of [signedOut, signedIn]) {
-  assert.match(header(page), /href="\/api\/download"/);
+  assert.match(header(page), /href="\/download"/);
   assert.doesNotMatch(page, /__SERVER_(?:MOBILE_ACCOUNT|ACCOUNT_ACTION)__/);
  }
  // Rendering a signed-in page must not mutate the shared template for the next visitor.

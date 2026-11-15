@@ -6,7 +6,7 @@ export function MinacoDownloadPage({ release, workspace }: { release: PublicRele
   return <MinacoAuthFrame title="Install Minaco Desktop." description="Your agents, tools, and connected apps. Together on your Mac.">
     {release ? <>
       <a className={styles.primary} href="/api/download" data-analytics-cta="download_macos_dmg" data-analytics-location="download_page">Download for Mac ↓</a>
-      <p className={styles.note}>Version {release.version} · {Math.round(release.bytes / 1024 / 1024)} MB<br />Apple silicon · macOS 13 or later · Signed and notarized</p>
+      <p className={styles.note}><strong>Try for free.</strong><br />Version {release.version} · {Math.round(release.bytes / 1024 / 1024)} MB<br />Apple silicon · macOS 13 or later · Signed and notarized</p>
     </> : <p className={styles.note} role="status">The download is temporarily unavailable. Please refresh this page in a moment.</p>}
     {workspace ? <p className={styles.note}>Your next workspace: “{workspace}”</p> : null}
     <ol className={styles.steps}>
