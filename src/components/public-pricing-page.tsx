@@ -58,14 +58,14 @@ export function PublicPricingPage() {
         <MinacoBrandMark className={styles.brandMark} imageClassName={styles.brandImage} />
         <span>Minaco</span>
       </Link>
-      <nav><Link href="/agents">Agents</Link><Link href="/guides">Guides</Link><Link href="/download">Download</Link></nav>
+      <nav><Link href="/agents">Agents</Link><Link href="/models">Models</Link><Link href="/guidance">Guidance</Link><Link href="/download">Download</Link></nav>
       <PublicAccountActions signUpClassName={styles.navAction} />
     </header>
 
     <section className={styles.intro}>
       <div>
-        <h1>One plan.<br />Your AI agents.</h1>
-        <p>Bring your supported native AI agents together in one desktop workspace, with a shared Minaco subscription and Credit balance.</p>
+        <h1>Plans for<br />every agent.</h1>
+        <p>Use one Minaco plan across supported native agents, or connect an eligible personal provider account and use its subscription without spending Minaco Credits.</p>
       </div>
       <div className={styles.cycleControl} aria-label="Billing cycle">
         {(['monthly', 'yearly'] as BillingCycle[]).map((value) => <button key={value} className={cycle === value ? styles.cycleActive : ''} onClick={() => setCycle(value)}>{value === 'monthly' ? 'Monthly' : 'Annual · 20% less'}</button>)}
@@ -73,14 +73,11 @@ export function PublicPricingPage() {
     </section>
 
     <section className={styles.planTable} aria-label="Minaco plans">
-      <div className={styles.planLabels}>
-        <strong>Plans</strong><span>Credits</span><span>Concurrent tasks</span><span>Scheduled tasks</span><span>Model access</span><span>Workspace</span><span />
-      </div>
       {BILLING_PLANS.map((plan) => {
         const price = getPlanBillingPriceUsd(plan, cycle);
         const credits = getPlanBillingCredits(plan, cycle);
         return <article key={plan.key} className={plan.highlighted ? styles.planFeatured : ''}>
-          <header><h2>{plan.name}</h2><strong>${price}<small>/{cycle === 'yearly' && plan.key !== 'FREE' ? 'year' : 'month'}</small></strong></header>
+          <header><div><h2>{plan.name}</h2>{plan.highlighted ? <span>Most popular</span> : null}</div><strong>${price}<small>/{cycle === 'yearly' && plan.key !== 'FREE' ? 'year' : 'month'}</small></strong>{cycle === 'yearly' && plan.key !== 'FREE' ? <em>${Math.round(price / 12)}/month equivalent</em> : null}</header>
           <p>{plan.description}</p>
           <dl>
             <div><dt>Credits</dt><dd>{credits.toLocaleString('en-US')}{plan.key === 'FREE' ? ' once' : cycle === 'yearly' ? ' per year' : ' per month'}</dd></div>
@@ -89,15 +86,15 @@ export function PublicPricingPage() {
             <div><dt>Model access</dt><dd>{plan.modelTiers.join(' + ')}</dd></div>
             <div><dt>Workspace</dt><dd>Minaco Desktop</dd></div>
           </dl>
-          <Link href={planHref(plan.key, cycle)} data-analytics-cta={`pricing_plan_${plan.key.toLowerCase()}`} data-analytics-location="pricing_table">Choose {plan.name}<ArrowRight size={16} /></Link>
+          <Link href={planHref(plan.key, cycle)} data-analytics-cta={`pricing_plan_${plan.key.toLowerCase()}`} data-analytics-location="pricing_table">{plan.key === 'FREE' ? 'Start free' : `Choose ${plan.name}`}<ArrowRight size={16} /></Link>
         </article>;
       })}
     </section>
 
     <section className={styles.rateSection} id="model-rates">
       <div className={styles.rateIntro}>
-        <h2>Know the cost before the turn</h2>
-        <p>These live rates come from the Desktop API. Figures are Minaco Credits per one million tokens.</p>
+        <h2>Model rates,<br />without surprises.</h2>
+        <p>Compare live rates across agents and models. Figures are Minaco Credits per one million tokens.</p>
         <Link href="/download"><Download size={17} /> Download Minaco</Link>
       </div>
       <div className={styles.rateBrowser}>
@@ -117,8 +114,8 @@ export function PublicPricingPage() {
     </section>
 
     <section className={styles.explainer}>
-      <h2>Credits follow the work</h2>
-      <div><p><strong>Minaco-credit mode</strong>Each completed turn shows input, cached input, output, and Credits together.</p><p><strong>Personal-account mode</strong>Usage stays with the provider account you explicitly connect for that Agent.</p><p><strong>Purchased Credits</strong>Credit packs remain on your account when you change plans.</p></div>
+      <h2>Two ways<br />to keep working.</h2>
+      <div><p><strong>Use Minaco Credits</strong>Choose a funded model available to your plan. Eligible turns are deducted from one Credit balance across supported agents.</p><p><strong>Connect your provider account</strong>Use an eligible personal provider subscription where supported. Those turns follow the provider’s quotas and do not use Minaco Credits.</p><p><strong>Add Credits when needed</strong>Purchased Credit packs stay on your account when you change plans.</p></div>
     </section>
 
     <footer className={styles.footer}><span>Minaco pricing</span><div><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/contact">Contact</Link></div><Link href="/download">Download for macOS</Link></footer>
