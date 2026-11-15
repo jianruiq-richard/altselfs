@@ -64,7 +64,7 @@ export function PublicPricingPage() {
 
     <section className={styles.intro}>
       <div>
-        <h1>Plans for<br />every agent.</h1>
+        <h1>Pricing.</h1>
         <p>Use one Minaco plan across supported native agents, or connect an eligible personal provider account and use its subscription without spending Minaco Credits.</p>
       </div>
       <div className={styles.cycleControl} aria-label="Billing cycle">
