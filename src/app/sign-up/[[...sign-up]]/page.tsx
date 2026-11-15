@@ -11,6 +11,7 @@ import { isOauthBlockedEmbeddedBrowser } from "@/lib/oauth-browser";
 export const metadata: Metadata = {
   title: `Create account | ${productBrand.name}`,
   description: `Create your ${productBrand.name} Desktop account.`,
+  robots: { index: false, follow: false },
 };
 
 function buildFallbackUrl(path: string, headersList: Headers): string {

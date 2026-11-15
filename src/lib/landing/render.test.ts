@@ -15,6 +15,9 @@ test('server renders rates safely and normalizes microUSD to credits',()=>{
 test('production actions use real routes and omit simulated account views',()=>{
  const page=renderLanding(catalog);
  for(const path of ['/api/download','/sign-up?redirect_url=/get-started','/terms'])assert.ok(page.includes('href="'+path+'"'));
+ const mainNav=page.match(/<nav class="mainnav"[\s\S]*?<\/nav>/)![0];
+ assert.match(mainNav, /href="\/pricing">Pricing<\/a>/);
+ assert.doesNotMatch(mainNav, /href="#pricing"/);
  assert.ok(!page.includes('id="account-page"'));
  assert.ok(!page.includes('id="dialog"'));
 });

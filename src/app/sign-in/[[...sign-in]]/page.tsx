@@ -14,6 +14,7 @@ const DEFAULT_AUTH_REDIRECT = "/account";
 export const metadata: Metadata = {
   title: `Sign in | ${productBrand.name}`,
   description: `Sign in to ${productBrand.name}, your account for Minaco Desktop.`,
+  robots: { index: false, follow: false },
 };
 
 function buildFallbackUrl(path: string, headersList: Headers): string {
