@@ -11,7 +11,8 @@ const publishedRate = (profile: ModelProfile, catalog: MinacoProductCatalog) => 
 const agentFor = (profile: ModelProfile) => agentProfiles.find(a => a.id === profile.engine)!;
 function row(profile: ModelProfile, catalog: MinacoProductCatalog) {
   const rate = publishedRate(profile, catalog), agent = agentFor(profile);
-  return `<a class="model-directory-row" href="/models/${profile.slug}" data-model-row data-family="${e(profile.family)}"><div><span>${e(profile.family)} · ${e(agent.name)}</span><h2>${e(profile.name)}</h2><p>${e(profile.summary)}</p></div><div class="model-directory-rate">${rate ? `<strong>${rate.longContext ? 'From ' : ''}${number(creditRate(rate, 'input'))} / ${number(creditRate(rate, 'output'))}</strong><span>Input / output Credits per 1M tokens</span>` : '<strong>Check availability</strong><span>No live rate available</span>'}<span class="text-link">Explore model →</span></div></a>`;
+  const href = profile.id === 'qwen/qwen4-max' ? '/qwen4-max' : `/models/${profile.slug}`;
+  return `<a class="model-directory-row" href="${href}" data-model-row data-family="${e(profile.family)}"><div><span>${e(profile.family)} · ${e(agent.name)}</span><h2>${e(profile.name)}</h2><p>${e(profile.summary)}</p></div><div class="model-directory-rate">${rate ? `<strong>${rate.longContext ? 'From ' : ''}${number(creditRate(rate, 'input'))} / ${number(creditRate(rate, 'output'))}</strong><span>Input / output Credits per 1M tokens</span>` : '<strong>Check availability</strong><span>No live rate available</span>'}<span class="text-link">Explore model →</span></div></a>`;
 }
 export function renderModelDirectory(catalog: MinacoProductCatalog, account: LandingAccount | null = null) {
   return shell('/models', 'AI Models in Minaco: Agents, Uses & Live Credit Rates', 'Explore GPT, Claude, DeepSeek, Muse, Kimi, Grok, GLM and Qwen models. See their native agents, practical uses and current Minaco Credit rates.', `

@@ -5,7 +5,7 @@ import { isLegacyMarketingPath } from '@/lib/legacy-marketing-pages';
 import { marketingPaths } from '@/lib/marketing/content';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const primaryPaths = ['/pricing', '/agents', '/models', '/guidance', '/download'];
+  const primaryPaths = ['/pricing', '/agents', '/models', '/qwen4-max', '/guidance', '/download'];
   return [
     ...['/', ...primaryPaths, '/contact', '/terms', '/privacy', ...marketingPaths.filter((path) => !primaryPaths.includes(path))].map((path) => ({
       url: `${productBrand.canonicalUrl}${path === '/' ? '' : path}`,

@@ -61,4 +61,4 @@ export const guides: Guide[] = [
 
 export const featuredAgents = agentProfiles;
 
-export const marketingPaths = ['/models', ...modelProfiles.map(m => `/models/${m.slug}`), '/agents', ...featuredAgents.map(a => `/agents/${a.slug}`)];
+export const marketingPaths = ['/qwen4-max', '/models', ...modelProfiles.filter(m => m.id !== 'qwen/qwen4-max').map(m => `/models/${m.slug}`), '/agents', ...featuredAgents.map(a => `/agents/${a.slug}`)];
