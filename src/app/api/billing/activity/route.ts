@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getInvestorOrNull } from '@/lib/investor-auth';
 import { personalAgentInternalFetch } from '@/lib/personal-agent-internal';
+import { publicBillingActivity } from '@/lib/public-billing-activity';
 import { ServerTiming } from '@/lib/server-timing';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
       () => personalAgentInternalFetch(`/internal/billing/activity?${query.toString()}`),
       'personal-agent billing activity',
     );
-    return timing.finish(NextResponse.json(activity));
+    return timing.finish(NextResponse.json(publicBillingActivity(activity)));
   } catch (error) {
     console.error('Failed to load billing activity:', error);
     return timing.finish(NextResponse.json(

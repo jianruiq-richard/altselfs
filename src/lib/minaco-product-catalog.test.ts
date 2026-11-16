@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { loadMinacoProductCatalog } from './minaco-product-catalog';
+import { BILLING_PLANS } from './billing-plans';
+import { loadMinacoProductCatalog, publicProductCatalog } from './minaco-product-catalog';
 
 test('commercial catalog keeps plans local and follows Desktop authorities for models and releases', async () => {
   const calls: string[] = [];
@@ -40,6 +41,15 @@ test('commercial catalog keeps plans local and follows Desktop authorities for m
     'https://desktop.minaco.ai/releases/latest.json',
   ]);
 });
+test('public website catalog does not expose internal model providers', () => {
+  const catalog = publicProductCatalog({ generatedAt: '2026-11-17T00:00:00.000Z', plans: BILLING_PLANS, agents: [], models: [
+    { provider: 'apiyi-claude', model: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', engines: ['claude'], version: 'v1', input: 1, cachedInput: 1, output: 1, unit: 'credits' },
+    { provider: 'minaco-codex', model: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', engines: ['codex'], version: 'v1', input: 1, cachedInput: 1, output: 1, unit: 'credits' },
+  ], release: null, sources: { plans: 'minaco-billing', agentsAndModels: 'minaco-desktop-api', release: 'unavailable' } });
+  assert.deepEqual(catalog.models.map((model) => model.provider), ['minaco', 'minaco']);
+  assert.deepEqual(catalog.models.map((model) => model.version), ['current', 'current']);
+});
+
 
 test('commercial catalog never invents models or a download when Desktop is unavailable', async () => {
   const fetcher = (async () => new Response(null, { status: 503 })) as typeof fetch;

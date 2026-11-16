@@ -53,6 +53,13 @@ export type MinacoProductCatalog = {
   };
 };
 
+export function publicProductCatalog(catalog: MinacoProductCatalog): MinacoProductCatalog {
+  return {
+    ...catalog,
+    models: catalog.models.map((model) => ({ ...model, provider: 'minaco', version: 'current' })),
+  };
+}
+
 type DesktopConfig = {
   releaseManifestUrl?: unknown;
   engines?: unknown;
