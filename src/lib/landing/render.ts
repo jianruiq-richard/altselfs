@@ -21,5 +21,9 @@ export function renderLanding(source: MinacoProductCatalog, clarityProjectId = p
     .replaceAll('href="/guides/one-subscription-multiple-agents"', 'href="/guidance#usage"')
     .replace('href="#pricing">Pricing</a>', 'href="/pricing">Pricing</a>')
     .replace('<a class="btn primary" href="/api/download">Get Minaco', '<a class="btn primary" href="/download">Get Minaco')
+    .replace('Minaco brings together the context of your work and hands it to the next agent.', 'Minaco Desktop brings together the context of your work and hands it to the next agent.')
+    .replace('Download for Mac <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>', 'Download Minaco Desktop for Mac <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>')
+    .replace('Download for Mac <svg class="icon"><use href="#i-download"/></svg>', 'Download Minaco Desktop for Mac <svg class="icon"><use href="#i-download"/></svg>')
+    .replace('© 2026 Minaco. Think with you. Act for you.', '© 2026 Astromar Limited. Minaco Desktop · Think with you. Act for you.')
     .replace('</head>', () => homepageStructuredData(catalog) + clarityScriptTag(clarityProjectId) + landingGoogleTag() + '</head>').replace('__SERVER_RATE_ROWS__',rows).replace('__SERVER_PLANS__',plans).replace('__CATALOG_DATE__',escape(catalog.generatedAt.slice(0,10))).replace('__CATALOG_JSON__',()=>JSON.stringify(catalog).replace(/</g,'\\u003c'));
 }

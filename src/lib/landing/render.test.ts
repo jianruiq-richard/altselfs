@@ -27,6 +27,15 @@ test('production actions use real routes and omit simulated account views',()=>{
  assert.ok(!page.includes('id="dialog"'));
 });
 
+test('homepage identifies the downloadable product and legal publisher consistently', () => {
+ const page = renderLanding(catalog);
+ assert.match(page, /Minaco Desktop brings together the context of your work/);
+ assert.equal(page.match(/Download Minaco Desktop for Mac/g)?.length, 2);
+ assert.match(page, /© 2026 Astromar Limited\. Minaco Desktop · Think with you\. Act for you\./);
+ assert.match(page, /"@type":"Organization","@id":"https:\/\/minaco\.ai\/#organization","name":"Astromar Limited","legalName":"Astromar Limited"/);
+ assert.match(page, /"@type":"SoftwareApplication","name":"Minaco Desktop","alternateName":"Minaco"/);
+});
+
 test('standalone homepage includes exactly one configured Clarity script in head',()=>{
  const page=renderLanding(catalog, 'abc123');
  assert.equal(page.split('id="minaco-microsoft-clarity"').length-1, 1);

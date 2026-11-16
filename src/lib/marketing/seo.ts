@@ -7,9 +7,9 @@ export const escapeHtml = (value: unknown) => String(value).replace(/[&<>"']/g, 
 
 export function homepageStructuredData(catalog: MinacoProductCatalog) {
   return jsonLd([
-    { '@context': 'https://schema.org', '@type': 'Organization', '@id': `${canonicalOrigin}/#organization`, name: 'Minaco', url: canonicalOrigin, logo: `${canonicalOrigin}/brand/minaco/png/minaco-app-icon-512.png` },
+    { '@context': 'https://schema.org', '@type': 'Organization', '@id': `${canonicalOrigin}/#organization`, name: 'Astromar Limited', legalName: 'Astromar Limited', url: canonicalOrigin, logo: `${canonicalOrigin}/brand/minaco/png/minaco-app-icon-512.png`, brand: { '@type': 'Brand', name: 'Minaco' } },
     { '@context': 'https://schema.org', '@type': 'WebSite', '@id': `${canonicalOrigin}/#website`, name: 'Minaco', url: canonicalOrigin, publisher: { '@id': `${canonicalOrigin}/#organization` } },
-    { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'Minaco', applicationCategory: 'ProductivityApplication', operatingSystem: 'macOS 13 or later (Apple silicon)', url: canonicalOrigin, description: 'A desktop workspace for native AI agents, shared work context and one Minaco subscription.', ...(catalog.release ? { softwareVersion: catalog.release.version, downloadUrl: `${canonicalOrigin}/download` } : {}), publisher: { '@id': `${canonicalOrigin}/#organization` } },
+    { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'Minaco Desktop', alternateName: 'Minaco', applicationCategory: 'ProductivityApplication', operatingSystem: 'macOS 13 or later (Apple silicon)', url: `${canonicalOrigin}/download`, description: 'A desktop workspace for native AI agents, shared work context and one Minaco subscription.', ...(catalog.release ? { softwareVersion: catalog.release.version, downloadUrl: `${canonicalOrigin}/download` } : {}), brand: { '@type': 'Brand', name: 'Minaco' }, publisher: { '@id': `${canonicalOrigin}/#organization` } },
   ]);
 }
 
