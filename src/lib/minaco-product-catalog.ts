@@ -46,6 +46,7 @@ export type MinacoProductCatalog = {
   agents: PublicAgent[];
   models: PublicModelRate[];
   release: PublicRelease | null;
+  releases?: PublicRelease[];
   sources: {
     plans: 'minaco-billing';
     agentsAndModels: 'minaco-desktop-api' | 'unavailable';
@@ -84,9 +85,11 @@ export async function loadMinacoProductCatalog(
   const models = modelsResult.status === 'fulfilled' ? publicModels(modelsResult.value) : [];
 
   let release: PublicRelease | null = null;
+  let releases: PublicRelease[] = [];
   if (config && typeof config.releaseManifestUrl === 'string') {
     try {
-      release = publicRelease(await fetchJson(fetcher, trustedPublicUrl(config.releaseManifestUrl)));
+      releases = publicReleases(await fetchJson(fetcher, trustedPublicUrl(config.releaseManifestUrl)));
+      release = releases.find((item) => item.platform === 'darwin-arm64') || releases[0] || null;
     } catch {
       release = null;
     }
@@ -98,6 +101,7 @@ export async function loadMinacoProductCatalog(
     agents,
     models,
     release,
+    releases,
     sources: {
       plans: 'minaco-billing',
       agentsAndModels: agents.length || models.length ? 'minaco-desktop-api' : 'unavailable',
@@ -175,20 +179,25 @@ function cachePrices(entry: Record<string, unknown>) {
   };
 }
 
-function publicRelease(value: unknown): PublicRelease | null {
-  if (!isRecord(value) || typeof value.version !== 'string' || typeof value.releasedAt !== 'string' || !Array.isArray(value.assets)) return null;
-  const asset = value.assets.find((item) => isRecord(item) && item.platform === 'darwin-arm64');
-  if (!isRecord(asset) || typeof asset.url !== 'string' || typeof asset.bytes !== 'number' || typeof asset.sha256 !== 'string') return null;
-  const url = trustedPublicUrl(asset.url);
-  if (!url.pathname.toLowerCase().endsWith('.dmg')) return null;
-  return {
-    version: value.version,
-    releasedAt: value.releasedAt,
-    platform: 'darwin-arm64',
-    url: url.href,
-    bytes: asset.bytes,
-    sha256: asset.sha256,
-  };
+function publicReleases(value: unknown): PublicRelease[] {
+  if (!isRecord(value) || typeof value.version !== 'string' || typeof value.releasedAt !== 'string' || !Array.isArray(value.assets)) return [];
+  const manifestVersion = value.version;
+  const releasedAt = value.releasedAt;
+  return value.assets.flatMap((asset): PublicRelease[] => {
+    if (!isRecord(asset) || !['darwin-arm64', 'darwin-x64'].includes(String(asset.platform))) return [];
+    if (typeof asset.url !== 'string' || typeof asset.bytes !== 'number' || !Number.isFinite(asset.bytes) || asset.bytes <= 0) return [];
+    if (typeof asset.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(asset.sha256)) return [];
+    const url = trustedPublicUrl(asset.url);
+    if (!url.pathname.toLowerCase().endsWith('.dmg')) return [];
+    return [{
+      version: typeof asset.version === 'string' ? asset.version : manifestVersion,
+      releasedAt,
+      platform: asset.platform as 'darwin-arm64' | 'darwin-x64',
+      url: url.href,
+      bytes: asset.bytes,
+      sha256: asset.sha256,
+    }];
+  });
 }
 
 function trustedServiceUrl(value: string): URL {

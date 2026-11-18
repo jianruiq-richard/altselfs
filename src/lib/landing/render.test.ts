@@ -16,7 +16,7 @@ test('production actions use real routes and omit simulated account views',()=>{
  const page=renderLanding(catalog);
  assert.match(page, /Use Claude Code, Codex, DeepSeek, Kimi, GLM, and other native AI agents in one Mac workspace\. Minaco carries your work context between agents\./);
  assert.doesNotMatch(page, /Use Claude Code, Codex, and other native AI agents/);
- for(const path of ['/api/download','/sign-up?redirect_url=/get-started','/terms'])assert.ok(page.includes('href="'+path+'"'));
+ for(const path of ['/download','/sign-up?redirect_url=/get-started','/terms'])assert.ok(page.includes('href="'+path+'"'));
  const mainNav=page.match(/<nav class="mainnav"[\s\S]*?<\/nav>/)![0];
  assert.match(mainNav, /href="\/pricing">Pricing<\/a>/);
  assert.match(mainNav, /href="\/agents">Agents<\/a>/);

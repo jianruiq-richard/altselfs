@@ -8,8 +8,8 @@ export const metadata: Metadata = { title: 'Get started | Minaco Desktop', robot
 export default async function GetStarted() {
   if (!(await auth()).userId) redirect('/sign-up?redirect_url=%2Fget-started');
   return <MinacoAuthFrame title="Your account is ready." description="Bring your next project into Minaco Desktop.">
-    <a className={styles.primary} href="/api/download">Download for Mac ↓</a>
-    <p className={styles.note}>For Mac with Apple silicon. On another device? Visit minaco.ai on your Mac to install.</p>
+    <a className={styles.primary} href="/download">Download for Mac ↓</a>
+    <p className={styles.note}>For Apple silicon or Intel Mac. On another device? Visit minaco.ai on your Mac to install.</p>
     <ol className={styles.steps}>
       <li><div><strong>Install Minaco Desktop</strong><p>Open the downloaded file and drag Minaco into Applications.</p></div></li>
       <li><div><strong>Connect your account</strong><p>Open Minaco and choose “Connect Minaco account”. Use the account you just created.</p></div></li>

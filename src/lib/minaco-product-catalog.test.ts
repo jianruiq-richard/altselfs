@@ -21,6 +21,8 @@ test('commercial catalog keeps plans local and follows Desktop authorities for m
     if (url.endsWith('/releases/latest.json')) return Response.json({
       version: '0.12.62', releasedAt: '2026-11-03T00:00:00.000Z', assets: [{
         platform: 'darwin-arm64', url: 'https://downloads.minaco.ai/releases/Minaco-0.12.62-arm64.dmg', bytes: 320_000_000, sha256: 'a'.repeat(64),
+      }, {
+        platform: 'darwin-x64', version: '0.12.62', url: 'https://downloads.minaco.ai/releases/Minaco-0.12.62-x64.dmg', bytes: 321_000_000, sha256: 'b'.repeat(64),
       }],
     });
     return new Response(null, { status: 404 });
@@ -34,6 +36,7 @@ test('commercial catalog keeps plans local and follows Desktop authorities for m
   assert.equal(catalog.models[0]?.longContext?.cacheWrite, 312.5);
   assert.equal(catalog.models[0]?.pricingNote, 'Prompt total selects the tier.');
   assert.equal(catalog.release?.version, '0.12.62');
+  assert.deepEqual(catalog.releases?.map((release) => release.platform), ['darwin-arm64', 'darwin-x64']);
   assert.deepEqual(catalog.agents.map((agent) => agent.id), ['codex']);
   assert.deepEqual(calls, [
     'https://desktop-api.minaco.ai/v1/public/config',

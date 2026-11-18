@@ -38,7 +38,7 @@ export function MinacoDesktopLandingPage({ catalog }: Props) {
   const featuredModels = useMemo(() => distinctModels(catalog.models).slice(0, 6), [catalog.models]);
   const downloadUrl = '/download';
   const releaseText = catalog.release
-    ? `Minaco ${catalog.release.version} · Apple silicon · ${formatBytes(catalog.release.bytes)}`
+    ? `Minaco ${catalog.release.version} · Apple silicon and Intel · from ${formatBytes(catalog.release.bytes)}`
     : 'Latest signed macOS release';
 
   return (

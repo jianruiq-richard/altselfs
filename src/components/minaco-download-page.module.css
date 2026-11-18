@@ -12,6 +12,15 @@
   color: var(--ink);
   font-family: var(--font-sans);
 }
+.options { display:grid; gap:12px; margin:4px 0 20px; }
+.option { display:flex; align-items:center; justify-content:space-between; gap:18px; min-height:74px; padding:14px 16px; border:1px solid rgba(255,250,240,.16); border-radius:10px; color:#fffaf0; text-decoration:none; transition:border-color 160ms ease,background-color 160ms ease,transform 160ms ease; }
+.option:hover { border-color:#f2c36b; background:#171613; transform:translateY(-1px); }
+.option[data-recommended] { border-color:#f2c36b; background:rgba(242,195,107,.08); }
+.option span:first-child { display:grid; gap:2px; }
+.option strong { font-size:15px; font-weight:650; }
+.option small { color:#aaa69e; font-size:12px; }
+.optionAction { flex:none; color:#f2c36b; font-size:13px; font-weight:650; text-align:right; }
+@media(max-width:480px){.option{align-items:flex-start;flex-direction:column;gap:8px}.optionAction{text-align:left}}
 .page *, .page *::before, .page *::after { box-sizing: border-box; }
 .page a { transition: background-color 180ms ease, color 180ms ease, transform 180ms ease; }
 .page :focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }

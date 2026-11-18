@@ -1,12 +1,13 @@
 import type { PublicRelease } from '@/lib/minaco-product-catalog';
+import { MacDownloadOptions } from './mac-download-options';
 import { MinacoAuthFrame } from './minaco-auth-frame';
 import styles from './minaco-auth-frame.module.css';
 
-export function MinacoDownloadPage({ release, workspace }: { release: PublicRelease | null; workspace: string | null }) {
+export function MinacoDownloadPage({ release, releases, workspace }: { release: PublicRelease | null; releases: PublicRelease[]; workspace: string | null }) {
   return <MinacoAuthFrame title="Install Minaco Desktop." description="Your agents, tools, and connected apps. Together on your Mac.">
     {release ? <>
-      <a className={styles.primary} href="/api/download" data-analytics-cta="download_macos_dmg" data-analytics-location="download_page">Download Minaco Desktop for Mac ↓</a>
-      <p className={styles.note}><strong>Try for free.</strong><br />Version {release.version} · {Math.round(release.bytes / 1024 / 1024)} MB<br />Apple silicon · macOS 13 or later · Signed and notarized<br />Published by Astromar Limited</p>
+      <MacDownloadOptions releases={releases} />
+      <p className={styles.note}><strong>Try for free.</strong><br />Version {release.version} · macOS 13 or later · Signed and notarized<br />Published by Astromar Limited<br />Not sure? Choose Apple menu → About This Mac and check whether it says Chip or Processor.</p>
     </> : <p className={styles.note} role="status">The download is temporarily unavailable. Please refresh this page in a moment.</p>}
     {workspace ? <p className={styles.note}>Your next workspace: “{workspace}”</p> : null}
     <ol className={styles.steps}>
