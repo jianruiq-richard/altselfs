@@ -14,7 +14,7 @@ test('server renders rates safely and normalizes microUSD to credits',()=>{
 });
 test('production actions use real routes and omit simulated account views',()=>{
  const page=renderLanding(catalog);
- assert.match(page, /Use Claude Code, Codex, DeepSeek, Kimi, GLM, and other native AI agents/);
+ assert.match(page, /Use Claude Code, Codex, DeepSeek, Kimi, GLM, and other native AI agents in one Mac workspace\. Minaco carries your work context between agents\./);
  assert.doesNotMatch(page, /Use Claude Code, Codex, and other native AI agents/);
  for(const path of ['/api/download','/sign-up?redirect_url=/get-started','/terms'])assert.ok(page.includes('href="'+path+'"'));
  const mainNav=page.match(/<nav class="mainnav"[\s\S]*?<\/nav>/)![0];
@@ -31,7 +31,7 @@ test('production actions use real routes and omit simulated account views',()=>{
 
 test('homepage identifies the downloadable product and legal publisher consistently', () => {
  const page = renderLanding(catalog);
- assert.match(page, /Minaco Desktop brings together the context of your work/);
+ assert.match(page, /Minaco carries your work context between agents/);
  assert.equal(page.match(/Download Minaco Desktop for Mac/g)?.length, 2);
  assert.match(page, /© 2026 Astromar Limited\. Minaco Desktop · Think with you\. Act for you\./);
  assert.match(page, /"@type":"Organization","@id":"https:\/\/minaco\.ai\/#organization","name":"Astromar Limited","legalName":"Astromar Limited"/);
