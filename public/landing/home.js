@@ -2,6 +2,13 @@ const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>'
 // A history restore can otherwise show the account state from before sign-in/out.
 window.addEventListener('pageshow',event=>{if(event.persisted)window.location.reload()});
 document.querySelectorAll('.account-avatar img').forEach(img=>{img.addEventListener('error',()=>img.remove());if(img.complete&&img.naturalWidth===0)img.remove()});
+// Chromium exposes the Mac CPU architecture through a privacy-preserving client hint.
+// Pin direct-download links to that architecture; Safari keeps the Apple-silicon
+// default and has an explicit Intel link beside the primary hero action.
+navigator.userAgentData?.getHighEntropyValues(['architecture']).then(({architecture})=>{
+ const value=String(architecture).toLowerCase(),arch=['x86','x86_64','amd64'].includes(value)?'x64':['arm','arm64','aarch64'].includes(value)?'arm64':'';
+ if(arch)document.querySelectorAll('a[href="/api/download"]').forEach(link=>{link.href='/api/download?arch='+arch});
+}).catch(()=>{});
 const icon=name=>'<svg class="icon" aria-hidden="true"><use href="#i-'+name+'"/></svg>';
 // Only the requested ecosystem strip loops; it pauses offscreen, on hover/focus, or by choice.
 const ribbon=document.querySelector('.agent-ribbon'),ribbonButton=document.querySelector('.ribbon-control');

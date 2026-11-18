@@ -8,6 +8,10 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const [catalog, account] = await Promise.all([loadMinacoProductCatalog(), loadMarketingAccount()]);
   return new Response(renderLanding(catalog, undefined, account), {
-    headers: {'Content-Type':'text/html; charset=utf-8','Cache-Control':'private, no-store'},
+    headers: {
+      'Content-Type':'text/html; charset=utf-8',
+      'Cache-Control':'private, no-store',
+      'Accept-CH':'Sec-CH-UA-Arch',
+    },
   });
 }
